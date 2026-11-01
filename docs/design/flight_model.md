@@ -1,0 +1,239 @@
+# Flap: flight model design (v0.1)
+
+This doc covers the flight model, the energy model, catching and releasing perches, how perches sit in space, the arena and its flight paths, and the AI pilot.
+Research behind it is in `docs/research/`:
+- `flight_simulation_models.md`: arcade vs point-mass vs 6DOF, plus the recommended hybrid.
+- `bird_aerodynamics_by_species.md`: species data and the derivation of each profile.
+- `wing_shapes_and_articulation.md`: wing classes, joints, perching, and the greybox rig.
+
+Goal: flight that feels natural and is easy to pick up, not maximum realism.
+
+---
+
+## 1. The flight model (`scripts/flight/flight_model.gd`)
+
+**Model: a point mass with an attitude state.** There are no rigid-body torques. The bird's attitude is two numbers measured against its own flight path:
+
+| State | Meaning | Driven by |
+|---|---|---|
+| `alpha` | angle of attack: how far the nose sits above the flight path | stick Y, slewed at `alpha_rate` |
+| `bank` | roll about the flight path | stick X × `max_bank`, slewed at `roll_rate` |
+| `fold` | wing tuck, 0 (spread) to 1 (tucked) | push past half stick, plus auto-sweep with speed |
+
+The research recommends this hybrid. Because attitude is defined relative to the velocity, the bird is **always coordinated**: it never sideslips, never tumbles, and needs no rudder.
+
+**Forces.** Each tick (60 Hz) applies these:
+- Lift: L = q·S·CL(α), along the lift vector. The lift vector is perpendicular to the path and tilted by `bank`.
+- Drag: D = q·S·(CD0 + K·CL² + stall drag), opposite the path.
+- Gravity.
+- Flap thrust, during a downstroke only.
+
+Here q = ½ρv². CL rises linearly up to the stall angle, then sags to 65% of its peak over the next 10°, while drag climbs sharply.
+
+**The derived polar is exact.** Designers set mass, span, area, Oswald efficiency e, glide ratio L/D, and CL_max. `BirdProfile.derive()` computes the rest:
+- K = 1/(π·e·AR)
+- CD0 = 1/(4·(L/D)²·K), which makes L/D max equal the designed glide ratio exactly
+- CL* = √(CD0/K) and α* = CL*/CL_α
+- V* = √(2mg/(ρ·S·CL*)) and V_stall = √(2mg/(ρ·S·CL_max))
+- glide angle = atan(1/(L/D))
+
+`test_glide_trim` checks that every bird settles onto its ideal glide slope to within 0.2°, from both too slow and too fast.
+
+**Controls map to physics:**
+- **Neutral stick = best-glide α.** Let go of the mouse and the bird settles onto its ideal glide slope; the virtual stick drifts back to centre. The HUD's pitch ladder marks the ideal glide line, and the flight-path circle turns green when you're on it.
+- **Pull back:** more CL, so the path curves up while induced drag bleeds speed. This gives the speed penalty you described. At 85% pull the wing reaches its stall angle. The last 15% of travel is the flare: post-stall, a big airbrake. The HUD stick box marks that line.
+- **Push forward:** less CL, so the path drops and speed builds. Past half push the wings tuck, reducing area, span and parasitic drag. That's the falcon stoop.
+- **Bank-and-yank:** bank tilts the lift vector, which turns the path. Pulling in a bank tightens the turn: turn rate ω = n·g·sin(φ)/V, verified in `test_flight_controls`.
+  - Bank limits are per species, from 65° (hawk) to 85° (falcon, sparrow). The HUD shows them as red ticks.
+  - `turn_assist` supplies 60% of the extra lift a bank needs, so a pure bank doesn't sink much.
+
+**Assists that make it feel easy.** Set any of these to 0 to turn it off.
+- `pitch_damping`: a phugoid damper. Without it, speed and height trade back and forth ("the bob") for half a minute.
+  - It feeds the unpowered along-path acceleration back into α. That works out to about 0.7 of critical damping.
+  - Feeding back the path's rate of change instead only changes the bob's stiffness, and it chatters at 60 Hz. We tried it; the test caught it.
+- `turn_assist`: described above.
+- `auto_sweep`: the wings tuck up to 35% by themselves at twice best-glide speed. Gliding pigeons do this (wing research).
+- Stall **hysteresis**: the stall sets in past the stall angle and only ends once α is clearly back below it.
+
+**Integration.** Semi-implicit Euler. Lift is applied as a speed-preserving rotation of the velocity, which keeps it stable at low speed. The rotation is split half before the linear forces and half after (Strang splitting); applying it all first steepened every glide by about 0.6°. Drag can remove at most half the speed in one tick. Aero forces fade out below 2 m/s, for example when dropping off a perch.
+
+**Wing area for the HUD.** It's already computed: press F3. Two numbers:
+- `wing_area_eff`: the planform area after the tuck. It's the lifting area, and it shrinks in a stoop.
+- `frontal_area` = S_eff·|sin α|: the wing area facing the oncoming air. It's near 0 in cruise and large in a flare, so it reads as airbrake.
+
+The research suggests labelling these "lifting area" and "airbrake area" in the full HUD.
+
+## 2. The energy model (`scripts/flight/energy_model.gd`)
+
+There are two reserves, so you can't flap forever and can't flap infinitely fast.
+
+| Reserve | Scale | Spent by | Refills | Effect when low |
+|---|---|---|---|---|
+| **Burst** (short term, about 5–8 s of held flapping) | full-strength flaps (crow: 16) | 1 per flap; hard pulls over 2 g also drain it | `burst_regen` flaps/s whenever the wings aren't driving; scaled by stamina; doubled when perched | under 1 flap left, flaps are weak (25% strength) |
+| **Stamina** (medium term, about 1 minute of flapping) | 0 to 1 | 1/`stamina_flaps` per flap, doubled on an empty burst | slowly while gliding (0.4%/s), fast while perched (8%/s) | caps the burst at 30% to 100% of max, and slows burst refill to as little as 5% |
+
+**Hard caps on flapping:**
+- **Rate:** a wingbeat can't start before the last one finishes (`flap_period`: sparrow 0.1 s, hawk 0.45 s).
+- **Speed:** thrust fades as (1 − v/flap_speed_cap)², so flapping has a natural top speed. Diving does not.
+- **Direction:** at a standstill a wingbeat mostly lifts (65° up from the bird's heading, which makes takeoff work). At cruise it mostly drives forward (30°). Slow thrust is aimed from the heading, not the flight path. That keeps a slow bird from flying straight up like a helicopter.
+
+**Gameplay loop this creates.** Flap to climb and sprint. When tired, glide to a perch to rest: about 10 s on a perch restores most stamina. So the game is flying from perch to perch, which is what you described.
+
+The HUD energy bars show:
+- burst (yellow)
+- the part of the burst lost to fatigue (dark red)
+- stamina (blue)
+
+`test_energy` checks each of these behaviors for every species.
+
+**Long term (not built yet).** A third, "fed" reserve that caps stamina, refilled by food or kills, could carry the combat loop.
+
+## 3. Catching and releasing perches (`scripts/bird/bird.gd`)
+
+```
+FLYING --SPACE, perch in reach and slow enough--> LANDING (blend, 0.15–0.45 s) --> PERCHED
+PERCHED --SPACE--> FLYING (drop off along the facing, free wingbeat)
+FLYING --settle slowly onto anything flat--> GROUNDED --SPACE--> FLYING (hop up, free wingbeat)
+```
+
+- **Catch area.** A sphere of `grab_radius` around the perch's grip point: 1.5 m for most birds, 1.0 m for the sparrow.
+- **Catch speed.** Speed must be ≤ `grab_speed_max` = `grab_speed_factor` × V_stall. That works out to about 6.8 m/s for the crow and 10.6 m/s for the falcon.
+  - Every bird's catch speed sits between its stall speed and its best-glide speed. Coming in at glide speed is slightly too fast, so you have to flare a little. That's the skill: dive under the perch and swoop up into it, the way hawks do.
+  - The HUD speed tape has a cyan "catch" mark.
+- **Feedback.**
+  - A ring on the candidate perch: white while approaching, **green** when SPACE will catch now, **red** when the perch is in reach but you're too fast.
+  - Prompts: "SPACE: CATCH" and "TOO FAST – pull up".
+- **Forgiveness.**
+  - **Press buffer:** a SPACE press counts as a catch attempt for 0.25 s if a perch will be in reach within that time. A press inside the approach cone never wastes itself on a flap.
+  - **Perch assist** (`perch_assist`, default 0.6) works in the last 5 m: it auto-flares when closing faster than 85% of catch speed, and pulls the bird gently onto the perch line.
+- **Transition.** A cubic Hermite blend runs from the bird's position and velocity to the seat at rest. Its duration scales with distance over speed, clamped to 0.15–0.45 s, and orientation slerps to the perched pose. The rig spreads the wings forward, fans and drops the tail, and swings the legs forward.
+- **Release.**
+  - The bird drops off along the perch facing at `hop_speed` (2.5–3.5 m/s), pitched 20° down, starting clear of the branch.
+  - It gets one free wingbeat.
+  - It can't re-catch the same perch for 0.6 s.
+- **Collisions.**
+  - Trunks and branches: hitting one bounces you off at 0.3 restitution, keeps 60% of your speed, and stuns you for 0.35 s. Grazes under 1 m/s just slide.
+  - Settling slowly onto the ground or a trunk top: you stand there (GROUNDED), and SPACE takes off.
+
+`test_perching` covers the slow catch, the too-fast refusal, the buffered early press, the assisted flare, release, re-catch lockout, and resting. `test_collision` covers trunk bounces and landing on the ground.
+
+## 4. How perches are defined in space (`scripts/world/perch.gd`)
+
+A perch is plain data with four fields:
+- **grip point:** where the feet close, on top of the branch or trunk top
+- **facing:** a horizontal unit vector
+- **kind:** `BRANCH` or `TREETOP`
+- **tree_id**
+
+The **facing** does three jobs:
+1. It's where the bird looks while perched.
+2. It's the direction it drops off in on release.
+3. It's the side the AI approaches from.
+
+Facings by perch kind:
+- **Branch perches face across the branch**, at a random side. The drop-off then falls clear of the branch, and the approach never aims at the trunk. An earlier version faced along the branch, and released birds landed on their own branch.
+- **Treetop perches face the arena centre**, looking out over the clearing.
+
+Perches are generated with the trees:
+- Each tree grows `height / 4.5` branches, spiralling up the trunk between 35% and 88% of its height.
+- Each branch gets one perch at 80% of its length.
+- Each tree gets one treetop perch.
+
+A spatial hash on 8 m cells serves `perches_near()`. Seed 7 gives 137 trees and 375 perches. Most perches are low, with a handful above 20 m.
+
+## 5. The arena and its flight paths (`scripts/world/arena_layout.gd`)
+
+The arena is a circle 85 m in radius. A soft wall pushes birds back past the edge, and a soft ceiling sits at 60 m. Trees are placed by seeded rejection sampling in three tiers, tallest first:
+
+| Tier | Count | Height | Spacing | Role |
+|---|---|---|---|---|
+| Understory | 90 | 4–9 m | 5.5 m | dense low slalom |
+| Canopy | 38 | 10–18 m | 11 m | mid layer, room to turn |
+| Emergent | 9 | 22–34 m | 26 m | lone pylons in open sky |
+
+So **trunk density falls with height**: 6.0, 2.1 and 0.4 trunks per 1000 m² above 2, 10 and 20 m.
+
+**Flight paths** are open lanes carved through the lower tiers. They're drawn on the ground as pale strips so you can read them from the air.
+- **The clearing:** 16 m radius at the centre. It's open air, and the start perch is the tallest treetop beside it.
+- **Two crossing avenues:** 10 m-wide straight lanes. These are the long fast glide lines.
+- **The ring:** a 10 m-wide circular lane at 56 m radius. It's free of low trees, but emergents may stand in it, so it's a racing loop with occasional pylons.
+- **Above 20 m:** open sky with a few emergent pylons, for altitude, scouting and stoops.
+- **The understory:** below 9 m, a dense trunk forest for close-quarters chases.
+
+That gives three distinct altitude bands that play differently. Those bands are where combat will live (section 7).
+
+## 6. The AI pilot (`scripts/ai/ai_pilot.gd`, `scripts/ai/flight_planner.gd`)
+
+The AI drives a bird with **exactly the player's inputs** (`FlightInput`: stick and SPACE). It sees only the bird's own state and the arena geometry. It works in four layers:
+
+1. **Goal.** Pick a perch it can reach on its energy.
+   - Reach = glide reach from its current height, plus a climb budget from stamina and burst.
+   - It prefers hops of about 30 m that lose a little height, and perches up in the trees.
+   - It skips perches too low for its stall speed, and the tree it just left.
+   - Perched, it rests until stamina is back above 50%.
+2. **Route.** A* over a free-air lattice (6 m spacing, 7 altitude levels).
+   - Nodes and edges are checked against trunk and branch capsules geometrically (`ArenaLayout.segment_clear`); no physics queries.
+   - The cost is energy-aware: climbing a metre costs as much as 4 m of flight, and descending is free.
+   - The route runs through a **pre-approach point** and an **approach point** out along the perch facing, ending 1.2 m below the perch. The bird arrives lined up and swoops up into the catch.
+   - The route is string-pulled (any waypoint the previous point can see past is dropped).
+3. **Guidance.**
+   - Bank toward the next waypoint (bank-to-turn). The bank limit shrinks near the ground, because steep banks shed vertical lift.
+   - Pitch to hold the path angle that reaches the waypoint.
+   - Flap when it needs to climb or is slow.
+   - Push when near the stall.
+   - On final, pull to bleed speed below the catch speed, and press SPACE when the bird reports the catch is on.
+4. **Avoidance.** Whiskers sweep the next second of flight against the geometry.
+   - If the sweep is blocked, it steers to the nearest clear direction: sideways, then climbing.
+   - A watchdog re-plans if the bird makes no progress for 8 s. It goes around if it overshoots, or if the perch leaves its forward cone on final.
+
+**Status.** `test_ai_flight` flies all five species for 90 s:
+
+| Species | Perches |
+|---|---|
+| Owl | 6 |
+| Sparrow | 5 |
+| Crow | 3 |
+| Hawk | 1 |
+| Falcon | 0 |
+
+That's 15 perches and 11 bonks in total.
+
+**Known weak: the falcon and hawk.** They're fast or heavy birds, and the low understory doesn't fit them. Next steps for them:
+- Per-species altitude bands, so falcons stay high and stoop.
+- A speed-planned final approach that starts its flare by distance rather than by a fixed gain.
+- Trajectory-sampling avoidance: roll the model forward for candidate stick inputs, instead of straight-line whiskers.
+
+**Why this shape.** The same input surface gives three things:
+- AI and players are interchangeable (autopilot is the P key, and a player can take over any AI bird).
+- AI behaviour is bounded by the same physics and energy.
+- Later, a networked host can run AI the same way. Once networking arrives, the HUD, rig and camera already read only a telemetry snapshot (`Bird.telemetry()`).
+
+## 7. Bird profiles
+
+Numbers come from the species research, scaled for gameplay where noted there.
+
+| | Crow | Owl | Hawk | Falcon | Sparrow |
+|---|---|---|---|---|---|
+| Glide ratio (angle) | 10 (5.7°) | 9 (6.3°) | 12 (4.8°) | 10.5 (5.4°) | 6.5 (8.7°) |
+| Best-glide speed (m/s) | 8.6 | 8.3 | 9.9 | 12.6 | 8.2 |
+| Stall / catch speed (m/s) | 5.7 / 6.8 | 5.5 / 7.2 | 6.5 / 7.8 | 9.2 / 10.6 | 6.0 / 7.2 |
+| Bank limit / roll rate | 80° / 320°/s | 75° / 180°/s | 65° / 120°/s | 85° / 240°/s | 85° / 420°/s |
+| Wingbeat period | 0.28 s | 0.4 s | 0.45 s | 0.2 s | 0.1 s |
+| Burst / stamina (flaps) | 16 / 260 | 12 / 200 | 8 / 130 | 14 / 240 | 40 / 800 |
+| Character | all-rounder | floats, gentle catches | glides forever, flapping is costly | fast, deep stoop, thin margin | steep glide, rapid cheap wingbeats |
+
+Keys 1–5 switch bird in game.
+
+## 8. Open questions and next steps
+
+- **Combat.** Not designed yet. Hooks this model already offers:
+  - Energy advantage: height and speed are the currency.
+  - A stoop from above as the attack, using the tuck.
+  - Grabbing another bird with the same catch rule, in a "talon" mode.
+  - Knocking birds off perches.
+  - Contesting perches for resting.
+  - The understory as an escape layer where big birds can't follow.
+- **Mouse feel.** Return-to-centre rates and sensitivity need playtesting. A "mouse aim" mode, where the bird auto-banks toward a cursor, could be an option for new players.
+- **Thermals or updrafts** over the clearing would give the hawk its niche and add a long-term energy source.
+- **Wing-area HUD** (section 1) is ready to promote from the F3 panel.
+- **Alula, slotted-tip splay and tail twist** are currently visual only. The research suggests giving them small control effects at low speed.

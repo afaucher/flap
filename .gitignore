@@ -1,0 +1,8 @@
+# Godot
+.godot/
+*.tmp
+# Generated
+test_logs/
+build/
+# Build stamp written by build.ps1 (packed into the .pck)
+version.txt
