@@ -4,10 +4,11 @@ extends CharacterBody3D
 ## snapshot the HUD, camera and rig read (they never touch the model). Its controller (PlayerController or
 ## AIPilot) supplies one FlightInput per physics tick; both have exactly the same authority.
 ##
-## States: FLYING -> (SPACE with a perch in reach and slow enough) -> LANDING (a short Hermite blend onto
-## the perch seat) -> PERCHED -> (SPACE) -> FLYING (drops off along the perch facing with a free wingbeat).
-## Settling slowly onto the ground or anything flat stands on it (GROUNDED); SPACE takes off. Hitting a trunk or branch bounces,
-## costs speed and briefly takes the controls away.
+## States: FLYING -> (CATCH held as a perch comes into reach slow enough) -> LANDING (a short Hermite blend onto
+## the perch seat) -> PERCHED -> (FLAP: take off with a free wingbeat, or CATCH: let go and drop) -> FLYING.
+## Perched (or on the ground) the stick turns the bird to look around; it leaves the way it faces.
+## Settling slowly onto the ground or anything flat stands on it (GROUNDED); FLAP jumps up and takes off.
+## Hitting a trunk or branch bounces, costs speed and briefly takes the controls away.
 
 signal perched(perch: Perch)
 signal released(perch: Perch)
@@ -17,18 +18,22 @@ enum State { FLYING, LANDING, PERCHED, GROUNDED }
 
 const BIRD_LAYER := 2
 const APPROACH_RADIUS := 8.0   ## perches this close (and ahead) are candidates
-const GRAB_BUFFER := 0.25      ## s a SPACE press stays live for a catch (pressed a touch early, or too fast)
+const GRAB_BUFFER := 0.25      ## s a quick CATCH tap stays live (holding catch keeps it live indefinitely)
 const RELEASE_LOCK := 0.6      ## s before the perch just left can be caught again
 const STUN_TIME := 0.35        ## s of no control after hitting a tree
 const BOUNCE := 0.3            ## restitution off trunks
 const BONK_KEEP := 0.6         ## share of speed kept after a bounce
 const BONK_MIN := 1.0          ## m/s into a surface for a hit to count as a bonk (less is a graze)
+const TURN_RATE := 150.0       ## deg/s a full stick turns a sitting bird
+const TAKEOFF_GRACE := 0.5     ## s after leaving the ground or a perch before touching down counts as landing
+const LEAVE_PASS := 0.35       ## s the bird passes through the tree it just left (it may face along a branch)
 
 var profile: BirdProfile
 var model: FlightModel
 var layout: ArenaLayout
 var controller: Object         ## has sample(bird: Bird, dt: float) -> FlightInput
 var rig: BirdRig
+var arena: ArenaBuilder        ## optional: lets a departing bird pass through its own tree
 
 var state := State.FLYING
 var perch: Perch = null        ## held (PERCHED) or being landed on (LANDING)
@@ -39,6 +44,8 @@ var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a pe
 var bonks := 0
 var stun := 0.0
 var last_input := FlightInput.new()
+var facing := Vector3.FORWARD  ## where a sitting bird looks (turned by the stick); it leaves this way
+var look_pitch := 0.0          ## -1..1, a sitting bird looking down/up (camera)
 
 var _radius := 0.1
 var _grab_buffer := 0.0
@@ -49,6 +56,9 @@ var _land_dur := 0.3
 var _land_from := Vector3.ZERO
 var _land_vel := Vector3.ZERO
 var _land_from_basis := Basis()
+var _grace := 0.0
+var _pass_body: Node = null
+var _pass_left := 0.0
 
 
 func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
@@ -76,7 +86,9 @@ func perch_at(p: Perch) -> void:
 	global_position = p.seat(profile)
 	model.position = global_position
 	model.velocity = Vector3.ZERO
-	global_basis = Basis.looking_at(p.facing, Vector3.UP)
+	facing = p.facing
+	look_pitch = 0.0
+	global_basis = Basis.looking_at(facing, Vector3.UP)
 	reset_physics_interpolation()
 
 
@@ -93,6 +105,13 @@ func fly_from(pos: Vector3, dir: Vector3, spd: float) -> void:
 func _physics_process(dt: float) -> void:
 	var inp: FlightInput = controller.sample(self, dt) if controller != null else FlightInput.new()
 	last_input = inp
+	_grace = maxf(0.0, _grace - dt)
+	if _pass_body != null:
+		_pass_left -= dt
+		if _pass_left <= 0.0:
+			if is_instance_valid(_pass_body):
+				remove_collision_exception_with(_pass_body)
+			_pass_body = null
 	match state:
 		State.FLYING: _fly(dt, inp)
 		State.LANDING: _land(dt)
@@ -106,23 +125,23 @@ func _physics_process(dt: float) -> void:
 func _fly(dt: float, inp: FlightInput) -> void:
 	_release_lock = maxf(0.0, _release_lock - dt)
 	_update_candidate()
-	# A press counts as a catch attempt (not a flap) when a perch is in reach, or will be within the buffer.
-	if inp.action_pressed and candidate != null and candidate_distance < profile.grab_radius + model.speed * GRAB_BUFFER:
+	# Catch while it is held (hold it through the approach), and for GRAB_BUFFER after a quick tap.
+	if inp.catch_pressed:
 		_grab_buffer = GRAB_BUFFER
-	if _grab_buffer > 0.0:
-		if candidate_status == Perch.Catch.OK:
-			_grab_buffer = 0.0
-			_begin_landing(candidate)
-			return
-		_grab_buffer -= dt
-	elif inp.action_pressed:
+	if (inp.catch_held or _grab_buffer > 0.0) and candidate_status == Perch.Catch.OK:
+		_grab_buffer = 0.0
+		_begin_landing(candidate)
+		return
+	_grab_buffer = maxf(0.0, _grab_buffer - dt)
+	if inp.flap_pressed:
 		model.flap()
 	var ctl := inp
 	if stun > 0.0:
 		stun -= dt
-		ctl = FlightInput.new(Vector2.ZERO, false, false)
+		ctl = FlightInput.new()
 	_apply_assists()
 	model.position = global_position
+	model.ground_height = global_position.y - ArenaLayout.GROUND_Y - _radius
 	model.step(dt, ctl)
 	var col := move_and_collide(model.position - global_position)
 	if col != null:
@@ -131,7 +150,7 @@ func _fly(dt: float, inp: FlightInput) -> void:
 			return
 	model.position = global_position
 	# Belly on the ground and settling: stand (even if the contact came through a seam the collision missed).
-	if global_position.y < _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
+	if _grace <= 0.0 and global_position.y < _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
 		_land_on_ground()
 		return
 	global_basis = model.body_basis()
@@ -185,7 +204,7 @@ func _on_collision(col: KinematicCollision3D) -> void:
 	var into := v.dot(n)
 	var collider := col.get_collider()
 	# Settling slowly onto anything flat (the ground, a trunk top): stand on it.
-	if n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:
+	if _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:
 		_land_on_ground()
 		return
 	if into < -BONK_MIN:
@@ -210,7 +229,10 @@ func _land_on_ground() -> void:
 	fwd.y = 0.0
 	if fwd.length() < 0.1:
 		fwd = -global_basis.z
-	global_basis = Basis.looking_at(fwd.normalized(), Vector3.UP)
+		fwd.y = 0.0
+	facing = fwd.normalized() if fwd.length() > 0.01 else Vector3.FORWARD
+	look_pitch = 0.0
+	global_basis = Basis.looking_at(facing, Vector3.UP)
 
 
 # --- Landing on a perch --------------------------------------------------------------------------
@@ -243,6 +265,8 @@ func _land(dt: float) -> void:
 	if s >= 1.0:
 		state = State.PERCHED
 		model.velocity = Vector3.ZERO
+		facing = perch.facing
+		look_pitch = 0.0
 		perched.emit(perch)
 
 
@@ -252,27 +276,47 @@ func _sit(dt: float, inp: FlightInput) -> void:
 	model.energy.tick(dt, false, 0.0, true)
 	candidate = null
 	candidate_status = Perch.Catch.OUT_OF_RANGE
-	if not inp.action_pressed:
-		return
+	# Look around: the stick turns the bird (and so where it will leave toward) and tilts its gaze.
+	facing = facing.rotated(Vector3.UP, -deg_to_rad(TURN_RATE) * inp.stick.x * dt).normalized()
+	look_pitch = lerpf(look_pitch, clampf(inp.stick.y, -1.0, 1.0), 1.0 - exp(-6.0 * dt))
+	global_basis = Basis.looking_at(facing, Vector3.UP)
 	if state == State.PERCHED:
-		var left := perch
-		var dir := (left.facing + Vector3.DOWN * 0.35).normalized()
-		global_position = left.drop_off(profile)
-		model.launch(global_position, dir, profile.hop_speed)
-		model.flap(true)   # the push-off wingbeat is free
-		_released_perch_id = left.id
-		_release_lock = RELEASE_LOCK
-		perch = null
-		state = State.FLYING
-		released.emit(left)
-	else:
-		var fwd := -global_basis.z
-		fwd.y = 0.0
-		var dir := (fwd.normalized() + Vector3.UP * 0.9).normalized()
-		model.launch(global_position + Vector3.UP * 0.1, dir, profile.hop_speed * 1.3)
+		if inp.flap_pressed or inp.catch_pressed:
+			_leave_perch(inp.flap_pressed)
+	elif inp.flap_pressed:
+		# Jump and beat: mostly up, a little forward, with ground effect helping the first wingbeats.
+		var v := facing * profile.hop_speed * 0.6 + Vector3.UP * maxf(3.5, profile.hop_speed * 1.1)
+		model.launch(global_position + Vector3.UP * 0.05, v.normalized(), v.length())
 		model.flap(true)
+		_grace = TAKEOFF_GRACE
 		state = State.FLYING
 
+
+## FLAP: push off with a free wingbeat; CATCH: just let go and drop.
+func _leave_perch(with_flap: bool) -> void:
+	var left := perch
+	var dir := (facing + Vector3.DOWN * (0.1 if with_flap else 0.35)).normalized()
+	global_position = left.seat(profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)
+	model.launch(global_position, dir, profile.hop_speed)
+	if with_flap:
+		model.flap(true)   # the push-off wingbeat is free
+	_released_perch_id = left.id
+	_release_lock = RELEASE_LOCK
+	_grace = TAKEOFF_GRACE
+	_pass_through(left.tree_id)
+	perch = null
+	state = State.FLYING
+	released.emit(left)
+
+
+func _pass_through(tree_id: int) -> void:
+	if arena == null or tree_id < 0 or tree_id >= arena.tree_bodies.size():
+		return
+	if _pass_body != null and is_instance_valid(_pass_body):
+		remove_collision_exception_with(_pass_body)
+	_pass_body = arena.tree_bodies[tree_id]
+	_pass_left = LEAVE_PASS
+	add_collision_exception_with(_pass_body)
 
 # --- Telemetry (the only thing the HUD, camera and rig read) ------------------------------------
 
@@ -285,7 +329,11 @@ func telemetry() -> Dictionary:
 		"position": global_position,
 		"velocity": m.velocity,
 		"flight_dir": m.flight_dir(),
-		"facing": perch.facing if perch != null else -global_basis.z,
+		"facing": facing if state == State.PERCHED or state == State.GROUNDED else -global_basis.z,
+		"look_pitch": look_pitch,
+		"flap_count": m.flap_count,
+		"ground_effect": m.ground_effect if state == State.FLYING else 0.0,
+		"catch_armed": _grab_buffer > 0.0 or last_input.catch_held,
 		"speed": m.speed if state == State.FLYING else m.velocity.length(),
 		"v_best": p.v_best,
 		"v_stall": p.v_stall,

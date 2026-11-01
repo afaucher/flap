@@ -14,6 +14,7 @@ var arena: ArenaBuilder
 var bird: Bird
 var camera: ChaseCamera
 var hud: FlightHud
+var audio: FlightAudio
 var player := PlayerController.new()
 var autopilot: AIPilot
 var ai_birds: Array[Bird] = []
@@ -46,6 +47,8 @@ func _ready() -> void:
 	add_child(layer)
 	hud = FlightHud.new()
 	layer.add_child(hud)
+	audio = FlightAudio.new()
+	add_child(audio)
 	_spawn_player(profile_id, layout.start_perch())
 
 	for i in ai_count:
@@ -55,6 +58,7 @@ func _ready() -> void:
 		var pilot := AIPilot.new(layout, arena_seed * 31 + i)
 		add_child(b)
 		b.setup(BirdProfile.by_id(pid), layout, pilot)
+		b.arena = arena
 		b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
 		ai_birds.append(b)
 
@@ -101,6 +105,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	bird.name = "Player"
 	add_child(bird)
 	bird.setup(BirdProfile.by_id(pid), layout, autopilot if use_autopilot else player)
+	bird.arena = arena
 	bird.perch_at(at)
 	camera.bird = bird
 	camera.snap()
@@ -115,7 +120,11 @@ func _physics_process(_dt: float) -> void:
 
 func _process(_dt: float) -> void:
 	if bird != null:
-		hud.set_state(bird.telemetry())
+		var t := bird.telemetry()
+		hud.gamepad = player.using_gamepad
+		hud.set_state(t)
+		audio.set_state(t)
+	camera.look_input = player.look
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -132,6 +141,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		hud.autopilot = use_autopilot
 	if e.is_action_pressed("respawn"):
 		_spawn_player(profile_id, bird.perch if bird.perch != null else layout.start_perch())
+	if e.is_action_pressed("cycle_bird"):
+		var next: String = BirdProfile.IDS[(BirdProfile.IDS.find(profile_id) + 1) % BirdProfile.IDS.size()]
+		_spawn_player(next, bird.perch if bird.perch != null else layout.start_perch())
 	for i in BirdProfile.IDS.size():
 		if e.is_action_pressed("bird_%d" % (i + 1)):
 			_spawn_player(BirdProfile.IDS[i], bird.perch if bird.perch != null else layout.start_perch())

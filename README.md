@@ -19,25 +19,30 @@ Export templates are copied from `..\cast\build\deps\godot-data` on the first bu
 
 ## Controls
 
-| Input | Effect |
-|---|---|
-| Click | capture the mouse (Esc releases it) |
-| Mouse left / right | bank (bank-and-yank: bank, then pull to turn tighter) |
-| Mouse toward you / away | pull back (climb, lose speed, flare) / push forward (dive, gain speed, tuck past half) |
-| Let go | the stick drifts back to centre: wings level, best glide |
-| Space | flap (hold to keep flapping); catch a perch when the ring is green; drop off a perch |
-| C or middle mouse | centre the stick |
-| 1-5 | switch bird (crow, owl, hawk, falcon, sparrow) |
-| R | respawn  ·  P autopilot  ·  F3 debug (angle of attack, CL, L/D, wing areas) |
+A gamepad is the recommended way to fly: the left stick has a real centre (wings level, best glide).
+
+| Gamepad | Keyboard + mouse | Effect |
+|---|---|---|
+| Left stick | mouse (click to capture, Esc releases) | bank left/right; pull back = climb, lose speed, flare; push = dive, gain speed, tuck past half |
+| (let go) | (let go: drifts back; C / middle mouse snaps) | centre = wings level, best glide |
+| Left trigger | Space | flap (hold to keep flapping); from a perch or the ground: take off |
+| A (hold) | Ctrl (hold) | catch: hold it through the approach and the bird catches the perch the moment it's in reach and slow enough. On a perch, a fresh press lets go and drops. |
+| Right stick | | tilt / orbit the camera (springs back) |
+| Left stick while perched | mouse while perched | turn on the perch to look around; you leave the way you face |
+| Back / Start / Y | 1-5 / R / P | change bird / respawn / autopilot |
+| | F3 | debug panel: angle of attack, CL, L/D, wing areas |
 
 **HUD.**
-- Speed tape: stall, catch and best-glide marks.
+- Speed tape with stall, catch and best-glide marks, and the current speed band (STALL, CATCH, SLOW, GLIDE, FAST, DIVE).
 - Pitch ladder: nose, flight path and the green ideal-glide line.
-- Roll arc: red bank-limit ticks.
+- Roll arc with red bank-limit ticks.
 - Burst and stamina bars.
 - Stick position.
 
-**Perching.** Approach the perch slower than the cyan "catch" speed: dive under it and swoop up. Press Space
-inside the ring.
+**Audio.** The wind rises with speed. Each speed band boundary plays its own whoosh: rising when you speed up, falling when you slow down. When you drop under catch speed you hear it, and best glide has its own whoosh too. Wingbeats thump.
+
+**Perching.** Approach the perch slower than the cyan "catch" speed: dive under it and swoop up. Hold catch on the way in.
+
+**Low and slow.** Ground effect (within about 1.5 spans of the ground) cuts drag and strengthens wingbeats, so a downed bird can flap back up.
 
 Design: `docs/design/flight_model.md`. Research: `docs/research/`.

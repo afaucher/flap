@@ -1,15 +1,28 @@
 class_name ChaseCamera
 extends Camera3D
-## Third-person chase camera: behind and a little above the bird's direction of flight, rolling a third of
-## the bank, widening its field of view with speed. Pulled in when a trunk is between it and the bird.
-## Reads the bird's telemetry and interpolated transform only.
+## Third-person chase camera: behind and a little above the bird's direction of flight (or where a sitting
+## bird faces), rolling a third of the bank, widening its field of view with speed. Pulled in when a trunk is
+## between it and the bird. Reads the bird's telemetry and interpolated transform only.
+## `look_input` (the right stick, -1..1) orbits it around the bird -- up to LOOK_YAW to the side and
+## LOOK_PITCH up or down -- and it springs back when the stick is let go. A sitting bird's look_pitch tilts it.
+
+const LOOK_YAW := 75.0
+const LOOK_PITCH := 35.0
 
 var bird: Bird
 var distance := 3.2
 var height := 0.9
 var roll_share := 0.35
+var look_input := Vector2.ZERO
 var _look := Vector3.FORWARD
 var _roll := 0.0
+var _orbit := Vector2.ZERO   ## smoothed look_input
+
+
+func _ready() -> void:
+	# The camera moves every rendered frame (_process) toward the bird's already-interpolated transform, so it
+	# must not be physics-interpolated itself (Godot warns when an interpolated camera moves outside physics).
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
 
 func snap() -> void:
@@ -17,17 +30,29 @@ func snap() -> void:
 		return
 	var t := bird.telemetry()
 	_look = _look_dir(t)
+	_orbit = Vector2.ZERO
 	global_position = _desired(bird.global_position, _look)
 	look_at(bird.global_position + _look * 3.0, Vector3.UP)
 
 
 func _look_dir(t: Dictionary) -> Vector3:
-	var d: Vector3 = t.flight_dir if t.state == Bird.State.FLYING else t.facing
+	var flying: bool = t.state == Bird.State.FLYING
+	var d: Vector3 = t.flight_dir if flying else t.facing
 	# Don't stare straight down a vertical dive: keep some horizontal heading.
 	var h := Vector3(d.x, 0.0, d.z)
 	if h.length() < 0.3:
 		h = Vector3(_look.x, 0.0, _look.z)
-	return (h.normalized() * 0.8 + Vector3.UP * clampf(d.y, -0.6, 0.6)).normalized()
+	var up := clampf(d.y, -0.6, 0.6) if flying else float(t.look_pitch) * 0.5   # (pull back: look up)
+	return (h.normalized() * 0.8 + Vector3.UP * up).normalized()
+
+
+## The look direction swung by the right stick: yaw about world up, then pitch about the camera's right.
+func _orbited(look: Vector3) -> Vector3:
+	var d := look.rotated(Vector3.UP, -deg_to_rad(LOOK_YAW) * _orbit.x)
+	var right := d.cross(Vector3.UP)
+	if right.length() > 1e-3:
+		d = d.rotated(right.normalized(), -deg_to_rad(LOOK_PITCH) * _orbit.y)
+	return d.normalized()
 
 
 func _desired(target: Vector3, look: Vector3) -> Vector3:
@@ -41,8 +66,10 @@ func _process(dt: float) -> void:
 	var t := bird.telemetry()
 	var target := bird.get_global_transform_interpolated().origin
 	_look = _look.slerp(_look_dir(t), 1.0 - exp(-4.0 * dt)).normalized()
-	var want := _desired(target, _look)
-	# Keep a trunk from coming between the camera and the bird.
+	_orbit = _orbit.lerp(look_input, 1.0 - exp(-6.0 * dt))
+	var look := _orbited(_look)
+	var want := _desired(target, look)
+	# Keep a trunk (or the ground) from coming between the camera and the bird.
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(target, want, ArenaBuilder.WORLD_LAYER)
 	var hit := space.intersect_ray(q)
@@ -50,7 +77,7 @@ func _process(dt: float) -> void:
 		want = target.lerp(hit.position, 0.85)
 	global_position = global_position.lerp(want, 1.0 - exp(-8.0 * dt))
 	_roll = lerpf(_roll, float(t.bank) * roll_share, 1.0 - exp(-5.0 * dt))
-	var aim := target + _look * 3.0
+	var aim := target + look * 3.0
 	if global_position.distance_to(aim) > 0.01:
 		var fwd := (aim - global_position).normalized()
 		var up := Vector3.UP.rotated(fwd, _roll)   # (+ about the view axis rolls the view right, with the bank)

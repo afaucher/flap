@@ -52,6 +52,10 @@ var stamina_regen_glide := 0.004   ## per second while not flapping (0..1 scale)
 var stamina_regen_perch := 0.08    ## per second while perched
 var weak_flap := 0.25       ## strength of a flap with the burst reserve empty
 
+# --- Ground effect ---------------------------------------------------------------------------------
+var ground_effect_lift := 0.25    ## extra lift on the ground (fades out by ground_effect_height)
+var ground_effect_thrust := 0.8   ## extra wingbeat thrust on the ground
+
 # --- Perching --------------------------------------------------------------------------------------
 var grab_radius := 1.5      ## m, catch sphere around a perch's grip point
 var grab_speed_factor := 1.2  ## max closing speed for a catch = this * V_stall
@@ -69,6 +73,7 @@ var v_best := 0.0           ## m/s, best-glide airspeed
 var v_stall := 0.0          ## m/s
 var glide_angle := 0.0      ## rad (positive number; the path is that far below the horizon)
 var grab_speed_max := 0.0   ## m/s
+var ground_effect_height := 0.0   ## m: ground effect fades out by this height (1.5 spans, at least 1.5 m)
 
 
 func derive() -> BirdProfile:
@@ -85,6 +90,7 @@ func derive() -> BirdProfile:
 	v_stall = sqrt(w / cl_max)
 	glide_angle = atan(1.0 / glide_ratio)
 	grab_speed_max = grab_speed_factor * v_stall
+	ground_effect_height = maxf(1.5, span * 1.5)
 	return self
 
 

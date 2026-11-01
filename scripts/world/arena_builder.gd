@@ -7,6 +7,7 @@ extends Node3D
 const WORLD_LAYER := 1
 
 var layout: ArenaLayout
+var tree_bodies: Array[StaticBody3D] = []   ## by tree id
 var highlight: MeshInstance3D
 var _hl_mat: StandardMaterial3D
 var _mats := {}
@@ -158,6 +159,7 @@ func _tree(t: ArenaLayout.TreeData, color: Color) -> void:
 		bcs.basis = basis
 		body.add_child(bcs)
 	add_child(body)
+	tree_bodies.append(body)
 
 
 ## A basis whose +Y runs along `d` (cylinders and capsules are Y-aligned).

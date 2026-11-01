@@ -1,8 +1,8 @@
 extends TestCase
 ## Probe (not in -TestAll): trace AI birds' flights, one species after another (BIRDS), once a second.
 
-const BIRDS := ["falcon"]
-const SECONDS := 25
+const BIRDS := ["hawk", "falcon"]
+const SECONDS := 45
 
 
 func _init() -> void:
@@ -31,7 +31,7 @@ func setup() -> void:
 			if tid != last_target:
 				print("   target %d (%s) route %d pts %s" % [tid, pilot.target.position if pilot.target else "", pilot.route.size(), pilot.debug_reason])
 				last_target = tid
-			if f % 30 == 0:
+			if f % 60 == 0:
 				var t := b.telemetry()
 				print("t=%d st=%d md=%d pos=(%.1f,%.1f,%.1f) v=%.1f path=%.0f bank=%.0f stick=(%.2f,%.2f) wp=%d/%d d=%.1f stam=%.2f burst=%.1f cand=%d" % [
 					f / 60, b.state, pilot.mode, b.global_position.x, b.global_position.y, b.global_position.z, t.speed,

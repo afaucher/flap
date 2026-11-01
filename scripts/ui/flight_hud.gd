@@ -19,6 +19,8 @@ const CYAN := Color(0.4, 0.9, 1.0, 0.95)
 
 var debug := false
 var autopilot := false
+var gamepad := false        ## label prompts for the gamepad (else keyboard + mouse)
+var _band := -1
 var t: Dictionary = {}
 var _font: Font
 
@@ -45,7 +47,10 @@ func _draw() -> void:
 	_stick(Vector2(sz.x * 0.5, sz.y - 70))
 	_prompts(Vector2(sz.x * 0.5, sz.y * 0.5 + 120))
 	_text(Vector2(20, 30), "%s   alt %.1f m%s" % [t.bird, t.altitude, "   [AUTOPILOT]" if autopilot else ""], FG, 18)
-	_text(Vector2(20, 52), "mouse: bank / pitch   space: flap, catch, release   1-5 bird   R respawn   P autopilot   F3 debug", DIM, 13)
+	if gamepad:
+		_text(Vector2(20, 52), "left stick: bank / pitch   right stick: look   LT: flap   A (hold): catch   Back: bird   Start: respawn   Y: autopilot", DIM, 13)
+	else:
+		_text(Vector2(20, 52), "mouse: bank / pitch   space: flap   ctrl (hold): catch   1-5 bird   R respawn   P autopilot   F3 debug", DIM, 13)
 	if debug:
 		_debug(Vector2(sz.x - 330, 40))
 
@@ -72,6 +77,11 @@ func _speed_tape(c: Vector2) -> void:
 		draw_line(Vector2(c.x - 14, y), Vector2(c.x + 14, y), mark[1], 2.0)
 		_text(Vector2(c.x + 18, y + 5), mark[2], mark[1], 11)
 	_text(Vector2(c.x - 40, top - 12), "%.1f m/s" % speed, FG, 18)
+	_band = SpeedBands.band(speed, SpeedBands.cuts(t.v_stall, t.grab_speed, t.v_best), _band)
+	if int(t.state) == Bird.State.FLYING:
+		_text(Vector2(c.x - 40, top + h + 22), SpeedBands.NAMES[_band], col, 14)
+	if float(t.ground_effect) > 0.15:
+		_text(Vector2(c.x - 40, top + h + 40), "ground effect", CYAN, 12)
 
 
 func _pitch_ladder(c: Vector2) -> void:
@@ -145,17 +155,21 @@ func _prompts(c: Vector2) -> void:
 	var col := FG
 	match int(t.state):
 		Bird.State.PERCHED:
-			msg = "PERCHED  -  SPACE to drop off"
+			msg = "PERCHED  -  %s take off  |  %s let go  |  stick to look around" % [_key("flap"), _key("catch")]
 		Bird.State.GROUNDED:
-			msg = "ON THE GROUND  -  SPACE to take off"
+			msg = "ON THE GROUND  -  %s to jump up and fly" % _key("flap")
 		Bird.State.LANDING:
 			msg = "CAUGHT"
 			col = GOOD
 		_:
 			match int(t.candidate_status):
 				Perch.Catch.OK:
-					msg = "SPACE: CATCH"
+					msg = "%s: CATCH" % _key("catch")
 					col = GOOD
+				Perch.Catch.OUT_OF_RANGE:
+					if float(t.candidate_distance) < 8.0:
+						msg = "perch ahead  -  hold %s to catch" % _key("catch") if not t.catch_armed else "catch armed"
+						col = CYAN if t.catch_armed else DIM
 				Perch.Catch.TOO_FAST:
 					msg = "TOO FAST - pull up to slow down"
 					col = BAD
@@ -186,3 +200,10 @@ func _debug(o: Vector2) -> void:
 	draw_rect(Rect2(o.x - 10, o.y - 18, 330, 22 * lines.size() + 10), Color(0, 0, 0, 0.35))
 	for i in lines.size():
 		_text(o + Vector2(0, i * 22), lines[i], FG, 14)
+
+
+func _key(action: String) -> String:
+	match action:
+		"flap": return "LT" if gamepad else "SPACE"
+		"catch": return "A" if gamepad else "CTRL"
+	return action.to_upper()

@@ -35,6 +35,7 @@ var flap_count := 0
 var stalled := false
 var flare := 0.0            ## 0..1 extra airbrake from the perch assist (visual + drag)
 var extra_accel := Vector3.ZERO  ## world-space push this tick (arena boundary)
+var ground_height := INF        ## m from the bird's underside to the ground below (set by the Bird each tick)
 
 # --- Assists (0 turns one off) ---------------------------------------------------------------------
 ## Phugoid damper: alpha rises by this * 2 alpha* * (along-path acceleration / g), so the speed-for-height
@@ -53,6 +54,7 @@ var load_factor := 1.0      ## lift / weight
 var wing_area_eff := 0.0    ## m^2, planform area after the tuck
 var frontal_area := 0.0     ## m^2, wing area facing the oncoming air: S_eff |sin alpha| (airbrake)
 var lift_to_drag := 0.0
+var ground_effect := 0.0    ## 0 (clear of the ground) .. 1 (on it)
 
 var _last_drag_accel := 0.0
 var _last_dir := Vector3.FORWARD
@@ -168,7 +170,7 @@ func step(dt: float, input: FlightInput) -> void:
 		stalled = false
 
 	# --- Wingbeat --------------------------------------------------------------------------------
-	if input.action_held and can_flap():
+	if input.flap_held and can_flap():
 		flap()
 	flap_cooldown = maxf(0.0, flap_cooldown - dt)
 	var driving := flap_time > 0.0
@@ -179,8 +181,13 @@ func step(dt: float, input: FlightInput) -> void:
 	var dir := _last_dir
 	var q := 0.5 * BirdProfile.RHO * speed * speed
 	var area := p.wing_area * (1.0 - p.fold_area_cut * fold)
-	cl = lift_coefficient(alpha) * (1.0 + 0.3 * flare)
-	cd = drag_coefficient(cl, alpha, fold) + 1.2 * flare
+	# Ground effect: within ground_effect_height the ground cuts the wingtip vortices (less induced drag),
+	# cushions the wing (a little more lift) and gives the downstroke something to push against (stronger
+	# wingbeats, below). Exaggerated past the real thing on purpose: it's what lets a downed bird get back up.
+	ground_effect = clampf(1.0 - ground_height / p.ground_effect_height, 0.0, 1.0)
+	cl = lift_coefficient(alpha) * (1.0 + 0.3 * flare) * (1.0 + p.ground_effect_lift * ground_effect)
+	var induced_cut := p.k_induced * 0.5 * ground_effect * cl * cl
+	cd = drag_coefficient(cl, alpha, fold) - induced_cut + 1.2 * flare
 	var aero_fade := smoothstep(0.5, 2.0, speed)   # no aero at a standstill (dropping off a perch)
 	var a_lift := q * area * cl / p.mass * aero_fade
 	var a_drag := q * area * cd / p.mass * aero_fade
@@ -219,7 +226,8 @@ func step(dt: float, input: FlightInput) -> void:
 		var slow_dir := (_heading_dir * cos(tilt) + UP * sin(tilt)).normalized()
 		var thrust_dir := slow_dir.slerp(cruise_dir, cruise_k)
 		var fade := pow(clampf(1.0 - speed / p.flap_speed_cap, 0.0, 1.0), 2.0)
-		velocity += thrust_dir * p.flap_accel * flap_strength * fade * dt
+		var cushion := 1.0 + p.ground_effect_thrust * ground_effect
+		velocity += thrust_dir * p.flap_accel * flap_strength * fade * cushion * dt
 		flap_time = maxf(0.0, flap_time - dt)
 	velocity += extra_accel * dt
 	if turn != 0.0:

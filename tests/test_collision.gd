@@ -1,6 +1,6 @@
 extends TestCase
 ## Flying into a trunk bounces off it (never through), costs speed and briefly stuns; a slow touchdown on
-## the ground lands; SPACE on the ground takes off.
+## the ground lands; FLAP on the ground takes off.
 
 var layout: ArenaLayout
 
@@ -53,8 +53,8 @@ func setup() -> void:
 		if g.state == Bird.State.GROUNDED:
 			break
 	eq(g.state, Bird.State.GROUNDED, "slow touchdown lands on the ground")
-	ctl2.press = true
+	ctl2.flap = true
 	await frames(1)
-	eq(g.state, Bird.State.FLYING, "SPACE takes off")
+	eq(g.state, Bird.State.FLYING, "FLAP takes off")
 	check(g.model.velocity.y > 0.5, "takes off upward")
 	finish()
