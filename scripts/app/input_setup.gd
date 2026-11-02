@@ -6,6 +6,7 @@ extends RefCounted
 ## Ctrl catches a perch / lets go of one.
 ## Gamepad: left stick steers (absolute, springs to centre), right stick tilts the camera, left trigger
 ## flaps, A catches / lets go. Back cycles the bird, Start respawns, Y toggles the autopilot.
+## Combat (scripts/combat): left mouse / F / right trigger fires, Q / RB switches weapon.
 
 const KEYS := {
 	"flap": [KEY_SPACE],
@@ -20,19 +21,24 @@ const KEYS := {
 	"bird_4": [KEY_4],
 	"bird_5": [KEY_5],
 	"release_mouse": [KEY_ESCAPE],
+	"fire": [KEY_F],
+	"weapon_next": [KEY_Q],
 }
 const MOUSE := {
 	"center_stick": MOUSE_BUTTON_MIDDLE,
+	"fire": MOUSE_BUTTON_LEFT,
 }
 const PAD_BUTTONS := {
 	"catch": JOY_BUTTON_A,
 	"cycle_bird": JOY_BUTTON_BACK,
 	"respawn": JOY_BUTTON_START,
 	"toggle_autopilot": JOY_BUTTON_Y,
+	"weapon_next": JOY_BUTTON_RIGHT_SHOULDER,
 }
 ## action: [axis, direction]
 const PAD_AXES := {
 	"flap": [JOY_AXIS_TRIGGER_LEFT, 1.0],
+	"fire": [JOY_AXIS_TRIGGER_RIGHT, 1.0],
 	"steer_left": [JOY_AXIS_LEFT_X, -1.0],
 	"steer_right": [JOY_AXIS_LEFT_X, 1.0],
 	"steer_push": [JOY_AXIS_LEFT_Y, -1.0],
@@ -69,7 +75,7 @@ static func ensure_actions() -> void:
 		j.axis = PAD_AXES[action][0]
 		j.axis_value = PAD_AXES[action][1]
 		InputMap.action_add_event(action, j)
-		InputMap.action_set_deadzone(action, TRIGGER_DEADZONE if action == "flap" else STICK_DEADZONE)
+		InputMap.action_set_deadzone(action, TRIGGER_DEADZONE if action == "flap" or action == "fire" else STICK_DEADZONE)
 
 
 static func _add(action: String) -> void:
