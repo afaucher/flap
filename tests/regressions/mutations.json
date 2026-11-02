@@ -613,5 +613,47 @@
     "replace": "\tm.next_pass = ShaderMaterial.new()\n"
    }
   ]
+ },
+ {
+  "id": "sitting-tail-in-surface",
+  "bug": "Sitting, the body kept the species' upright posture whatever it sat on: facing along a branch, on a treetop or on the ground the tail and wingtips went into it (2026-11-02).",
+  "tests": [
+   "test_posture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tlean = minf(lean + dt * clampf(worst / (_L * 0.02), 0.5, 6.0), 1.0)\n",
+    "replace": "\t\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "weapons-fire-from-beak",
+  "bug": "Rockets and seekers left from a fixed point 0.6 body lengths ahead of the bird -- past its beak -- not from the pods drawn on its back (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "mount.call(weapon, int(ammo[weapon])) if mount.is_valid() else muzzle()",
+    "replace": "muzzle()"
+   }
+  ]
+ },
+ {
+  "id": "mount-fire-through-head",
+  "bug": "The launcher sat on the pommel so low that its line of fire skimmed the bird's crown by 3-12 mm (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "\t\tpivot.y += 0.5 * k\n",
+    "replace": "\t\tpivot.y += 0.0\n"
+   }
+  ]
  }
 ]

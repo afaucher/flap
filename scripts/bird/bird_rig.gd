@@ -78,6 +78,9 @@ var world_up := Vector3.UP      ## rig space, for head stabilisation
 var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var toe_grip := 0.0             ## 0 open .. 1 curled round a branch
 var grip_radius := 0.0          ## the branch under the feet (m; 0: none, or the ground): the detailed toes wrap it
+var lean := 0.0                 ## sitting: 0 the species' posture .. 1 the body level and the tail raised (to keep the
+                                ## tail and wingtips off what the bird sits on: BirdRig._posture)
+const LEAN_PITCH := 5.0         ## deg: the body's pitch at full lean
 var neck_ext := 0.3             ## 0 retracted (head on the shoulders) .. 1 reaching
 var head_offset := Vector3.ZERO ## rig space, head stabilisation: where the head lags its neck target
 var fluff := 1.0                ## plumage volume (1 sleek .. ~1.15 fluffed)
@@ -1329,6 +1332,8 @@ func animate(t: Dictionary, dt: float) -> void:
 	var tail_t := 0.6 * flare if not sitting else deg_to_rad(float(POSE.get(profile.id, POSE["crow"]).tail_down))
 	if sitting and age < 1.5:
 		tail_t += 0.3 * exp(-age * 3.0) * sin(age * 14.0)   # a few balancing pumps after touching down
+	if sitting:
+		tail_t -= deg_to_rad(25.0) * lean   # (leaning, the tail cocks up)
 	tail_pitch = lerpf(tail_pitch, tail_t, ks)
 	tail_twist = lerpf(tail_twist, -float(t.bank) * 0.25 if not sitting else 0.0, ks)
 	# Airflow on the feathers: a little always, more with speed, almost none perched.
@@ -1351,6 +1356,7 @@ func animate(t: Dictionary, dt: float) -> void:
 	fluff = lerpf(fluff, fluff_t, 1.0 - exp(-2.0 * dt))
 	_clock_t += dt
 	breath = sin(TAU * 0.3 / sqrt(_L) * _clock_t) * (1.0 if sitting else 0.3)
+	_posture(t, dt, sitting)
 	# Touchdown: the trunk sinks on flexing legs and comes back up (the feet stay on the grip).
 	world_up = (global_transform.basis.inverse() * Vector3.UP).normalized()
 	var dip := 0.0
@@ -1363,7 +1369,7 @@ func animate(t: Dictionary, dt: float) -> void:
 	var stance_t := 0.0
 	if sitting and t.has_grip:
 		var parent_xf := get_parent_node_3d().global_transform if get_parent_node_3d() != null else Transform3D()
-		var hip_w := parent_xf * ((_hip[0] + _hip[1]) * 0.5)
+		var hip_w := parent_xf * (basis * ((_hip[0] + _hip[1]) * 0.5))
 		var reach := body.femur + _tib + _tars
 		var want_h := reach * (float(POSE.get(profile.id, POSE["crow"]).stance) if state == Bird.State.PERCHED else 0.85)
 		stance_t = want_h - (hip_w - (t.grip as Vector3)).dot(Vector3.UP)
@@ -1403,6 +1409,53 @@ func animate(t: Dictionary, dt: float) -> void:
 		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
 	grip_radius = float(t.get("grip_radius", 0.0)) if t.has_grip else 0.0
 	apply_pose()
+
+
+## Sitting, keep the tail and wingtips out of what the bird sits on, as a bird shifts its posture: measure the
+## drawn feathers' tips (last pose) against the surface (telemetry "surface": a branch's cylinder, a treetop's disc,
+## the ground) and lean -- the body pitched toward level (LEAN_PITCH) about the rig's origin and the tail cocked up
+## -- while any tip digs in; ease back to the species' posture once they clear it by a margin. Facing across a
+## branch the tail hangs behind it and nothing changes; facing along it, or on the ground, the bird levels out.
+## Visual only: the rig turns within the Bird's own (unchanged) body.
+func _posture(t: Dictionary, dt: float, sitting: bool) -> void:
+	var srf: Dictionary = t.get("surface", {})
+	if not sitting or srf.is_empty():
+		lean = maxf(lean - dt * 2.0, 0.0)
+	else:
+		var margin := _L * 0.01
+		var worst := -INF   # (the deepest tip below the surface plus margin; negative: the smallest clearance)
+		var xf := global_transform
+		var tips := PackedVector3Array()
+		for f in feather_xforms:
+			tips.append(xf * (f.origin + f.basis.z))
+		for p in tips:
+			worst = maxf(worst, _depth(srf, p) + margin)
+		if worst > 0.0:
+			lean = minf(lean + dt * clampf(worst / (_L * 0.02), 0.5, 6.0), 1.0)
+		elif worst < -_L * 0.03:
+			lean = maxf(lean - dt * 0.6, 0.0)
+	var sit_pitch: float = float(POSE.get(profile.id, POSE["crow"]).perch_pitch)
+	if t.state == Bird.State.GROUNDED:
+		sit_pitch = float(POSE.get(profile.id, POSE["crow"]).ground_pitch)
+	basis = Basis(Vector3.RIGHT, -deg_to_rad(maxf(sit_pitch - LEAN_PITCH, 0.0)) * smoothstep(0.0, 1.0, lean))
+
+
+## How far `p` (world) is inside the surface: + inside, - clear of it.
+static func _depth(srf: Dictionary, p: Vector3) -> float:
+	match String(srf.kind):
+		"branch":
+			var a: Vector3 = srf.a
+			var ab: Vector3 = (srf.b as Vector3) - a
+			var s := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 1e-8), -0.2, 1.2)   # (the branch runs on past the grip line)
+			return float(srf.radius) - p.distance_to(a + ab * s)
+		"disc":
+			var c: Vector3 = srf.centre
+			if Vector2(p.x - c.x, p.z - c.z).length() > float(srf.radius):
+				return -INF
+			return c.y - p.y
+		"ground":
+			return (srf.centre as Vector3).y - p.y
+	return -INF
 
 
 ## Where the head looks, as birds do it: hold a fixation (log-normal, the species' mean), then snap to the

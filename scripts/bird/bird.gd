@@ -401,6 +401,7 @@ func telemetry() -> Dictionary:
 		"has_grip": _grip_point() != null,
 		"grip": _grip_point() if _grip_point() != null else Vector3.ZERO,
 		"grip_radius": perch.thickness if perch != null and state in [State.LANDING, State.PERCHED] else 0.0,   # (the branch the toes wrap)
+		"surface": _surface(),
 		"speed": m.speed if state == State.FLYING else m.velocity.length(),
 		"v_best": p.v_best,
 		"v_stall": p.v_stall,
@@ -449,6 +450,19 @@ func _look_target() -> Vector3:
 			return candidate_grip
 		return global_position + model.flight_dir() * 8.0
 	return global_position + facing * 8.0 + Vector3.UP * look_pitch * 4.0
+
+
+## What the bird sits on, for the rig to keep its tail and wingtips out of (world): {kind "branch" (a..b its axis,
+## radius), "disc" (a treetop: centre on its top, radius) or "ground" (centre on it)}; empty in the air.
+func _surface() -> Dictionary:
+	if state == State.GROUNDED:
+		return {"kind": "ground", "centre": Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)}
+	if perch == null or not (state == State.PERCHED or state == State.LANDING):
+		return {}
+	if perch.kind == Perch.Kind.BRANCH:
+		var down := Vector3.DOWN * perch.thickness
+		return {"kind": "branch", "a": perch.a + down, "b": perch.b + down, "radius": perch.thickness}
+	return {"kind": "disc", "centre": perch_grip, "radius": perch.disc}
 
 
 ## Where the feet reach for (world), or null: the perch while landing on or sitting on it, the ground
