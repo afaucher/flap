@@ -10,6 +10,9 @@ func setup() -> void:
 	check(game.bird != null and game.bird.state == Bird.State.PERCHED, "player starts perched")
 	check(game.ai_birds.size() >= 1, "AI birds spawned")
 	check(not game.hud.t.is_empty(), "HUD has telemetry")
+	# The chase camera moves every rendered frame, so physics interpolation must be off for it (on, the engine
+	# warns -- only in a windowed run, which these headless tests never see).
+	check(not game.camera.is_physics_interpolated(), "chase camera isn't physics-interpolated")
 	game.use_autopilot = true
 	game.bird.controller = game.autopilot
 	await frames(60 * 8)

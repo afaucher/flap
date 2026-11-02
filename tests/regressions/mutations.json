@@ -1,0 +1,360 @@
+[
+ {
+  "id": "fold-elbow-raised",
+  "bug": "Folded elbow pushed up off the back by the IK pole; wings stuck up like ears (2026-11-01).",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tvar pole := el_fk.lerp(fold_elbow[i], ik_w)",
+    "replace": "\t\tvar pole := el_fk.lerp(sh + Vector3(s * 0.1, 0.35, 1.0) * _L, ik_w)"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tfold_anchor[i] = elbow + (front - elbow).normalized() * l[1]",
+    "replace": "\t\tfold_anchor[i] = sh + Vector3(s * maxf(_L * 0.155 - shape.shoulder.x, 0.0), 0.0, 0.0) + Vector3(0.0, -0.75, 0.66).normalized() * maxf(absf(l[0] - l[1]) * 1.15, _L * 0.07)"
+   }
+  ]
+ },
+ {
+  "id": "folded-feathers-propeller",
+  "bug": "Folded feathers kept their spread-wing angles and fanned out like a propeller.",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tif ik_w > 0.0:",
+    "replace": "\t\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "feathers-half-width",
+  "bug": "Feather outline peaked at 0.5, so every feather was drawn half as wide as designed.",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const PLAIN_PROFILE := [[0.0, 0.12], [0.05, 0.55], [0.2, 0.9], [0.5, 1.0], [0.8, 0.97], [0.9, 0.86], [0.96, 0.62], [1.0, 0.12]]",
+    "replace": "const PLAIN_PROFILE := [[0.0, 0.06], [0.05, 0.275], [0.2, 0.45], [0.5, 0.5], [0.8, 0.485], [0.9, 0.43], [0.96, 0.31], [1.0, 0.06]]"
+   }
+  ]
+ },
+ {
+  "id": "tail-fan-overspread",
+  "bug": "Tail spread past the point where its feathers still overlap: gaps in the fan.",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const TAIL_FAN_MAX := 100.0",
+    "replace": "const TAIL_FAN_MAX := 160.0"
+   }
+  ]
+ },
+ {
+  "id": "tail-feathers-narrow",
+  "bug": "Narrow tail feathers separated into blades instead of a solid fan.",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const TAIL_WIDTH := 0.2",
+    "replace": "const TAIL_WIDTH := 0.1"
+   }
+  ]
+ },
+ {
+  "id": "feather-colours-linear",
+  "bug": "Feather vertex colours read as linear: washed-out plumage.",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tsm.vertex_color_is_srgb = true",
+    "replace": "\t\tsm.vertex_color_is_srgb = false"
+   }
+  ]
+ },
+ {
+  "id": "camera-interpolation-warning",
+  "bug": "Chase camera left physics interpolation on: engine warning every run.",
+  "tests": [
+   "test_game_smoke"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/chase_camera.gd",
+    "find": "\tphysics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF",
+    "replace": "\tpass"
+   }
+  ]
+ },
+ {
+  "id": "audio-generator-leak",
+  "bug": "Headless audio generator playback leaked at exit (engine warning).",
+  "tests": [
+   "test_speed_audio",
+   "test_game_smoke"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/flight_audio.gd",
+    "find": "\tif DisplayServer.get_name() == \"headless\":\n\t\treturn\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "phugoid-undamped",
+  "bug": "No phugoid damping: the glide bobbed instead of settling.",
+  "tests": [
+   "test_glide_trim",
+   "test_flight_controls"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "var pitch_damping := 1.0",
+    "replace": "var pitch_damping := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "lift-rotation-unsplit",
+  "bug": "Whole lift rotation applied before gravity (no Strang split): glide ~0.6 deg too steep.",
+  "tests": [
+   "test_glide_trim",
+   "test_bird_profiles"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\t\t\taxis = axis.normalized()\n\t\t\tvelocity = velocity.rotated(axis, turn * 0.5)",
+    "replace": "\t\t\taxis = axis.normalized()\n\t\t\tvelocity = velocity.rotated(axis, turn)"
+   },
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tif turn != 0.0:\n\t\tvelocity = velocity.rotated(axis, turn * 0.5)",
+    "replace": "\tif false:\n\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "negative-turn-skipped",
+  "bug": "Second half of the lift rotation skipped when the turn was negative (push).",
+  "tests": [
+   "test_glide_trim",
+   "test_flight_controls"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tif turn != 0.0:",
+    "replace": "\tif turn > 0.0:"
+   }
+  ]
+ },
+ {
+  "id": "flare-loses-lift",
+  "bug": "The flare killed lift and the bird sank under the perch.",
+  "tests": [
+   "test_perching"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tif flare > 0.0:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "slow-thrust-from-path",
+  "bug": "Slow thrust aimed along the path: birds helicoptered straight up.",
+  "tests": [
+   "test_energy"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "_heading_dir * cos(tilt) + UP * sin(tilt)",
+    "replace": "dir * cos(tilt) + lift_dir * sin(tilt)"
+   }
+  ]
+ },
+ {
+  "id": "no-ground-effect-thrust",
+  "bug": "No ground-effect thrust cushion: grounded birds couldn't climb out.",
+  "tests": [
+   "test_ground_takeoff"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\t\tvar cushion := 1.0 + p.ground_effect_thrust * ground_effect",
+    "replace": "\t\tvar cushion := 1.0"
+   }
+  ]
+ },
+ {
+  "id": "leave-pass-zero",
+  "bug": "A bird leaving a perch collided with its own tree.",
+  "tests": [
+   "test_ai_flight",
+   "test_perching"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "const LEAVE_PASS := 0.35",
+    "replace": "const LEAVE_PASS := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "unreachable-candidate-hides",
+  "bug": "The nearest unreachable perch hid a reachable one behind it.",
+  "tests": [
+   "test_perching"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "if candidate == null or (candidate_status == Perch.Catch.OUT_OF_RANGE and status != Perch.Catch.OUT_OF_RANGE):",
+    "replace": "if candidate == null:"
+   }
+  ]
+ },
+ {
+  "id": "spawned-perched-own-tree",
+  "bug": "AI that spawned perched didn't count its own tree as just left.",
+  "tests": [
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t_last_tree = bird.perch.tree_id if bird.perch != null else -1",
+    "replace": "\t_last_tree = -1"
+   }
+  ]
+ },
+ {
+  "id": "ai-plan-not-fitted",
+  "bug": "AI plans ignored the bird's turn radius: hawk and falcon perched 0 times.",
+  "tests": [
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tplanner.clearance = 0.9 + 0.15 * turn_radius",
+    "replace": "\tplanner.clearance = 0.9"
+   },
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif turn_radius > 4.5:\n\t\tmin_perch_height",
+    "replace": "\tif false:\n\t\tmin_perch_height"
+   }
+  ]
+ },
+ {
+  "id": "ai-null-target",
+  "bug": "AI crashed when it had no target.",
+  "tests": [
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif target == null:\n\t\tif not _choose_target(bird):\n\t\t\treturn _hold_glide(bird)",
+    "replace": "\tif target == null:\n\t\t_choose_target(bird)"
+   }
+  ]
+ },
+ {
+  "id": "assist-gain-strong",
+  "bug": "A stronger flare-assist gain braked the hawk short of its perches.",
+  "tests": [
+   "test_perching",
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "/ (profile.grab_speed_max * 0.5), 0.0, 1.0) * perch_assist",
+    "replace": "/ (profile.grab_speed_max * 0.25), 0.0, 1.0) * perch_assist"
+   }
+  ]
+ },
+ {
+  "id": "aim-nearest-not-ahead",
+  "bug": "Landing aimed at the nearest grip point instead of the one straight ahead.",
+  "tests": [
+   "test_perching",
+   "test_arena_layout"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/perch.gd",
+    "find": "\treturn pts[1]",
+    "replace": "\treturn closest_grip(pos)"
+   }
+  ]
+ },
+ {
+  "id": "parse-error-unloaded-script",
+  "bug": "A parse error in a script no test loads (like the _set clash).",
+  "tests": [
+   "test_project_files"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/landing_reel.gd",
+    "find": "extends Node3D\n",
+    "replace": "extends Node3D\nvar _broken: int = \"x\"\n"
+   }
+  ]
+ },
+ {
+  "id": "bom-in-doc",
+  "bug": "A doc written with a UTF-8 BOM by PowerShell's Set-Content.",
+  "tests": [
+   "test_project_files"
+  ],
+  "edits": [
+   {
+    "file": "docs/design/flight_model.md",
+    "find": "",
+    "replace": "\ufeff"
+   }
+  ]
+ },
+ {
+  "id": "mojibake-in-doc",
+  "bug": "A doc double-encoded through a legacy code page.",
+  "tests": [
+   "test_project_files"
+  ],
+  "edits": [
+   {
+    "file": "README.md",
+    "find": "# Flap\n",
+    "replace": "# Flap \u00e2\u20ac\u201d \u00c3\u00a9\n"
+   }
+  ]
+ }
+]

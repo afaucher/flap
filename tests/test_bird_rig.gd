@@ -111,6 +111,9 @@ func setup() -> void:
 		check(ok, p.id + " finite feathers")
 		eq(rig.feather_xforms.size(), rig._plain_count + rig._emarg_count, p.id + " every feather placed")
 		check(rig.feather_material == null, p.id + " plain feathers by default (the shader is parked)")
+		# Instance colours are authored in sRGB: read as linear they wash out pale.
+		var fm := (rig.get_node("Feathers") as MultiMeshInstance3D).material_override as StandardMaterial3D
+		check(fm != null and fm.vertex_color_use_as_albedo and fm.vertex_color_is_srgb, p.id + " feather colours are sRGB")
 		# The parked shader still builds and gets its species look.
 		BirdRig.plain_feathers = false
 		var shaded := BirdRig.new()
