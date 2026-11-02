@@ -36,6 +36,7 @@ var _scarf_mesh := ImmediateMesh.new()
 var _scarf_pts: Array[Vector3] = []
 var _t := 0.0
 const SCARF_N := 10
+const HOLD_REACH := 0.72        ## standing: shoulders to the hand loops, of the arm's length (leaning back)
 const SOLE := 3.6                ## real cm from the ankle down to the boot's sole (the foot mesh)
 const ARCH := 6.0                ## real cm from the ankle forward to the arch: standing, the bar goes there
 ## The coat's girth (torso frame, real cm): [y, half width, half depth, z offset], as built, the collar's
@@ -773,10 +774,27 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 	var p_seat := sp + sn * _r("seat_lift")
 	var leg := _r("thigh") + _r("shin") + _r("ankle")
 	var mid_peg := (pegs[0] + pegs[1]) * 0.5
-	var p_stand := mid_peg + u * leg * 0.93 + sn * 1.0 * k
 	var st := smoothstep(0.0, 1.0, stand)
+	# Standing, the rider leans back from the hand loops from the feet up -- like a lineman in his belt --
+	# until the arms reach them outstretched, rather than standing so close the arms fold into the chest.
+	var t_stand := u
+	var away := -sn - u * (-sn).dot(u)
+	if away.length() > 0.05:
+		var ax := (-sn).cross(u).normalized()
+		var reach := (_r("upper_arm") + _r("forearm")) * HOLD_REACH
+		for q in 31:
+			t_stand = u.rotated(ax, deg_to_rad(q))
+			var shm := mid_peg + t_stand * (leg * 0.93 + _r("spine") - 4.0 * k)
+			# (each hand to its loop from the nearer shoulder; stop once the further one is at reach)
+			var far := 0.0
+			for h in saddle.holds:
+				var hp: Vector3 = h * sc
+				far = maxf(far, minf(hp.distance_to(shm + ax * _r("shoulder_w")), hp.distance_to(shm - ax * _r("shoulder_w"))))
+			if far >= reach:
+				break
+	var p_stand := mid_peg + t_stand * leg * 0.93 + sn * 1.0 * k
 	var pelvis := p_seat.lerp(p_stand, st) + sn * 6.0 * k * sin(PI * st)   # (lifts clear of the pommel on the way)
-	var trunk := t_seat.slerp(u, st).normalized()
+	var trunk := t_seat.slerp(t_stand, st).normalized()
 	var facing := fwd.slerp(-sn, st)
 	var back := -(facing - trunk * facing.dot(trunk)).normalized()
 	var pb := Basis(trunk.cross(back).normalized(), trunk, back)
