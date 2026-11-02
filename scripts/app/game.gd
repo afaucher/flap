@@ -16,7 +16,7 @@ extends Node3D
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
 ##   --no-rider         no war tack on any bird (the menu's Flight)
 ##   --no-far-blur      no softening of the far wood (ForestLight.far_blur; F5 toggles in game)
-##   --hud <style>      dev (default) | classic | centre: the HUD's layout (FlightHud.style)
+##   --hud <style>      classic (default) | ring | dev: the HUD's layout (FlightHud.style)
 
 var layout: ArenaLayout
 var arena: ArenaBuilder

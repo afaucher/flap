@@ -1470,5 +1470,19 @@
     "replace": "\t\twidths.append(1.0)"
    }
   ]
+ },
+ {
+  "id": "perch-marked-without-catch",
+  "bug": "The classic HUD marks the perch ahead only while catch is held (less noise); it mustn't mark every perch flown past (2026-11-02).",
+  "tests": [
+   "test_game_smoke"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/flight_hud.gd",
+    "find": "\treturn style == \"dev\" or catch_armed",
+    "replace": "\treturn true"
+   }
+  ]
  }
 ]

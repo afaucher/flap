@@ -20,6 +20,19 @@ func setup() -> void:
 		check(ca.dof_blur_far_distance >= 40.0 and ca.dof_blur_amount <= 0.05, "only past 40 m, and gently (from %.0f m, amount %.3f)" % [ca.dof_blur_far_distance, ca.dof_blur_amount])
 		check(not ForestLight.toggle_far_blur(game) and not ca.dof_blur_far_enabled, "F5 turns it off")
 		check(ForestLight.toggle_far_blur(game) and ca.dof_blur_far_enabled, "and on again")
+	# The classic HUD: the perch ahead is marked only while catch is held (and always with --hud dev).
+	eq(FlightHud.style, "classic", "the classic HUD is the default")
+	var near: Perch = game.layout.perches[0]
+	for held in [false, true]:
+		game.bird.candidate = near
+		game.bird.last_input.catch_held = held
+		game._physics_process(0.0)
+		eq(game.arena.highlight.visible, held, "the perch ahead is marked %s" % ("while catch is held" if held else "only while catch is held"))
+	FlightHud.style = "dev"
+	game.bird.last_input.catch_held = false
+	game._physics_process(0.0)
+	check(game.arena.highlight.visible, "--hud dev marks it always")
+	FlightHud.style = "classic"
 	game.use_autopilot = true
 	game.bird.controller = game.autopilot
 	await frames(60 * 8)

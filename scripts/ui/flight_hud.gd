@@ -9,8 +9,8 @@ extends Control
 ##   Prompts (centre): catch / too fast / perched / stall.
 ##   F3 debug: angle of attack, CL, L/D, load factor and the wing areas (planform after tuck, and the
 ##   frontal "airbrake" area S_eff |sin alpha|) -- the wing-area readout planned for the full HUD.
-## `style` (--hud) picks the layout, being compared (docs/images/hud_styles.jpg):
-##   dev      all of the above, as it has been
+## `style` (--hud) picks the layout (docs/images/hud_styles.jpg; classic is the default):
+##   dev      all of the above on screen at once
 ##   classic  the bird's status in the top-left corner (name, burst, stamina; the combat HUD adds health and
 ##            rounds under it); the instruments (speed tape, pitch ladder, bank arc, stick) only with F3; key hints at the bottom left, fading after a few seconds (F1 brings them
 ##            back)
@@ -28,7 +28,7 @@ const WARN := Color(1.0, 0.75, 0.25, 0.95)
 const BAD := Color(1.0, 0.35, 0.3, 0.95)
 const CYAN := Color(0.4, 0.9, 1.0, 0.95)
 
-static var style := "dev"   ## "dev" | "classic" | "ring"
+static var style := "classic"   ## "classic" (the game's) | "ring" | "dev" (every instrument on screen)
 const STYLES := ["dev", "classic", "ring"]
 const HINT_TIME := 8.0      ## s the key hints stay up (classic, ring)
 const RING_DEG := 15.0      ## the aim ring: the seeker's lock cone (Launcher.LOCK_CONE), drawn this many deg out

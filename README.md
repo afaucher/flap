@@ -38,18 +38,20 @@ A gamepad is the recommended way to fly: the left stick has a real centre (wings
 | Right stick | | tilt / orbit the camera (springs back) |
 | Left stick while perched | mouse while perched | turn on the perch to look around; you leave the way you face |
 | Back / Start / Y | 1-5 / R / P | change bird / respawn / autopilot |
-| | F3 | debug panel: angle of attack, CL, L/D, wing areas |
+| | F1 | show the key hints again |
+| | F3 | instruments and debug panel: speed tape, pitch ladder, bank arc, stick; angle of attack, CL, L/D, wing areas |
 
 **HUD.**
-- Speed tape with stall, catch and best-glide marks, and the current speed band (STALL, CATCH, SLOW, GLIDE, FAST, DIVE).
-- Pitch ladder: nose, flight path and the green ideal-glide line.
-- Roll arc with red bank-limit ticks.
-- Burst and stamina bars.
-- Stick position.
+- Top left: your bird, burst and stamina (in a fight, health and rounds under them).
+- Speed shows where it matters, on the perch: hold catch and the perch you're heading for is marked, with a
+  gauge of your speed against the catch speed (green: it will hold; red: slow down).
+- Prompts at the bottom (stall, too fast, perched); key hints fade after a few seconds.
+- `--hud dev` puts every instrument on screen (speed tape, pitch ladder, bank arc, stick); `--hud ring` wraps the
+  status round the aim circle.
 
 **Audio.** The wind rises with speed. Each speed band boundary plays its own whoosh: rising when you speed up, falling when you slow down. When you drop under catch speed you hear it, and best glide has its own whoosh too. Wingbeats thump.
 
-**Perching.** Approach the perch slower than the cyan "catch" speed: dive under it and swoop up. Hold catch on the way in.
+**Perching.** Approach the perch slower than the catch speed (the perch's gauge turns green): dive under it and swoop up. Hold catch on the way in.
 
 **Low and slow.** Ground effect (within about 1.5 spans of the ground) cuts drag and strengthens wingbeats, so a downed bird can flap back up.
 
