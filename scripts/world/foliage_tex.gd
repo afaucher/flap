@@ -90,7 +90,50 @@ class Canvas:
 			data[k * 4 + 3] = int(clampf(aa, 0.0, 1.0) * 255.0)
 		var img := Image.create_from_data(n, m, false, Image.FORMAT_RGBA8, data)
 		img.generate_mipmaps()
+		FoliageTex._keep_coverage(img, 0.4)
 		return img
+
+
+## Mipmaps that keep the alpha test's coverage: plain averaging thins needles to a soft blob that the test then
+## cuts into a smooth, leaf-like outline; here each level's alpha is scaled so as much of it passes `cut` as
+## passes at full size, so a distant spray stays a spiky fringe of needles. (Castano's coverage-preserving mips.)
+static func _keep_coverage(img: Image, cut: float) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	var data := img.get_data()
+	var levels := img.get_mipmap_count() + 1
+	var c0 := -1.0
+	for lv in levels:
+		var off := img.get_mipmap_offset(lv)
+		var lw := maxi(1, w >> lv)
+		var lh := maxi(1, h >> lv)
+		var n := lw * lh
+		var hist := PackedInt32Array()
+		hist.resize(256)
+		for k in n:
+			hist[data[off + k * 4 + 3]] += 1
+		var cover := func(sc: float) -> float:
+			var above := 0
+			for b in 256:
+				if b * sc > cut * 255.0:
+					above += hist[b]
+			return float(above) / n
+		if lv == 0:
+			c0 = cover.call(1.0)
+			continue
+		var lo := 1.0
+		var hi := 8.0
+		for it in 14:
+			var mid := (lo + hi) * 0.5
+			if cover.call(mid) < c0:
+				lo = mid
+			else:
+				hi = mid
+		var sc := (lo + hi) * 0.5
+		for k in n:
+			var i := off + k * 4 + 3
+			data[i] = mini(255, int(data[i] * sc))
+	img.set_data(w, h, true, Image.FORMAT_RGBA8, data)
 
 
 static func _needle_col(rng: RandomNumberGenerator) -> Color:
@@ -118,16 +161,22 @@ static func _shoot(cv: Canvas, rng: RandomNumberGenerator, p: Vector2, dir: Vect
 		var k := int(f * seg)
 		var base := pts[k].lerp(pts[mini(k + 1, seg)], f * seg - k)
 		var along := (pts[mini(k + 1, seg)] - pts[k]).normalized()
-		var nl := rng.randf_range(4.0, 6.5) * px_per_cm * lerpf(0.75, 1.0, f)
+		var nl := rng.randf_range(4.5, 6.0) * px_per_cm   # (all about the same length: a brush's outline is blunt)
 		# (seen from above, a pine shoot is a bottle brush: needles stand out all round it, so in the flat some
 		# lie to the sides at full length and others, pointing up or down, foreshortened over the shoot)
 		for q in 3:
 			var s := -1.0 if q == 0 else (1.0 if q == 1 else (1.0 if rng.randf() < 0.5 else -1.0))
 			var fore := 1.0 if q < 2 else rng.randf_range(0.25, 0.6)
-			var ang: float = s * rng.randf_range(0.35, 1.0) * (1.0 if q < 2 else 0.6)
+			var ang: float = s * rng.randf_range(0.75, 1.3) * (1.0 if q < 2 else 0.6)   # (standing well out from the shoot)
 			var nd := along.rotated(ang)
 			var tip := base + nd * nl * fore + Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * px_per_cm * 0.4
 			cv.stroke(base, tip, 2.2, _needle_col(rng) * (0.85 if q == 2 else 1.0), 0.35)
+	# The bud's tuft at the tip: needles fanning forward, so the brush ends round, not in a point.
+	var end := pts[seg]
+	var fwd := (pts[seg] - pts[seg - 1]).normalized()
+	for i in 14:
+		var nd := fwd.rotated(rng.randf_range(-1.1, 1.1))
+		cv.stroke(end, end + nd * rng.randf_range(3.5, 5.5) * px_per_cm, 2.2, _needle_col(rng), 0.35)
 	if depth < 2:
 		for fk in rng.randi_range(1, 2):
 			var f := rng.randf_range(0.35, 0.75)
@@ -148,7 +197,7 @@ static func _needles(size: int, s: int) -> ImageTexture:
 	var h := int(size * NEEDLE_ASPECT)
 	var cv := Canvas.new(size, h)
 	var px_per_cm := size / 45.0
-	_shoot(cv, rng, Vector2(size * 0.02, h * 0.52), Vector2(1.0, rng.randf_range(-0.05, 0.05)).normalized(), size * 0.78, 1, px_per_cm)
+	_shoot(cv, rng, Vector2(size * 0.02, h * 0.52), Vector2(1.0, rng.randf_range(-0.05, 0.05)).normalized(), size * 0.8, 2, px_per_cm)   # (depth 2: no side shoots off the card)
 	return ImageTexture.create_from_image(cv.image())
 
 

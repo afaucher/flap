@@ -383,8 +383,8 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], cus
 ## (foliage.gdshader, FoliageTex) -- sprays of needles on the pines and saplings, leaf clusters on the oaks --
 ## set mostly round the clump's shell, facing out and up, their sprays pointing outward; drawn only.
 const _CARDS := {
-	"needles": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.35, 0.6), "per_m3": 70.0, "n": Vector2i(40, 120), "tint": Color(0.86, 0.98, 0.98), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.1},
-	"sapling": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.25, 0.42), "per_m3": 60.0, "n": Vector2i(14, 40), "tint": Color(0.9, 1.0, 0.95), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.1},
+	"needles": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.35, 0.6), "per_m3": 70.0, "n": Vector2i(40, 120), "tint": Color(0.86, 0.98, 0.98), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.3, "boost_from": 3.0},
+	"sapling": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.2, 0.34), "per_m3": 110.0, "n": Vector2i(10, 30), "tint": Color(0.9, 1.0, 0.95), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.3, "boost_from": 3.0},
 	"leaves": {"tex": "oak", "size": Vector2(0.6, 0.95), "per_m3": 6.0, "n": Vector2i(16, 80), "tint": Color(1.0, 1.0, 1.0)},
 }
 const FOLIAGE_SHADER := preload("res://scripts/world/foliage.gdshader")
@@ -431,7 +431,7 @@ func _foliage_mat(key: String, spec: Dictionary, extra := {}) -> ShaderMaterial:
 	m.shader = FOLIAGE_SHADER
 	m.set_shader_parameter("tex", FoliageTex.get_tex(spec.tex))
 	m.set_shader_parameter("tint", spec.tint)
-	for p in ["tex_size", "scissor", "boost"]:
+	for p in ["tex_size", "scissor", "boost", "boost_from"]:
 		if spec.has(p):
 			m.set_shader_parameter(p, spec[p])
 	for e in extra:
