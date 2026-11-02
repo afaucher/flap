@@ -927,5 +927,47 @@
     "replace": "const BEAT_FADE := 0.0001 "
    }
   ]
+ },
+ {
+  "id": "tucked-leg-flips",
+  "bug": "Tucked in flight the knee bent the ankle back in the world, which with the body pitched up for a flare points up through it: the owl's legs flipped up into its body and out of its back (2026-11-02).",
+  "tests": [
+   "test_landing_legs"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tvar pole_body := knee + Vector3.DOWN * _L * 0.3\n",
+    "replace": "\t\tvar pole_body := knee - fwd_h * _L * 0.3 - up_w * _L * 0.05\n"
+   }
+  ]
+ },
+ {
+  "id": "touchdown-stance-jump",
+  "bug": "At touchdown the body took its perched stance in one tick (meant for a bird placed on a perch), a jump of a few centimetres (2026-11-02).",
+  "tests": [
+   "test_landing_legs"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "var arrived := sitting and age < 0.05 and _prev_state != Bird.State.LANDING",
+    "replace": "var arrived := sitting and age < 0.05"
+   }
+  ]
+ },
+ {
+  "id": "touchdown-feet-snap",
+  "bug": "Through a landing the feet chased the grip at a fixed rate and snapped the rest of the way onto it at touchdown (2026-11-02).",
+  "tests": [
+   "test_landing_legs"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tfoot_targets[i] = _land_foot[i].lerp(want_foot, smoothstep(0.0, 0.85, float(t.landing_t)))\n",
+    "replace": "\t\t\tfoot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 - exp(-12.0 * dt))\n"
+   }
+  ]
  }
 ]

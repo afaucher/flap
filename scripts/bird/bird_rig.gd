@@ -77,6 +77,10 @@ var tail_twist := 0.0           ## rad
 var look_dir := Vector3.FORWARD ## rig space, where the head looks
 var world_up := Vector3.UP      ## rig space, for head stabilisation
 var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _land_foot: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## each foot target at the catch (rig space)
+var _prev_state := -1            ## the Bird's state last tick (animate): a landing settles, a spawn snaps
+var leg_reach := PackedFloat32Array([1.0, 1.0])   ## per leg: 0 tucked (the knee folds toward the belly) .. 1 reaching for
+                                                  ## or standing on something (the ankle bends back in the world)
 var toe_grip := 0.0             ## 0 open .. 1 curled round a branch
 var grip_radius := 0.0          ## the branch under the feet (m; 0: none, or the ground): the detailed toes wrap it
 var lean := 0.0                 ## sitting: 0 the species' posture .. 1 the body level and the tail raised (to keep the
@@ -1436,7 +1440,8 @@ func animate(t: Dictionary, dt: float) -> void:
 		var reach := body.femur + _tib + _tars
 		var want_h := reach * (float(POSE.get(profile.id, POSE["crow"]).stance) if state == Bird.State.PERCHED else 0.85)
 		stance_t = want_h - (hip_w - (t.grip as Vector3)).dot(Vector3.UP)
-	_stance = lerpf(_stance, stance_t, 1.0 if age < 0.05 else 1.0 - exp(-10.0 * dt))
+	var arrived := sitting and age < 0.05 and _prev_state != Bird.State.LANDING   # (placed sitting -- a spawn: take the stance at once;
+	_stance = lerpf(_stance, stance_t, 1.0 if arrived else 1.0 - exp(-10.0 * dt))   # landed: settle into it)
 	position = transform.basis * (world_up * (_stance - dip))
 
 	# Head: look at the target, level with the world.
@@ -1464,14 +1469,22 @@ func animate(t: Dictionary, dt: float) -> void:
 			var g: Vector3 = inv * (t.grip as Vector3)
 			var side_off := Vector3(SIDES[i] * _L * 0.04, 0.0, 0.0)
 			var reach := body.femur + _tib + _tars
-			if (g + side_off).distance_to(_hip[i]) < reach * 1.6:
+			if landing or (g + side_off).distance_to(_hip[i]) < reach * 1.6:   # (landing: reaching for it from the catch)
 				want_foot = g + side_off
 				grip = 1.0 if state == Bird.State.PERCHED else 0.0   # (on the ground the toes lie flat)
 		elif flare > 0.3:
 			want_foot = _hip[i] + Vector3(0.0, -_L * 0.22, -_L * 0.16)
-		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
+		var reaching := 1.0 if sitting or want_foot != _tucked_foot(i) else 0.0
+		leg_reach[i] = 1.0 if arrived else lerpf(leg_reach[i], reaching, 1.0 - exp(-8.0 * dt))
+		if landing:   # (on the landing's own clock, from where the foot was at the catch: on the grip at touchdown)
+			if _prev_state != Bird.State.LANDING:
+				_land_foot[i] = foot_targets[i]
+			foot_targets[i] = _land_foot[i].lerp(want_foot, smoothstep(0.0, 0.85, float(t.landing_t)))
+		else:
+			foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
 		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
 	grip_radius = float(t.get("grip_radius", 0.0)) if t.has_grip else 0.0
+	_prev_state = state
 	apply_pose()
 
 
@@ -1793,10 +1806,21 @@ func apply_pose() -> void:
 		var fdir := (fwd_h * 0.9 - up_w * 0.3).normalized()
 		fdir = (fdir + (target - hip).normalized() * 0.2).normalized()
 		var knee := hip + fdir * body.femur
-		var pole := knee - fwd_h * _L * 0.3 - up_w * _L * 0.05
+		# The ankle bends back in the world when the foot reaches for or stands on something (the bird's "backward
+		# knee" under it), but tucked in flight it folds under the belly, in the body's own frame: with the body
+		# pitched up in a flare, world "back" points up through the body and flipped the tucked leg into it. Going
+		# from one to the other the bend turns round the leg -- swung out past the side (the knee splays), never
+		# through the body -- as the foot starts to reach (leg_reach).
 		if legs != null:   # (the foot pad sits on the surface, not half in it)
 			target += up_w * legs.sole_height()
-		var ankle := two_bone(knee, target, _tib, _tars, pole)
+		var pole_world := knee - fwd_h * _L * 0.3 - up_w * _L * 0.05
+		var pole_body := knee + Vector3.DOWN * _L * 0.3
+		var w := leg_reach[i]
+		var ankle := two_bone(knee, target, _tib, _tars, pole_world if w >= 0.999 else pole_body)
+		if w > 0.001 and w < 0.999:
+			var a_world := two_bone(knee, target, _tib, _tars, pole_world)
+			var swing := ankle.lerp(a_world, smoothstep(0.0, 1.0, w)) + Vector3(SIDES[i], 0.0, 0.0) * sin(PI * w) * _L * 0.15
+			ankle = two_bone(knee, target, _tib, _tars, swing)
 		var foot := chain_end(ankle, target, _tars)
 		leg_joints[i] = [hip, knee, ankle, foot]
 		if legs != null:   # (the detailed legs: lofted, joined, segmented toes, claws)
