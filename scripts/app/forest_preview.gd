@@ -48,20 +48,30 @@ func _views() -> Array:
 	var oak: ArenaLayout.TreeData = layout.trees[0]
 	v.append(["The clearing's oak, from its edge at 9 m", Vector3(4.0, 9.0, 30.0), oak.top() * Vector3(1, 0, 1) + Vector3.UP * 8.0])
 	v.append(["Overview", Vector3(0.0, 75.0, 120.0), Vector3(0.0, 0.0, 10.0)])
-	# The pine outpost whose approach looks half into the sun (the concept's view), with a falcon
-	# and its rider flaring onto the rail.
-	var toward_sun0 := -(Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
+	# A pine outpost with a falcon and its rider flaring onto the rail, as in the concept: the bird in full sun
+	# (nothing between it and the sun -- the kestrel there is sunlit; ours had sat in its own trunk's shadow),
+	# the sun off to the side of the approach so we see both its lit side and the rim. (A DirectionalLight
+	# shines along its -Z, so the sun is along +Z.)
+	var to_sun := (Basis.from_euler(Vector3(deg_to_rad(-ForestLight.SUN_ELEVATION), deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
+	var sun_h := Vector3(to_sun.x, 0.0, to_sun.z).normalized()
 	var on_pine: ArenaLayout.OutpostData = null
+	var best := -INF
 	for o in layout.outposts:
-		# (the concept's sun: ahead of the camera and off to one side, ~55 deg, so it lights the wings' tops and
-		# rims their edges rather than leaving the bird's back in its own shadow)
-		if layout.trees[o.tree_id].kind == ArenaLayout.Kind.PINE and (on_pine == null or absf(o.out.dot(-toward_sun0) - 0.55) < absf(on_pine.out.dot(-toward_sun0) - 0.55)):
+		if layout.trees[o.tree_id].kind != ArenaLayout.Kind.PINE:
+			continue
+		var spot: Vector3 = _bird_spot(o)
+		var score := -absf(o.out.dot(sun_h)) + (2.0 if _sunlit(spot, to_sun) else 0.0)
+		if score > best:
+			best = score
 			on_pine = o
 	var bird_at := _bird(on_pine)
 	# The concept's angle: above and behind a bird coming in to the outpost, looking across it into the light.
 	var toward_sun := -(Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
 	var bside := on_pine.out.cross(Vector3.UP).normalized()
-	v.append(["The concept's angle: a falcon coming in to an outpost", bird_at + on_pine.out * 1.5 + bside * 0.45 + Vector3.UP * 0.75, on_pine.centre + Vector3.UP * 0.15])
+	# (behind the bird and swung round toward the sun's side, so the sun -- behind and beside the camera --
+	# lights its back and the tops of its wings)
+	var cam_dir := (on_pine.out * 0.6 + sun_h * 0.8).normalized()
+	v.append(["The concept's angle: a falcon coming in to an outpost", bird_at + cam_dir * 1.3 + Vector3.UP * 0.55, bird_at.lerp(on_pine.centre, 0.3)])
 	v.append(["The falcon flaring onto the rail, from the side", bird_at - bside * 1.0 + Vector3.UP * 0.15 + on_pine.out * 0.35, bird_at])
 	v.append(["A pine's outpost, on approach", on_pine.centre + on_pine.out * 3.2 + Vector3.UP * 0.6 + on_pine.out.cross(Vector3.UP) * 1.2, on_pine.centre])
 	v.append(["A pine's outpost, the deck from 1 m", on_pine.centre + on_pine.out * 1.1 + on_pine.out.cross(Vector3.UP) * 0.5 + Vector3.UP * 0.9, on_pine.centre - on_pine.out * 0.1])
@@ -95,12 +105,27 @@ func _views() -> Array:
 	return v
 
 
+## Where the falcon flares: just short of outpost `o`'s rail.
+func _bird_spot(o: ArenaLayout.OutpostData) -> Vector3:
+	return o.centre + o.out * (o.depth * 0.5 + 0.7) + Vector3.UP * 0.32
+
+
+## Does the sun reach `p`: no wood (trunks, limbs, decks) and no leaves along the line to it for 60 m?
+func _sunlit(p: Vector3, to_sun: Vector3) -> bool:
+	if not layout.segment_clear(p + to_sun * 0.6, p + to_sun * 60.0, 0.2):
+		return false
+	for i in 60:
+		if not Pinewood._leaf_free(layout, p + to_sun * (1.0 + i), 0.1):
+			return false
+	return true
+
+
 ## A falcon with its rider and tack, flaring to land on outpost `o`'s rail, just short of it. Returns where.
 func _bird(o: ArenaLayout.OutpostData) -> Vector3:
 	var rig := BirdRig.new()
 	add_child(rig)
 	rig.build(BirdProfile.by_id("falcon"))
-	var at: Vector3 = o.centre + o.out * (o.depth * 0.5 + 0.7) + Vector3.UP * 0.32
+	var at := _bird_spot(o)
 	rig.global_transform = Transform3D(Basis.looking_at(-o.out, Vector3.UP), at)
 	RigPoses.apply(rig, "flare", 0.0)
 	var tack := Tack.fit(rig)
