@@ -455,8 +455,8 @@
   "edits": [
    {
     "file": "scripts/tack/rider.gd",
-    "find": "\t\tvar a := lerpf(a0, PI - a0, j / 20.0)",
-    "replace": "\t\tvar a := lerpf(a0, a0 + TAU, j / 20.0)"
+    "find": "\t\t\t\tvar ph := lerpf(ph0, TAU - ph0, (i - 1) / 28.0)",
+    "replace": "\t\t\t\tvar ph := lerpf(ph0, TAU + ph0, (i - 1) / 28.0)"
    }
   ]
  },
@@ -569,6 +569,34 @@
     "file": "scripts/bird/leg_rig.gd",
     "find": "\tvar c := maxf(absf(base.dot(fr[3] as Vector3)), 0.22)",
     "replace": "\tvar c := 1.0"
+   }
+  ]
+ },
+ {
+  "id": "tack-helmet-in-skull",
+  "bug": "The helmet was a sphere of its own, not the skull pushed out by its padding: the crown poked through it and the brim stood off the brow (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/head_shape.gd",
+    "find": "const HELMET_T := 0.9",
+    "replace": "const HELMET_T := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "tack-goggles-float",
+  "bug": "The goggles' cups hung 2 cm in front of the face instead of sitting on it round the eyes (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tvar o := c + ax * 1.7\n",
+    "replace": "\t\tvar o := c + ax * 3.7\n"
    }
   ]
  }

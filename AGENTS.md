@@ -30,8 +30,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
 - `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
-  `BackSurface`), `Rider`, `TackMesh` + the leather/metal/cloth shaders. Look at it with
-  `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros]]`.
+  `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
+  cloth/skin/eye shaders. Look at it with
+  `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads]]`.
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet behind `LegRig.enabled` (trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked

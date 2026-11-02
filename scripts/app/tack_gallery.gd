@@ -5,13 +5,21 @@ extends Node3D
 ##       [--shot <png> [--shot-after <s>]] [--sheet <png> [--label <text>]] [--ammo <rockets>,<seekers>]
 ## --sheet renders the standard set of views (flight, perched, close-ups of the rider, launcher, harness and
 ## leather) into one image, for before/after comparisons; with --macros, close-ups of the seat, face, boots and
-## breast ring instead. Keys: Space next view, P pose.
+## breast ring instead; with --heads, the face and helmet. Keys: Space next view, P pose.
 
 const MACROS := [
 	["Seat from behind", "glide", "seat", Vector3(0.2, 0.6, 1.0), 0.05],
 	["Face", "glide", "head", Vector3(-0.2, -0.1, -1.0), 0.035],
 	["Boots and heels", "glide", "seat", Vector3(1.0, 0.4, 0.6), 0.05],
 	["Breast ring", "glide", "ring", Vector3(0.1, -1.0, -0.5), 0.06],
+]
+const HEADS := [
+	# (anchor "face": the direction is in the rider's head frame, -Z the way the face looks; pose "rest": wings
+	# spread but the rider at rest, kneeling up with goggles raised)
+	["Face, goggles down", "glide", "face", Vector3(0.3, 0.12, -1.0), 0.032],
+	["Face, goggles up", "rest", "face", Vector3(0.3, 0.12, -1.0), 0.032],
+	["Profile", "rest", "face", Vector3(1.0, 0.05, -0.15), 0.034],
+	["Helmet from behind", "rest", "face", Vector3(-0.6, 0.55, 0.85), 0.036],
 ]
 const SHOTS := [
 	# [label, pose, anchor, direction to the camera (world), distance (x L for whole-bird anchors)]
@@ -79,7 +87,7 @@ func _ready() -> void:
 	_frame(["", pose, "bird", Vector3(0.6, 0.45, 0.9), 1.9])
 	var sheet := Boot.arg_value(args, "--sheet")
 	if sheet != "":
-		await _sheet(sheet, Boot.arg_value(args, "--label"), MACROS if args.has("--macros") else SHOTS)
+		await _sheet(sheet, Boot.arg_value(args, "--label"), MACROS if args.has("--macros") else (HEADS if args.has("--heads") else SHOTS))
 		get_tree().quit()
 		return
 	var shot := Boot.arg_value(args, "--shot")
@@ -93,9 +101,9 @@ func _ready() -> void:
 
 
 func _apply_pose() -> void:
-	RigPoses.apply(rig, pose, 0.0)
-	tack.sitting = pose == "folded"
-	tack.wind = Vector3(0, 0, 12.0) if pose != "folded" else Vector3.ZERO
+	RigPoses.apply(rig, "glide" if pose == "rest" else pose, 0.0)
+	tack.sitting = pose == "folded" or pose == "rest"
+	tack.wind = Vector3(0, 0, 12.0) if pose == "glide" or pose == "flap" or pose == "upstroke" else Vector3.ZERO
 	tack.update(0.0)
 	branch.visible = pose == "folded"
 	var L := rig.body.L
@@ -113,6 +121,13 @@ func _frame(s: Array) -> void:
 			dist *= L
 		"head":
 			anchor = tack.rider.to_global(tack.rider.joints.head)
+		"face":
+			var hd := tack.rider.get_node("head") as Node3D
+			anchor = hd.global_position
+			var dir := (hd.global_basis * (s[3] as Vector3)).normalized()
+			cam.look_at_from_position(anchor + dir * dist, anchor, hd.global_basis.y.normalized())
+			_label.text = s[0]
+			return
 		"seat":
 			anchor = tack.saddle.to_global(tack.saddle.seat_point)
 		"launcher":

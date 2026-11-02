@@ -6,7 +6,8 @@ extends TestCase
 ## rider rides the seat in a racer's tuck in flight (knees into the tank, feet on the side pegs) and stands upright on the footrest perched, knees hinging like knees
 ## (bent forward, within a human range) left and right, hands within reach of the grips; on a shallow perch
 ## (the crow) the rider kneels up instead of standing; the owl and the sparrow carry none; the launcher points
-## along the body and shows the rounds left.
+## along the body and shows the rounds left. The rider's head: the helmet sits snugly on the skull and leaves the
+## face open; the face has a nose and eyes under a brow; the goggles sit on the face, or raised on the helmet.
 
 
 
@@ -27,35 +28,121 @@ func setup() -> void:
 			tack.update(0.0)
 			_rider(id, pose, rig, tack)
 			_head(id, pose, rig, tack)
+			_goggles(id, pose, tack)
 		_wings(id, rig, tack)
 		_launcher(id, tack)
-		_goggles(id, tack)
+		_head_shape(id, tack)
 		rig.queue_free()
 		await frames(1)
 	finish()
 
 
-## The goggle strap runs from each cup's outer rim round the back of the helmet: nothing of it lies across
-## the face between the cups, and it reaches both cups (goggles' own frame, real cm; the face is within 9.2
-## of the head's centre, the cups at x = +-3.6).
-func _goggles(id: String, tack: Tack) -> void:
-	var mi := tack.rider.get_node("head/goggles").get_child(0) as MeshInstance3D
+## Vertices (head frame, real cm) of the head mesh's surfaces drawn in material `mat`.
+func _head_verts(tack: Tack, mat: String) -> PackedVector3Array:
+	var m := (tack.rider.get_node("head/head_mesh") as MeshInstance3D).mesh as ArrayMesh
+	var out := PackedVector3Array()
+	for sfc in m.get_surface_count():
+		if m.surface_get_material(sfc) == TackMaterials.get_mat(mat):
+			for v in (m.surface_get_arrays(sfc)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+				out.append(v / tack.rider.k)
+	return out
+
+
+## The head (HeadShape, as drawn): the helmet sits on the skull, its padding's depth out, never in it; it
+## leaves the face open (brows, eyes, nose, mouth) and its flaps come down both cheeks to the jaw; the nose
+## stands out from the cheeks; each eye shows (in front of the skin round it) under a brow ridge that stands
+## further forward.
+func _head_shape(id: String, tack: Tack) -> void:
+	var helm := _head_verts(tack, "helmet")
+	var lo := INF
+	var gaps := []
+	var over_face := 0
+	var flaps := [0, 0]
+	for p in helm:
+		var g := HeadShape.gap(p)
+		lo = minf(lo, g)
+		gaps.append(g)
+		if p.z < -5.0 and p.y < 2.9 and absf(p.x) < 5.6:
+			over_face += 1
+		if p.y < -6.0 and absf(p.x) > 5.0:
+			flaps[0 if p.x < 0.0 else 1] += 1
+	for p in _head_verts(tack, "lining"):
+		if p.z < -5.0 and p.y < 2.9 and absf(p.x) < 5.6:
+			over_face += 1
+	gaps.sort()
+	check(lo > 0.4, "%s: the helmet never dips into the head (closest %.2f cm)" % [id, lo])
+	check(gaps[gaps.size() / 2] < 1.3, "%s: the helmet's shell hugs the skull (median gap %.2f cm)" % [id, gaps[gaps.size() / 2]])
+	eq(over_face, 0, "%s: the helmet leaves the face open" % id)
+	check(flaps[0] > 0 and flaps[1] > 0, "%s: the helmet's flaps come down both cheeks" % id)
+	var skin := _head_verts(tack, "skin")
+	var tip := Vector3(0, 0, INF)
+	for p in skin:
+		if absf(p.x) < 1.0 and p.z < tip.z:
+			tip = p
+	check(tip.y > -4.0 and tip.y < -1.5, "%s: the face's frontmost point is the nose's tip (y %.1f)" % [id, tip.y])
+	var eyes := _head_verts(tack, "eye")
+	for s in [-1.0, 1.0]:
+		var cheek := INF
+		var brow := INF
+		var apex := Vector3(0, 0, INF)
+		for p in skin:
+			if absf(p.x - s * 4.6) < 0.5 and absf(p.y + 2.0) < 0.5:
+				cheek = minf(cheek, p.z)
+			if absf(p.x - s * 3.2) < 0.6 and p.y > 1.5 and p.y < 3.0:
+				brow = minf(brow, p.z)
+		for p in eyes:
+			if p.x * s > 0.0 and p.z < apex.z:
+				apex = p
+		check(cheek - tip.z > 1.8, "%s: the nose stands out from the cheek (%.1f cm, side %d)" % [id, cheek - tip.z, int(s)])
+		check(HeadShape.gap(apex) > 0.1, "%s: the eye shows in front of the skin (side %d)" % [id, int(s)])
+		check(brow < apex.z, "%s: the brow ridge stands in front of the eye (side %d)" % [id, int(s)])
+
+
+## The goggles, as posed: down (flying), the cushions sit on the face round the eyes; raised (at rest), the
+## cups rest on the helmet, not in it. The strap runs from each cup's outer rim round the back of the helmet,
+## on it, down or raised -- nothing of it across the face.
+func _goggles(id: String, pose: String, tack: Tack) -> void:
 	var k := tack.rider.k
+	var g := tack.rider.get_node("head/goggles") as Node3D
+	var cups := (g.get_node("cups") as MeshInstance3D).mesh as ArrayMesh
+	var up := tack.rider.goggles_up > 0.5
+	var cush := cups.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	for s in [-1.0, 1.0]:
+		var lo := INF
+		for v in cush:
+			var p := g.transform * v / k
+			if p.x * s > 0.0:
+				lo = minf(lo, HeadShape.helmet_gap(p) if up else HeadShape.gap(p))
+		if up:
+			check(lo > -0.15 and lo < 0.8, "%s %s: the raised goggles rest on the helmet (gap %.2f, side %d)" % [id, pose, lo, int(s)])
+		else:
+			check(lo > -0.6 and lo < 0.2, "%s %s: the goggles' cushion sits on the face (gap %.2f, side %d)" % [id, pose, lo, int(s)])
+	var smi := tack.rider.get_node("head/goggle_strap") as MeshInstance3D
+	var sm := smi.mesh as ArrayMesh
+	var w := smi.get_blend_shape_value(0)
+	var base := sm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var raised := (sm.surface_get_blend_shape_arrays(0)[0] as Array)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 	var across := 0
-	var cups := [0, 0]
+	var ends := [0, 0]
 	var behind := 0
-	for v in ((mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-		var p := v / k
-		if p.z < -8.0:
+	var sunk := 0
+	for i in base.size():
+		var p := base[i].lerp(raised[i], w) / k
+		if p.z < -6.0 and p.y < 2.9:
 			if absf(p.x) < 5.5:
 				across += 1
 			else:
-				cups[0 if p.x < 0.0 else 1] += 1
-		elif p.z > 8.0:
+				ends[0 if p.x < 0.0 else 1] += 1
+		if p.z > 8.0:
 			behind += 1
-	eq(across, 0, "%s: no goggle strap across the face" % id)
-	check(cups[0] > 0 and cups[1] > 0, "%s: the goggle strap reaches both cups" % id)
-	check(behind > 0, "%s: the goggle strap goes round the back" % id)
+		var d := p.normalized()
+		if acos(d.y) < HeadShape.helmet_edge(atan2(d.x, -d.z)) - 0.05 and HeadShape.helmet_gap(p) < -0.15:
+			sunk += 1
+	eq(across, 0, "%s %s: no goggle strap across the face" % [id, pose])
+	if not up:
+		check(ends[0] > 0 and ends[1] > 0, "%s %s: the goggle strap reaches both cups" % [id, pose])
+	check(behind > 0, "%s %s: the goggle strap goes round the back" % [id, pose])
+	eq(sunk, 0, "%s %s: the goggle strap lies on the helmet, not in it" % [id, pose])
 
 
 ## Vertices of the saddle's mesh for material `id`, rig space.

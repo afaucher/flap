@@ -28,6 +28,8 @@ var upright := 0.0
 var joints := {}                 ## name -> rig-space point, as last solved (tests)
 var _segs := {}                  ## name -> MeshInstance3D
 var _goggles: Node3D
+var _goggles_up_xf := Transform3D.IDENTITY   ## the cups raised onto the helmet (head frame, real cm)
+var _goggle_strap: MeshInstance3D
 var _head: Node3D
 var _scarf: MeshInstance3D
 var _scarf_mesh := ImmediateMesh.new()
@@ -166,114 +168,490 @@ func _build_torso() -> void:
 		cuv.append(ru)
 		cuv2.append(ru2)
 	collar.grid(crow, cuv, cuv2, [], false, false)
-	_mi("torso", {"jacket": coat, "strap": belt, "brass": brass, "fleece": collar})
+	# The neck, up into the head.
+	var neck := _tmk()
+	_loft(neck, [[45.0, 0.0, 0.0, 0.8], [46.0, 6.4, 6.0, 0.8], [53.0, 6.0, 5.6, 0.6], [59.0, 5.6, 5.2, 0.4], [60.0, 0.0, 0.0, 0.4]], 14, 2.0)
+	# The silk scarf wound twice round the neck over the collar, knotted behind where its tail streams from.
+	var wrap := _tmk()
+	wrap.seed = 0.7
+	for turn in 2:
+		var wp := PackedVector3Array()
+		var wu := PackedVector3Array()
+		for j in 33:
+			var a := TAU * j / 32.0
+			var rx := 7.3 - 0.6 * turn
+			var y := 51.0 + 1.9 * turn + 0.7 * sin(a + turn * 2.0)
+			wp.append(Vector3(rx * cos(a), y, (rx - 0.4) * sin(a) + 0.6) * k)
+			wu.append(Vector3(cos(a), 0.15, sin(a)).normalized())
+		var prof := PackedVector2Array()
+		for q in 10:
+			var b := TAU * q / 10.0
+			prof.append(Vector2(1.5 * cos(b), 0.55 * sin(b) + 0.35 + 0.12 * sin(3.0 * b)) * k)
+		wrap.sweep(wp, wu, prof, true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.0]), false)
+	wrap.lathe(_sphere_prof(2.0, 6, 0.8), 10, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, 51.5, 7.6) * k))
+	_mi("torso", {"jacket": coat, "strap": belt, "brass": brass, "lining": collar, "skin": neck, "silk": wrap})
 
 
 func _build_head() -> void:
 	_head = Node3D.new()
 	_head.name = "head"
 	add_child(_head)
-	# The head: lofted from the chin to the crown -- a narrow jaw, cheekbones, the widest above the ears -- with a
-	# nose; the helmet covers the top, the goggles the eyes, the moustache the lip.
-	var face := _tmk()
-	var hr := 9.0
-	_loft(face, [[-11.0, 0.0, 0.0, -1.2], [-10.6, 2.6, 2.8, -1.2], [-9.6, 4.6, 5.6, -0.6], [-7.5, 6.4, 7.8, 0.0], [-4.5, 7.4, 8.8, 0.2], [-1.0, 7.9, 9.2, 0.2], [2.5, 8.2, 9.2, 0.2], [5.5, 7.8, 8.6, 0.2], [8.0, 6.2, 7.0, 0.2], [9.6, 3.4, 4.0, 0.2], [10.2, 0.0, 0.0, 0.2]], 20, 2.2)
-	face.lathe(_sphere_prof(1.6, 6, 1.7), 10, Transform3D(Basis(Vector3.RIGHT, -PI * 0.38), Vector3(0.0, -2.0, -9.3) * k))
+	# The head (HeadShape): skin with the face's landforms, eyes behind lids, brows, a handlebar moustache; a
+	# leather flying helmet over the skull -- a crown strip seamed front to back, domed ear cups, cheek flaps
+	# down to the jaw, a fleece edge, a chin strap with its buckle; goggles that sit on the face.
+	var skin := _tmk()
+	skin.seed = 0.3
+	_head_skin(skin)
+	var eyes := _tmk()
+	var hair := _tmk()
+	hair.seed = 0.5
+	for side in [-1.0, 1.0]:
+		_eye(eyes, skin, hair, side)
+		_brow(hair, side)
+		_moustache(hair, side)
 	var helm := _tmk()
 	helm.seed = 0.4
-	# Helmet shell: the upper back of a slightly bigger sphere, cut level with the brow in front and lower behind.
+	var fleece := _tmk()
+	var strap := _tmk()
+	var brass := _tmk()
+	_helmet(helm, fleece, strap, brass)
+	var mi := _mi("head_mesh", {"skin": skin, "eye": eyes, "hair": hair, "helmet": helm, "lining": fleece, "strap": strap, "brass": brass})
+	remove_child(mi)
+	_head.add_child(mi)
+	_build_goggles()
+
+
+## TackMesh.grid, wound so the faces look away from `inside` (a point the surface wraps round).
+func _grid_out(tm: TackMesh, rows: Array, uv: Array, uv2: Array, cols: Array, wrap: bool, inside: Vector3) -> void:
+	var i := rows.size() / 2
+	var r0: PackedVector3Array = rows[i]
+	var r1: PackedVector3Array = rows[i + 1]
+	var a := r0[1]
+	var flip := (r1[1] - a).cross(r0[2] - a).dot(a - inside) > 0.0
+	tm.grid(rows, uv, uv2, cols, wrap, flip)
+
+
+## The skin: rows from the crown to under the chin, crowded through the face; columns crowded at the front.
+func _head_skin(tm: TackMesh) -> void:
+	var ths := _head_rows(96)
+	var cols_n := 120
 	var rows := []
 	var uv := []
 	var uv2 := []
-	var R := hr + 2.0
-	for i in 11:
-		var th := PI * 0.5 * i / 10.0   # from the crown down
+	var cols := []
+	for th in ths:
 		var row := PackedVector3Array()
 		var ru := PackedVector2Array()
 		var ru2 := PackedVector2Array()
-		for j in 25:
-			var a := TAU * j / 24.0
-			var back := 0.5 + 0.5 * sin(a)          # 1 behind, 0 in front
-			var drop := lerpf(0.8, 1.12, back)      # the brim: down to the brow in front, low at the nape
-			var t := th * drop
-			var p := Vector3(R * sin(t) * cos(a), R * cos(t) * 1.1, R * sin(t) * sin(a))
+		var rc := PackedColorArray()
+		for j in cols_n:
+			var t := -PI + TAU * j / cols_n
+			var ph := t - 0.65 * sin(t)   # (crowded where t is near 0: the face)
+			var d := HeadShape.dir(th, ph)
+			var p := HeadShape.point(d)
 			row.append(p * k)
-			ru.append(Vector2(R * t, R * a))
-			ru2.append(Vector2(R * (PI * 0.5 * drop - t), R * a))
+			ru.append(Vector2(ph * 8.0, th * 10.5))
+			ru2.append(Vector2(99.0, 0.0))
+			rc.append(HeadShape.masks(p.x, p.y, smoothstep(0.15, 0.6, -d.z)))
 		rows.append(row)
 		uv.append(ru)
 		uv2.append(ru2)
-	helm.grid(rows, uv, uv2, [], false, false)
-	# Ear flaps, hanging, with a chin strap.
+		cols.append(rc)
+	_grid_out(tm, rows, uv, uv2, cols, true, Vector3.ZERO)
+
+
+## `n` polar angles from the crown to under the chin, closest together across the face (eyes to chin).
+func _head_rows(n: int) -> PackedFloat32Array:
+	var steps := 400
+	var cum := PackedFloat32Array([0.0])
+	for i in steps:
+		var th := PI * (i + 0.5) / steps
+		cum.append(cum[i] + (1.0 + 2.5 * exp(-pow((th - 1.95) / 0.6, 2.0))) * PI / steps)
+	var out := PackedFloat32Array()
+	var s := 0
+	for i in n:
+		var want := cum[steps] * i / (n - 1)
+		while s < steps - 1 and cum[s + 1] < want:
+			s += 1
+		var f := clampf((want - cum[s]) / maxf(cum[s + 1] - cum[s], 1e-6), 0.0, 1.0)
+		out.append(PI * (s + f) / steps)
+	return out
+
+
+## The direction to the face's surface at face position (x, y).
+func _face_dir(x: float, y: float) -> Vector3:
+	var d := Vector3(x, y, -9.0).normalized()
+	for i in 5:
+		d = Vector3(x, y, HeadShape.point(d).z).normalized()
+	return d
+
+
+## A tapering tuft (a brow, a moustache's half, an eyelid, lashes): an elliptic section `w` across and `t`
+## thick (real cm, per point), swept along `path` (head frame, real cm), its thickness along `ups`, mostly
+## above the path; closed to a point at both ends.
+func _tuft(tm: TackMesh, path: PackedVector3Array, ups: PackedVector3Array, w: PackedFloat32Array, t: PackedFloat32Array, wear := 0.0, around := 8) -> void:
+	var n := path.size()
+	var rows := []
+	var uv := []
+	var uv2 := []
+	var cols := []
+	var run := 0.0
+	for i in n + 2:
+		var q := clampi(i - 1, 0, n - 1)
+		if i > 1 and i < n + 1:
+			run += path[q].distance_to(path[q - 1])
+		var tg := (path[mini(q + 1, n - 1)] - path[maxi(q - 1, 0)]).normalized()
+		var up := (ups[q] - tg * ups[q].dot(tg)).normalized()
+		var sd := tg.cross(up)
+		var row := PackedVector3Array()
+		var ru := PackedVector2Array()
+		var ru2 := PackedVector2Array()
+		var rc := PackedColorArray()
+		var cap := i == 0 or i == n + 1
+		for j in around:
+			var a := TAU * j / around
+			var p := path[q] + (Vector3.ZERO if cap else sd * w[q] * cos(a) + up * t[q] * (sin(a) + 0.5))
+			row.append(p * k)
+			ru.append(Vector2(run, a * w[q]))
+			ru2.append(Vector2(99.0, run))
+			rc.append(Color(wear, 0.5 * maxf(-sin(a), 0.0), 0.0, 0.0))
+		rows.append(row)
+		uv.append(ru)
+		uv2.append(ru2)
+		cols.append(rc)
+	var mid := path[n / 2] + ups[n / 2].normalized() * t[n / 2] * 0.5
+	_grid_out(tm, rows, uv, uv2, cols, true, mid * k)
+
+
+## An eye: the eyeball (UV: angle from the gaze, angle round it), the upper and lower lids over it, lashes.
+func _eye(eyes: TackMesh, skin: TackMesh, hair: TackMesh, side: float) -> void:
+	var c := HeadShape.eye_centre(side)
+	var er := HeadShape.EYE_R
+	var rows := []
+	var uv := []
+	var uv2 := []
+	for i in 13:
+		var a := PI * i / 12.0
+		var row := PackedVector3Array()
+		var ru := PackedVector2Array()
+		var ru2 := PackedVector2Array()
+		for j in 20:
+			var b := TAU * j / 20.0
+			row.append((c + Vector3(sin(a) * cos(b), sin(a) * sin(b), -cos(a)) * er) * k)
+			ru.append(Vector2(a, b))
+			ru2.append(Vector2(99.0, 0.0))
+		rows.append(row)
+		uv.append(ru)
+		uv2.append(ru2)
+	_grid_out(eyes, rows, uv, uv2, [], true, c * k)
+	# Lids: arcs over the eyeball from the inner corner to the outer (a touch higher), the upper fuller.
+	for lid in [1.0, -1.0]:
+		var path := PackedVector3Array()
+		var ups := PackedVector3Array()
+		var w := PackedFloat32Array()
+		var t := PackedFloat32Array()
+		var lash := PackedVector3Array()
+		var lups := PackedVector3Array()
+		var lw := PackedFloat32Array()
+		var lt := PackedFloat32Array()
+		for i in 11:
+			var s := lerpf(-1.0, 1.0, i / 10.0)   # -1 the inner corner (toward the nose) .. 1 the outer
+			var open := pow(maxf(1.0 - s * s, 0.0), 0.7)
+			var lx := s * 1.5
+			var ly: float = (0.48 * open + 0.1) * lid + 0.12 * s if lid > 0.0 else -(0.36 * open + 0.1) + 0.1 * s
+			var rl := er + 0.05
+			var lz := -sqrt(maxf(rl * rl - lx * lx - ly * ly, 0.04))
+			var p := c + Vector3(side * lx, ly, lz)
+			path.append(p)
+			ups.append((p - c).normalized())
+			var fat := 0.25 + 0.75 * open
+			w.append((0.36 if lid > 0.0 else 0.22) * fat)
+			t.append((0.2 if lid > 0.0 else 0.13) * fat)
+			if lid > 0.0:
+				var lp := p + Vector3(0.0, -0.2, -0.1) * open
+				lash.append(lp)
+				lups.append((lp - c).normalized())
+				lw.append(0.08 * fat)
+				lt.append(0.06 * fat)
+		_tuft(skin, path, ups, w, t, 0.4)
+		if lid > 0.0:
+			_tuft(hair, lash, lups, lw, lt, 0.0, 6)
+
+
+func _brow(hair: TackMesh, side: float) -> void:
+	var path := PackedVector3Array()
+	var ups := PackedVector3Array()
+	var w := PackedFloat32Array()
+	var t := PackedFloat32Array()
+	for i in 10:
+		var u := i / 9.0
+		var x := lerpf(1.0, 5.3, u)
+		var y := 2.4 + 0.35 * sin(PI * u * 0.9) - 0.3 * u
+		var d := _face_dir(side * x, y)
+		path.append(HeadShape.point(d) + HeadShape.normal(d) * 0.08)
+		ups.append(HeadShape.normal(d))
+		w.append(lerpf(0.32, 0.12, u) * (0.8 + 0.4 * sin(PI * minf(u * 1.6, 1.0))))
+		t.append(lerpf(0.15, 0.06, u))
+	_tuft(hair, path, ups, w, t)
+
+
+## A handlebar moustache: full over the upper lip, swept out and up to waxed points.
+func _moustache(hair: TackMesh, side: float) -> void:
+	for layer in 2:
+		var path := PackedVector3Array()
+		var ups := PackedVector3Array()
+		var w := PackedFloat32Array()
+		var t := PackedFloat32Array()
+		for i in 14:
+			var u := i / 13.0
+			var x := lerpf(0.25, 4.9, u)
+			var y := -4.25 - 0.75 * sin(PI * minf(u * 1.4, 1.0)) * (1.0 - u) + 0.9 * smoothstep(0.55, 1.0, u) - 0.25 * layer
+			var d := _face_dir(side * x, y)
+			var lift := 0.22 + 0.5 * smoothstep(0.6, 1.0, u)
+			path.append(HeadShape.point(d) + HeadShape.normal(d) * lift)
+			ups.append(HeadShape.normal(d))
+			var body := sin(PI * minf(u * 1.8 + 0.18, 1.0))
+			w.append(lerpf(0.55, 0.06, smoothstep(0.35, 1.0, u)) * (0.75 + 0.35 * body) * (1.0 - 0.25 * layer))
+			t.append(lerpf(0.42, 0.05, smoothstep(0.3, 1.0, u)) * (1.0 - 0.3 * layer))
+		_tuft(hair, path, ups, w, t)
+
+
+## The helmet: the shell (skull + padding) down to its edge, the crown strip's seams, ear cups, a fleece edge,
+## the chin strap and its buckle.
+func _helmet(helm: TackMesh, fleece: TackMesh, strap: TackMesh, brass: TackMesh) -> void:
+	var m := 40
+	var cn := 112
+	var rows := []
+	var dirs := []
+	var phs := PackedFloat32Array()
+	for j in cn:
+		var t := -PI + TAU * j / cn
+		phs.append(t - 0.4 * sin(t))
+	for i in m:
+		var row := PackedVector3Array()
+		var dr := []
+		for j in cn:
+			var th := HeadShape.helmet_edge(phs[j]) * i / (m - 1)
+			var d := HeadShape.dir(th, phs[j])
+			row.append(HeadShape.helmet_point(d))
+			dr.append(d)
+		rows.append(row)
+		dirs.append(dr)
+	# Edge distances: to the outline (the last row), searched near each column; along it, its arc length.
+	var edge: PackedVector3Array = rows[m - 1]
+	var arc := PackedFloat32Array([0.0])
+	for j in range(1, cn + 1):
+		arc.append(arc[j - 1] + edge[j % cn].distance_to(edge[j - 1]))
+	var grows := []
+	var uv := []
+	var uv2 := []
+	for i in m:
+		var row: PackedVector3Array = rows[i]
+		var g := PackedVector3Array()
+		var ru := PackedVector2Array()
+		var ru2 := PackedVector2Array()
+		for j in cn:
+			var p := row[j]
+			var best := INF
+			var at := 0.0
+			for dj in range(-24, 25):
+				var q := posmod(j + dj, cn)
+				var e := edge[q].distance_to(p)
+				if e < best:
+					best = e
+					at = arc[q]
+			g.append(p * k)
+			ru.append(Vector2(phs[j] * 9.0, HeadShape.helmet_edge(phs[j]) * i / (m - 1) * 10.5))
+			ru2.append(Vector2(best, at))
+		grows.append(g)
+		uv.append(ru)
+		uv2.append(ru2)
+	_grid_out(helm, grows, uv, uv2, [], true, Vector3.ZERO)
+	# The fleece lining showing as a roll all round the edge.
+	var fp := PackedVector3Array()
+	var fu := PackedVector3Array()
+	for j in cn + 1:
+		var d: Vector3 = dirs[m - 1][j % cn]
+		var n := HeadShape.normal(d)
+		fp.append((HeadShape.point(d) + n * 0.42) * k)
+		fu.append(n)
+	fleece.sweep(fp, fu, TackMesh.circle(0.45 * k, 8), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.2]), false)
+	# The crown strip's seams: welts 2.9 cm either side of the middle, from the brow over the crown to the nape.
 	for side in [-1.0, 1.0]:
-		var flap := PackedVector3Array()
-		var fups := PackedVector3Array()
-		for j in 7:
-			var u := float(j) / 6.0
-			flap.append(Vector3(side * (R - 0.3 + 0.4 * u), 1.0 - 9.5 * u, 1.2 - 1.5 * u) * k)
-			fups.append(Vector3(side, 0.0, 0.0))
+		var sp := PackedVector3Array()
+		var su := PackedVector3Array()
+		for i in 61:
+			var psi := lerpf(0.2, 4.1, i / 60.0)
+			var e := Vector3(0.0, sin(psi), -cos(psi))
+			var q := 0.3
+			var d := e
+			for it in 4:
+				d = (e + Vector3(side * q, 0.0, 0.0)).normalized()
+				q *= 2.9 / maxf(absf(HeadShape.helmet_point(d).x), 0.1)
+			var th := acos(clampf(d.y, -1.0, 1.0))
+			var ph := atan2(d.x, -d.z)
+			if th > HeadShape.helmet_edge(ph) - 0.015:
+				continue
+			var n := HeadShape.normal(d)
+			sp.append((HeadShape.helmet_point(d) + n * 0.02) * k)
+			su.append(n)
+		var sec: Array = helm.strap_section(1.1 * k, 0.22 * k)
+		helm.sweep(sp, su, sec[0], true, sec[1], sec[2], PackedFloat32Array([0.35]))
+	# Ear cups: domed leather over the ears, stitched round, a smaller dome on each.
+	for side in [-1.0, 1.0]:
+		var d := Vector3(side, -0.14, 0.06).normalized()
+		var n := HeadShape.normal(d)
+		var o := HeadShape.helmet_point(d) - n * 0.2
+		var bx := n.cross(Vector3.FORWARD).normalized()
+		var xf := Transform3D(Basis(bx, n, bx.cross(n)), o * k)
 		var prof := PackedVector2Array()
-		for j in 10:
-			var a := TAU * j / 10.0
-			prof.append(Vector2(4.2 * cos(a), 0.6 * sin(a) + 0.6) * k)
-		helm.sweep(flap, fups, prof, true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.2]))
-	var strap := _tmk()
-	var sp := PackedVector3Array()
-	var sups := PackedVector3Array()
-	for j in 9:
-		var a := lerpf(-PI * 0.95, -PI * 0.05, float(j) / 8.0)
-		sp.append(Vector3(9.4 * cos(a), -8.0 + 2.0 * absf(cos(a)), 4.5 * sin(a) - 1.0) * k)
-		sups.append(Vector3(cos(a), 0.0, sin(a)))
-	var ssec: Array = strap.strap_section(1.6 * k, 0.4 * k)
-	strap.sweep(sp, sups, ssec[0], true, ssec[1], ssec[2])
-	# Moustache.
-	var stache := _tmk()
-	for side in [-1.0, 1.0]:
-		var mp := PackedVector3Array()
-		for j in 6:
-			var u := float(j) / 5.0
-			mp.append(Vector3(side * (0.4 + 4.0 * u), -3.6 + 1.6 * u * u, -8.5 + 2.2 * u * u) * k)
-		stache.sweep(mp, PackedVector3Array([Vector3.FORWARD]), TackMesh.circle(0.9 * k, 6), true)
-	var mi := _mi("head_mesh", {"skin": face, "helmet": helm, "strap": strap, "boot": stache})
-	remove_child(mi)
-	_head.add_child(mi)
-	# Goggles: two brass-rimmed cups with glass and a strap from each cup's outer rim round the back of the
-	# helmet (nothing crosses the face).
+		var ed := PackedFloat32Array()
+		for v in [[3.8, 0.0, 0.0], [3.8, 0.35, 0.35], [3.5, 0.95, 1.0], [2.7, 1.4, 1.95], [1.5, 1.62, 3.2], [0.0, 1.7, 4.7]]:
+			prof.append(Vector2(v[0], v[1]) * k)
+			ed.append(v[2])
+		helm.lathe(prof, 28, xf, ed, PackedFloat32Array([0.4, 0.2, 0.0]), 0.3)
+		var top := PackedVector2Array()
+		for v in [[1.9, 1.45], [1.9, 1.7], [1.6, 2.0], [0.9, 2.15], [0.0, 2.2]]:
+			top.append(Vector2(v[0], v[1]) * k)
+		helm.lathe(top, 20, xf, PackedFloat32Array([0.0, 0.25, 0.6, 1.3, 2.2]), PackedFloat32Array([0.5, 0.0]), 0.4)
+		brass.lathe(PackedVector2Array([Vector2(0.45, 2.15) * k, Vector2(0.45, 2.35) * k, Vector2(0.0, 2.45) * k]), 10, xf)
+	# Chin strap, from under one flap's corner beneath the chin to the other; a buckle on the right.
+	var cp := PackedVector3Array()
+	var cu := PackedVector3Array()
+	for i in 17:
+		var s := lerpf(-1.0, 1.0, i / 16.0)
+		var d := HeadShape.dir(lerpf(2.5, 2.92, 1.0 - s * s), s * 1.12)
+		var n := HeadShape.normal(d)
+		cp.append((HeadShape.point(d) + n * 0.3) * k)
+		cu.append(n)
+	var csec: Array = strap.strap_section(1.5 * k, 0.32 * k)
+	strap.sweep(cp, cu, csec[0], true, csec[1], csec[2], PackedFloat32Array([0.4]))
+	var bi := 13
+	var bt := (cp[bi + 1] - cp[bi - 1]).normalized()
+	var bn := cu[bi]
+	var bs := bt.cross(bn).normalized()
+	var bc := cp[bi] + bn * 0.3 * k
+	var ring := PackedVector3Array()
+	for v in [Vector2(-0.7, -1.05), Vector2(0.7, -1.05), Vector2(0.7, 1.05), Vector2(-0.7, 1.05), Vector2(-0.7, -1.05)]:
+		ring.append(bc + (bt * v.x + bs * v.y) * k)
+	brass.sweep(ring, PackedVector3Array([bn]), TackMesh.circle(0.17 * k, 6), true)
+	brass.sweep(PackedVector3Array([bc + bs * -1.0 * k, bc + bs * 1.0 * k]), PackedVector3Array([bn]), TackMesh.circle(0.12 * k, 6), true)
+
+
+## Goggles: brass cups on leather cushions over the eyes, glass, a bridge over the nose; the strap from each
+## cup's outer rim round the back of the helmet, never across the face. Raised (goggles_up), the cups swing up
+## onto the helmet's front (the "goggles" node's transform) and the strap follows (a blend shape).
+func _build_goggles() -> void:
 	_goggles = Node3D.new()
 	_goggles.name = "goggles"
 	_head.add_child(_goggles)
-	var gband := _tmk()
-	var gp := PackedVector3Array()
-	var gups := PackedVector3Array()
-	var a0 := -0.8   # rad: just behind the right cup's outer rim (the front is -PI/2)
-	gp.append(Vector3(6.4, 1.5, -10.6) * k)
-	gups.append(Vector3(0.85, 0.0, -0.53))
-	for j in 21:
-		var a := lerpf(a0, PI - a0, j / 20.0)
-		gp.append(Vector3((R + 0.3) * cos(a), 1.5, (R + 0.3) * sin(a)) * k)
-		gups.append(Vector3(cos(a), 0.0, sin(a)))
-	gp.append(Vector3(-6.4, 1.5, -10.6) * k)
-	gups.append(Vector3(-0.85, 0.0, -0.53))
-	var gsec: Array = gband.strap_section(2.4 * k, 0.5 * k)
-	gband.sweep(gp, gups, gsec[0], true, gsec[1], gsec[2], PackedFloat32Array([0.4]), true)
 	var rim := _tmk()
 	var glass := _tmk()
+	var cush := _tmk()
+	var cushion_pts: Array[Vector3] = []
+	var rims := []
 	for side in [-1.0, 1.0]:
-		var c := Vector3(side * 3.6, 1.5, -(R + 0.6)) * k
-		var b := Basis(Vector3.RIGHT, -PI * 0.5).rotated(Vector3.UP, -side * 0.35)
-		rim.lathe(PackedVector2Array([Vector2(3.0 * k, -1.2 * k), Vector2(3.3 * k, 0.0), Vector2(3.1 * k, 1.4 * k), Vector2(2.5 * k, 1.6 * k), Vector2(2.4 * k, 1.0 * k)]), 16, Transform3D(b, c))
-		glass.lathe(PackedVector2Array([Vector2(2.5 * k, 1.1 * k), Vector2(1.6 * k, 1.5 * k), Vector2(0.0, 1.7 * k)]), 16, Transform3D(b, c))
-	rim.sweep(PackedVector3Array([Vector3(-1.2, 1.7, -(R + 1.6)) * k, Vector3(1.2, 1.7, -(R + 1.6)) * k]), PackedVector3Array([Vector3.UP]), TackMesh.circle(0.5 * k, 6), true)
+		var c := HeadShape.eye_centre(side)
+		var ax := Basis(Vector3.UP, -side * 0.3) * Vector3.FORWARD
+		var bx := ax.cross(Vector3.UP).normalized()
+		var b := Basis(bx, ax, bx.cross(ax))
+		var o := c + ax * 1.7
+		var xf := Transform3D(b, o * k)
+		cush.torus(2.45 * k, 0.4 * k, xf, 24, 8, 0.2)
+		for q in 16:
+			var a := TAU * q / 16.0
+			cushion_pts.append(o + (b.x * cos(a) + b.z * sin(a)) * 2.45 - ax * 0.4)
+		var prof := PackedVector2Array()
+		for v in [[2.75, 0.2], [2.9, 0.7], [2.85, 1.3], [2.5, 1.6], [2.3, 1.45]]:
+			prof.append(Vector2(v[0], v[1]) * k)
+		rim.lathe(prof, 24, xf, PackedFloat32Array(), PackedFloat32Array([0.6, 0.0, 0.0, 0.3, 0.6]), 0.3)
+		glass.lathe(PackedVector2Array([Vector2(2.35 * k, 1.42 * k), Vector2(1.5 * k, 1.58 * k), Vector2(0.0, 1.65 * k)]), 24, xf)
+		var out: Vector3 = ax.cross(Vector3.UP) * side
+		rims.append([o + ax * 0.9 + out * 2.95, o + ax * 0.9 - out * 2.75])
+	# The bridge: a curved brass bar over the nose between the cups' inner rims.
+	var bridge := PackedVector3Array()
+	var nose := HeadShape.point(_face_dir(0.0, 1.0))
+	var a0: Vector3 = rims[0][1]
+	var a1: Vector3 = rims[1][1]
+	for i in 7:
+		var u := i / 6.0
+		var p := a0.lerp(a1, u)
+		p.z = lerpf(p.z, nose.z - 0.45, sin(PI * u))
+		p.y += 0.25 * sin(PI * u)
+		bridge.append(p * k)
+	rim.sweep(bridge, PackedVector3Array([Vector3.UP]), TackMesh.circle(0.24 * k, 6), true)
 	var gm := ArrayMesh.new()
-	gband.commit(gm)
+	cush.commit(gm)
 	rim.commit(gm)
 	glass.commit(gm)
 	gm.surface_set_material(0, TackMaterials.get_mat("strap"))
 	gm.surface_set_material(1, TackMaterials.get_mat("brass"))
 	gm.surface_set_material(2, TackMaterials.get_mat("glass"))
 	var gmi := MeshInstance3D.new()
+	gmi.name = "cups"
 	gmi.mesh = gm
 	_goggles.add_child(gmi)
+	# Raised: swung up about the head's side axis, then out until the cushions sit on the helmet.
+	var rot := Basis(Vector3.RIGHT, deg_to_rad(56.0))
+	var out_dir := (rot * (HeadShape.eye_centre(1.0) + HeadShape.eye_centre(-1.0)) * 0.5).normalized()
+	var lift := 0.0
+	for it in 60:
+		var worst := INF
+		for p in cushion_pts:
+			worst = minf(worst, HeadShape.helmet_gap(rot * p + out_dir * lift))
+		if worst >= 0.05:
+			break
+		lift += 0.1
+	_goggles_up_xf = Transform3D(rot, out_dir * lift)
+	# The strap, down and raised: from the right cup's outer rim over the helmet, round the back, to the left's.
+	var paths := []
+	for up in [false, true]:
+		var path := PackedVector3Array()
+		var ups := PackedVector3Array()
+		var ends: Array[Vector3] = [rims[1][0], rims[0][0]]
+		var ph0 := atan2(ends[0].x, -ends[0].z) + 0.3
+		for i in 31:
+			var p: Vector3
+			if i == 0 or i == 30:
+				p = ends[0] if i == 0 else ends[1]
+			else:
+				var ph := lerpf(ph0, TAU - ph0, (i - 1) / 28.0)
+				var th := 1.36 - 0.2 * pow(sin(ph), 2.0)
+				var d := HeadShape.dir(th, ph)
+				p = HeadShape.helmet_point(d) + HeadShape.normal(d) * 0.25
+			var nrm := p.normalized()
+			if up:
+				p = _goggles_up_xf * p
+				nrm = p.normalized()
+				if i > 0 and i < 30:
+					var lift_to := HeadShape.helmet_point(nrm).length() + 0.25
+					if p.length() < lift_to:
+						p = nrm * lift_to
+			path.append(p * k)
+			ups.append(nrm)
+		paths.append([path, ups])
+	var meshes := []
+	for pu in paths:
+		var sm := _tmk()
+		var sec: Array = sm.strap_section(2.2 * k, 0.45 * k)
+		sm.sweep(pu[0], pu[1], sec[0], true, sec[1], sec[2], PackedFloat32Array([0.4]), true)
+		meshes.append(sm.commit())
+	var base: Array = (meshes[0] as ArrayMesh).surface_get_arrays(0)
+	var raised: Array = (meshes[1] as ArrayMesh).surface_get_arrays(0)
+	var shape := []
+	shape.resize(Mesh.ARRAY_MAX)
+	shape[Mesh.ARRAY_VERTEX] = raised[Mesh.ARRAY_VERTEX]
+	shape[Mesh.ARRAY_NORMAL] = raised[Mesh.ARRAY_NORMAL]
+	shape[Mesh.ARRAY_TANGENT] = raised[Mesh.ARRAY_TANGENT]
+	var smesh := ArrayMesh.new()
+	smesh.blend_shape_mode = Mesh.BLEND_SHAPE_MODE_NORMALIZED
+	smesh.add_blend_shape("raised")
+	smesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, base, [shape])
+	smesh.surface_set_material(0, TackMaterials.get_mat("strap"))
+	_goggle_strap = MeshInstance3D.new()
+	_goggle_strap.name = "goggle_strap"
+	_goggle_strap.mesh = smesh
+	_head.add_child(_goggle_strap)
 
 
 ## A sphere's profile for lathe (radius r real cm, n rows, stretched by `sy` along its axis).
@@ -409,7 +787,8 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 	var hb := Basis(hx, hz.cross(hx).normalized(), hz)
 	var head_c := neck_top + trunk * _r("head_r") * 0.95
 	_head.transform = Transform3D(hb, head_c)
-	_goggles.transform = Transform3D(Basis(Vector3.RIGHT, deg_to_rad(48.0) * goggles_up), Vector3(0.0, 2.5 * k * goggles_up, 0.0))
+	_goggles.transform = Transform3D.IDENTITY.interpolate_with(Transform3D(_goggles_up_xf.basis, _goggles_up_xf.origin * k), goggles_up)
+	_goggle_strap.set_blend_shape_value(0, goggles_up)
 	joints.pelvis = pelvis
 	joints.chest = chest
 	joints.head = head_c

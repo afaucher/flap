@@ -1,15 +1,18 @@
 class_name TackMaterials
 extends RefCounted
 ## The tack's materials, made once and shared by every bird. Each is one of three shaders (leather, metal,
-## cloth) with a set of values, plus skin and goggle glass. Colours are sRGB.
+## cloth) with a set of values, plus skin, eyes and goggle glass. Colours are sRGB.
 ##   leather: saddle (chestnut), seat (oxblood, quilted), strap (dark havana), helmet (brown, glossy),
 ##            jacket (dark, coarse grain), boot (black-brown, polished), glove (tan, soft)
 ##   metal:   brass, blued (blued steel), nickel, olive (enamel over steel, chipped), roundel, red (seeker noses)
-##   cloth:   breeches (khaki twill), tunic (olive twill), silk (scarf), fleece (sheepskin), canvas
+##   cloth:   breeches (khaki twill), tunic (olive twill), silk (scarf), fleece (sheepskin), lining (the helmet's shearling), canvas, hair
+##   skin, eye: their own shaders (skin.gdshader, eye.gdshader)
 
 const LEATHER := preload("res://scripts/tack/leather.gdshader")
 const METAL := preload("res://scripts/tack/metal.gdshader")
 const CLOTH := preload("res://scripts/tack/cloth.gdshader")
+const SKIN := preload("res://scripts/tack/skin.gdshader")
+const EYE := preload("res://scripts/tack/eye.gdshader")
 
 const SPECS := {
 	"saddle": [LEATHER, {"base_col": Color(0.46, 0.26, 0.13), "dark_col": Color(0.17, 0.08, 0.04), "worn_col": Color(0.68, 0.46, 0.27)}],
@@ -29,6 +32,10 @@ const SPECS := {
 	"tunic": [CLOTH, {"col": Color(0.36, 0.37, 0.25), "dark_col": Color(0.2, 0.21, 0.14), "pitch": 0.22, "seam_row": 0.25}],
 	"silk": [CLOTH, {"col": Color(0.95, 0.93, 0.88), "dark_col": Color(0.72, 0.7, 0.66), "weave": 1, "pitch": 0.08, "rough": 0.33, "fuzz": 0.2}],
 	"fleece": [CLOTH, {"col": Color(0.8, 0.73, 0.6), "dark_col": Color(0.45, 0.38, 0.29), "weave": 2, "pitch": 0.3, "rough": 1.0, "fuzz": 0.75, "bump": 1.4}],
+	"lining": [CLOTH, {"col": Color(0.66, 0.56, 0.42), "dark_col": Color(0.34, 0.27, 0.19), "weave": 2, "pitch": 0.2, "rough": 1.0, "fuzz": 0.7, "bump": 1.2}],
+	"hair": [CLOTH, {"col": Color(0.34, 0.22, 0.12), "dark_col": Color(0.13, 0.08, 0.04), "weave": 1, "pitch": 0.03, "rough": 0.45, "fuzz": 0.3}],
+	"skin": [SKIN, {}],
+	"eye": [EYE, {}],
 	"canvas": [CLOTH, {"col": Color(0.62, 0.58, 0.44), "dark_col": Color(0.38, 0.35, 0.26), "pitch": 0.16, "rough": 0.9, "seam_row": 0.3}],
 }
 
@@ -40,15 +47,6 @@ static func get_mat(id: String) -> Material:
 		return _cache[id]
 	var m: Material
 	match id:
-		"skin":
-			var s := StandardMaterial3D.new()
-			s.albedo_color = Color(0.78, 0.55, 0.43)
-			s.roughness = 0.55
-			s.subsurf_scatter_enabled = true
-			s.subsurf_scatter_strength = 0.4
-			s.rim_enabled = true
-			s.rim = 0.2
-			m = s
 		"glass":
 			var g := StandardMaterial3D.new()
 			g.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
