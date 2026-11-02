@@ -19,7 +19,8 @@ const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08)
 const OUTPOSTS := 9
 ## How full the crowns are, 0..1: 1 a dense pine crown (whorls of pads at each limb's end and middle), lower
 ## airier (fewer whorls, pads only at the tips, smaller, some limbs bare) -- the crown layer's sightlines.
-static var crown_density := 1.0
+## 0.5: in the crown band (about 22 m) almost half of level looks reach 40 m, against a fifth at 1 (probe_sightlines).
+static var crown_density := 0.5
 const GRIP_TRUNK_GAP := ArenaLayout.GRIP_TRUNK_GAP
 const GRIP_TIP_GAP := ArenaLayout.GRIP_TIP_GAP
 
