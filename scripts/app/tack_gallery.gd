@@ -21,6 +21,11 @@ const HEADS := [
 	["Profile", "rest", "face", Vector3(1.0, 0.05, -0.15), 0.034],
 	["Helmet from behind", "rest", "face", Vector3(-0.6, 0.55, 0.85), 0.036],
 ]
+const PLACEMENT := [
+	# (with --placement: the line of fire from the drawn muzzle in red, where the combat code fires from in yellow)
+	["Side", "glide", "bird", Vector3(1.0, 0.08, -0.05), 1.15],
+	["Ahead and above", "glide", "bird", Vector3(0.45, 0.55, -1.0), 1.15],
+]
 const SHOTS := [
 	# [label, pose, anchor, direction to the camera (world), distance (x L for whole-bird anchors)]
 	["Flight, from behind", "glide", "bird", Vector3(0.25, 0.5, 1.0), 1.9],
@@ -84,10 +89,12 @@ func _ready() -> void:
 	_label.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
 	add_child(_label)
 	_apply_pose()
+	if args.has("--placement"):
+		_placement_markers()
 	_frame(["", pose, "bird", Vector3(0.6, 0.45, 0.9), 1.9])
 	var sheet := Boot.arg_value(args, "--sheet")
 	if sheet != "":
-		await _sheet(sheet, Boot.arg_value(args, "--label"), MACROS if args.has("--macros") else (HEADS if args.has("--heads") else SHOTS))
+		await _sheet(sheet, Boot.arg_value(args, "--label"), MACROS if args.has("--macros") else (HEADS if args.has("--heads") else (PLACEMENT if args.has("--placement") else SHOTS)))
 		get_tree().quit()
 		return
 	var shot := Boot.arg_value(args, "--shot")
@@ -108,6 +115,33 @@ func _apply_pose() -> void:
 	branch.visible = pose == "folded"
 	var L := rig.body.L
 	branch.position = Vector3(0, -L * 0.35 - 0.018 + rig.position.y, 0)
+
+
+## The line of fire from the drawn launcher's muzzle (red, along the rig's nose) and the point the combat
+## code fires from (Launcher.muzzle: 0.6 L ahead of the bird's middle, 0.1 L up; yellow), in rig space.
+func _placement_markers() -> void:
+	var L := BirdProfile.by_id(bird_id).body_length
+	var im := ImmediateMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	mat.no_depth_test = true
+	im.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+	var m := tack.saddle.muzzle * tack.saddle.scale.x
+	im.surface_set_color(Color(0.9, 0.1, 0.1))
+	im.surface_add_vertex(m)
+	im.surface_set_color(Color(0.9, 0.1, 0.1))
+	im.surface_add_vertex(m + Vector3.FORWARD * L)
+	var c := Vector3(0.0, 0.1 * L, -0.6 * L)
+	for ax in [Vector3.RIGHT, Vector3.UP, Vector3.BACK]:
+		im.surface_set_color(Color(1.0, 0.85, 0.0))
+		im.surface_add_vertex(c - ax * 0.02)
+		im.surface_set_color(Color(1.0, 0.85, 0.0))
+		im.surface_add_vertex(c + ax * 0.02)
+	im.surface_end()
+	var mi := MeshInstance3D.new()
+	mi.mesh = im
+	rig.add_child(mi)
 
 
 ## Point the camera: [label, pose, anchor, direction, distance].
