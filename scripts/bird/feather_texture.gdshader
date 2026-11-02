@@ -12,6 +12,7 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
+uniform float flex = 0.0;      // the wing's flex this pose (BirdRig.flex): a feather bends by its share of it
 uniform sampler2D strip : filter_linear, repeat_disable;   // sRGB values, read raw
 uniform float rows = 1.0;
 uniform sampler2D atlas : filter_linear_mipmap_anisotropic, repeat_disable;   // masks, read raw
@@ -49,7 +50,7 @@ void vertex() {
 	lead = c < 0.0 ? -1.0 : 1.0;
 	flen = length(MODEL_MATRIX[2].xyz);   // the feather's length (m: the instance transform's z scales with it)
 	// Flex: the feather bends along its length (as feather_marks.gdshader).
-	float bend = INSTANCE_CUSTOM.g;
+	float bend = INSTANCE_CUSTOM.g * flex;   // (.g: this feather's share of the wing's flex)
 	VERTEX.y += bend * VERTEX.z * VERTEX.z;
 	NORMAL = normalize(NORMAL + vec3(0.0, 0.0, -2.0 * bend * VERTEX.z) * NORMAL.y);
 }

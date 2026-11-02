@@ -34,6 +34,17 @@ func setup() -> void:
 	add_child(rig)
 	rig.build(BirdProfile.by_id("hawk"))
 	check(rig.marks_material != null and rig.marks_material.shader == BirdRig.TEXTURE_SHADER, "level 6 feathers use the texture shader")
+	# Flex: the wing's flex reaches the feathers each pose as one uniform (each feather bends by its own share of it,
+	# written once with its instance data): through a wingbeat the material's flex follows the rig's.
+	var seen_flex: Array = []
+	for t: float in [0.1, 0.35]:
+		RigPoses.apply(rig, "flap", t)
+		rig.apply_pose()
+		near(float(rig.marks_material.get_shader_parameter("flex")), rig.flex, 1e-6, "the feathers' flex uniform is the wing's (t %.2f)" % t)
+		seen_flex.append(rig.flex)
+	check(absf(float(seen_flex[0]) - float(seen_flex[1])) > 0.01, "and it changes through the wingbeat (%s)" % [seen_flex])
+	RigPoses.apply(rig, "glide", 0.0)
+	rig.apply_pose()
 	# Silhouette cards: rooted on the trunk's shell, mirrored left and right (centre tracts aside), riding on the
 	# trunk (its fluff scales them), drawn with the feather material in the body's own colour.
 	var nc := rig.card_xforms.size()
@@ -180,3 +191,4 @@ func setup() -> void:
 		check(n_a >= BirdRig.ARM_AROUND and worst_a < 0.02, "%s wing surface starts on the trunk's coordinates (%d points, worst %.4f tiles)" % [p.id, n_a, worst_a])
 		b.queue_free()
 	finish()
+

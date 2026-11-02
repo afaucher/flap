@@ -134,6 +134,8 @@ var _head: Node3D
 var _trunk: MeshInstance3D
 var _neck_mi: MeshInstance3D
 var _neck_mesh: ArrayMesh
+var _custom_dirty := true          ## the feathers' instance data (strip row, share of the flex, atlas cell, seed) to write
+var _flex_set := INF
 var _neck_loft := LoftMesh.new()   ## the neck's surface (built in full only when its rings' pairing changes)
 var _neck_key := ""
 var _head_world := Vector3.INF
@@ -1269,13 +1271,15 @@ func _place_body(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind:
 	mm.set_instance_transform(idx, xf)
 	if mmu != null:
 		mmu.set_instance_transform(idx, xf)
+	if not _custom_dirty and not _paint_dirty:   # (the rest is the feather's own, written when the set last changed)
+		return
 	var g := Plumage.group(kind, fi, bone)
 	# (level 6: the atlas cell -- neighbours never the same variant --, signed by the leading side; and a random
 	# value per feather for its own small variation)
 	var code := (FeatherAtlas.cell(g, mm == _emarg, fi, 0 if lead > 0.0 else 1) + 1.0) * lead if Plumage.level >= 6 else 0.0
 	var vseed := FeatherAtlas._hash(custom.g * 97.0 + float(kind), lead + float(fi) * 0.1)
 	feather_codes.append(code)
-	if marks_material != null and not _paint_dirty:   # (the bend changes every pose; the rest only at build)
+	if marks_material != null and not _paint_dirty:   # (`bend`: the feather's share of the wing's flex, a uniform)
 		mm.set_instance_custom_data(idx, Color(Plumage.row_index(g, false), bend, code, vseed))
 		if mmu != null:
 			mmu.set_instance_custom_data(idx, Color(Plumage.row_index(g, true), bend, code, vseed))
@@ -1684,11 +1688,19 @@ func apply_pose() -> void:
 	var emarg_i := 0
 	feather_xforms.clear()
 	feather_kinds.clear()
-	feather_codes.clear()
+	# (each feather's instance data only changes with the feather set or the paint: written then, not every pose;
+	# the wing's flex reaches the shader as one uniform)
+	if _custom_dirty or _paint_dirty:
+		feather_codes.clear()
+	if marks_material != null and absf(flex - _flex_set) > 1e-6:
+		_flex_set = flex
+		marks_material.set_shader_parameter("flex", flex)
 	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
 	if _defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01:
 		var pd := Perf.t()
 		_defs = shape.feathers(fold, slot, _under_row)
+		_custom_dirty = true
+		feather_codes.clear()
 		Perf.add("  feather_defs (in wings)", pd)
 		_defs_fold = fold
 		_defs_slot = slot
@@ -1783,10 +1795,10 @@ func apply_pose() -> void:
 			feather_xforms.append(xf)
 			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
 			if f.emarg:
-				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), flex * _flex_share(f), s)
+				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
 				emarg_i += 1
 			else:
-				_place(_plain, _plain_u, plain_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), flex * _flex_share(f), s)
+				_place(_plain, _plain_u, plain_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), _flex_share(f), s)
 				plain_i += 1
 		var pl := Perf.t()
 		var fr: Array = _fairings[i]
@@ -1825,6 +1837,7 @@ func apply_pose() -> void:
 		_place(_plain, _plain_u, plain_i, txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
 		plain_i += 1
 	_paint_dirty = false
+	_custom_dirty = false
 	if marks_material != null and Plumage.level >= 6 and absf(fold - _cover_fold) > 0.01:
 		_cover_fold = fold   # (how much of each flight feather's inner vane its neighbour hides: more as the wing closes)
 		marks_material.set_shader_parameter("cover", lerpf(0.45, 0.85, fold))

@@ -496,23 +496,35 @@ func _shell_loop(i: int, e: Vector3, side: Vector3, rs: float, rf: float, rb: fl
 	var uvs := PackedVector2Array()
 	var uv2s := PackedVector2Array()
 	for u in best:
-		# Down onto the shell along its normal at the exit: bracket the crossing by stepping in or out, then halve.
+		# Down onto the shell along its normal at the exit: bracket the crossing, then halve. The bracket is seeded
+		# from the shell's closed-form projection (within a few mm of the crossing); failing that, stepped in or out.
 		var t := nrm_e
-		var step := L * 0.01 * (1.0 if b.gap(u) < 0.0 else -1.0)
 		var lo := 0.0
 		var hi := 0.0
 		var found := false
-		for k in 16:
-			hi = lo + step
-			if (b.gap(u + t * hi) > 0.0) != (step < 0.0):
-				found = true
-				break
-			lo = hi
-		if step < 0.0:   # (lo outside, hi inside: swap so lo is inside)
-			var tmp := lo
-			lo = hi
-			hi = tmp
-		for k in 16:
+		var t0 := (_onto_shell(u) - u).dot(t)
+		var bw := L * 0.004
+		var g_in := b.gap(u + t * (t0 - bw))
+		var g_out := b.gap(u + t * (t0 + bw))
+		var halvings := 16
+		if (g_in > 0.0) != (g_out > 0.0):
+			found = true
+			lo = t0 - bw if g_in <= 0.0 else t0 + bw   # (lo inside the shell, hi outside)
+			hi = t0 + bw if g_in <= 0.0 else t0 - bw
+			halvings = 10   # (2 bw / 2^10: a few micrometres)
+		else:
+			var step := L * 0.01 * (1.0 if b.gap(u) < 0.0 else -1.0)
+			for k in 16:
+				hi = lo + step
+				if (b.gap(u + t * hi) > 0.0) != (step < 0.0):
+					found = true
+					break
+				lo = hi
+			if step < 0.0:   # (lo outside, hi inside: swap so lo is inside)
+				var tmp := lo
+				lo = hi
+				hi = tmp
+		for k in halvings:
 			var mid := 0.5 * (lo + hi)
 			if b.gap(u + t * mid) > 0.0:
 				hi = mid
@@ -672,7 +684,10 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 	var first_ring := _ring(c0, r0[1], r0[2], r0[3], r0[4], r0[5], n)
 	# The loop: the first ring spread wider (the leg's feathers fan out onto the belly), slid along the leg onto the
 	# shell.
+	var q0 := Perf.t()
 	var lp := _shell_loop(i, e, r0[1], float(r0[3]) * LOOP_FLARE, float(r0[4]) * LOOP_FLARE, float(r0[5]) * LOOP_FLARE, first_ring, st)
+	Perf.add("    shell loop (in trousers)", q0)
+	q0 = Perf.t()
 	var loop := PackedVector3Array()
 	for p in (lp.pts as PackedVector3Array):
 		loop.append(p * st)
@@ -752,6 +767,8 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 	# the loop and equal to it on the outer side, its period the loop's girth in the trunk's feather size there (so
 	# the feathers narrow as the leg does); v down the leg from the loop's mean, the feathers shrinking from the
 	# trunk's size to LEG_FEATHER.
+	Perf.add("    rings (in trousers)", q0)
+	q0 = Perf.t()
 	var unit_top := rig._tile * rig._size_trunk(c0.z / st)
 	var unit_bot := rig._tile * LEG_FEATHER
 	var d_end: float = tail[tail.size() - 1][3]
@@ -846,6 +863,8 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 			uv2s.append(own2)
 	var nfil := FILLET_W.size()
 	var nrows := all_rows.size()
+	Perf.add("    charts (in trousers)", q0)
+	q0 = Perf.t()
 	bld.tube("trouser", all_rows, centres, cols, uvs, uv2s, func(ri: int, q: Vector3) -> Array:
 		if owl and ri == nrows - 1:   # (the owl's tube ends on the pad)
 			return [[B_PAD, 1.0]]
@@ -860,7 +879,10 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 		return lw)
 	for j in n + 1:   # (the loop shades as the trunk does there: its normals are the trunk's)
 		bld.fixed[j] = lnrm[j % n]
+	Perf.add("    tube+weights (in trousers)", q0)
+	q0 = Perf.t()
 	bld.commit(feather_mi[i].mesh as ArrayMesh)
+	Perf.add("    commit (in trousers)", q0)
 	parts_f[i] = bld.parts
 
 

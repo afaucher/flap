@@ -950,5 +950,19 @@
     "replace": "\t\tif false:"
    }
   ]
+ },
+ {
+  "id": "feather-flex-not-reaching-shader",
+  "bug": "With the bend moved from each feather's instance data to one uniform (its share x the wing's flex), a wing whose flex didn't reach the material would stop bending its feathers (2026-11-02).",
+  "tests": [
+   "test_feather_texture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tmarks_material.set_shader_parameter(\"flex\", flex)",
+    "replace": "\t\tpass"
+   }
+  ]
  }
 ]
