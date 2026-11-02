@@ -450,6 +450,21 @@ func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> Mul
 
 # --- Telemetry -> control values -------------------------------------------------------------------------
 
+## Take another rig's control values and solve the same pose (the bird lab's onion-skin ghosts).
+func copy_pose_from(src: BirdRig) -> void:
+	for key in ["flap", "hand_lift", "fold", "sweep", "twist", "alula", "slot", "tail_spread", "tail_pitch", "tail_twist", "look_dir", "world_up", "toe_grip", "neck_ext", "head_offset", "fluff", "breath"]:
+		set(key, src.get(key))
+	foot_targets = src.foot_targets.duplicate()
+	apply_pose()
+
+
+## Fade every mesh of this rig (0 solid .. 1 invisible): the bird lab's ghosts.
+func set_ghost(amount: float) -> void:
+	for n in find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).transparency = amount
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
 ## Map a Bird.telemetry() snapshot to the control values (smoothed) and pose the rig.
 func animate(t: Dictionary, dt: float) -> void:
 	if not _built:

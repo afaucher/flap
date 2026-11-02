@@ -68,6 +68,32 @@ static func generate(s: int) -> ArenaLayout:
 	return a
 
 
+## The bird lab's arena: one tree at the origin with a single long, level branch along +X at 3.5 m (its grip
+## line from just clear of the trunk to just short of the tip, facing -Z: the side approaches come from)
+## and a treetop disc.
+static func lab() -> ArenaLayout:
+	var a := ArenaLayout.new()
+	a.seed = -1
+	var t := TreeData.new()
+	t.tier = Tier.CANOPY
+	t.height = 7.0
+	t.radius = 0.22
+	a.trees.append(t)
+	_add_to_hash(a._tree_hash, t.base, t.id)
+	var b := BranchData.new()
+	b.root = Vector3(0.0, 3.5, 0.0)
+	b.tip = Vector3(3.4, 3.5, 0.0)
+	b.radius = 0.07
+	var length := b.root.distance_to(b.tip)
+	var up := Vector3.UP * b.radius
+	var p := Perch.branch(0, b.root.lerp(b.tip, (t.radius + GRIP_TRUNK_GAP) / length) + up, b.root.lerp(b.tip, 1.0 - GRIP_TIP_GAP / length) + up, Vector3.FORWARD, 0, b.radius)
+	b.perch_id = p.id
+	a._add_perch(p)
+	t.branches.append(b)
+	a._add_perch(Perch.treetop(1, t.top() + Vector3.UP * 0.05, t.radius * 0.75 - 0.03, Vector3.FORWARD, 0))
+	return a
+
+
 func _generate() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed

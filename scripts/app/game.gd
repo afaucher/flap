@@ -69,6 +69,11 @@ func _ready() -> void:
 
 
 func _environment() -> void:
+	add_environment(self)
+
+
+## The sky, fog, ambient light and sun (also used by the bird lab).
+static func add_environment(parent: Node) -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
@@ -88,13 +93,13 @@ func _environment() -> void:
 	env.fog_sky_affect = 0.0
 	var we := WorldEnvironment.new()
 	we.environment = env
-	add_child(we)
+	parent.add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, -35, 0)
 	sun.light_energy = 1.1
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 120.0
-	add_child(sun)
+	parent.add_child(sun)
 
 
 func _spawn_player(pid: String, at: Perch) -> void:
