@@ -1,7 +1,7 @@
 extends Node3D
 ## Dev scene: the pine wood (Pinewood) in greybox, seen from a set of fixed views, for judging its structure.
 ##   .\run.ps1 --scene res://scenes/forest_preview.tscn [--seed <n>] [--sheet <png>]
-## --sheet renders the views into one image and quits. Keys: Space next view. To fly it:
+## --sheet renders the views into one image and quits; --no-far-blur leaves the far wood sharp. Keys: Space next view. To fly it:
 ##   .\run.ps1 -- --forest pinewood
 
 var layout: ArenaLayout
@@ -14,6 +14,8 @@ var _label: Label
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var seed_arg := Boot.arg_value(args, "--seed")
+	if args.has("--no-far-blur"):
+		ForestLight.far_blur = false
 	if Boot.arg_value(args, "--crowns") != "":
 		Pinewood.crown_density = float(Boot.arg_value(args, "--crowns"))
 	layout = Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)

@@ -15,6 +15,7 @@ extends Node3D
 ##   --shot-after <s>
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
 ##   --no-rider         no war tack on any bird (the menu's Flight)
+##   --no-far-blur      no softening of the far wood (ForestLight.far_blur; F5 toggles in game)
 
 var layout: ArenaLayout
 var arena: ArenaBuilder
@@ -41,6 +42,8 @@ func _ready() -> void:
 	var ai_count := int(ai_arg) if ai_arg != "" else 3
 	use_autopilot = args.has("--autopilot")
 	rider = not args.has("--no-rider")
+	if args.has("--no-far-blur"):
+		ForestLight.far_blur = false
 	if args.has("--rig-tick"):
 		Bird.rig_in_process = false
 	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; project.godot sets 3)
@@ -174,6 +177,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
+		ForestLight.toggle_far_blur(self)
 	if e.is_action_pressed("toggle_debug"):
 		hud.debug = not hud.debug
 	if e.is_action_pressed("toggle_autopilot"):

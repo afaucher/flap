@@ -1442,5 +1442,33 @@
     "replace": ":"
    }
   ]
+ },
+ {
+  "id": "far-blur-too-near",
+  "bug": "Depth of field is only a softening of the far wood; it must never reach the trees the bird flies among (2026-11-02).",
+  "tests": [
+   "test_game_smoke"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/forest_light.gd",
+    "find": "const FAR_BLUR_FROM := 45.0",
+    "replace": "const FAR_BLUR_FROM := 8.0"
+   }
+  ]
+ },
+ {
+  "id": "planks-machined",
+  "bug": "The outpost's planks are hand-sawn: edges that waver and widths that differ, not identical boxes (2026-11-02).",
+  "tests": [
+   "test_planks"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\twidths.append(prng.randf_range(0.82, 1.18))",
+    "replace": "\t\twidths.append(1.0)"
+   }
+  ]
  }
 ]
