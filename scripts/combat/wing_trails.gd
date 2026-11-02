@@ -12,6 +12,7 @@ const FAR := 15.0
 
 var color := Color(1, 1, 1)
 var _tracks := {}     ## Bird -> Array of [t, left tip, right tip, load]
+var _colors := {}     ## Bird -> its trail's colour (its team's; `color` by default)
 var _clock := 0.0
 var _mesh: ImmediateMesh
 
@@ -30,12 +31,19 @@ func _ready() -> void:
 	add_child(mi)
 
 
-func track(b: Bird) -> void:
+func track(b: Bird, col := Color(-1, 0, 0)) -> void:
 	_tracks[b] = []
+	_colors[b] = color if col.r < 0.0 else col
+
+
+## The colour `b`'s trail is drawn in.
+func color_of(b: Bird) -> Color:
+	return _colors.get(b, color)
 
 
 func untrack(b: Bird) -> void:
 	_tracks.erase(b)
+	_colors.erase(b)
 
 
 ## `b`'s trail [t, left tip, right tip, load] as of `now`: the points sampled by then, and, flying, the wingtips where
@@ -94,6 +102,7 @@ func _process(_delta: float) -> void:
 	var now := _clock - Bird.drawn_lag()
 	for b in _tracks:
 		var pts := drawn_points(b, now)
+		var tc: Color = _colors.get(b, color)
 		if pts.size() < 2:
 			continue
 		for side in 2:
@@ -106,7 +115,7 @@ func _process(_delta: float) -> void:
 				var k := 1.0 - (now - float(pts[i][0])) / LENGTH        # 1 newest .. 0 oldest
 				var near := smoothstep(NEAR, FAR, eye.distance_to(c))
 				var w := (0.006 + 0.012 * clampf(float(pts[i][3]) - 1.0, 0.0, 2.0)) * (0.3 + 0.7 * k) * maxf(1.0, eye.distance_to(c) * 0.12)
-				var col := Color(color.r, color.g, color.b, 0.75 * k * k * near)
+				var col := Color(tc.r, tc.g, tc.b, 0.75 * k * k * near)
 				if col.a < 0.01:
 					continue
 				var s := seg.cross(eye - c).normalized() * w

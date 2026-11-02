@@ -10,13 +10,18 @@ extends Control
 ##   rack       bottom right: the rounds left of each weapon carried, the selected one bright
 ##   health     over the rack: your bird's feathers (Bird.health), a notch per feather it can lose; and a short bar
 ##              under the target's bracket
+##   teams      enemies in ENEMY (the target's bracket; a small mark on the others), teammates a FRIEND caret above
+##              them with no range, both as arrows at the screen's edge when off it; a FRIEND cross on the
+##              gunsight while a teammate is in the line of fire (CombatWorld.friend_in_line)
 ##   tally      top right: shots, hits, downed
 ##   home       out of rounds or hurt: a marker on your base (where you rearm and mend), or an arrow at the edge
 ## Reads the launcher (and through it the birds) and the combat world's stats; draws in screen space.
 
 const INK := Color(1.0, 0.93, 0.75)
 const DIM := Color(1.0, 0.93, 0.75, 0.45)
-const LOCKED := Color(1.0, 0.45, 0.3)
+const LOCKED := Color(1.0, 0.3, 0.25)
+const ENEMY := Color(1.0, 0.62, 0.32)    ## warm: the other side
+const FRIEND := Color(0.35, 0.92, 0.85)  ## cool: your side
 
 var launcher: Launcher
 var world: CombatWorld
@@ -60,11 +65,11 @@ func _draw() -> void:
 		var br := l.bearing(t)
 		var closing := -(Projectile.velocity_of(t) - l.bird.model.velocity).dot((tpos - l.muzzle()).normalized())
 		if cam.is_position_behind(tpos) or not get_viewport_rect().has_point(cam.unproject_position(tpos)):
-			_edge_arrow(cam, tpos)
+			_edge_arrow(cam, tpos, ENEMY)
 		else:
 			var tp := cam.unproject_position(tpos)
 			var r := 18.0
-			_bracket(tp, r, LOCKED if l.locked() else INK)
+			_bracket(tp, r, LOCKED if l.locked() else ENEMY)
 			_bar(Rect2(tp.x - r, tp.y + r + 5, r * 2.0, 4), float(t.telemetry().health), 0)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_text(tp + Vector2(r + 6, -r + 30), "%+.0f" % closing, DIM, 13)
@@ -76,6 +81,7 @@ func _draw() -> void:
 					_diamond(lp, 7.0, INK, false)
 			elif l.lock_target == t:
 				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
+	_teams(cam, l, t, sp if sight_ok else Vector2.INF)
 	_rack(l)
 	if home != null and l.bird.state != Bird.State.PERCHED and (_empty(l) or l.bird.health() < 1.0):
 		_home_marker(cam, home, l.bird.global_position.distance_to(home))
@@ -109,7 +115,39 @@ func _diamond(c: Vector2, r: float, col: Color, fill: bool) -> void:
 	draw_polyline(pts, col, 2.0)
 
 
-func _edge_arrow(cam: Camera3D, world_pos: Vector3) -> Vector2:
+## Friend and foe on the other birds (`t`, the bracketed target, has its own mark): a FRIEND caret over each
+## teammate, a small ENEMY mark on each other enemy, an arrow at the edge for those off screen; and the FRIEND
+## cross over the gunsight `sp` while a teammate is in the line of fire.
+func _teams(cam: Camera3D, l: Launcher, t: Bird, sp: Vector2) -> void:
+	if world == null:
+		return
+	for b in world.birds:
+		if not is_instance_valid(b) or b == l.bird or b == t:
+			continue
+		var friend := world.friends(b, l.bird)
+		var col := FRIEND if friend else ENEMY
+		var at: Vector3 = (b as Bird).global_position
+		if cam.is_position_behind(at) or not get_viewport_rect().has_point(cam.unproject_position(at)):
+			_edge_arrow(cam, at, col, 0.7)
+			continue
+		var p := cam.unproject_position(at)
+		if friend:
+			var c := p + Vector2(0, -22)
+			var pts := PackedVector2Array([c + Vector2(-11, -8), c, c + Vector2(11, -8)])
+			draw_polyline(pts, Color(0, 0, 0, 0.6), 6.0)
+			draw_polyline(pts, col, 3.0)
+		else:
+			_bracket(p, 11.0, Color(0, 0, 0, 0.5), 4.0)
+			_bracket(p, 10.0, Color(col, 0.8), 2.0)
+	if sp != Vector2.INF and world.friend_in_line(l) != null:
+		for pass_i in 2:
+			var c: Color = Color(0, 0, 0, 0.6) if pass_i == 0 else FRIEND
+			var wd := 6.0 if pass_i == 0 else 3.0
+			draw_line(sp + Vector2(-16, -16), sp + Vector2(16, 16), c, wd)
+			draw_line(sp + Vector2(-16, 16), sp + Vector2(16, -16), c, wd)
+
+
+func _edge_arrow(cam: Camera3D, world_pos: Vector3, col := INK, scale_by := 1.0) -> Vector2:
 	var local := cam.global_transform.affine_inverse() * world_pos
 	var dir := Vector2(local.x, -local.y)
 	if dir.length() < 1e-3:
@@ -119,7 +157,7 @@ func _edge_arrow(cam: Camera3D, world_pos: Vector3) -> Vector2:
 	var r := minf(size.x, size.y) * 0.42
 	var p := c + dir * r
 	var n := Vector2(-dir.y, dir.x)
-	draw_colored_polygon(PackedVector2Array([p + dir * 14.0, p + n * 9.0, p - n * 9.0]), INK)
+	draw_colored_polygon(PackedVector2Array([p + dir * 14.0 * scale_by, p + n * 9.0 * scale_by, p - n * 9.0 * scale_by]), col)
 	return p
 
 
@@ -164,12 +202,12 @@ func _draw_styled() -> void:
 		var tpos: Vector3 = t.global_position
 		var br := l.bearing(t)
 		if cam.is_position_behind(tpos) or not get_viewport_rect().has_point(cam.unproject_position(tpos)):
-			_edge_arrow(cam, tpos)
+			_edge_arrow(cam, tpos, ENEMY)
 		else:
 			var tp := cam.unproject_position(tpos)
 			var r := 20.0
 			_bracket(tp, r + 1.0, Color(0, 0, 0, 0.6), 5.0)
-			_bracket(tp, r, LOCKED if l.locked() else INK, 2.5)
+			_bracket(tp, r, LOCKED if l.locked() else ENEMY, 2.5)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)
 			if l.weapon == Launcher.Weapon.ROCKETS:
@@ -180,6 +218,7 @@ func _draw_styled() -> void:
 					_diamond(lp, 7.0, INK, false)
 			elif l.lock_target == t:
 				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
+	_teams(cam, l, t, sp if sight_ok else Vector2.INF)
 	# Your health and rounds.
 	var kind := Launcher.Weapon.ROCKETS if int(l.capacity[Launcher.Weapon.ROCKETS]) > 0 else Launcher.Weapon.SEEKERS
 	var n := int(l.capacity[kind])

@@ -7,7 +7,10 @@ extends TestCase
 ## what it carries; a hit stuns, shoves and knocks out the flight feathers nearest it (on the side it came from,
 ## left and right; the rig leaves them out), 2 or 3 of them within a fuse's reach (2.5 on average), 1 beyond; a wing that lost
 ## feathers lifts less and drops (the bird rolls toward it, either side); eight feathers down a bird, once, and a
-## perch or a respawn mends it; the range scene's demo shooter lands hits on an evading target.
+## perch or a respawn mends it; teams: a lock never takes a teammate (dead ahead) but takes an enemy, the HUD's
+## target is never a teammate, a teammate in the line of fire is reported (left and right of it, not wide of
+## it), a burst still hurts a teammate, and trails take their team's colour; the range scene's demo shooter
+## lands hits on an evading target, with a wingman on its side and the target on the other.
 
 
 class FakeModel:
@@ -31,6 +34,7 @@ func setup() -> void:
 	await _hits()
 	_feather_counts()
 	_wing_loss_flight()
+	await _teams()
 	await _range()
 	finish()
 
@@ -336,6 +340,58 @@ func _wing_loss_flight() -> void:
 	check(float(bank.right) > 5.0 and float(bank.left) < -5.0, "a damaged wing drops: right %.1f deg, left %.1f deg (+ right down)" % [bank.right, bank.left])
 
 
+func _teams() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var a := Bird.new()
+	var f := Bird.new()
+	var e := Bird.new()
+	for b in [a, f, e]:
+		add_child(b)
+		(b as Bird).setup(BirdProfile.crow(), layout, null)
+	a.fly_from(Vector3(0, 40, 0), Vector3(0, 0, 1), 9.0)
+	f.fly_from(Vector3(0, 40, 20), Vector3(0, 0, 1), 9.0)
+	e.fly_from(Vector3(30, 40, 20), Vector3(0, 0, 1), 9.0)
+	var l := world.add_bird(a, null, 0)
+	world.add_bird(f, null, 0)
+	world.add_bird(e, null, 1)
+	check(world.friends(a, f) and not world.friends(a, e), "teams: the wingman's a friend, the other side isn't")
+	l.weapon = Launcher.Weapon.SEEKERS
+	await frames(80)
+	check(l.lock_target != f and not l.locked(), "no lock on a teammate dead ahead")
+	check(l.target() != f, "the HUD never brackets a teammate")
+	# (placed on the line of fire as it is now: the aim follows the glide's flight path, a little down)
+	var across := l.aim().cross(Vector3.UP).normalized()
+	f.global_position = l.muzzle() + l.aim() * 20.0
+	check(world.friend_in_line(l) == f, "a teammate dead ahead is in the line of fire")
+	for side: float in [-1.0, 1.0]:
+		f.global_position = l.muzzle() + l.aim() * 20.0 + across * side * 0.8
+		check(world.friend_in_line(l) == f, "a teammate 0.8 m %s of the line is in it" % ("left" if side < 0 else "right"))
+		f.global_position = l.muzzle() + l.aim() * 20.0 + across * side * 3.0
+		check(world.friend_in_line(l) == null, "3 m %s of it, the lane is clear" % ("left" if side < 0 else "right"))
+	# The enemy moved dead ahead: locked.
+	f.fly_from(Vector3(-30, 40, 20), Vector3(0, 0, 1), 9.0)
+	e.fly_from(a.global_position + Vector3(0, 0, 20), Vector3(0, 0, 1), 9.0)
+	await frames(80)
+	check(l.lock_target == e and l.locked(), "an enemy dead ahead is locked")
+	# Friendly fire stays on.
+	world._burst(f.global_position + Vector3(0.3, 0, 0), a, "fuse")
+	check(f.lost_feathers.size() > 0, "a burst still hurts a teammate")
+	# Trails in their team's colour.
+	var trails := WingTrails.new()
+	add_child(trails)
+	trails.track(f, CombatHud.FRIEND)
+	trails.track(e, CombatHud.ENEMY)
+	check(trails.color_of(f) == CombatHud.FRIEND and trails.color_of(e) == CombatHud.ENEMY, "each trail in its team's colour")
+	for b in [a, f, e]:
+		world.remove_bird(b)
+		b.queue_free()
+	trails.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
 func _range() -> void:
 	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 	add_child(r)
@@ -346,6 +402,7 @@ func _range() -> void:
 	await frames(60 * 18)
 	var s: Dictionary = r.world.stats
 	check(int(s.shots) >= 3 and int(s.hits) >= 1, "the demo shooter fires and lands hits on an evading target (%s)" % s)
+	check(r.wingman != null and r.world.friends(r.bird, r.wingman) and not r.world.friends(r.bird, r.target), "the range: a wingman on your side, the target on the other")
 	var home: Perch = r.home
 	check(home != null and r.world.player.rearm_perch == home.id, "the range gives you a base to rearm at")
 	var rails := []
