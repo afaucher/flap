@@ -25,6 +25,17 @@ const PLAIN_PROFILE := [[0.0, 0.12], [0.05, 0.55], [0.2, 0.9], [0.5, 1.0], [0.8,
 const EMARG_PROFILE := [[0.0, 0.12], [0.05, 0.55], [0.2, 0.9], [0.45, 1.0], [0.55, 0.75], [0.62, 0.45], [0.9, 0.42], [0.97, 0.3], [1.0, 0.08]]
 const TAIL_WIDTH := 0.2   ## rectrix width / length (a hawk's ~22 cm tail feather is ~4.5 cm wide)
 const TAIL_FAN_MAX := 100.0   ## deg, full tail spread
+## Sitting posture per species (docs/research/body_poses_and_folded_wings.md; the angles are estimates to
+## tune against photos): body pitch when perched and on the ground (+ = upright), and how far the tail bends
+## down from the body line. Raptors and owls sit upright with the tail in line; crows and sparrows sit
+## more level with the tail angled down.
+const POSE := {
+	"sparrow": {"perch_pitch": 25.0, "ground_pitch": 10.0, "tail_down": 15.0},
+	"crow": {"perch_pitch": 35.0, "ground_pitch": 10.0, "tail_down": 20.0},
+	"hawk": {"perch_pitch": 60.0, "ground_pitch": 30.0, "tail_down": 5.0},
+	"falcon": {"perch_pitch": 65.0, "ground_pitch": 35.0, "tail_down": 5.0},
+	"owl": {"perch_pitch": 72.0, "ground_pitch": 45.0, "tail_down": 5.0},
+}
 const CAMBER := 0.03   ## feather arch height, as a share of its length
 const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
 ## Per-species feather look (docs/research/feather_rendering.md): glossy iridescent crow, matte barred soft
@@ -62,9 +73,11 @@ var wing_joints: Array = [[], []]     ## per side: [shoulder, elbow, wrist, hand
 var leg_joints: Array = [[], []]      ## per side: [hip, ankle, foot]
 var head_basis := Basis()
 var fold_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var fold_elbow: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## folded elbow, on the flank
 ## Flat-colour feathers (the default). The feather shader (feather.gdshader) is parked: set this false to
 ## try it (rig gallery: --feather-shader). docs/research/feather_rendering.md has its status.
 static var plain_feathers := true
+static var flat_perch := false   ## rig gallery: the old level perched pose (before/after comparisons)
 var feather_material: ShaderMaterial
 var feather_xforms: Array[Transform3D] = []
 var feather_kinds: PackedInt32Array = []      ## WingShape.Kind per feather_xforms entry (6 = tail); tests   ## every feather this tick (the MultiMeshes' copy; tests, debug)
@@ -103,14 +116,18 @@ func build(p: BirdProfile) -> void:
 	_hip = [Vector3(-_L * 0.06, -_L * 0.06, _L * 0.02), Vector3(_L * 0.06, -_L * 0.06, _L * 0.02)]
 	_head_pos = Vector3(0.0, _L * 0.1, -_L * 0.3)
 	_tail_base = Vector3(0.0, _L * 0.02, _L * 0.24)
-	# The fold anchor: beside and a little behind and below the shoulder, at least as far from it as the arm
-	# bones can fold to (|humerus - forearm|), so the IK always reaches it.
+	# The folded wing is a Z lying flat on the flank (research: a panel inside the body outline, never above
+	# the back): the humerus runs back from the shoulder, the elbow tucked against the flank; the forearm runs
+	# forward to the wrist -- the bend of the wing -- at the front of the breast; the hand runs back again.
+	# Both are placed on the side of the body; the fold IK targets the wrist and bends toward the elbow.
 	var l := shape.bone_lengths()
-	var reach := maxf(absf(l[0] - l[1]) * 1.4, _L * 0.08)
 	for i in 2:
 		var s: float = SIDES[i]
 		var sh := Vector3(s * shape.shoulder.x, _sh_up, shape.shoulder.y)
-		fold_anchor[i] = sh + Vector3(s * 0.35, -0.3, 0.6).normalized() * reach
+		var elbow := sh + Vector3(0.0, -0.25, 1.0).normalized() * l[0]
+		var front := sh + Vector3(0.0, -_L * 0.06, -_L * 0.1)
+		fold_elbow[i] = elbow
+		fold_anchor[i] = elbow + (front - elbow).normalized() * l[1]
 		foot_targets[i] = _tucked_foot(i)
 	var tint := _tint(p.id)
 	_colors = {
@@ -401,7 +418,7 @@ func animate(t: Dictionary, dt: float) -> void:
 	slot = lerpf(slot, (1.0 - fold) * maxf(slow, flare), ks)
 	var spread_t: float = 0.15 + 0.5 * absf(float(t.bank)) / maxf(float(t.max_bank), 0.1) + 0.6 * slow + flare
 	tail_spread = lerpf(tail_spread, 0.0 if sitting else clampf(spread_t, 0.0, 1.0), ks)
-	tail_pitch = lerpf(tail_pitch, 0.6 * flare if not sitting else 0.15, ks)
+	tail_pitch = lerpf(tail_pitch, 0.6 * flare if not sitting else deg_to_rad(float(POSE.get(profile.id, POSE["crow"]).tail_down)), ks)
 	tail_twist = lerpf(tail_twist, -float(t.bank) * 0.25 if not sitting else 0.0, ks)
 	# Airflow on the feathers: a little always, more with speed, almost none perched.
 	var air := 0.04 if sitting else 0.15 + 0.6 * clampf((speed - float(t.v_best) * 0.5) / (float(t.v_best) * 1.5), 0.0, 1.0)
@@ -508,13 +525,19 @@ func apply_pose() -> void:
 			hd_fk = wr_fk + back.rotated(fore_axis, s * deg_to_rad(hand_lift) * 0.7)
 		# Fold IK: the wrist heads for the flank anchor as the wing folds; the elbow bends toward its FK place.
 		var target := wr_fk.lerp(fold_anchor[i], ik_w)
-		var elbow := two_bone(sh, target, lengths[0], lengths[1], el_fk)
+		# Folded, the elbow lies back along the flank, not raised above the back.
+		var pole := el_fk.lerp(fold_elbow[i], ik_w)
+		var elbow := two_bone(sh, target, lengths[0], lengths[1], pole)
 		var wrist := chain_end(elbow, target, lengths[1])
 		var hand := wrist + (hd_fk - wr_fk)
 		wing_joints[i] = [sh, elbow, wrist, hand]
 		var hand_n := arm_n
 		if absf(hand_lift) > 1e-3:
 			hand_n = arm_n.rotated((wr_fk - el_fk).normalized(), s * deg_to_rad(hand_lift) * 0.7)
+		# Folding, the wing becomes a panel against the side of the body: its surface turns to face outward.
+		var side_n := Vector3(s, 0.2, 0.0).normalized()
+		arm_n = arm_n.slerp(side_n, ik_w).normalized()
+		hand_n = hand_n.slerp(side_n, ik_w).normalized()
 		var segs := [[sh, elbow, arm_n], [elbow, wrist, arm_n], [wrist, hand, hand_n]]
 		for f in defs:
 			var seg: Array = segs[int(f.bone)]
@@ -530,8 +553,13 @@ func apply_pose() -> void:
 			var d := (u * cos(rel) + aft * sin(rel)).normalized()
 			# Folding, the IK swings the arm bones well away from their FK angles; the feathers instead blend
 			# toward their designed folded direction (aft along the body), so the folded wing lies flat.
-			if ik_w > 0.0 and int(f.bone) != WingShape.Bone.HAND:
-				d = d.slerp(_fk_feather_dir(i, f, fold), ik_w).normalized()
+			if ik_w > 0.0:
+				# Folded, every feather lies along the side of the body: aft, angled a few degrees down and in,
+				# so the primaries cross over the tail instead of fanning out in a "V" above the back.
+				var folded_dir := Vector3(-s * 0.05, -0.1, 1.0).normalized()
+				if int(f.bone) != WingShape.Bone.HAND:
+					d = d.slerp(_fk_feather_dir(i, f, fold), ik_w).normalized()
+				d = d.slerp(folded_dir, ik_w * ik_w).normalized()
 			var base: Vector3 = a.lerp(b, f.t) + n * (float(f.layer) * unit)
 			if f.kind == WingShape.Kind.ALULA:
 				base += n * _L * 0.02 * alula

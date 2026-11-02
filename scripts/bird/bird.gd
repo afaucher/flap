@@ -45,7 +45,8 @@ var candidate_distance := INF
 var candidate_grip := Vector3.ZERO   ## the candidate's grip point nearest the bird
 var perch_grip := Vector3.ZERO       ## where the feet hold on (landing on / sitting on `perch`)
 var _land_facing := Vector3.FORWARD
-var sit_pitch_deg := 0.0             ## body pitch when perched (+ = upright); set per species
+var sit_pitch_deg := 0.0             ## body pitch when perched (+ = upright); per species (BirdRig.POSE)
+var ground_pitch_deg := 0.0          ## ... and standing on the ground
 var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a perch in the last few metres
 var bonks := 0
 var stun := 0.0
@@ -85,6 +86,9 @@ func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
 	rig = BirdRig.new()
 	rig.build(p)
 	add_child(rig)
+	var pose: Dictionary = BirdRig.POSE.get(p.id, BirdRig.POSE["crow"])
+	sit_pitch_deg = pose.perch_pitch
+	ground_pitch_deg = pose.ground_pitch
 
 
 ## Put the bird on a perch (spawn, respawn).
@@ -97,7 +101,7 @@ func perch_at(p: Perch) -> void:
 	model.velocity = Vector3.ZERO
 	facing = p.facing
 	look_pitch = 0.0
-	global_basis = Basis.looking_at(facing, Vector3.UP)
+	global_basis = _sit_basis()
 	reset_physics_interpolation()
 
 
@@ -251,7 +255,7 @@ func _land_on_ground() -> void:
 		fwd.y = 0.0
 	facing = fwd.normalized() if fwd.length() > 0.01 else Vector3.FORWARD
 	look_pitch = 0.0
-	global_basis = Basis.looking_at(facing, Vector3.UP)
+	global_basis = _sit_basis()
 
 
 # --- Landing on a perch --------------------------------------------------------------------------
@@ -294,6 +298,13 @@ func _land(dt: float) -> void:
 		perched.emit(perch)
 
 
+## A sitting bird's body: facing `facing`, pitched up to its species' posture (upright raptors and owls,
+## level-ish crows and sparrows; a little more level on the ground).
+func _sit_basis() -> Basis:
+	var pitch := sit_pitch_deg if state == State.PERCHED or state == State.LANDING else ground_pitch_deg
+	return (Basis.looking_at(facing, Vector3.UP) * Basis(Vector3.RIGHT, deg_to_rad(pitch))).orthonormalized()
+
+
 ## The body through a landing: from the flight attitude it turns toward the landing facing and pitches up
 ## into the flare (peaking about two-thirds of the way), then settles to the perched posture.
 func _landing_basis(s: float) -> Basis:
@@ -315,7 +326,7 @@ func _sit(dt: float, inp: FlightInput) -> void:
 	# Look around: the stick turns the bird (and so where it will leave toward) and tilts its gaze.
 	facing = facing.rotated(Vector3.UP, -deg_to_rad(TURN_RATE) * inp.stick.x * dt).normalized()
 	look_pitch = lerpf(look_pitch, clampf(inp.stick.y, -1.0, 1.0), 1.0 - exp(-6.0 * dt))
-	global_basis = Basis.looking_at(facing, Vector3.UP)
+	global_basis = _sit_basis()
 	if state == State.PERCHED:
 		if inp.flap_pressed or inp.catch_pressed:
 			_leave_perch(inp.flap_pressed)

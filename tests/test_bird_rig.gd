@@ -40,6 +40,16 @@ func setup() -> void:
 		_pose(rig, 0.0, 1.0, 0.0, 0.0)
 		for i in 2:
 			check(rig.wing_joints[i][2].distance_to(rig.fold_anchor[i]) < 1e-3, p.id + " folded wrist on its flank anchor")
+			# The folded wing lies on the body: every joint on the capsule's surface, the elbow aft of the
+			# shoulder and the wrist forward of it (a Z-fold, not a "V" raised above the back).
+			for k in 4:
+				var gap := _body_gap(rig.wing_joints[i][k], p.body_length)
+				check(absf(gap) < p.body_length * 0.05, "%s folded joint %d on the body (gap %.2f L)" % [p.id, k, gap / p.body_length])
+			check(rig.wing_joints[i][1].z > rig.wing_joints[i][0].z, p.id + " folded elbow aft of the shoulder")
+			check(rig.wing_joints[i][2].z < rig.wing_joints[i][0].z, p.id + " folded wrist forward of the shoulder")
+		for xf in rig.feather_xforms.slice(0, rig.feather_xforms.size() - BirdRig.TAIL_FEATHERS):
+			var gap := _body_gap((xf as Transform3D).origin, p.body_length)
+			check(gap < p.body_length * 0.08, "%s folded feather base on the body (gap %.2f L)" % [p.id, gap / p.body_length])
 		check(_tip_x(rig, 1.0) < half * 0.5, "%s folded feathers stay near the body (%.2f of %.2f)" % [p.id, _tip_x(rig, 1.0), half])
 		# Skeleton mirrors the solve.
 		var fr := rig.skeleton.find_bone("forearm.R")
@@ -147,6 +157,12 @@ func _worst_gap(rig: BirdRig, kind: int) -> float:
 		var g := pa.distance_to(pb) - (a.basis.x.length() + b.basis.x.length()) * half
 		worst = maxf(worst, g)
 	return worst
+
+
+## Distance of a rig-space point outside the body capsule (radius 0.15 L along Z, 0.62 L long); - = inside.
+func _body_gap(pt: Vector3, length: float) -> float:
+	var half := length * (0.31 - 0.15)
+	return pt.distance_to(Vector3(0.0, 0.0, clampf(pt.z, -half, half))) - length * 0.15
 
 
 ## The furthest feather tip on one side (x * side), from the rig's feather transforms.

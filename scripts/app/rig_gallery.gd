@@ -21,6 +21,7 @@ func _ready() -> void:
 	var view := Boot.arg_value(args, "--view")
 	var only := Boot.arg_value(args, "--only")
 	BirdRig.plain_feathers = not args.has("--feather-shader")
+	BirdRig.flat_perch = args.has("--flat-perch")
 	var sun_arg := Boot.arg_value(args, "--sun")
 	var time_arg := Boot.arg_value(args, "--time")
 	if time_arg != "":
@@ -118,13 +119,18 @@ func _pose_all(time: float) -> void:
 				r.flap = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))
 				r.hand_lift = 50.0 * sin((ph - 0.5) * TAU) if ph > 0.5 else 0.0
 			"folded":
+				# Perched: the species' posture, tail at its angle, feet gripping a branch under the body.
+				var pose: Dictionary = BirdRig.POSE.get(r.profile.id, BirdRig.POSE["crow"])
+				r.rotation_degrees.x = 0.0 if BirdRig.flat_perch else float(pose.perch_pitch)
 				r.fold = 1.0
 				r.flap = deg_to_rad(-10.0)
 				r.slot = 0.0
 				r.tail_spread = 0.0
+				r.tail_pitch = deg_to_rad(float(pose.tail_down)) if not BirdRig.flat_perch else 0.15
 				r.toe_grip = 1.0
 				for i in 2:
-					r.foot_targets[i] = r._hip[i] + Vector3(BirdRig.SIDES[i] * 0.0, -r._L * 0.3, 0.0)
+					var grip_world := r.position + Vector3(BirdRig.SIDES[i] * r._L * 0.04, -r._L * 0.35, 0.0)
+					r.foot_targets[i] = r.transform.affine_inverse() * grip_world
 			"flare":
 				r.flap = deg_to_rad(25.0)
 				r.sweep = 12.0
