@@ -9,6 +9,7 @@ func _init() -> void:
 
 
 func setup() -> void:
+	var was := LegRig.enabled
 	for id: String in ["sparrow", "crow", "hawk", "falcon", "owl"]:
 		var line := id
 		for detail: bool in [false, true]:
@@ -43,5 +44,5 @@ func setup() -> void:
 				line += ", legs moving %.2f ms; %d vertices, %d triangles, 4 draw calls" % [moving, verts, tris]
 			rig.queue_free()
 		print(line)
-	LegRig.enabled = false
+	LegRig.enabled = was
 	finish()

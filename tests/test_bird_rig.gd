@@ -121,7 +121,9 @@ func setup() -> void:
 		rig.foot_targets[1] = hip + Vector3(0.0, -p.body_length * 0.3, -p.body_length * 0.05)
 		rig.apply_pose()
 		var lj: Array = rig.leg_joints[1]
-		check(lj[3].distance_to(rig.foot_targets[1]) < 1e-4, p.id + " foot on its target")
+		var sole := rig.legs.sole_height() if rig.legs != null else 0.0   # (the detailed foot's pad stands on the target)
+		var want: Vector3 = rig.foot_targets[1] + (rig._world_frame()[0] as Vector3) * sole
+		check(lj[3].distance_to(want) < 1e-4, p.id + " foot on its target")
 		near(lj[0].distance_to(lj[1]), rig.body.femur, 1e-4, "femur length")
 		near(lj[1].distance_to(lj[2]), rig._tib, 1e-4, "tibiotarsus length")
 		near(lj[2].distance_to(lj[3]), rig._tars, 1e-4, "tarsus length")

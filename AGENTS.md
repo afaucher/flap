@@ -34,7 +34,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads]]`.
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
-- `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet behind `LegRig.enabled` (trousers joined to the trunk,
+- `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.

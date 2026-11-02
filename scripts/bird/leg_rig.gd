@@ -1,7 +1,7 @@
 class_name LegRig
 extends RefCounted
-## The detailed legs and feet (docs/design/legs_and_feet.md; research: docs/research/legs_and_feet.md), behind
-## `LegRig.enabled` (rig gallery `--legs detail`). It draws what BirdRig's leg solve gives it -- hip, knee, ankle,
+## The detailed legs and feet (docs/design/legs_and_feet.md; research: docs/research/legs_and_feet.md), on by
+## default (`LegRig.enabled`; off, BirdRig draws capsules: rig gallery `--legs capsules`). It draws what BirdRig's leg solve gives it -- hip, knee, ankle,
 ## foot per side, the world frame, toe_grip and the owl's toe swing -- as continuous lofted surfaces, every join
 ## an edge loop on the surface it leaves, as the arm wing and the neck join the trunk:
 ##
@@ -17,10 +17,11 @@ extends RefCounted
 ##   toes. Each toe starts at a loop on the pad (its first ring projected back along the toe onto the pad), so toes
 ##   never pass through each other or the pad; the toe's phalanges bend at their joints as the grip closes, the
 ##   pads bulge under the joints (raptors) or the bones (perchers), and the last ring runs on into a curved claw.
-##   Scales are drawn by leg_skin.gdshader through the meshes' coordinates (scutes in front, reticulate behind).
+##   Scales are ScaleTile's baked tile, read by leg_skin.gdshader through the meshes' coordinates (scutes in front,
+##   reticulate behind).
 ## Rebuilt only when its inputs move (perched or flying straight, the legs hold still relative to the body).
 
-static var enabled := false
+static var enabled := true
 
 const SKIN_SHADER := preload("res://scripts/bird/leg_skin.gdshader")
 const AROUND := 12        ## feather tube and tarsus rings

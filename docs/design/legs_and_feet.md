@@ -4,8 +4,8 @@ A higher detail level for everything below the body shell: the trousers, the bar
 their claws. The research behind every number is in `docs/research/legs_and_feet.md`. The body it joins is in
 `docs/design/body_rig_plan.html`, and its feather chart in `docs/research/feather_texture_study.md`.
 
-**Status.** It is a working prototype behind a switch, `LegRig.enabled`, which is off by default. In the rig gallery
-it is `--legs detail`. The code is in:
+**Status.** On by default since 2026-11-02 (`LegRig.enabled`; clear it, or pass the rig gallery `--legs capsules`,
+for the old capsule legs). Mind the CPU cost while legs move (§7). The code is in:
 - `scripts/bird/leg_rig.gd` (`LegRig`);
 - `scripts/bird/leg_skin.gdshader`;
 - a few lines of `bird_rig.gd`'s leg code.
@@ -317,5 +317,7 @@ the constants that build them. Every species is checked, both legs, perched, fla
 
 Decided (2026-11-02): the barn owl; the measured bones for every bird; toes fitted to the branch; baked scales; the
 colours as given. Still open:
-1. **Turn it on by default?** The CPU cost while legs move (§7) is the reason it is off.
-2. **Fringe cards on the trousers' hem** for close-ups (§5).
+1. **Fringe cards on the trousers' hem** for close-ups (§5).
+2. **The rebuild cost** with many birds landing at once (§7): a level of detail or GPU skinning.
+
+Turned on by default: 2026-11-02.
