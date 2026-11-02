@@ -33,6 +33,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `BackSurface`), `Rider`, `TackMesh` + the leather/metal/cloth shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros]]`.
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
+- `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet behind `LegRig.enabled` (trousers joined to the trunk,
+  bare tarsus, foot pad, segmented toes, claws; `leg_skin.gdshader`; `docs/design/legs_and_feet.md`).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a
