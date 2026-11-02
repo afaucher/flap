@@ -651,8 +651,8 @@
   "edits": [
    {
     "file": "scripts/tack/saddle.gd",
-    "find": "\t\tpivot.y += 0.5 * k\n",
-    "replace": "\t\tpivot.y += 0.0\n"
+    "find": "\t\tpivot.y = minf(pivot.y + 0.5 * k, top)\n",
+    "replace": "\t\tpivot.y = minf(pivot.y, top)\n"
    }
   ]
  },
@@ -681,6 +681,20 @@
     "file": "scripts/tack/rider.gd",
     "find": "\t\t\t_scarf_pts[i] = _clear_of_body(_scarf_pts[i], 1.2)\n",
     "replace": "\t\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "mount-stilts",
+  "bug": "An owl's mounts rose on stilts as tall as the rider, to fire over its big head (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "const MOUNT_RAISE := 30.0 ",
+    "replace": "const MOUNT_RAISE := 300.0 "
    }
   ]
  }

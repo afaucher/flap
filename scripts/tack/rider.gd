@@ -1,7 +1,7 @@
 class_name Rider
 extends Node3D
 ## The pilot: a man in a leather flying helmet and goggles, a leather coat with a sheepskin collar, a silk
-## scarf, a Sam Browne belt, khaki riding breeches, tall boots and gauntlets; `height` m tall (7.5 cm: 1:23).
+## scarf, a Sam Browne belt, khaki riding breeches, tall boots and gauntlets; `height` m tall (Tack.RIDER_HEIGHT: 8.5 cm, 1:20.6).
 ## Rig space, a child of the bird's rig beside the Saddle.
 ##
 ## Rigid segments (pelvis, torso, head, upper and lower arms, hands, thighs, shins, feet) placed each frame
