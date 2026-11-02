@@ -7,6 +7,7 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
+uniform float flex = 0.0;      // the wing's flex this pose (BirdRig.flex): a feather bends by its share of it
 uniform sampler2D strip : filter_linear, repeat_disable;   // sRGB values, read raw
 uniform float rows = 1.0;
 varying float row;
@@ -15,7 +16,7 @@ void vertex() {
 	row = INSTANCE_CUSTOM.r;
 	// Flex: the feather bends along its length (INSTANCE_CUSTOM.g = the tip's deflection, in feather lengths),
 	// rooted at its base, so a wing curves under load instead of pivoting as rigid plates.
-	float bend = INSTANCE_CUSTOM.g;
+	float bend = INSTANCE_CUSTOM.g * flex;   // (.g: this feather's share of the wing's flex)
 	VERTEX.y += bend * VERTEX.z * VERTEX.z;
 	NORMAL = normalize(NORMAL + vec3(0.0, 0.0, -2.0 * bend * VERTEX.z) * NORMAL.y);
 }

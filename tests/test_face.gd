@@ -38,7 +38,7 @@ func setup() -> void:
 		# The neck's first ring is the trunk's front ring.
 		rig.look_dir = Vector3.FORWARD
 		rig.apply_pose()
-		var nm := (rig._neck_mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var nm := rig.drawn_arrays(rig._neck_mi)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 		var tm := (rig._trunk.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 		var worst := 0.0   # (vertex order isn't kept through normal generation: match each front-ring vertex)
 		var front_z := INF
@@ -58,7 +58,7 @@ func setup() -> void:
 		rig.apply_pose()
 		var hm := (rig._head.get_node("HeadSurface") as MeshInstance3D).mesh as ArrayMesh
 		var hv := hm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
-		var nv := (rig._neck_mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var nv := rig.drawn_arrays(rig._neck_mi)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 		# (the neck pairs with the head's ring at the head's own resolution, a third of a neck step: so by each
 		# twentieth of the ring there is a neck vertex, and it is one of the head's)
 		var head_worst := 0.0
@@ -81,8 +81,7 @@ func setup() -> void:
 		rig.look_dir = Vector3.FORWARD
 		rig.fold = 0.0
 		rig.apply_pose()
-		var am := (rig._fairings[1][0] as MeshInstance3D).mesh as ArrayMesh
-		var av := am.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var av := rig.drawn_arrays(rig._fairings[1][0])[Mesh.ARRAY_VERTEX] as PackedVector3Array
 		var on_body := 0
 		for q in av:
 			if absf(rig.body.gap(q / rig._trunk.scale.x)) < rig.body.L * 0.005:
