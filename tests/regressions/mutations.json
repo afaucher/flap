@@ -1514,6 +1514,34 @@
   ]
  },
  {
+  "id": "teamkill-scores",
+  "bug": "Downing a teammate scores nothing; only enemy birds count for a side (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif is_instance_valid(by) and teams.has(by) and not friends(by, b):",
+    "replace": "\t\tif is_instance_valid(by) and teams.has(by):"
+   }
+  ]
+ },
+ {
+  "id": "respawn-in-place",
+  "bug": "A downed bird respawns at its side's base, not where it fell (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tb.perch_at(at)\n\treturn true",
+    "replace": "\treturn true"
+   }
+  ]
+ },
+ {
   "id": "ai-predict-instant-roll",
   "bug": "AI avoidance assumed the bird could roll and turn at once (straight whiskers, escapes it couldn't fly): fast, wide-turning birds saw a trunk their turn curved into too late and clipped trunks about once per perch (2026-11-02).",
   "tests": [

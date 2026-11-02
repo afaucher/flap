@@ -13,7 +13,8 @@ extends Control
 ##   teams      enemies in ENEMY (the target's bracket; a small mark on the others), teammates a FRIEND caret above
 ##              them with no range, both as arrows at the screen's edge when off it; a FRIEND cross on the
 ##              gunsight while a teammate is in the line of fire (CombatWorld.friend_in_line)
-##   tally      top right: shots, hits, downed
+##   score      top right: your side's downed enemies (FRIEND) against theirs (ENEMY), when there are teams
+##   tally      top right: shots, hits, downed (dev)
 ##   home       out of rounds or hurt: a marker on your base (where you rearm and mend), or an arrow at the edge
 ## Reads the launcher (and through it the birds) and the combat world's stats; draws in screen space.
 
@@ -88,6 +89,7 @@ func _draw() -> void:
 	_text(Vector2(size.x - 210, size.y - 77), "HEALTH", INK, 13)
 	_bar(Rect2(size.x - 130, size.y - 88, 106, 12), float(l.bird.telemetry().health), Bird.DOWN_FEATHERS)
 	if world != null:
+		_score(Vector2(size.x - 24, 78))
 		var s := world.stats
 		var acc := 100.0 * float(s.hits) / maxf(float(s.shots), 1.0)
 		_text(Vector2(size.x - 24, 34), "shots %d   hits %d   downed %d   %d%%" % [s.shots, s.hits, s.kills, roundi(acc)], INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -242,8 +244,25 @@ func _draw_styled() -> void:
 	if home != null and l.bird.state != Bird.State.PERCHED and (_empty(l) or l.bird.health() < 1.0):
 		_home_marker(cam, home, l.bird.global_position.distance_to(home))
 	if world != null:
-		var s := world.stats
-		_text(Vector2(size.x - 24, 34), "hits %d   downed %d" % [s.hits, s.kills], INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
+		_score(Vector2(size.x - 24, 38))
+
+
+## The score at `p` (right aligned): your side's downed enemies, in FRIEND, against the other side's, in ENEMY.
+func _score(p: Vector2) -> void:
+	if world == null or launcher == null or world.score.size() < 2:
+		return
+	var mine := int(world.teams.get(launcher.bird, -1))
+	var ours := int(world.score.get(mine, 0))
+	var theirs := 0
+	for team in world.score:
+		if team != mine:
+			theirs += int(world.score[team])
+	var right := "%d" % theirs
+	var wr := _font.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
+	var wc := _font.get_string_size(" : ", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x
+	_text(p, right, ENEMY, 26, HORIZONTAL_ALIGNMENT_RIGHT)
+	_text(p - Vector2(wr, 0), " : ", INK, 26, HORIZONTAL_ALIGNMENT_RIGHT)
+	_text(p - Vector2(wr + wc, 0), "%d" % ours, FRIEND, 26, HORIZONTAL_ALIGNMENT_RIGHT)
 
 
 ## Health on the aim ring's right: a segment per feather the bird can lose, the remaining ones lit from the

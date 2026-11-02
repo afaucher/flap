@@ -13,6 +13,7 @@ var quarry: Bird = null
 var offset := 12.0             ## CHASE: metres behind the quarry to aim at
 var cruise := 1.0              ## x best-glide speed to hold
 var wp := 0
+var via: Array = []           ## points to fly through before the circuit (a respawn: out from the base and up)
 ## Evading: a Callable(bird) -> threat position or null (CombatWorld.threat_to). When something threatens,
 ## break hard -- full bank across the threat's line and a pull -- for BREAK_TIME, then rejoin the circuit.
 var threat: Callable = Callable()
@@ -74,7 +75,11 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 	var m := bird.model
 	var pos := bird.global_position
 	var aim := pos + m.flight_dir() * 10.0
-	if mode == Mode.CIRCUIT and not waypoints.is_empty():
+	if not via.is_empty() and pos.distance_to(via[0]) < 4.0:
+		via.pop_front()
+	if not via.is_empty():   # (on the way back to the circuit: out from the base first)
+		aim = via[0]
+	elif mode == Mode.CIRCUIT and not waypoints.is_empty():
 		var w: Vector3 = waypoints[wp % waypoints.size()]
 		if Vector2(w.x - pos.x, w.z - pos.z).length() < 4.0:
 			wp += 1
@@ -112,3 +117,15 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 	_stick = _stick.lerp(Vector2(sx, sy), 1.0 - exp(-10.0 * dt))
 	var flap := m.speed < p.v_best * cruise or pos.y < 4.0
 	return FlightInput.new(_stick, false, flap and m.energy.burst >= 1.0)
+
+
+## Rejoin the circuit from wherever the bird is (a respawn at its base): out along `out` and up first, then the
+## nearest waypoint.
+func rejoin(from: Vector3, out: Vector3) -> void:
+	var exit := from + Vector3(out.x, 0.0, out.z).normalized() * 10.0 + Vector3.UP * 3.0
+	via = [exit]
+	var best := 0
+	for i in waypoints.size():
+		if (waypoints[i] as Vector3).distance_to(exit) < (waypoints[best] as Vector3).distance_to(exit):
+			best = i
+	wp = best
