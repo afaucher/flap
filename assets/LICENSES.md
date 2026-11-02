@@ -21,3 +21,5 @@ packed as `arm`, displacement).
 | `assets/textures/bark/pine_bark/` | Pine Bark | Dimitrios Savva | 2.0 x 2.0 m | <https://polyhaven.com/a/pine_bark> | CC0 1.0 |
 | `assets/textures/bark/knotted_pine_bark/` | Knotted Pine Bark | Dimitrios Savva | 1.7 x 1.7 m | <https://polyhaven.com/a/knotted_pine_bark> | CC0 1.0 |
 | `assets/textures/bark/jolcham_oak_bark_01/` | Jolcham Oak Bark 01 | Charlotte Baglioni | 1.0 x 2.0 m | <https://polyhaven.com/a/jolcham_oak_bark_01> | CC0 1.0 |
+| `assets/textures/ground/forrest_ground_03/` | Forest Ground 03 (pine-needle litter) | Rob Tuytel | 2.0 x 2.0 m | <https://polyhaven.com/a/forrest_ground_03> | CC0 1.0 |
+| `assets/textures/planks/weathered_planks/` | Weathered Planks | Dario Barresi, Dimitrios Savva | 2.0 x 2.0 m | <https://polyhaven.com/a/weathered_planks> | CC0 1.0 |

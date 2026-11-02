@@ -8,6 +8,14 @@ uniform vec3 litter : source_color = vec3(0.27, 0.22, 0.16);
 uniform vec3 litter_hi : source_color = vec3(0.4, 0.33, 0.24);
 uniform vec3 moss : source_color = vec3(0.24, 0.3, 0.13);
 uniform vec3 earth : source_color = vec3(0.17, 0.14, 0.11);
+// The photoscan of pine-needle litter (assets/LICENSES.md), when given: the base, at `scan_tile` m, sampled at two
+// scales and rotations blended by noise so its 2 m repeat doesn't show from the air.
+uniform bool use_scan = false;
+uniform sampler2D scan_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float scan_tile = 2.0;
+uniform vec3 scan_tint : source_color = vec3(1.0);
 
 varying vec2 wxz;
 
@@ -69,16 +77,28 @@ void fragment() {
 	float keep = 1.0 - smoothstep(0.004, 0.02, fp);
 	float nd = needles(p * 18.0) * keep;
 	col = mix(col, litter_hi * 1.15, nd * 0.6 * (1.0 - moss_m));
+	vec3 scan_n = vec3(0.5, 0.5, 1.0);
+	float scan_r = 0.9;
+	if (use_scan) {
+		vec2 u1 = p / scan_tile;
+		vec2 u2 = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p / (scan_tile * 1.37) + 0.37;
+		float w = smoothstep(0.35, 0.65, fbm(p * 0.15 + 11.0));
+		col = mix(texture(scan_albedo, u1).rgb, texture(scan_albedo, u2).rgb, w) * scan_tint * (0.85 + 0.3 * big);
+		scan_n = mix(texture(scan_normal, u1).rgb, texture(scan_normal, u2).rgb, w);
+		scan_r = mix(texture(scan_arm, u1).g, texture(scan_arm, u2).g, w);
+		nd = 0.0;
+	}
 	col = mix(col, moss * (0.85 + 0.3 * fbm(p * 4.0)), moss_m);
 	col = mix(col, earth, earth_m * 0.7);
 	col *= 0.9 + 0.2 * fbm(p * 2.5 + 5.0);
 	ALBEDO = col;
-	ROUGHNESS = mix(0.95, 0.85, moss_m);
+	ROUGHNESS = mix(use_scan ? scan_r : 0.95, 0.85, moss_m);
 	SPECULAR = 0.25;
 	// Relief: the needle streaks and the moss's lumps, as a normal.
 	float e = 0.01;
 	float h0 = mid * 0.4 + nd * 0.3;
 	float hx = fbm((p + vec2(e, 0.0)) * 0.6 + 3.0) * 0.4 + needles((p + vec2(e, 0.0)) * 18.0) * keep * 0.3;
 	float hy = fbm((p + vec2(0.0, e)) * 0.6 + 3.0) * 0.4 + needles((p + vec2(0.0, e)) * 18.0) * keep * 0.3;
-	NORMAL_MAP = normalize(vec3((h0 - hx) / e * 0.02, (h0 - hy) / e * 0.02, 1.0)) * 0.5 + 0.5;
+	vec3 pn = normalize(vec3((h0 - hx) / e * 0.02, (h0 - hy) / e * 0.02, 1.0));
+	NORMAL_MAP = use_scan ? mix(scan_n, pn * 0.5 + 0.5, moss_m) : pn * 0.5 + 0.5;
 }

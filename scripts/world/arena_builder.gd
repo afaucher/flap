@@ -57,6 +57,13 @@ func _ground() -> void:
 	mi.mesh = plane
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://scripts/world/forest_floor.gdshader" if layout.style == "pinewood" else "res://scripts/world/ground_grid.gdshader")
+	if layout.style == "pinewood":
+		var g := "res://assets/textures/ground/forrest_ground_03/forrest_ground_03"
+		sm.set_shader_parameter("use_scan", true)
+		sm.set_shader_parameter("scan_albedo", load(g + "_diff_2k.jpg"))
+		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
+		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
+		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
@@ -539,6 +546,12 @@ func _timber(key: String, params: Dictionary) -> Material:
 	if not _mats.has(k):
 		var m := ShaderMaterial.new()
 		m.shader = PLANKS_SHADER
+		var w := "res://assets/textures/planks/weathered_planks/weathered_planks"
+		m.set_shader_parameter("use_scan", true)
+		m.set_shader_parameter("scan_albedo", load(w + "_diff_2k.jpg"))
+		m.set_shader_parameter("scan_normal", load(w + "_nor_gl_2k.jpg"))
+		m.set_shader_parameter("scan_arm", load(w + "_arm_2k.jpg"))
+		m.set_shader_parameter("scan_tint", Color(1.45, 1.3, 1.1))
 		for p in params:
 			m.set_shader_parameter(p, params[p])
 		_mats[k] = m

@@ -57,6 +57,7 @@ func _views() -> Array:
 	var toward_sun := -(Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
 	v.append(["The concept's angle: coming in to an outpost", on_pine.centre - toward_sun * 4.0 + on_pine.out * 1.2 + Vector3.UP * 2.4, on_pine.centre + toward_sun * 3.0])
 	v.append(["A pine's outpost, on approach", on_pine.centre + on_pine.out * 3.2 + Vector3.UP * 0.6 + on_pine.out.cross(Vector3.UP) * 1.2, on_pine.centre])
+	v.append(["A pine's outpost, the deck from 1 m", on_pine.centre + on_pine.out * 1.1 + on_pine.out.cross(Vector3.UP) * 0.5 + Vector3.UP * 0.9, on_pine.centre - on_pine.out * 0.1])
 	var o2: ArenaLayout.OutpostData = layout.outposts[0]
 	v.append(["The clearing oak's outpost, from 8 m", o2.centre + o2.out * 8.0 + Vector3.UP * 1.5, o2.centre + Vector3.UP * 0.5])
 	v.append(["Between the pines at 8 m", Vector3(-70.0, 8.0, -30.0), Vector3(-20.0, 9.0, -10.0)])

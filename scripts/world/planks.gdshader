@@ -13,6 +13,16 @@ uniform float weather = 0.55;      // 0 fresh .. 1 grey all over
 uniform int grain_axis = 2;
 uniform float length_m = 1.1;      // the piece's length along the grain (for the nails)
 uniform bool nails = true;
+// The weathered-planks photoscan (assets/LICENSES.md), when given: each piece takes one board of it (the scan is
+// `scan_boards` boards across `scan_tile` m), picked by its seed, the grain along the piece.
+uniform bool use_scan = false;
+uniform sampler2D scan_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float scan_tile = 2.0;
+uniform float scan_boards = 9.5;
+uniform float board_w = 0.17;      // m, the piece's width across the grain
+uniform vec3 scan_tint : source_color = vec3(1.0);
 
 varying vec3 lp;
 varying float seed;
@@ -70,6 +80,14 @@ void fragment() {
 		nail *= step(0.5, up);
 	}
 	col = mix(col, vec3(0.12, 0.1, 0.09), nail);
+	if (use_scan) {
+		float board = floor(seed * scan_boards * 0.999);
+		vec2 su = vec2((board + 0.08 + 0.84 * clamp(across / board_w + 0.5, 0.0, 1.0)) / scan_boards, along / scan_tile + seed * 7.0);
+		vec3 sc = texture(scan_albedo, su).rgb * scan_tint;
+		col = mix(sc, sc * mix(vec3(1.0), silver / max(wood, vec3(0.05)), 0.35), grey * 0.6);
+		col = mix(col, dark, crack * 0.3);
+		nail = 0.0;
+	}
 	ALBEDO = col;
 	ROUGHNESS = mix(0.85, 0.45, nail);
 	METALLIC = nail * 0.6;
@@ -77,4 +95,11 @@ void fragment() {
 	// Relief: the rings and cracks as a normal (face normal space: x across, y along).
 	float h = rings * 0.3 + fine * 0.2 - crack * 0.8;
 	NORMAL_MAP = normalize(vec3(dFdx(h) * 0.0 - (vnoise(vec2(along * 40.0, across * 900.0 + 1.0)) - fine) * 0.6, crack * -0.3, 1.0)) * 0.5 + 0.5;
+	if (use_scan) {
+		float board = floor(seed * scan_boards * 0.999);
+		vec2 su = vec2((board + 0.08 + 0.84 * clamp(across / board_w + 0.5, 0.0, 1.0)) / scan_boards, along / scan_tile + seed * 7.0);
+		vec3 sn = texture(scan_normal, su).rgb;
+		NORMAL_MAP = grain_axis == 2 ? sn : sn.yxz;   // (the scan's boards run along v; on a rod, round it)
+		ROUGHNESS = texture(scan_arm, su).g;
+	}
 }

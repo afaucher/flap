@@ -51,7 +51,7 @@ func _pines(a: ArenaLayout) -> void:
 				low_live += 1
 			else:
 				limbs_up += 1
-		if t.crown_base > t.height * 0.55 and limbs_up >= 8:
+		if t.crown_base > t.height * 0.55 and limbs_up >= 6:
 			crown_ok += 1
 		for f in t.foliage:
 			if (f[0] as Vector3).y < t.crown_base - 0.5:

@@ -140,26 +140,33 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 		var root := c + Vector3.UP * y
 		var tip := root + d * (r + rng.randf_range(0.25, 0.7)) + Vector3.UP * rng.randf_range(-0.08, 0.12)
 		_branch(a, t, root, tip, rng.randf_range(0.025, 0.045), true, true)
-	# The crown: whorls of 3-5 limbs, longest low, upswept, a pad of needles at each limb's end and middle.
+	# The crown of an old Scots pine: irregular and flat-topped, not a cone -- a few whorls of strongly upswept
+	# limbs, the longest high up (an umbrella), each ending in an irregular tuft of needles (a clump of pads,
+	# some off to the side, sizes varying), with a tuft part-way along the longer limbs.
 	var dens := clampf(crown_density, 0.0, 1.0)
 	var whorls := rng.randi_range(4, 6) if dens >= 0.75 else rng.randi_range(3, 4)
 	var ang0 := rng.randf() * TAU
 	for w in whorls:
 		var f := (w + rng.randf_range(0.0, 0.5)) / float(whorls)
-		var y := lerpf(t.crown_base, t.height - 1.2, f)
-		var reach := lerpf(3.0, 1.1, f) * rng.randf_range(0.8, 1.15)
-		var n := rng.randi_range(3, 5)
+		var y := lerpf(t.crown_base, t.height - 1.6, f)
+		var reach := lerpf(1.7, 3.1, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0))) * rng.randf_range(0.75, 1.2)
+		var n := rng.randi_range(2, 4)
 		for k in n:
-			var ang := ang0 + TAU * k / n + rng.randf_range(-0.3, 0.3) + w * 0.9
+			var ang := ang0 + TAU * k / n + rng.randf_range(-0.45, 0.45) + w * 1.3
 			var d := Vector3(sin(ang), 0.0, cos(ang))
 			var root := c + Vector3.UP * y
-			var tip := root + d * (_r_at(t, y) + reach) + Vector3.UP * reach * rng.randf_range(0.15, 0.45)
+			var rise := lerpf(0.35, 0.7, f) * rng.randf_range(0.8, 1.25)
+			var tip := root + d * (_r_at(t, y) + reach) + Vector3.UP * reach * rise + Vector3(rng.randf_range(-0.4, 0.4), 0.0, rng.randf_range(-0.4, 0.4))
 			var br := _branch(a, t, root, tip, lerpf(0.07, 0.035, f), true)
-			var pad := Vector3(reach * 0.45 + 0.4, 0.35 + 0.15 * reach, reach * 0.45 + 0.4) * lerpf(0.6, 1.0, dens)
-			if rng.randf() < lerpf(0.6, 1.0, dens):
-				t.foliage.append([br.tip + Vector3.UP * 0.15, pad])
-			if dens >= 0.75:
-				t.foliage.append([br.root.lerp(br.tip, 0.6) + Vector3.UP * 0.25, pad * 0.8])
+			var s := lerpf(0.75, 1.0, dens) * rng.randf_range(0.8, 1.25)
+			var pad := Vector3(1.15, 0.6, 1.15) * s
+			t.foliage.append([br.tip + Vector3.UP * 0.2, pad])
+			var side := d.cross(Vector3.UP)
+			for q in rng.randi_range(2, 3):
+				var off := side * rng.randf_range(-0.55, 0.55) - d * rng.randf_range(0.1, 0.5) + Vector3.UP * rng.randf_range(-0.05, 0.25)
+				t.foliage.append([br.tip + off, pad * rng.randf_range(0.6, 0.9)])
+			if reach > 2.3 and rng.randf() < lerpf(0.35, 0.8, dens):
+				t.foliage.append([br.root.lerp(br.tip, 0.62) + Vector3.UP * 0.25 + side * rng.randf_range(-0.3, 0.3), pad * 0.7])
 	# The leader's tuft and a treetop perch on the broken-off top.
 	t.foliage.append([c + Vector3.UP * (t.height - 0.4), Vector3(1.0, 1.2, 1.0)])
 	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.05, _r_at(t, t.height) - 0.02), -c, t.id))
@@ -280,7 +287,8 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 			var d := Vector3(sin(ang), 0.0, cos(ang))
 			var from := c + Vector3.UP * (float(yy) + 0.3) + d * (r + 1.4)
 			var run := 0.0
-			while run < 30.0 and a.segment_clear(from, from + d * (run + 2.0), 0.6, -1) and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6):
+			var across := d.cross(Vector3.UP).normalized() * 0.6   # (both ends of the rail, as well as its middle)
+			while run < 30.0 and a.segment_clear(from, from + d * (run + 2.0), 0.6, -1) and a.segment_clear(from + across, from + across + d * (run + 2.0), 0.5, -1) and a.segment_clear(from - across, from - across + d * (run + 2.0), 0.5, -1) and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6):
 				run += 2.0
 			if run > best:
 				best = run
