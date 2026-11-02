@@ -38,18 +38,33 @@ func untrack(b: Bird) -> void:
 	_tracks.erase(b)
 
 
-## The two wingtips in world space: past the hand by roughly the longest primary.
-static func tips(b: Bird) -> Array:
+## `b`'s trail [t, left tip, right tip, load] as of `now`: the points sampled by then, and, flying, the wingtips where
+## they are drawn.
+func drawn_points(b: Bird, now: float) -> Array:
+	var pts: Array = (_tracks[b] as Array).filter(func(q): return float(q[0]) <= now)
+	if is_instance_valid(b) and b.state == Bird.State.FLYING and not pts.is_empty():
+		var tp := tips(b, true)
+		if tp.size() == 2:
+			pts.append([now, tp[0], tp[1], float(pts[-1][3])])
+	return pts
+
+
+## The two wingtips in world space: past the hand by roughly the longest primary. `drawn`: where the frame draws them
+## (the bird between its last two ticks, as physics interpolation draws it), else as of the last tick.
+static func tips(b: Bird, drawn := false) -> Array:
 	var r := b.rig
 	if r == null or r.wing_joints[0].size() < 4:
 		return []
+	var xf := r.global_transform
+	if drawn:
+		xf = b.get_global_transform_interpolated() * (b.global_transform.affine_inverse() * r.global_transform)
 	var out := []
 	for i in 2:
 		var j: Array = r.wing_joints[i]
 		var hand: Vector3 = j[3]
 		var wrist: Vector3 = j[2]
 		var tip := hand + (hand - wrist).normalized() * b.profile.span * 0.5 * 0.35
-		out.append(r.global_transform * tip)
+		out.append(xf * tip)
 	return out
 
 
@@ -74,8 +89,11 @@ func _process(_delta: float) -> void:
 		return
 	var eye := cam.global_position
 	var started := false
+	# As of the drawn moment: the points laid since then left out, the trail running on to the wingtips where they
+	# are drawn (sampled on the tick, the newest point led the drawn bird by up to a tick's flight).
+	var now := _clock - Bird.drawn_lag()
 	for b in _tracks:
-		var pts: Array = _tracks[b]
+		var pts := drawn_points(b, now)
 		if pts.size() < 2:
 			continue
 		for side in 2:
@@ -85,7 +103,7 @@ func _process(_delta: float) -> void:
 				var seg := c - a
 				if seg.length() < 1e-4:
 					continue
-				var k := 1.0 - (_clock - float(pts[i][0])) / LENGTH        # 1 newest .. 0 oldest
+				var k := 1.0 - (now - float(pts[i][0])) / LENGTH        # 1 newest .. 0 oldest
 				var near := smoothstep(NEAR, FAR, eye.distance_to(c))
 				var w := (0.006 + 0.012 * clampf(float(pts[i][3]) - 1.0, 0.0, 2.0)) * (0.3 + 0.7 * k) * maxf(1.0, eye.distance_to(c) * 0.12)
 				var col := Color(color.r, color.g, color.b, 0.75 * k * k * near)

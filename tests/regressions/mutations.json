@@ -1191,6 +1191,90 @@
   ]
  },
  {
+  "id": "rig-stepped-with-ticks",
+  "bug": "The rig was posed on the physics tick: the feathers were interpolated tick to tick but the lofted wing and neck and the skinned legs only stepped with the ticks, so on a frame with no tick (or two) they held still (or jumped) while the body and feathers moved -- the wing surface juddered against its own feathers (2026-11-02).",
+  "tests": [
+   "test_rig_pacing"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "static var rig_in_process := true\n",
+    "replace": "static var rig_in_process := false\n"
+   }
+  ]
+ },
+ {
+  "id": "projectile-drawn-at-latest-tick",
+  "bug": "Rounds in flight were placed in _process at their latest tick's position (and interpolated again by the engine): a tick ahead of the birds the frame drew, jittering (2026-11-02).",
+  "tests": [
+   "test_drawn_moment"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tvar at := p.last_pos.lerp(p.pos, f)\n",
+    "replace": "\t\tvar at := p.pos\n"
+   }
+  ]
+ },
+ {
+  "id": "smoke-ahead-of-round",
+  "bug": "Smoke trails were drawn to the latest tick's points: their head led the drawn round by up to a tick's flight (2026-11-02).",
+  "tests": [
+   "test_drawn_moment"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tvar pts: Array = (s.pts as Array).filter(func(q): return float(q[1]) <= now)\n\tif heads.has(s.id):\n",
+    "replace": "\tvar pts: Array = (s.pts as Array).duplicate()\n\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "wing-trail-ahead-of-wingtip",
+  "bug": "Wing trails ended at the wingtips as of the last tick, up to a tick's flight (25 cm at 15 m/s) ahead of the drawn bird (2026-11-02).",
+  "tests": [
+   "test_drawn_moment"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/wing_trails.gd",
+    "find": "\t\txf = b.get_global_transform_interpolated() * (b.global_transform.affine_inverse() * r.global_transform)\n",
+    "replace": "\t\txf = r.global_transform\n"
+   }
+  ]
+ },
+ {
+  "id": "tack-posed-apart-from-rig",
+  "bug": "The tack (saddle, rider) was posed in its own _process, apart from the rig it rides on: the rider moved at another rate from the bird under them, and set interpolated transforms outside the tick (2026-11-02).",
+  "tests": [
+   "test_rig_pacing"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/tack.gd",
+    "find": "\t\tr.posed.connect(t.update)   # each frame, or as the gallery calls update())\n\t\tt.set_process(false)\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "rig-first-frame-unposed",
+  "bug": "Posed every frame for the drawn moment, a new bird's first frame wasn't posed (the drawn moment was still its start): its rig ran a tick behind its state from then on, the wingbeat out of step with the take-off -- the head tipped 54 deg up the climb (2026-11-02).",
+  "tests": [
+   "test_rig_pacing"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif is_nan(_posed_t):   # (first drawn: posed for a tick, as the tick it was placed on would have)\n\t\t_posed_t = at - 1.0 / Engine.physics_ticks_per_second\n",
+    "replace": "\tif is_nan(_posed_t):\n\t\t_posed_t = at\n"
+   }
+  ]
+ },
+ {
   "id": "sapling-twigs-solid",
   "bug": "Young pines' twigs were solid and in the planner's way: AI birds bumped them eleven times in 90 s, low over the floor (2026-11-02).",
   "tests": [
