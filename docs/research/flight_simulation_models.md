@@ -322,3 +322,19 @@ func hud_glide() -> Dictionary:
 - Stall trigger note: https://bugnet.io/blog/how-to-fix-aircraft-stall-not-triggering-at-low-airspeed
 - Turn formulas: https://stolaf.edu/people/hansonr/soaring/speeds.htm , https://aerodynamics4students.com/aircraft-performance/manoeuvres.php , https://wikipedia.classicistranieri.com/en/articles/b/a/n/Banked_turn.html
 - Godot physics interpolation: https://docs.godotengine.org/en/latest/tutorials/physics/interpolation/physics_interpolation_introduction.html ; Fix Your Timestep: https://gafferongames.com/post/fix_your_timestep/ ; semi-implicit Euler: https://gamedev.net/forums/topic/702904-projectile-motion-not-behaving-as-expected/?page=1
+
+### Standard references for the physics
+The formulas in sections 2, 5 and 6 are textbook aerodynamics. Several links above are forum posts or mirror sites, so these are the stronger references:
+- **Drag polar, best glide, minimum sink, stall speed, level-turn radius and rate, load factor.** Anderson JD, *Introduction to Flight* (McGraw-Hill, any recent edition), chapters on airplane performance. Canonical pages for the mirrors above: https://en.wikipedia.org/wiki/Drag_curve , https://en.wikipedia.org/wiki/Lift-induced_drag , https://en.wikipedia.org/wiki/Banked_turn
+- **Lift slope.**
+  - Thin-airfoil theory gives 2π per radian.
+  - Lifting-line theory gives the finite-wing slope a = a0 / (1 + a0 / (π·e·AR)). With a0 = 2π and e = 1 this is exactly 2π·AR/(AR+2), the form used in section 2.
+  - Source: Anderson JD, *Fundamentals of Aerodynamics* (McGraw-Hill), chapters on thin-airfoil and finite-wing theory.
+- **Flat-plate normal-force coefficient C_N ≈ 1.2–2.0** (section 5). This spans a flat plate normal to the flow, from about 1.2 for a square plate to about 2.0 for a two-dimensional one. Source: Hoerner SF 1965, *Fluid-Dynamic Drag*, chapter 3. The values are quoted from the standard handbook figures, not re-checked here.
+- **Semi-implicit (symplectic) Euler** (section 7). Hairer E, Lubich C, Wanner G 2003, "Geometric numerical integration illustrated by the Störmer–Verlet method", *Acta Numerica* 12:399–450.
+- **Perching forces.** The Polet, Rival & Weymouth claim in section 5 was checked against the paper's abstract: "Peak lift and drag forces during rapid perching are measured to be more than 10 times the quasi-steady values." The paper studied a two-dimensional pitching, decelerating airfoil, not a bird. See `landing_and_takeoff.md` for the bird studies.
+
+**Source quality.**
+- Weak: the Roblox DevForum, html5gamedevs, gamedev.net and bugnet links, the store pages, and the mirror sites `wiki.riteme.site`, `wikipedia.com` and `wikipedia.classicistranieri.com`.
+- The shipped-game techniques in section 1 are observations, as that section already says.
+- The gasgiant repo's force-averaging detail is from memory (section 3a).

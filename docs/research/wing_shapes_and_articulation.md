@@ -47,7 +47,7 @@ The wing is a jointed arm: **shoulder** (humerus) -> **elbow** (radius/ulna) -> 
   joint.
 - **Elbow + wrist are mechanically coupled.** Bending the elbow automatically bends the wrist,
   and straightening one straightens the other, with no extra muscle effort. The classic
-  explanation is "drawing parallels": the radius slides along the ulna (Coues 1872). A 2017 study
+  explanation is "drawing parallels": the radius slides along the ulna (Bergmann 1839; Coues 1871; confirmed surgically by Fisher 1957, all as cited in [PUBMED-2017]). A 2017 study
   showed the motion is strongly non-planar and needs the wrist bones in the model; a six-bar
   linkage with a sliding ulnare fits the data [AUTOMATE][PUBMED-2017]. The propatagial tendon
   also helps extend the wrist when the elbow extends [AUTOMATE].
@@ -122,7 +122,7 @@ The wing is a jointed arm: **shoulder** (humerus) -> **elbow** (radius/ulna) -> 
   real birds (bigger mass comes with longer wings) the net trend is about **f ∝ m^-1/3**
   [PHASIANID-JEB]. A 414-point dataset from swans to hummingbirds confirms it holds across sizes
   [PHYSWORLD].
-- Rough reference values (~): hummingbird 40-80 Hz; sparrow/finch 12-20 Hz; pigeon 6-9 Hz; crow
+- Rough reference values (~; general figures, not taken from a single cited source): hummingbird 40-80 Hz; sparrow/finch 12-20 Hz; pigeon 6-9 Hz; crow
   3-5 Hz; hawk/buzzard 3-5 Hz; heron/stork/eagle 2-3 Hz; swan ~3 Hz.
 - Birds also **change amplitude and frequency with demand**: highest at takeoff and climb,
   lowest at cruise. Many species use flap-glide or flap-bound (folded ballistic) gaits.
@@ -139,8 +139,8 @@ Observed in hawks and steppe eagles; it is quite stereotyped [OXF-THESIS][STEPPE
 2. **Rapid pitch-up.** Body and wings rotate nose-up hard. The wings sweep forward, the
    underwing coverts deploy (phased with the sweep), the alula protracts, and the tail fans and
    pitches down [STEPPE]. This is the main braking event in raptors [OXF-THESIS].
-3. **Deep stall.** The wing works at very high AoA as an **airbrake**. Drag is high; measured
-   lift does *not* peak with it [STEPPE]. Unsteady models suggest pitching up lets the bird keep
+3. **Deep stall.** The wing works at very high AoA as an **airbrake**. Drag is high; lift shows
+   no matching peak [OXF-THESIS][CARR10]. Unsteady models suggest pitching up lets the bird keep
    high lift *and* drag together while it decelerates [POLET-JFM].
 4. **Feet forward + grab.** The legs swing forward and the feet open to take up the impact.
    For short hops, birds brake by flapping (backward strokes) instead of a pure glide pitch-up
@@ -207,7 +207,7 @@ them as separate inputs.
   - Within ~6-8 m of a targeted perch and below ~0.6x cruise speed, ramp `brake` -> 1.
   - On flare: body pitch goes up to ~60-80 deg, `tail_spread` 1, `tail_pitch` down, `alula` 1,
     `wing_sweep` -0.1 (wings *forward* past spread; allow a slight negative), and drag coeff x3-4.
-  - Lift held roughly constant (not spiked) through the flare, per the steppe eagle data [STEPPE].
+  - Lift held roughly constant (not spiked) through the flare, per the perching studies [OXF-THESIS][CARR10].
   - `legs_forward` 1 within ~3 m. Snap to the perch if relative speed < ~2 m/s.
   - Teach "**dive under, swoop up**" as the skilled approach: arriving fast and converting speed
     into a climb onto the perch should give the cleanest flare [SCIDAILY].
@@ -248,25 +248,25 @@ them as separate inputs.
 - [SLH] Science Learning Hub, Wing loading: https://www.sciencelearn.org.nz/resources/301-wing-loading
 - [NASA] NASA NTRS technical memo (bird wing loading): https://ntrs.nasa.gov/api/citations/19930090809/downloads/19930090809.pdf
 - [WB] Wilson Bulletin, hawk wing morphology: https://sora.unm.edu/sites/default/files/journals/wilson/v093n04/p0491-p0499.pdf
-- [LENTINK] Lentink et al. 2007, How swifts control their glide performance with morphing wings, Nature 446: https://www.nature.com/articles/nature05733 ; summary: https://physicstoday.aip.org/news/morphing-wings-help-birds-control-gliding
-- [AUTOMATE] Automating skeletal and muscular mechanisms of the avian wing: https://link.springer.com/doi/10.1007/BF00574915
-- [PUBMED-2017] Non-planar wing skeletal motion / wrist-inclusive linkage model (2017): https://pubmed.ncbi.nlm.nih.gov/28794161/
-- [PIGEON-ROBOT] PigeonBot / feathered morphing wing (MDPI Biomimetics overview): https://mdpi.com/2313-7673/9/9/555
+- [LENTINK] Lentink D, Müller UK, Stamhuis EJ, et al. 2007, How swifts control their glide performance with morphing wings, Nature 446:1082-1085: https://www.nature.com/articles/nature05733 ; summary: https://physicstoday.aip.org/news/morphing-wings-help-birds-control-gliding
+- [AUTOMATE] Vazquez RJ 1994, The automating skeletal and muscular mechanisms of the avian wing (Aves), Zoomorphology 114:59-71, doi:10.1007/BF00574915: https://link.springer.com/doi/10.1007/BF00574915
+- [PUBMED-2017] Stowers AK, Matloff LY, Lentink D 2017, How pigeons couple three-dimensional elbow and wrist motion to morph their wings, J R Soc Interface 14:20170224, doi:10.1098/rsif.2017.0224: https://pubmed.ncbi.nlm.nih.gov/28794161/ (full text: https://pmc.ncbi.nlm.nih.gov/articles/PMC5582118/)
+- [PIGEON-ROBOT] PigeonBot / feathered morphing wing (MDPI Biomimetics overview): https://mdpi.com/2313-7673/9/9/555 ; primary paper: Chang E, Matloff LY, Stowers AK, Lentink D 2020, Soft biohybrid morphing wings with feathers underactuated by wrist and finger motion, Science Robotics 5:eaay1246, doi:10.1126/scirobotics.aay1246
 - [PENNY68] Pennycuick 1968, A wind-tunnel study of gliding flight in the pigeon: https://scilit.com/publications/448c2860dd71f7fd126b473c3f059ca2
 - [WONG25] Wong et al. 2025, Wing extension-flexion coupled aeroelastic effects, J. R. Soc. Interface: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12055289/
-- [PONITZ-PLOS] Ponitz et al. 2014, Diving-flight aerodynamics of a peregrine falcon, PLOS ONE: https://pmc.ncbi.nlm.nih.gov/articles/PMC3914994
+- [PONITZ-PLOS] Ponitz B, Schmitz A, Fischer D, Bleckmann H, Brücker C 2014, Diving-flight aerodynamics of a peregrine falcon (Falco peregrinus), PLOS ONE 9:e86506: https://pmc.ncbi.nlm.nih.gov/articles/PMC3914994
 - [PONITZ-OJFD] Ponitz et al. 2014, cupped-wing CFD: https://openaccess.city.ac.uk/id/eprint/12942/1/2014-PonitzFalke.pdf
 - [SELIM] Selim, Gowree, Brucker, The peregrine falcon's dive: pull-out and wing morphing: https://ar5iv.labs.arxiv.org/html/2008.03948
-- [TUCKER93] Tucker 1993, Reduction of induced drag by wing tip slots: https://scilit.com/publications/0cb2e90ed7bc9c8a041ec08b2d5be9ed
-- [TUCKER95] Tucker 1995, Drag reduction by wing tip slots in a gliding Harris hawk: https://acnpsearch.tweb-dev.unibo.it/singlejournalindex/25807025
+- [TUCKER93] Tucker VA 1993, Gliding birds: reduction of induced drag by wing tip slots between the primary feathers, J Exp Biol 180:285-310: https://scilit.com/publications/0cb2e90ed7bc9c8a041ec08b2d5be9ed
+- [TUCKER95] Tucker VA 1995, Drag reduction by wing tip slots in a gliding Harris' hawk, Parabuteo unicinctus, J Exp Biol 198:775-781 (the link is a library index entry, a weak pointer): https://acnpsearch.tweb-dev.unibo.it/singlejournalindex/25807025
 - [ALULA-PRINCETON] Princeton BAM lab alula papers: https://bamlab.princeton.edu/_files/ugd/8339e9_9100cd4c8c8348058d2aa59d0a14fc75.pdf
-- [LEE15] Lee et al. 2015, Scientific Reports, alula function: https://www.doi.org/10.1038/srep09914
+- [LEE15] Lee S, Kim J, Park H, Jabłoński PG, Choi H 2015, The function of the alula in avian flight, Scientific Reports 5:9914: https://www.doi.org/10.1038/srep09914
 - [ITO19] Ito et al. 2019, alula-inspired leading-edge device: https://collaborate.princeton.edu/en/publications/the-function-of-the-alula-on-engineered-wings-a-detailed-experime/
 - [MANDADZHIEV] Mandadzhiev et al., alula at low Re: https://par.nsf.gov/servlets/purl/10097588
-- [THOMAS96] Thomas 1996, Why do birds have tails? Drag-reducing flap and trim control: https://acnpsearch.tweb-dev.unibo.it/singlejournalindex/264695
+- [THOMAS96] Thomas ALR 1996, Why do birds have tails? The tail as a drag reducing flap, and trim control, J Theor Biol 183:247-253 (the link is a library index entry, a weak pointer): https://acnpsearch.tweb-dev.unibo.it/singlejournalindex/264695
 - [TAIL-TURB] Turbulence enhances bird tail aerodynamic performance (2025): https://arxiv.org/html/2512.24168v1
 - [DRONE-TAIL] Raptor-informed feathered drone, tail twist (bioRxiv): https://www.biorxiv.org/content/10.1101/2023.12.29.573672.full.pdf
-- [PHAN24] Phan & Floreano 2024, Science Robotics: https://api.crossref.org/works/10.1126%2FSCIROBOTICS.ADO3890
+- [PHAN24] Phan HV, Floreano D 2024, A twist of the tail in turning maneuvers of bird-inspired drones, Science Robotics 9:eado3890, doi:10.1126/scirobotics.ado3890: https://api.crossref.org/works/10.1126%2FSCIROBOTICS.ADO3890
 - [UPSTROKE-JEB] Kinematics and aerodynamics of avian upstrokes, J Exp Biol 218: https://cob.silverchair.com/jeb/article/218/16/2518/14222/Kinematics-and-aerodynamics-of-avian-upstrokes
 - [UMT] Kinematics and aerodynamics of avian upstrokes during slow flight: https://umimpact.umt.edu/en/publications/kinematics-and-aerodynamics-of-avian-upstrokes-during-slow-flight/
 - [HEDRICK04] Hedrick et al. 2004, Wing inertia and whole-body acceleration (cockatiel), J Exp Biol 207: https://cob.silverchair.com/jeb/article/207/10/1689/14706/Wing-inertia-and-whole-body-acceleration-an
@@ -274,7 +274,10 @@ them as separate inputs.
 - [PENNY-AUK96] Pennycuick 1996, wingbeat frequency, The Auk 113: https://sora.unm.edu/sites/default/files/journals/auk/v113n01/p0151-p0177.pdf
 - [PHASIANID-JEB] Body size and take-off performance in Phasianidae, J Exp Biol 203: https://cob.silverchair.com/jeb/article-pdf/2608202/jexbio_203_21_3319.pdf
 - [PHYSWORLD] Simple equation predicts how quickly animals flap their wings: https://physicsworld.com/a/simple-equation-predicts-how-quickly-animals-flap-their-wings/
-- [OXF-THESIS] Oxford thesis on raptor perching/landing: https://ora.ox.ac.uk/objects/uuid:a439bd30-3916-4fe9-ba06-c65fd1547048
-- [STEPPE] Steppe eagle perching, wing-tail morphing in deep stall: https://scienceopen.com/document/vid/28814b54-7865-430c-adde-ffdb3e812d2f
+- [OXF-THESIS] France LA 2019, Mechanics and control of perching flight, DPhil thesis, University of Oxford (hawks brake by pitching up, with high drag and no matching lift peak; flapping brakes on the shortest flights): https://ora.ox.ac.uk/objects/uuid:a439bd30-3916-4fe9-ba06-c65fd1547048
+- [STEPPE] Steppe eagle perching, wing-tail morphing in deep stall (ScienceOpen record; refused automated fetches): https://scienceopen.com/document/vid/28814b54-7865-430c-adde-ffdb3e812d2f . The covert, alula and tail claims are in Carruthers AC, Thomas ALR, Taylor GK 2007, Automatic aeroelastic devices in the wings of a steppe eagle Aquila nipalensis, J Exp Biol 210:4136-4149, doi:10.1242/jeb.011197: https://journals.biologists.com/jeb/article/210/23/4136/17202/Automatic-aeroelastic-devices-in-the-wings-of-a . That paper did not measure lift.
+- [CARR10] Carruthers AC, Thomas ALR, Walker SM, Taylor GK 2010, Mechanics and aerodynamics of perching manoeuvres in a large bird of prey, Aeronautical Journal 114:673-680 (abstract snippets only: the key to perching is wing and tail morphing into a deep stall, not high-lift aerodynamics)
 - [POLET-JFM] Polet et al., unsteady perching aerodynamics, JFM: https://eprints.soton.ac.uk/380552/1/JFMResubmission.pdf
-- [SCIDAILY] ScienceDaily 2022, hawks minimise stall when perching (Nature 2022): https://sciencedaily.com/releases/2022/06/220630142218.htm ; paper: https://link.springer.com/10.1038/s41586-022-04861-4
+- [SCIDAILY] ScienceDaily 2022, hawks minimise stall when perching: https://sciencedaily.com/releases/2022/06/220630142218.htm ; paper: KleinHeerenbrink M, France LA, Brighton CH, Taylor GK 2022, Optimization of avian perching manoeuvres, Nature 607:91-96, doi:10.1038/s41586-022-04861-4: https://pmc.ncbi.nlm.nih.gov/articles/PMC9259480/ . See `landing_and_takeoff.md` for its numbers.
+
+Note on the references: the full author, title and page details added to [LENTINK], [PONITZ-PLOS], [TUCKER93], [TUCKER95], [THOMAS96], [LEE15] and [PHAN24] are the standard citations, added without re-fetching each paper. [TUCKER95] and [THOMAS96] link only to library index entries. Section 5 numbers are design starting points, not measurements.

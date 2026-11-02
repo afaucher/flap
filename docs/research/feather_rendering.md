@@ -89,3 +89,9 @@ Before/after: `docs/images/feathers_before_after.png`. To reproduce it, run `sce
 - [PIXAR] Pixar SIGGRAPH 2026 talk: https://research.pixar.com/docs/2026.SiggraphTalks.PCB.pdf
 - [OCTANE] Low-authority texture-shading tip page (soft look needs scattering); cited only as a rule of thumb.
 - Feather/fur card shader (VRChat): https://normalizedcrow.gumroad.com/l/FeathersAndFur ; SideFX feather tools: https://www.sidefx.com/learn/learning-paths/cfx/feathers/
+
+**Source quality.**
+- The 2026 *ACM Transactions on Graphics* paper mentioned in the first table has no recorded reference, so treat that row's last sentence as unsourced.
+- [OCTANE] has no URL; it is only a rule of thumb.
+- [UE-FUR] is a forum thread and [BIRDING] a blog. [FALCON] is a developer's own write-up, so it's good evidence of what that game did.
+- The patents and the SIGGRAPH and DreamWorks papers are primary sources.

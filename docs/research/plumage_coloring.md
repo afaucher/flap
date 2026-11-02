@@ -7,7 +7,7 @@ Why our birds don't yet read like the field-guide plate of raptors seen from bel
 ## 1. Plumage pattern elements and what makes them
 
 ### Big masses
-- **Countershading.** Animals are darker on top and paler underneath, which cancels the self-shadow that would otherwise make the back look darker than the belly. It's sometimes called Thayer's law, after Thayer's 1896 paper in *The Auk* [THAYER][WIKI-CS]. Thayer's example is the ruffed grouse, "dark brown on the back" grading to white underneath. It works best under direct sun; a 2016 PNAS study found no advantage under diffuse light [WIKI-CS]. For us, this is the cheapest single cue for whether we're seeing a bird's top or its belly.
+- **Countershading.** Animals are darker on top and paler underneath, which cancels the self-shadow that would otherwise make the back look darker than the belly. It's sometimes called Thayer's law, after Thayer's 1896 paper in *The Auk* [THAYER][WIKI-CS]. Thayer's example is the ruffed grouse, "dark brown on the back" grading to white underneath. It works best under direct sun. A 2016 PNAS study found that a sharp dark-to-light transition paid off only under direct sun; under diffuse light it gave no advantage over uniform colouring, and a smoother gradient was best [CUTHILL][WIKI-CS]. For us, this is the cheapest single cue for whether we're seeing a bird's top or its belly.
 - **Feather-tract colour zones.** Field guides describe plumage by feather tract. The colour placement *within each tract* never changes, whatever the posture, so tract names are reliable across viewing angles [BTO-TOPO][WIKI-TOPO]. The tracts that matter at our scale:
   - head: crown, face/cheek, malar, throat, nape
   - mantle/back, scapulars, rump/uppertail coverts
@@ -30,7 +30,7 @@ Why our birds don't yet read like the field-guide plate of raptors seen from bel
 - **Tail bands.** Several types:
   - **Terminal or subterminal band.** The adult Red-tail's red tail ends "in a single black band" [WIKI-RT]. The Peregrine's tail has fine bars, a black tip and a white band at the very end [WIKI-PF].
   - **Evenly banded tails.** Juvenile Red-tail (about six bars) [WIKI-RT], Great Horned Owl (6–7 dusky bands; low-authority source) [GHO-6], Osprey (banded tail, per the reference image).
-  - **Contrasting tail base.** Juvenile Golden Eagle (white base, dark band) [AAB-GE]; Bald Eagle (all-white tail).
+  - **Contrasting tail base.** Juvenile Golden Eagle (white base, dark band) [AAB-GE]; adult Bald Eagle (all-white tail) [WIKI-BE].
 - **Barring, streaking, spotting.**
   - **Barring** runs across the feather. Adult Peregrine underparts are "thin, clean bands" [WIKI-PF]; the underwing is barred pale grey and black [FWS-PF] and reads "plain greyish" at range [QA-PF].
   - **Streaking** runs along the shaft. Juvenile Peregrines are streaked rather than barred [WIKI-PF]; the Red-tail's belly band is made of streaks [WIKI-RT].
@@ -224,6 +224,7 @@ Throughout, evaluate in the real in-game lighting (see the lighting note) and fr
 ## Sources
 - [THAYER] Thayer 1896, *The Auk* 13: https://sora.unm.edu/sites/default/files/journals/auk/v013n02/p0124-p0129.pdf
 - [WIKI-CS] Countershading: https://en.wikipedia.org/wiki/Countershading
+- [CUTHILL] Cuthill IC et al. 2016, Optimizing countershading camouflage, *PNAS* 113:13093-13097, doi:10.1073/pnas.1611589113: https://pmc.ncbi.nlm.nih.gov/articles/PMC5135326/
 - [BTO-TOPO] BTO, bird topography (Field craft, spring 2023): https://www.bto.org/sites/default/files/bird_topography_-_field_craft_bto_news_spring_2023.pdf
 - [BTO-24] BTO Field craft, summer 2024 (median coverts): https://ociweb.bto.org/sites/default/files/field_craft_bto_news_summer_2024.pdf
 - [WIKI-TOPO] Terms used in bird topography: https://en.wikipedia.org/wiki/List_of_terms_used_in_bird_topography
@@ -253,7 +254,10 @@ Throughout, evaluate in the real in-game lighting (see the lighting note) and fr
 - [AUD-V] Audubon, "Birdist Rule #60" (vultures): https://www.audubon.org/magazine/birdist-rule-60-figure-out-what-kind-of-vulture-circling-you
 - [AUK-CC] *The Auk* 46(3), condor white under-coverts: https://sora.unm.edu/sites/default/files/journals/auk/v046n03/p0386-p0386.pdf
 - [AAB-GE] All About Birds, Golden Eagle similar species: https://www.allaboutbirds.org/guide/Golden_Eagle/species-compare
+- [WIKI-BE] Bald eagle: https://en.wikipedia.org/wiki/Bald_eagle
 - [AAB-BE] All About Birds, Bald Eagle ID (archived): https://webarchive.library.unt.edu/web/20170107115439/http://www.allaboutbirds.org/guide/Bald_Eagle/id
 - [GODOT-SS] Godot spatial shader reference (FRONT_FACING, INSTANCE_CUSTOM): https://docs.godotengine.org/en/stable/tutorials/shaders/shader_reference/spatial_shader.html
 
 All About Birds species ID pages refused automated fetches (HTTP 403), so species descriptions lean on Wikipedia, agency and society pages. The hex values are estimates, not measured reflectance.
+
+**Weak sources:** [GHO-6] (Avibirds) and [BF-AC] (Birdfact) are low-authority, and [CFNO] is a blog. The Osprey's banded tail is taken from the reference image, and the House Sparrow's plain underwing from photos; neither has a written source.

@@ -66,7 +66,8 @@ Wing loading: kg/m^2 multiplied by 9.81 gives N/m^2. Speeds are airspeeds in m/s
 | White-backed vulture (soarer reference) | ~5.4 | ~2.2 | ~0.69 | ~6.9 | ~7.8 (76) | ~14-15 (~4 deg) [S5][S6] | ~0.9-1.0 est. | 10-18 (glide) | n/a (soars) | n/a | ~8.8 est. | ~2.9 est. |
 
 *Vulture morphology (5.38 kg, 2.18 m, 0.69 m^2) is from my memory of Pennycuick 1971 [S5]
-and was not re-checked against the paper. Treat it as ~ quality.*
+and was not re-checked against the paper (the PDF refused automated fetches). Tucker 1991 [S20] gives a
+typical span of 2.2 m and mass of 5.4 kg for this species, which agrees. Treat the area as ~ quality.*
 
 ### Special traits (qualitative)
 - **Owls (barn, great horned):** Very low wing loading and large, highly cambered wings give slow,
@@ -239,7 +240,7 @@ The pitch-rate cap below is set near the physics value g n_max / V_c.
 ## 5. Sources
 
 - [S1] Tucker & Heine 1990, *Aerodynamics of gliding flight in a Harris' hawk*, JEB 149:469-489. https://cob.silverchair.com/jeb/article-pdf/3284090/jexbio_149_1_469.pdf, https://scholars.duke.edu/individual/pub919673
-- [S2] Tucker & Parrott 1970 (laggar falcon); Parrott 1970, *Aerodynamics of gliding flight of a black vulture*, JEB 53:363. https://cob.silverchair.com/jeb/article/53/2/363/21469/Aerodynamics-of-Gliding-Flight-of-a-Black-Vulture
+- [S2] Tucker VA, Parrott GC 1970, *Aerodynamics of gliding flight in a falcon and other birds*, JEB 52:345-367 (laggar falcon); Parrott 1970, *Aerodynamics of gliding flight of a black vulture*, JEB 53:363. https://cob.silverchair.com/jeb/article/53/2/363/21469/Aerodynamics-of-Gliding-Flight-of-a-Black-Vulture
 - [S3] Rosén & Hedenström 2001, *Gliding flight in a jackdaw: a wind tunnel study*, JEB. https://www.lunduniversity.lu.se/lup/publication/f405ca38-d3cc-4afe-9223-dd2e4eaaa312 ; KleinHeerenbrink, Warfvinge & Hedenström 2016, JEB 219:1572. https://cob.silverchair.com/jeb/article-pdf/219/10/1572/1916162/jeb132480.pdf
 - [S4] Henningsson & Hedenström 2011, *Aerodynamics of gliding flight in common swifts*, JEB 214:382. https://cob.silverchair.com/jeb/article-split/214/3/382/33508/Aerodynamics-of-gliding-flight-in-common-swifts , https://lup.lub.lu.se/record/1777556
 - [S5] Pennycuick 1971, *Gliding flight of the white-backed vulture Gyps africanus*, JEB 55:13. https://cob.silverchair.com/jeb/article-pdf/55/1/13/2388835/jexbio_55_1_13.pdf
@@ -258,6 +259,15 @@ The pitch-rate cap below is set near the physics value g n_max / V_c.
 - [S18] Wing loading and turn radius. https://en.wikipedia.org/wiki/Wing_loading
 - [S19] Pennycuick 2001, *Speeds and wingbeat frequencies of migrating birds compared with calculated benchmarks*, JEB 204:3283. https://research-information.bris.ac.uk/en/publications/speeds-and-wingbeat-frequencies-of-migrating-birds-compared-with-/
 - General mass and span ranges: Wikipedia and Cornell species accounts (great horned owl https://www.wikipedia.com/wiki/Great_horned_owl ; American crow https://wikiwand.com/en/articles/American_crow). House sparrow wingbeat and speed figures come from a secondary encyclopedia (https://www.DavidDarling.info/encyclopedia/S/sparrow.html) and are unverified.
+
+- [S20] Tucker 1991, *The Auk* 108:1-7 (typical span and mass of the white-backed vulture; seen via search summary). https://sora.unm.edu/sites/default/files/journals/auk/v108n01/p0001-p0007.pdf
+
+**Weak or unverified sources:**
+- [S13]: the red-tailed hawk and great horned owl aspect ratios come from a search summary; the primary source was not identified.
+- [S9]: the peregrine dive speed is secondhand, from a mailing-list quote of a Tucker essay.
+- [S15]: Audubon chapter and state-agency pages; fine for behaviour, not for numbers.
+- The house sparrow wingbeat and speed figures come from a secondary encyclopedia.
+- The American crow "46 km/h field" cruise speed and the falcon's "more than 18 g" pull-out have no recorded source.
 
 **Known gaps:** I could not read the per-species values in Johnson 1997 (scanned PDF), the Pennycuick
 2001 species table, or the Usherwood 2020 owl and goshawk L/D numbers. The owl, crow, and sparrow wing

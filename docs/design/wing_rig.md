@@ -49,7 +49,7 @@ All of these come from `Bird.telemetry()`, as the rig's inputs do today.
 
 | Group | Count | Attached to |
 |---|---|---|
-| Primaries p1–p10 | 10 | hand (p1–p6 on the carpometacarpus, p7–p10 on the major digit) |
+| Primaries p1–p10 | 10 | hand (p1–p6 on the carpometacarpus, p7 on the minor digit, p8–p10 on the major digit; `docs/research/wing_anatomy.md` §4) |
 | Secondaries | 9–14 by species | ulna |
 | Tertials | 3 | end of the humerus |
 | Coverts (greater, median, lesser) | rows | over the flight feather bases; the lesser coverts form a band behind the leading edge |
@@ -84,7 +84,12 @@ Ground effect works on the wingtip vortices, which sit about one span apart. The
 
 Wing area sets how much lift there is, not how high the effect reaches. Chord only matters when the bird is skimming lower than its chord, which is a few centimetres for a bird.
 
-The model uses 1.5 spans with a 1.5 m minimum, a deliberate exaggeration so downed birds can get back up. In reality the drag benefit is small above about a quarter of a span. The 1.5 m minimum only matters for the sparrow (it gets about 4.5 spans); every other bird already spans more than 1 m.
+The model uses 1.5 spans with a 1.5 m minimum, a deliberate exaggeration so downed birds can get back up. In reality the drag benefit fades fast with height. Figures quoted from the FAA *Pilot's Handbook of Aeronautical Knowledge* (seen only via secondary sources) give an induced-drag reduction of about 48 % at a tenth of a span, about 24 % at a quarter of a span, and only about 1.4 % at one span.
+
+**Source note.** Phillips & Hunsaker report that McCormick's fit above was a misprint in the 1979 edition, later corrected to φ = (16h/πb)² / (1 + (16h/πb)²). They also report that McCormick's 2nd edition (1995) replaced the fit with a graph, and that the real ratio also depends on planform, aspect ratio and lift coefficient. The uncorrected fit gives about 6 % at a quarter of a span, less than the FAA figure. Neither form is used in code. Sources:
+- Phillips WF, Hunsaker DF 2013, "Lifting-line predictions for induced drag and lift in ground effect", *J Aircraft* 50:1226–1233, doi:10.2514/1.C032152, https://digitalcommons.usu.edu/mae_facpub/81 (search snippets only).
+- McCormick BW, *Aerodynamics, Aeronautics, and Flight Mechanics*, Wiley 1979 (2nd ed. 1995); not seen.
+- FAA, *Pilot's Handbook of Aeronautical Knowledge* (FAA-H-8083-25), ground-effect section; quoted via secondary sources. The 1.5 m minimum only matters for the sparrow (it gets about 4.5 spans); every other bird already spans more than 1 m.
 
 ## As built
 

@@ -98,12 +98,12 @@ Body pitch below is the angle of the body's long axis above horizontal. The rig'
 - **Sleeping.** The bird turns its head and tucks the bill into the scapulars. The body fluffs and covers the legs and feet [24][25]. **[S]**
 - **Preening.** The neck curls to reach the flanks, back, uropygial gland and the underside of a half-raised wing. One wing lifts or droops at a time. **[E]**
 - **Flight.** The body is near horizontal in cruise. For the rig, use 0–10° nose-up in cruise, rising with slowness. The head is stretched forward and stabilised. In whooper swans the neck acts as a near-critically damped spring-damper: the head's vertical motion is about 4× smaller than the body's, and roughly 180° out of phase [26]. Herons, by contrast, fly with the neck retracted into an S, while ducks and storks fly with it extended. **[S]** for the swans; **[E]** for herons, ducks and storks.
-- **Head angle.** A pigeon study (as summarised by the search, not checked against the paper) reports that the eye-to-bill line stays near 35° below horizontal in flight, walking, perching and standing [27]. This supports the rig's "head stays level with the world" rule. **[F]**
+- **Head angle.** In pigeons the angle between the horizontal and the line from the pupil to the bill tip stays near 35° in level flight, walking, perching and standing (Erichsen et al. 1989, as cited by Green et al. 1994 [27]). In landing flights the head's angle also tracks the upward approach path [27]. This supports the rig's "head stays level with the world" rule. **[S]** (the 35° figure is secondhand, via [27])
 - **Landing flare.** Body angle, tail angle and the wing planes all rotate from near horizontal during take-off to near vertical during landing, raising drag. The stroke plane tilts up from about −1° to 17° on landing. All these rotations correlate strongly with body angle (pigeon) [28]. Lovebirds landing on a swinging perch held a uniform body pitch of 81.9° [29]. The wings brake first. The legs then absorb the remaining momentum (parrotlets) [30]. The legs swing forward, and the tail spreads and pitches down; a spread tail passively changes the bird's pitch (pigeon tail robot) [31]. **[S]**, except that legs-forward is **[E]**.
 - **Take-off.**
-  1. A slow preparatory crouch. The trunk pitches *down*, the head moving first. The ankle flexes most, then the hip, with the knee flexing least. The crouch is deeper in the heavier dove than in the zebra finch [32].
+  1. A slow preparatory crouch. The trunk pitches *down*, the head moving first. The ankle and hip flex, and the knee flexes less. The crouch is deeper in the heavier dove than in the zebra finch [32].
   2. A fast push-off. The hip and ankle extend to drive the trunk up and forward [32].
-  3. The legs supply 80–90 % of take-off velocity in starlings and quail [33]. Hummingbirds supply only 59 % [34].
+  3. The legs supply 80–90 % of take-off velocity in starlings and quail [33], and about 94–95 % of the velocity at lift-off in zebra finches and diamond doves [42]. Hummingbirds supply only 59 % [34]. In a pigeon's perch-to-perch flight the legs give only about a quarter of the acceleration [28]. See `landing_and_takeoff.md` §2.
   4. The first downstrokes have a steeply forward-down stroke plane, from −60° to −47° (pigeon) [28].
 
   **[S]**
@@ -119,7 +119,7 @@ Body pitch below is the angle of the body's long axis above horizontal. The rig'
   - The femur runs back up to the hip.
 
   The centre of mass sits plumb over the grip point. Upright perchers are near this balance by default. Horizontal perchers keep the hips over the perch and counterbalance the head and breast with the tail. **[E]**
-- **Grip.** Bending the ankle and knee tensions the flexor tendons, which pulls the toes shut. Tubercles on the tendons mesh with ridges in the tendon sheath, a digital tendon-locking mechanism [37][38]. Sleeping starlings, however, seem to balance mainly on the foot pad, with the toes largely unbent [25]. **[S]**
+- **Grip.** Bending the ankle and knee tensions the flexor tendons, which pulls the toes shut. Tubercles on the tendons mesh with ridges in the tendon sheath, a digital tendon-locking mechanism [37][38]. Sleeping starlings, however, balance mainly on the foot pad, with the toes largely unbent [25][43]. Galton & Shepherd found no passive "automatic perching mechanism" in starlings: bending the legs of anaesthetised birds did not close the toes, and birds with the flexor tendons cut still slept perched [43]. See `body_anatomy.md` §6. **[S]**
 - **Toe arrangements:**
   - *Anisodactyl* (songbirds, crows, hawks, falcons): three toes forward and one back. The hallux opposes the middle toe across the branch.
   - *Semi-zygodactyl* (owls, Osprey): the outer toe can rotate back, giving two forward and two back [39]. Ospreys were 5.7× more likely to use the zygodactyl grip when grasping in flight than when perched [40].
@@ -165,7 +165,7 @@ The current anchor is `sh + normalize(0.35, −0.3, 0.6) · reach`, with `reach 
 | Perched alert | species value (table below) | species value | raised, looking around | species zig-zag. CoM over grip | — |
 | Perched resting | species value − 5–10° | +5° down | sunk (neck shortened about 50 %) | deeper flex. Belly covers the tarsi | 1–2 s |
 | Sleeping | resting pose | resting pose | turned back into the scapulars | one leg tucked, optionally | 1–2 s |
-| Pre-take-off crouch | species value − 10–25° (pitch down, head first) | lifts slightly | forward, toward the launch direction | ankle flexes most, then hip; knee least. Drop about 15–25 % of leg length | 0.1–0.3 s |
+| Pre-take-off crouch | species value − 10–25° (pitch down, head first) | lifts slightly | forward, toward the launch direction | ankle and hip flex; knee least. Drop about 15–25 % of leg length | 0.1–0.3 s |
 | Take-off push | rotates to about 20–40° | spreads | forward | extend hip and ankle. Legs supply 80–90 % of launch speed | 0.05–0.15 s |
 | First downstrokes | 10–30° | spread, down | forward | trail aft | 2–4 beats |
 
@@ -205,7 +205,7 @@ Notes:
 1. Bird Wing Anatomy, Birdfact. https://birdfact.com/anatomy-and-physiology/wings-and-flight/bird-wing-anatomy
 2. Encyclopaedia Britannica 1911, Vol. 3 ("Bird"), Wikisource mirror. https://kwx.liehendr.com/content/wikisource_en_all_maxi_2022-09/A/Page%3AEB1911_-_Volume_03.djvu/988
 3. Vertebrate Zoology Lab 8 handout (patagialis). https://www-archiv.fdm.uni-hamburg.de/b-online/library/crone/3051/labwk08.html
-4. Stowers et al., pigeon wing linkage (four-bar vs six-bar), via scite. https://scite.ai/authors/amanda-k-stowers-6M1jAr
+4. Stowers AK, Matloff LY, Lentink D 2017, "How pigeons couple three-dimensional elbow and wrist motion to morph their wings", *J R Soc Interface* 14:20170224, doi:10.1098/rsif.2017.0224. https://pmc.ncbi.nlm.nih.gov/articles/PMC5582118/ (the "drawing parallels" model goes back to Bergmann 1839)
 5. SICB abstracts on the automatic wing linkage. https://sicb.org/?p=12414 and https://sicb.org/?p=21119
 6. PMC article on pigeon wrist morphology, citing Vazquez 1992. https://pmc.ncbi.nlm.nih.gov/articles/PMC2880093
 7. Flight feather, Wikipedia. https://en.wikipedia.org/wiki/Flight_feather ; Sibley topography figures (mirror). https://swartzentrover.com/cotor/Photos/Hiking/Birds/BirdPages/Anatomy/Anatomy.htm
@@ -226,22 +226,27 @@ Notes:
 22. "Posture", Info on Birds (upright vs horizontal perchers). https://info-on-birds.blogspot.com/2009_01_18_archive.html
 23. BLM Snake River Birds of Prey: Meet the Raptors (kestrel tail-bobbing). https://www.blm.gov/sites/blm.gov/files/documents/files/Morley-Nelson-Snake-River-Birds-of-Prey_Meet-The-Raptors.pdf
 24. Audubon: How do birds spend cold winter nights? https://www.audubon.org/magazine/how-do-birds-spend-cold-winter-nights
-25. ScienceABC: why birds don't fall off branches (the starling study). https://www.scienceabc.com/nature/animals/why-dont-birds-fall-off-branches-when-they-sleep.html ; BirdNote. https://birdnote.org/node/16863
+25. ScienceABC: why birds don't fall off branches (the starling study; popular summary, low authority). https://www.scienceabc.com/nature/animals/why-dont-birds-fall-off-branches-when-they-sleep.html ; BirdNote. https://birdnote.org/node/16863 . The primary study is [43].
 26. Pete, Kress, Dimitrov & Lentink 2015, "The role of passive avian head stabilization in flapping flight", *J R Soc Interface*. https://pmc.ncbi.nlm.nih.gov/articles/PMC4614461
-27. Pigeon head-posture study, *J Comp Physiol A*. https://doi.org/10.1007/BF00193791 (as summarised by search; not verified against the paper)
+27. Green PR, Davies MNO, Thorpe PH 1994, "Head-bobbing and head orientation during landing flights of pigeons", *J Comp Physiol A* 174:249–256, doi:10.1007/BF00193791. It cites Erichsen JT, Hodos W, Evinger C, Bessette BB, Phillips SJ 1989, "Head orientation in pigeons: postural, locomotor and visual determinants", *Brain Behav Evol* 33:268–278, doi:10.1159/000115935, for the 35° figure.
 28. Berg & Biewener 2010, "Wing and body kinematics of takeoff and landing flight in the pigeon", *J Exp Biol*. https://biewenerlab.oeb.harvard.edu/publications/wing-and-body-kinematics-takeoff-and-landing-flight-pigeon-columba-livia (doi 10.1242/jeb.038109)
-29. Biewener lab, "Landing on a swinging perch: peach-faced lovebirds prefer extremes". https://biewenerlab.oeb.harvard.edu/publication/landing-swinging-perch-peach-faced-lovebirds-prefer-extremes
+29. Bhagavatula PS, Biewener AA 2025, "Landing on a swinging perch: peach-faced lovebirds prefer extremes", *J Exp Biol* 228:jeb249692, doi:10.1242/jeb.249692. https://journals.biologists.com/jeb/article/228/8/jeb249692/367743/Landing-on-a-swinging-perch-peach-faced-lovebirds (81.9° is the mean body pitch at landing)
 30. Roderick, Chin, Cutkosky & Lentink 2019, "Birds land reliably on complex surfaces…", *eLife*. https://elifesciences.org/articles/46415
 31. Gayout, Onn & Lentink 2023, "Passive pitch induced by a spreading pigeon tail", APS DFD abstract. https://meetings-archive.aps.org/dfd/2023/r01/4/
 32. Provini & Abourachid 2018, "Whole-body 3D kinematics of bird take-off", *Naturwissenschaften*. https://pubmed.ncbi.nlm.nih.gov/29330588/
-33. Earls 2000, "Kinematics and mechanics of ground take-off in the starling and quail", *J Exp Biol*. https://www.sciencegate.app/document/10.1242/jeb.203.4.725
+33. Earls KD 2000, "Kinematics and mechanics of ground take-off in the starling *Sturnis vulgaris* and the quail *Coturnix coturnix*", *J Exp Biol* 203:725–739, doi:10.1242/jeb.203.4.725. https://journals.biologists.com/jeb/article/203/4/725/8377/Kinematics-and-Mechanics-of-Ground-Take-Off-in-the
 34. Tobalske et al. 2004, "Take-off mechanics in hummingbirds", *J Exp Biol*. https://cob.silverchair.com/jeb/article/207/8/1345/15063/Take-off-mechanics-in-hummingbirds-Trochilidae
 35. Bird feet and legs, Wikipedia. https://en.wikipedia.org/wiki/Bird_feet_and_legs
 36. North Dakota Game & Fish: A look at bird legs. https://gf.nd.gov/wildlife-notes/look-bird-legs
 37. Raptor Resource Project: ratcheting raptor toes. https://www.raptorresource.org/2021/01/22/racheting-raptor-toes-an-upside-down-eagle-at-great-spirit-bluff/
-38. Galton & Shepherd 2010, digital tendon-locking mechanism, *J Exp Zool* (record). https://bvbvf1.bib-bvb.de/vufind/PrimoRecord/cdi_proquest_miscellaneous_1010232799
+38. Quinn TH, Baumel JJ 1990, "The digital tendon locking mechanism of the avian foot (Aves)", *Zoomorphology* 109:281–293, doi:10.1007/BF00312195. (This entry used to read "Galton & Shepherd 2010, digital tendon-locking mechanism". The record it linked appears to be the Galton & Shepherd 2012 starling paper, now [43], which questions the automatic perching mechanism rather than describing the lock.)
 39. Bird feet and legs (owls and Osprey with a reversible outer toe). https://en.wikipedia.org/wiki/Bird_feet_and_legs
 40. Sustaita et al. 2019, "Behavioral correlates of semi-zygodactyly in Ospreys", *PeerJ*. https://peerj.com/articles/6243
 41. Radiographic evaluation of perching joint angles in cockatiels, Amazon parrots and Barred Owls, *J Avian Med Surg* 2009. https://bioone.org/journals/journal-of-avian-medicine-and-surgery/volume-23/issue-2/2008-028.1/Radiographic-Evaluation-of-Perching-joint-Angles-in-Cockatiels-Nymphicus-hollandicus/10.1647/2008-028.1.full
 
-Unreachable during research (HTTP 403 or DNS failure): the All About Birds ID pages, the BTO PDFs, the Biewener lab pages and the bioone full text. Their claims above come from search-result summaries.
+42. Provini P, Tobalske BW, Crandell KE, Abourachid A 2012, "Transition from leg to wing forces during take-off in birds", *J Exp Biol* 215:4115–4124, doi:10.1242/jeb.074484. https://journals.biologists.com/jeb/article/doi/10.1242/jeb.074484/257959/Transition-from-leg-to-wing-forces-during-take-off
+43. Galton PM, Shepherd JD 2012, "Experimental analysis of perching in the European starling (*Sturnus vulgaris*: Passeriformes; Passeres), and the automatic perching mechanism of birds", *J Exp Zool A* 317:205–215, doi:10.1002/jez.1714. https://pubmed.ncbi.nlm.nih.gov/22539208/
+
+Unreachable during research (HTTP 403 or DNS failure): the All About Birds ID pages, the BTO PDFs, the Biewener lab pages and the bioone full text. Their claims above come from search-result summaries. The Berg & Biewener [28], lovebird [29], Earls [33] and Provini [32][42] figures were later checked against the journal pages or abstracts (see `landing_and_takeoff.md`).
+
+**Weak sources.** [1], [9], [10], [13], [14], [19], [22] and [25] are blogs, forums or popular reference sites; their claims carry [F] tags. Everything tagged [E] is an estimate.
