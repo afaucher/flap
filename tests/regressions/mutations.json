@@ -1287,5 +1287,19 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "feathers-flat-in-sun",
+  "bug": "The textured feathers had no light pass of their own: in the sun no light came through the vanes and no edge caught it, so a backlit bird stayed dull (2026-11-02).",
+  "tests": [
+   "test_feather_texture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/feather_texture.gdshader",
+    "find": "uniform float edge_glow = 1.0;       // the free edges' and tips' glow (0: none)\n",
+    "replace": "uniform float edge_glow = 0.0;       // the free edges' and tips' glow (0: none)\n"
+   }
+  ]
  }
 ]

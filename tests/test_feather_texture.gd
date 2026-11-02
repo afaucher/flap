@@ -69,6 +69,16 @@ func setup() -> void:
 	for b in rig._brows:
 		var arr := (b.mesh as ArrayMesh).surface_get_arrays(0)
 		check(b.material_override == rig.body_texture_material and arr[Mesh.ARRAY_COLOR] != null and (arr[Mesh.ARRAY_COLOR] as PackedColorArray)[0].a > 0.5, "the brow ridge wears the head's feathers")
+	# In the sun: the flight feathers and the body carry the light pass that follows each feather (light through
+	# the vane, the edges' glow, the barbs' sheen; docs/research/feather_texture_study.md "In the sun"), on by
+	# default. (A headless test can't render it: the shaders' declared defaults are what turn it on.)
+	for mat: ShaderMaterial in [rig.marks_material, rig.body_texture_material]:
+		var code := mat.shader.code
+		check(code.contains("void light()"), "%s: a light pass of its own" % mat.shader.resource_path)
+		for prm in ["through_boost", "edge_glow", "barb_sheen"]:
+			var re := RegEx.create_from_string("uniform float " + prm + " = ([0-9.]+);")
+			var m := re.search(code)
+			check(m != null and m.get_string(1).to_float() > 0.0, "%s: %s on by default" % [mat.shader.resource_path, prm])
 	# The outline frays on the body's own surface: nothing is drawn off it (no shells beside the bird).
 	check(float(rig.body_texture_material.get_shader_parameter("fray")) > 0.0, "the body's outline frays")
 	check(rig.body_texture_material.next_pass == null, "no shells drawn off the body")

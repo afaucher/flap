@@ -27,7 +27,7 @@ const DATA := {
 		"bill": "#4a4d55", "bill_tip": "#18181b", "cere_col": "#e3c04a", "head_yaw": 130.0, "head_pitch": [-80.0, 60.0],
 		"fix_s": 4.0, "sac_speed": 450.0, "blink_pm": 15.0,
 	},
-	"falcon": {   # Peregrine, adult
+	"falcon": {   # Common Kestrel, adult male (the concept render's bird; a falcon too: yellow cere and eye ring)
 		"eye": {"r": 0.25, "az": 44.0, "el": 10.0}, "iris": "#24170f", "pupil": "#050404", "pupil_frac": 0.5, "ring": "#e8c547", "ring_w": 0.3,
 		"beak": {"len": 1.0, "depth": 0.7, "width": 0.5, "upper": 0.65, "taper": 0.8, "droop": 0.15, "hook": 0.25, "tooth": 0.7, "cere": 0.2, "bristle": 0.0, "pitch": 0.0},
 		"bill": "#6f7f93", "bill_tip": "#1d1f24", "cere_col": "#e8c547", "head_yaw": 130.0, "head_pitch": [-80.0, 60.0],

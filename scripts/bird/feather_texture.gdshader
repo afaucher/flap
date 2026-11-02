@@ -12,6 +12,19 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
+// In the sun (the concept's backlit kestrel; docs/research/feather_texture_study.md, "In the sun"): the light
+// follows each feather, from its own texture. A vane is a thin sheet of barbs: a sun behind it shines through
+// (most where it is thin and pale, none through the shaft); its free edge and tip -- the barbs' ends -- catch the
+// light and glow, most when looking toward the sun; and the barbs streak the sheen along themselves (anisotropic,
+// tight across them). Wrapped diffuse: soft barbs don't fall off hard at the terminator.
+uniform float through_boost = 2.5;   // light through the vanes (0: none)
+uniform float edge_glow = 1.0;       // the free edges' and tips' glow (0: none)
+uniform float barb_sheen = 1.0;      // the sheen streaked along the barbs (0: none)
+varying float v_through;
+varying float v_edge;
+varying vec3 v_barb;
+varying vec2 v_spec;                 // (specular level, its width across the barbs)
+
 uniform float flex = 0.0;      // the wing's flex this pose (BirdRig.flex): a feather bends by its share of it
 uniform sampler2D strip : filter_linear, repeat_disable;   // sRGB values, read raw
 uniform float rows = 1.0;
@@ -117,9 +130,9 @@ void fragment() {
 	// (transmittance, not BACKLIGHT: the feather above shadows each card from a sun behind it, and BACKLIGHT is
 	// shadowed with it; transmittance reads the thickness off the shadow map, so a thin vane glows through)
 	float through = gl.z * sheen * (1.0 - 0.8 * t.g) * mix(0.6, 1.0, v);
-	SSS_TRANSMITTANCE_COLOR = vec4(ALBEDO * through * 3.0, 1.0);
-	SSS_TRANSMITTANCE_DEPTH = 0.02;
-	SSS_TRANSMITTANCE_BOOST = 0.3;
+	SSS_TRANSMITTANCE_COLOR = vec4(ALBEDO * through * 3.0 * through_boost, 1.0);
+	SSS_TRANSMITTANCE_DEPTH = 0.02 * through_boost;
+	SSS_TRANSMITTANCE_BOOST = 0.3 * through_boost;
 	// Soft round tips: the atlas's outline rounds the card's tip off (its edge distance is 0 outside).
 	ALPHA = t.a;
 	ALPHA_SCISSOR_THRESHOLD = 0.01;
@@ -142,4 +155,30 @@ void fragment() {
 	float invmax = inversesqrt(max(max(dot(tu, tu), dot(tv, tv)), 1e-20));
 	vec2 nn = (texture(atlas_n, auv).rg * 2.0 - 1.0) * relief * k;
 	NORMAL = normalize(nrm * sqrt(max(1.0 - dot(nn, nn), 0.0)) + (tu * nn.x - tv * nn.y) * invmax);
+	// For the light: the barbs run out from the shaft toward the tip; light passes the thin pale vane, not the
+	// shaft; the free edge (and the rounded tip) is where barb ends catch it.
+	v_barb = tu * sign(us - shaft_u + 1e-4) * invmax + tv * invmax * 0.6;   // (left unnormalised: light() makes it a unit tangent)
+	float pale = clamp(dot(ALBEDO, vec3(0.3, 0.59, 0.11)) * 3.0, 0.0, 1.0);
+	v_through = through * (0.35 + 0.65 * pale);
+	v_edge = edge * k * (0.4 + 0.6 * pale) * (1.0 - t.g);
+	v_spec = vec2(SPECULAR * (1.0 - ROUGHNESS) * 2.0, mix(0.06, 0.3, ROUGHNESS));
 }
+
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	vec3 lc = LIGHT_COLOR * ATTENUATION / PI;
+	DIFFUSE_LIGHT += lc * max(0.0, (ndl + 0.2) / 1.2);
+	float toward = pow(max(0.0, dot(-VIEW, LIGHT)), 2.0);   // (looking toward the light)
+	DIFFUSE_LIGHT += lc * v_through * through_boost * (max(0.0, -ndl) * 1.2 + toward * 2.0);
+	DIFFUSE_LIGHT += lc * v_edge * edge_glow * (0.15 + toward) * (1.0 - 0.5 * max(0.0, dot(NORMAL, VIEW)));
+	vec3 h = normalize(VIEW + LIGHT);
+	vec3 t = v_barb - NORMAL * dot(v_barb, NORMAL);
+	t = dot(t, t) > 1e-8 ? normalize(t) : normalize(cross(NORMAL, abs(NORMAL.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+	vec3 b = cross(NORMAL, t);
+	float hn = max(dot(h, NORMAL), 1e-3);
+	float ht = dot(h, t) / max(v_spec.y, 0.02);
+	float hb = dot(h, b) / max(v_spec.y * 3.0, 0.06);
+	float s = exp(-(ht * ht + hb * hb) / (hn * hn)) * max(0.0, ndl);
+	SPECULAR_LIGHT += lc * s * v_spec.x * barb_sheen * mix(vec3(1.0), ALBEDO * 4.0, METALLIC);
+}
+
