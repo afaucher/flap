@@ -69,7 +69,7 @@ const SPEC := {
 	"hawk": {"skin": "#e3c04a", "claw": "#161514", "trouser": "#e2d4bc", "feathered": "ankle", "flag": 0.22, "thigh": 0.058, "shank": 0.03,
 		"tars_r": 0.0105, "toe": 0.085, "toe_r": 0.0062, "claws": [0.047, 0.043, 0.031, 0.026], "arc": 115.0, "pads": "joint", "bulge": 0.5,
 		"scutes": 1.0, "pad_r": 0.02, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
-	"falcon": {"skin": "#e8c547", "claw": "#141416", "trouser": "#bdb6ae", "feathered": "ankle", "flag": 0.15, "thigh": 0.055, "shank": 0.028,
+	"falcon": {"skin": "#e8c547", "claw": "#141416", "trouser": "#e2c39a", "feathered": "ankle", "flag": 0.15, "thigh": 0.055, "shank": 0.028,
 		"tars_r": 0.0105, "toe": 0.09, "toe_r": 0.006, "claws": [0.028, 0.025, 0.0245, 0.022], "arc": 118.0, "pads": "joint", "bulge": 0.5,
 		"scutes": 0.0, "pad_r": 0.02, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
 	"sparrow": {"skin": "#b38b7c", "claw": "#4e423a", "trouser": "", "feathered": "ankle", "flag": 0.06, "thigh": 0.05, "shank": 0.022,
