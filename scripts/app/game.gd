@@ -7,7 +7,7 @@ extends Node3D
 ##   --ai <n>           AI birds flying around (default 3)
 ##   --autopilot        the player's bird flies itself (P toggles in game)
 ##   --legs <kind>      detail (default) | capsules: the legs drawn
-##   --max-steps <n>    physics ticks a frame may run to catch up (Godot's default 8)
+##   --max-steps <n>    physics ticks a frame may run to catch up (the project sets 3; Godot's default is 8)
 ##   --shot <png>       save a screenshot after --shot-after seconds (default 3) and quit
 ##   --shot-after <s>
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
@@ -35,7 +35,7 @@ func _ready() -> void:
 	var ai_arg := Boot.arg_value(args, "--ai")
 	var ai_count := int(ai_arg) if ai_arg != "" else 3
 	use_autopilot = args.has("--autopilot")
-	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; Godot's default is 8)
+	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; project.godot sets 3)
 		Engine.max_physics_steps_per_frame = int(Boot.arg_value(args, "--max-steps"))
 	if Boot.arg_value(args, "--legs") != "":
 		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"

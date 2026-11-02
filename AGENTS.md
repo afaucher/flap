@@ -41,7 +41,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   scales; `docs/design/legs_and_feet.md`).
 - `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
   game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
-  ticks per frame, worst frames, the machine's load while it ran).
+  ticks per frame, worst frames, the machine's load while it ran). Rules and numbers: `docs/design/performance.md`.
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a
