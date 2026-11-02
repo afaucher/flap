@@ -5,7 +5,7 @@
 #   .\test_runner.ps1 -TestAll -NoImport          # skip the import pass
 #
 # Logs: test_logs\<name>.log / .err.log. A test passes only with exit code 0,
-# the ">>> [TEST PASSED] <name> <<<" marker, AND no "SCRIPT ERROR" in its output.
+# the ">>> [TEST PASSED] <name> <<<" marker, AND no "SCRIPT ERROR" or engine ERROR:/WARNING: line in its output.
 # Tests run under --fixed-fps 60, so physics is deterministic and runs as fast as the CPU allows.
 param(
     [string]$TestName = "",
@@ -47,12 +47,15 @@ function Finish-Test($r) {
     # A script error inside a coroutine aborts the test silently but can still end in a
     # PASS marker, so any SCRIPT ERROR in the output fails the test too.
     $scriptErr = ($out + "`n" + $err) -match "SCRIPT ERROR"
-    $ok = ($r.Proc.ExitCode -eq 0) -and ($out -match [regex]::Escape(">>> [TEST PASSED] $($r.Name) <<<")) -and (-not $scriptErr)
+    # Engine errors and warnings fail the test too (e.g. the camera's physics-interpolation warning, a leaked
+    # object at exit): they are bugs that never show up as a failed check.
+    $engineMsg = ($out + "`n" + $err) -match "(?m)^(USER )?(ERROR|WARNING):"
+    $ok = ($r.Proc.ExitCode -eq 0) -and ($out -match [regex]::Escape(">>> [TEST PASSED] $($r.Name) <<<")) -and (-not $scriptErr) -and (-not $engineMsg)
     $secs = $r.Watch.Elapsed.TotalSeconds.ToString("F1")
     if ($ok) { Write-Host "  PASS  $($r.Name)  ($secs s)" -ForegroundColor Green }
     else {
         Write-Host "  FAIL  $($r.Name)  ($secs s, exit $($r.Proc.ExitCode))" -ForegroundColor Red
-        ($out + "`n" + $err) -split "`n" | Where-Object { $_ -match "ASSERT FAILED|SCRIPT ERROR|Parse Error|ERROR:|TEST FAILED" } | Select-Object -First 15 | ForEach-Object { Write-Host "        $_" }
+        ($out + "`n" + $err) -split "`n" | Where-Object { $_ -match "ASSERT FAILED|SCRIPT ERROR|Parse Error|ERROR:|WARNING:|TEST FAILED" } | Select-Object -First 15 | ForEach-Object { Write-Host "        $_" }
     }
     return $ok
 }

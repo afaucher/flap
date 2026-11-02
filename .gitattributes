@@ -1,0 +1,3 @@
+# LF everywhere, whatever core.autocrlf says: Godot writes LF, and mixed endings broke scripted edits.
+* text=auto eol=lf
+*.png binary

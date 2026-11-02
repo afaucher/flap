@@ -48,6 +48,10 @@ func _ready() -> void:
 	_player = AudioStreamPlayer.new()
 	_player.stream = gen
 	add_child(_player)
+	# Headless (tests) there is nothing to hear, and the dummy audio driver never releases a started
+	# generator playback (reported as a leak at exit). Tests drive render() directly.
+	if DisplayServer.get_name() == "headless":
+		return
 	_player.play()
 	_playback = _player.get_stream_playback() as AudioStreamGeneratorPlayback
 
