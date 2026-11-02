@@ -356,5 +356,61 @@
     "replace": "# Flap \u00e2\u20ac\u201d \u00c3\u00a9\n"
    }
   ]
+ },
+ {
+  "id": "leg-loop-off-shell",
+  "bug": "The trousers' loop was the leg's ring slid along the bone onto the trunk; where the line missed the body (a glancing tibia) the point stayed in the air, and on a glancing leg the loop smeared 10 cm along the belly (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\tvar p := u + t * hi\n\t\tif not found:\n\t\t\tp = _onto_shell(u)\n",
+    "replace": "\t\tvar p := u\n"
+   }
+  ]
+ },
+ {
+  "id": "leg-hem-not-shared",
+  "bug": "The bare tarsus started at the ankle as its own tube instead of from the trousers' hem ring: two surfaces poking into each other (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\tvar top: PackedVector3Array = _hem[i]\n",
+    "replace": "\t\tvar top := PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "leg-ankle-fold",
+  "bug": "The feathered tube's rings crossed on the inside of a sharply bent ankle (no arc through the joint): the surface folded over itself (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tvar bend_r := shank * 1.15\n",
+    "replace": "\tvar bend_r := 0.0\n"
+   }
+  ]
+ },
+ {
+  "id": "toe-base-off-pad",
+  "bug": "A toe's first ring floated off the foot pad (not slid back onto it), leaving a gap or poking in (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\tvar p := _onto_pad(first[j], -dirs[0], fr)\n",
+    "replace": "\t\tvar p := first[j] - dirs[0] * float(spec.pad_r) * L * 0.2\n"
+   }
+  ]
  }
 ]

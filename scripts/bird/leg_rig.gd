@@ -29,6 +29,7 @@ const PAD_LON := 20
 const PAD_LAT := 11
 const PAD_FLAT := 0.5    ## the foot pad's height / width
 const LEG_FEATHER := 0.55 ## leg feather size, share of the body tile
+const REBUILD_TOL := 0.0005   ## a leg is rebuilt when an input moves more than this (LegRig._same)
 const ROOT_W := [0.0, 0.5]   ## connector rows' blend from a loop to the tube's first ring
 const FILLET_W := [0.0, 0.3, 0.6]   ## the trousers' loop and connector rows: a fillet from the trunk onto the leg
 const HANDOVER := [0.35, 0.7]   ## the trousers' first rings: how far their chart has turned from the trunk's to the leg's
@@ -163,11 +164,13 @@ func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, f
 	return toe_tips[i]
 
 
+## Whether a leg's inputs are unchanged enough to keep its meshes: every value within REBUILD_TOL (metres for the
+## joints, unit vectors and 0..1 values for the rest: half a millimetre, a few hundredths of a degree).
 static func _same(a: PackedFloat32Array, b: PackedFloat32Array) -> bool:
 	if a.size() != b.size():
 		return false
 	for k in a.size():
-		if absf(a[k] - b[k]) > 1e-6:
+		if absf(a[k] - b[k]) > REBUILD_TOL:
 			return false
 	return true
 
