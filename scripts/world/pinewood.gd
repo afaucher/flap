@@ -70,8 +70,7 @@ static func generate(s: int) -> ArenaLayout:
 		if p.length() > a.boundary - 3.0 or p.length() < a.clearing_radius or not _clear_of(a, p, SAPLING.spacing, OAK.glade):
 			continue
 		var t := _tree(a, ArenaLayout.Kind.SAPLING, p, rng.randf_range(SAPLING.h.x, SAPLING.h.y), rng.randf_range(SAPLING.r.x, SAPLING.r.y))
-		t.crown_base = t.height * rng.randf_range(0.1, 0.3)
-		_cone_pads(t, t.crown_base, t.height, t.height * 0.28, rng)
+		_grow_sapling(a, t, rng)
 		placed += 1
 	_outposts(a, rng)
 	return a
@@ -211,7 +210,33 @@ static func _grow_oak(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumber
 	a.max_tree_reach = maxf(a.max_tree_reach, longest - 4.0)
 
 
-## A sapling: stacked cones of needles (pads, narrowing to the top).
+## A young Scots pine: a whorl of branches a year (~0.45 m apart) almost to the ground, each a little longer than
+## the one above (a cone), angled up, a tuft of needles at its end and one part-way along the longer ones; the
+## leader's tuft on top. Its twigs are too thin to perch on (solid, though: you don't fly through a sapling).
+static func _grow_sapling(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
+	var c := Vector3(t.base.x, 0.0, t.base.y)
+	t.crown_base = t.height * rng.randf_range(0.04, 0.16)
+	var whorls := clampi(int((t.height - t.crown_base) / 0.45), 3, 12)
+	var ang0 := rng.randf() * TAU
+	for w in whorls:
+		var f := (w + rng.randf_range(0.0, 0.3)) / float(whorls)
+		var y := lerpf(t.crown_base, t.height - 0.4, f)
+		var reach := (lerpf(0.36, 0.07, f) * t.height + 0.12) * rng.randf_range(0.8, 1.15)
+		var n := rng.randi_range(4, 6)
+		for k in n:
+			var ang := ang0 + TAU * k / n + rng.randf_range(-0.35, 0.35) + w * 0.7
+			var d := Vector3(sin(ang), 0.0, cos(ang))
+			var root := c + Vector3.UP * y
+			var tip := root + d * reach + Vector3.UP * reach * rng.randf_range(0.2, 0.45)
+			var br := _branch(a, t, root, tip, lerpf(0.022, 0.009, f), false)
+			var rp := (0.2 + 0.24 * reach) * rng.randf_range(0.85, 1.15)
+			t.foliage.append([br.tip + Vector3.UP * 0.04, Vector3(rp, rp * 0.65, rp)])
+			if reach > 0.3:
+				t.foliage.append([br.root.lerp(br.tip, 0.5) + Vector3.UP * 0.05, Vector3(rp, rp * 0.65, rp) * 0.8])
+	t.foliage.append([c + Vector3.UP * (t.height - 0.15), Vector3(0.16, 0.32, 0.16)])
+
+
+## (the greybox saplings' stacked cones; unused since the young pines grow whorls)
 static func _cone_pads(t: ArenaLayout.TreeData, y0: float, y1: float, r0: float, rng: RandomNumberGenerator) -> void:
 	var c := Vector3(t.base.x, 0.0, t.base.y)
 	var n := maxi(2, int((y1 - y0) / 0.7))

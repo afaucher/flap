@@ -82,6 +82,14 @@ func _views() -> Array:
 	v.append(["Pine bark from 2 m", c + sun_side * 2.0 + side * 0.6 + Vector3.UP * 6.0, c + Vector3.UP * 6.5])
 	v.append(["Pine bark at 40 cm (a skimming pass)", c + sun_side * (pine.radius + 0.4) + side * 0.25 + Vector3.UP * 9.0, c + sun_side * pine.radius + Vector3.UP * 9.0])
 	v.append(["Upper trunk and crown limbs", c + sun_side * 4.0 + side * 1.5 + Vector3.UP * (pine.crown_base - 1.5), c + Vector3.UP * (pine.crown_base + 1.0)])
+	# Young pines: the tallest sapling near the clearing, from 3 m, sunlit side; and a stand of them low.
+	var young: ArenaLayout.TreeData = null
+	for t in layout.trees:
+		if t.kind == ArenaLayout.Kind.SAPLING and Vector2(t.base).length() < 50.0 and (young == null or t.height > young.height):
+			young = t
+	var yc := Vector3(young.base.x, 0.0, young.base.y)
+	v.append(["A young pine from 3 m", yc + sun_side * 3.0 + side * 0.8 + Vector3.UP * (young.height * 0.45), yc + Vector3.UP * (young.height * 0.45)])
+	v.append(["Young pines, low over the floor", yc + sun_side * 9.0 - side * 3.0 + Vector3.UP * 1.2, yc + Vector3.UP * 1.0])
 	var oc := Vector3(oak.base.x, 0.0, oak.base.y)
 	v.append(["Oak bark from 2.5 m", oc + sun_side * (oak.radius + 2.5) + Vector3.UP * 3.0, oc + Vector3.UP * 3.2])
 	return v
