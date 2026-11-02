@@ -35,18 +35,13 @@ func setup() -> void:
 		# past the elbow; it slackens away folded. Each limb piece thins from root to tip (muscle near the
 		# body, tendon and bone outward), and the arm is thicker than the hand.
 		_pose(rig, 0.0, 0.0, 0.0, 0.0)
-		var web: MeshInstance3D = rig._fairings[1][0]
+		var web: Dictionary = rig.arm_web[1]
 		var wj: Array = rig.wing_joints[1]
-		check(web.visible, p.id + " propatagium spread")
-		check(web.transform.origin.distance_to(wj[0]) < 1e-4, p.id + " propatagium from the shoulder")
-		check((web.transform.origin + web.transform.basis.z).distance_to(wj[2]) < 1e-4, p.id + " propatagium to the wrist")
-		var w0: Vector3 = wj[0]
-		var le: Vector3 = ((wj[2] as Vector3) - w0).normalized()
-		var behind: Vector3 = ((wj[1] as Vector3) - w0) - le * le.dot((wj[1] as Vector3) - w0)
-		check(web.transform.basis.x.length() > behind.length(), p.id + " propatagium reaches back over the elbow")
-		check(web.transform.basis.x.normalized().dot(behind.normalized()) > 0.9, p.id + " propatagium lies on the elbow's side of the edge")
+		check(not web.is_empty() and (rig._fairings[1][0] as MeshInstance3D).visible, p.id + " arm wing surface spread")
+		check((web.from as Vector3).distance_to(wj[0]) < 1e-4 and (web.to as Vector3).distance_to(wj[2]) < 1e-4, p.id + " its leading edge runs shoulder to wrist")
+		check(float(web.chord_at_elbow) > float(web.depth) + 0.01, "%s it reaches back over the elbow (%.3f > %.3f)" % [p.id, web.chord_at_elbow, web.depth])
 		_pose(rig, 0.0, 1.0, 0.0, 0.0)
-		check(not (rig._fairings[1][0] as MeshInstance3D).visible, p.id + " propatagium slack when folded")
+		check(not (rig._fairings[1][0] as MeshInstance3D).visible, p.id + " the web slackens away when folded")
 		for k in range(1, 4):
 			check(BirdRig.limb_section(k, 0.0).y > BirdRig.limb_section(k, 1.0).y, "limb %d thins outward" % k)
 		check(BirdRig.limb_section(1, 0.35).y > BirdRig.limb_section(3, 0.0).y * 2.0, "the arm is far thicker than the hand")

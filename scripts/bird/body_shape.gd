@@ -8,20 +8,25 @@ extends RefCounted
 ## neck is a three-bone chain from the front of the trunk to the head; its shell is a tube re-lofted every
 ## frame. Rig space as in BirdRig: -Z is the nose, +X the right wing, +Y up; lengths in metres.
 ##
-## Ring: [z, centre y, half width, height above centre, depth below centre]; the cross-section is two
-## half-ellipses (a deeper breast than back).
+## Ring: [z, centre y, half width, height above centre, depth below centre]. The cross-section is two
+## superellipse halves: a broad, flattish back with squarer shoulders above (exponent N_TOP), a deeper,
+## narrower breast below running down toward the keel (N_BOT) -- a bird's trunk is not an oval, though the
+## feathers round it off.
 
 ## Per species, as fractions of body length L (starting values to tune in the bird lab): neck length from
 ## the trunk to the head retracted / reaching; trunk depth at the breast; head radius; tibiotarsus and
 ## tarsometatarsus; neck extension in flight (0 retracted .. 1 reaching); head yaw range (deg); owl-style
-## reversible outer toe; plumage fluff when perched.
+## reversible outer toe; plumage fluff when perched; the skull's shape (head sphere scale x, y, z) and brow ridge
+## (docs/research/eyes_and_beaks.md 4.2: the crow's long head, the hawk's flat crown and frown, the owl's flat face).
 const DATA := {
-	"crow": {"neck": [0.14, 0.26], "depth": 0.32, "head": 0.105, "legs": [0.18, 0.20], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0},
-	"owl": {"neck": [0.1, 0.18], "depth": 0.34, "head": 0.15, "legs": [0.16, 0.14], "neck_flight": 0.3, "head_yaw": 135.0, "zygo": true, "fluff": 1.1},
-	"hawk": {"neck": [0.12, 0.22], "depth": 0.3, "head": 0.105, "legs": [0.17, 0.17], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0},
-	"falcon": {"neck": [0.1, 0.18], "depth": 0.32, "head": 0.1, "legs": [0.16, 0.15], "neck_flight": 0.8, "head_yaw": 110.0, "zygo": false, "fluff": 1.0},
-	"sparrow": {"neck": [0.09, 0.15], "depth": 0.33, "head": 0.11, "legs": [0.16, 0.14], "neck_flight": 0.5, "head_yaw": 110.0, "zygo": false, "fluff": 1.05},
+	"crow": {"neck": [0.14, 0.26], "depth": 0.32, "head": 0.105, "legs": [0.18, 0.20], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [0.88, 0.9, 1.15], "brow": 0.0},
+	"owl": {"neck": [0.1, 0.18], "depth": 0.34, "head": 0.15, "legs": [0.16, 0.14], "neck_flight": 0.3, "head_yaw": 135.0, "zygo": true, "fluff": 1.1, "skull": [1.0, 1.05, 0.8], "brow": 0.0},
+	"hawk": {"neck": [0.12, 0.22], "depth": 0.3, "head": 0.105, "legs": [0.17, 0.17], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.88, 1.08], "brow": 1.0},
+	"falcon": {"neck": [0.1, 0.18], "depth": 0.32, "head": 0.1, "legs": [0.16, 0.15], "neck_flight": 0.8, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.95, 1.02], "brow": 0.7},
+	"sparrow": {"neck": [0.09, 0.15], "depth": 0.33, "head": 0.11, "legs": [0.16, 0.14], "neck_flight": 0.5, "head_yaw": 110.0, "zygo": false, "fluff": 1.05, "skull": [0.95, 0.95, 1.0], "brow": 0.0},
 }
+const N_TOP := 2.6   ## back: flatter than an ellipse (2), squarer at the shoulders
+const N_BOT := 1.8   ## breast: deeper and narrower toward the keel
 const FEMUR := 0.09   ## femur length / L: short, near horizontal, hidden in the belly feathers
 
 var L := 0.45
@@ -40,6 +45,8 @@ var neck_flight := 0.5
 var head_yaw := 110.0
 var zygo := false
 var fluff_perched := 1.0
+var skull := Vector3.ONE             ## head sphere scale per axis (docs/research/eyes_and_beaks.md 4.2)
+var brow := 0.0                      ## raptor brow ridge (0 none .. 1 a hawk's)
 var rings: Array = []            ## front to back
 
 
@@ -63,6 +70,8 @@ static func for_profile(p: BirdProfile, wing: WingShape) -> BodyShape:
 	b.head_yaw = d.head_yaw
 	b.zygo = d.zygo
 	b.fluff_perched = d.fluff
+	b.skull = Vector3(d.skull[0], d.skull[1], d.skull[2])
+	b.brow = d.brow
 	b._build_rings(float(d.depth))
 	return b
 
@@ -72,7 +81,7 @@ func _build_rings(depth: float) -> void:
 	var breast_bot := depth - 0.15
 	# The shoulder ring passes through the shoulder joints.
 	var sh_top := 0.15
-	var sh_w := shoulder.x / L / sqrt(maxf(1.0 - pow(shoulder.y / L / sh_top, 2.0), 0.1))
+	var sh_w := shoulder.x / L / pow(maxf(1.0 - pow(absf(shoulder.y / L / sh_top), N_TOP), 0.1), 1.0 / N_TOP)
 	var r := [
 		[-0.33, 0.05, 0.0, 0.0, 0.0],
 		[-0.3, 0.05, 0.07, 0.06, 0.07 * k],                    # throat
@@ -88,6 +97,12 @@ func _build_rings(depth: float) -> void:
 	rings.clear()
 	for ring in r:
 		rings.append(PackedFloat32Array([ring[0] * L, ring[1] * L, ring[2] * L, ring[3] * L, ring[4] * L]))
+
+
+## A superellipse coordinate: `c` (a cos or sin) raised to 2/n, keeping its sign; the exponent by half (`s`: the sin).
+static func _se(c: float, s: float) -> float:
+	var nexp := N_TOP if s >= 0.0 else N_BOT
+	return signf(c) * pow(absf(c), 2.0 / nexp)
 
 
 func front_z() -> float:
@@ -141,7 +156,8 @@ func gap(pt: Vector3) -> float:
 		var ez := front_z() if pt.z < 0.0 else back_z()
 		return pt.distance_to(Vector3(0.0, r[0], ez))
 	var radial := Vector2(pt.x, dy)
-	var e := sqrt(pow(pt.x / r[1], 2.0) + pow(dy / h, 2.0))
+	var nexp := N_TOP if dy >= 0.0 else N_BOT
+	var e := pow(pow(absf(pt.x) / r[1], nexp) + pow(absf(dy) / h, nexp), 1.0 / nexp)
 	if e < 1e-5:
 		return -minf(r[1], h)
 	return radial.length() * (1.0 - 1.0 / e)
@@ -154,7 +170,8 @@ func half_width_at(z: float, y: float) -> float:
 	var h := r[2] if dy >= 0.0 else r[3]
 	if h < 1e-4:
 		return 0.0
-	return r[1] * sqrt(maxf(1.0 - pow(dy / h, 2.0), 0.0))
+	var nexp := N_TOP if dy >= 0.0 else N_BOT
+	return r[1] * pow(maxf(1.0 - pow(minf(absf(dy / h), 1.0), nexp), 0.0), 1.0 / nexp)
 
 
 ## Move `pt` onto the flank at its height (x set to the surface, plus `pad`), on side `s`.
@@ -167,7 +184,7 @@ func volume(steps := 200) -> float:
 	var dz := (back_z() - front_z()) / steps
 	for k in steps:
 		var r := ring_at(front_z() + (k + 0.5) * dz)
-		v += PI * r[1] * (r[2] + r[3]) * 0.5 * dz
+		v += r[1] * (1.7078 * r[2] + 1.5022 * r[3]) * dz   # superellipse half-areas (2 a b G(1+1/n)^2 / G(1+2/n), n = 2.6 / 1.8)
 	return v
 
 
@@ -184,7 +201,7 @@ func trunk_mesh(slices := 30, around := 20, color := Callable()) -> ArrayMesh:
 		for j in around:
 			var t := TAU * j / around
 			var h := r[2] if sin(t) >= 0.0 else r[3]
-			row.append(Vector3(r[1] * cos(t), r[0] + h * sin(t), z))
+			row.append(Vector3(r[1] * _se(cos(t), sin(t)), r[0] + h * _se(sin(t), sin(t)), z))
 			if color.is_valid():
 				crow.append(color.call(float(i) / slices, sin(t), absf(cos(t))))
 		pts.append(row)

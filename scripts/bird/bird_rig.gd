@@ -119,6 +119,9 @@ var _neck_mesh: ArrayMesh
 var _head_world := Vector3.INF
 var _body_tint := Color.WHITE
 var _neck_colors: Array = []
+var _arm_colors: Array = []
+var _root_fill: Array[MeshInstance3D] = []
+var arm_web: Array = [{}, {}]         ## per side, the arm wing's loft this pose: {from, to, depth (elbow behind the edge), chord_at_elbow}
 var _last_carrier := Vector3.ZERO
 var _clock_t := 0.0
 var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4]
@@ -256,6 +259,12 @@ func _build_body(tint: Color) -> void:
 	_head = Node3D.new()
 	_head.position = _head_pos
 	add_child(_head)
+	# The skull: the head sphere scaled per species (the crow's long head, the hawk's flat crown, the owl's flat
+	# face); the eyes and brows ride on it.
+	var skull := Node3D.new()
+	skull.name = "Skull"
+	skull.scale = body.skull
+	_head.add_child(skull)
 	var head := MeshInstance3D.new()
 	var sph := SphereMesh.new()
 	var hr := body.head_r
@@ -263,7 +272,7 @@ func _build_body(tint: Color) -> void:
 	sph.height = hr * 2.0
 	head.mesh = _head_mesh(sph)
 	head.material_override = body_mat
-	_head.add_child(head)
+	skull.add_child(head)
 	var beak := MeshInstance3D.new()
 	var cone := CylinderMesh.new()
 	cone.top_radius = 0.0
@@ -271,7 +280,7 @@ func _build_body(tint: Color) -> void:
 	cone.height = _L * (0.07 if profile.id == "owl" else 0.12)
 	beak.mesh = cone
 	beak.rotation.x = -PI * 0.5
-	beak.position = Vector3(0.0, -_L * 0.01, -hr - cone.height * 0.4)
+	beak.position = Vector3(0.0, -_L * 0.01, -hr * body.skull.z - cone.height * 0.4)
 	beak.material_override = leg_mat
 	_head.add_child(beak)
 	for e in [-1.0, 1.0]:   # eyes: dark dots so the look direction reads
@@ -282,7 +291,18 @@ func _build_body(tint: Color) -> void:
 		eye.mesh = es
 		eye.material_override = _material(Color(0.05, 0.05, 0.05))
 		eye.position = Vector3(e * hr * (0.45 if profile.id == "owl" else 0.75), hr * 0.25, -hr * (0.8 if profile.id == "owl" else 0.55))
-		_head.add_child(eye)
+		skull.add_child(eye)
+		if body.brow > 0.0:   # the raptor's brow ridge over the eye: the frown
+			var brow := MeshInstance3D.new()
+			var bs := SphereMesh.new()
+			bs.radius = 0.5
+			bs.height = 1.0
+			brow.mesh = bs
+			brow.material_override = _material(_body_tint if Plumage.level == 0 else Plumage.head(profile.id, Vector3.UP, Vector3(0.75, 0.25, -0.55).normalized()))
+			brow.position = eye.position + Vector3(e * 0.03, 0.2, 0.02) * hr
+			brow.rotation = Vector3(deg_to_rad(-15.0), e * deg_to_rad(-35.0), 0.0)
+			brow.scale = Vector3(0.42, 0.14 * body.brow, 0.34) * hr
+			skull.add_child(brow)
 	for i in 2:
 		var parts: Array = []
 		for k in 6:
@@ -376,19 +396,134 @@ func _build_fairings(c: Color) -> void:
 	var meshes: Array = []
 	for k in 4:
 		meshes.append(_limb_mesh(k, col))
+	# The arm wing (piece 0) is lofted every pose instead (_loft_arm); its colours don't move.
+	_arm_colors = []
+	for k in ARM_STATIONS + 3:
+		var u := clampf((k - 1.0) / ARM_STATIONS, 0.0, 1.0)
+		var row: Array = []
+		for j in ARM_AROUND:
+			var a := TAU * j / ARM_AROUND
+			row.append(col.call(2, 0.5 * (1.0 - cos(a)), u, sin(a) >= 0.0))
+		_arm_colors.append(row)
 	for i in 2:
 		var parts: Array = []
 		for k in 4:
 			var mi := MeshInstance3D.new()
-			mi.mesh = meshes[k]
+			mi.mesh = meshes[k] if k > 0 else ArrayMesh.new()
 			mi.material_override = mat
 			add_child(mi)
 			parts.append(mi)
 		_fairings[i] = parts
+	# Wing-root fairings: where the arm wing meets the body, the scapulars above and the flank feathers below
+	# lie over the join, so it is a smooth swelling, not a seam.
+	var fill_mesh := _root_fill_mesh()
+	for i in 2:
+		var f := MeshInstance3D.new()
+		f.name = "WingRoot" + ("L" if i == 0 else "R")
+		f.mesh = fill_mesh
+		f.material_override = mat
+		add_child(f)
+		_root_fill.append(f)
+
+
+const ARM_STATIONS := 10
+const ARM_AROUND := 16
+
+
+## The arm wing's covering, lofted each pose from the shoulder to the wrist. On a bird the skin web
+## (propatagium), the arm's muscle and the small covert feathers over them read as ONE smooth surface -- the
+## feathers hide where skin meets arm -- so this is one loft, not separate pieces with creases where they
+## cross. Its leading edge is the straight line shoulder -> wrist (the propatagium's tendon); each station
+## reaches back over the bone beneath it plus the coverts' padding; an airfoil section, thick at the root
+## (the arm's muscle) and thin at the wrist. `open` fades it as the wing folds.
+func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: Vector3, n_in: Vector3, s: float, open: float) -> void:
+	var span := sh.distance_to(wrist)
+	if span < 1e-5 or open <= 0.01:
+		mi.visible = false
+		arm_web[i] = {}
+		return
+	mi.visible = true
+	var rc := shape.root_chord()
+	var le := (wrist - sh) / span
+	var nn := (n_in - le * le.dot(n_in)).normalized()
+	var aft := (le.cross(nn) * s).normalized()
+	var flip := aft.cross(nn).dot(le) < 0.0   # (keep the faces' winding outward on either wing)
+	var l_h := sh.distance_to(elbow)
+	var l_f := elbow.distance_to(wrist)
+	var depth_elbow := maxf((elbow - sh).dot(aft), 0.0)
+	var rows: Array = []
+	var chord_elbow := 0.0
+	for k in ARM_STATIONS + 3:
+		var u := clampf((k - 1.0) / ARM_STATIONS, 0.0, 1.0)
+		var e := sh + le * span * u
+		var arc := u * (l_h + l_f)
+		var bone := sh.lerp(elbow, arc / maxf(l_h, 1e-5)) if arc <= l_h else elbow.lerp(wrist, (arc - l_h) / maxf(l_f, 1e-5))
+		var depth := maxf((bone - e).dot(aft), 0.0)
+		var chord := (depth + rc * lerpf(0.42, 0.26, u)) * open
+		var thick := rc * lerpf(0.14, 0.055, u) * (1.0 + 0.15 * exp(-pow((u - 0.25) / 0.2, 2.0))) * open
+		if k == 0 or k == ARM_STATIONS + 2:
+			chord = 0.0   # closed ends (inside the body; at the wrist, inside the hand's piece)
+			thick = 0.0
+		if absf(arc - l_h) < (l_h + l_f) / ARM_STATIONS * 0.5:
+			chord_elbow = chord
+		var row: Array = []
+		for j in ARM_AROUND:
+			var a := TAU * j / ARM_AROUND * (-1.0 if flip else 1.0)
+			var x := 0.5 * (1.0 - cos(a))
+			var half := _naca(x) * thick
+			var y := 0.02 * chord * sin(PI * x) + (-half if sin(a) >= 0.0 else half)
+			row.append(e + aft * (x * chord) + nn * y)
+		rows.append(row)
+	arm_web[i] = {"from": sh, "to": wrist, "depth": depth_elbow, "chord_at_elbow": chord_elbow}
+	var cols := _arm_colors
+	if flip:   # (the colour rows were laid out for the unflipped order)
+		cols = []
+		for r in _arm_colors:
+			var rr: Array = [r[0]]
+			for j in range(ARM_AROUND - 1, 0, -1):
+				rr.append(r[j])
+			cols.append(rr)
+	BodyShape.tube_mesh(rows, mi.mesh as ArrayMesh, cols)
+
+
+## The wing-root fairing's mesh: a unit sphere coloured as the back's scapulars on top and the flank below.
+func _root_fill_mesh() -> ArrayMesh:
+	var sph := SphereMesh.new()
+	sph.radius = 0.5
+	sph.height = 1.0
+	sph.radial_segments = 16
+	sph.rings = 8
+	var arrays := sph.get_mesh_arrays()
+	var cols := PackedColorArray()
+	var top := _body_color_at(0.3, 0.9, 0.9)
+	# (below: the axillaries and underwing coverts, from plumage level 2)
+	var below := Plumage.hex(Plumage.spec(profile.id).wing.under) if Plumage.level >= 2 else _body_color_at(0.3, -0.4, 1.0)
+	for v in (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		cols.append(below.lerp(top, smoothstep(-0.25, 0.25, v.y)))
+	arrays[Mesh.ARRAY_COLOR] = cols
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
+
+
+## Lay the wing-root fairing over the join of side `i`'s arm wing and the body: centred on the root of the
+## arm wing just behind the shoulder, long along the chord, short along the span, about the arm's thickness.
+func _place_root_fill(i: int, sh: Vector3, wrist: Vector3, n_in: Vector3, s: float, open: float) -> void:
+	var mi := _root_fill[i]
+	if open <= 0.01 or sh.distance_to(wrist) < 1e-5:
+		mi.visible = false
+		return
+	mi.visible = true
+	var rc := shape.root_chord()
+	var le := (wrist - sh).normalized()
+	var nn := (n_in - le * le.dot(n_in)).normalized()
+	var aft := (le.cross(nn) * s).normalized()
+	var c := sh + aft * rc * 0.32 - le * _L * 0.02
+	mi.transform = Transform3D(Basis(le * _L * 0.2 * open, nn * rc * 0.2 * open, aft * rc * 0.85), c)
 
 
 ## Lay a unit limb mesh from `a` to `b`, its chord aft and its thickness along `n`; `chord` scales x (m).
-func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, chord: float, fade: float) -> void:
+func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, chord: float, fade: float, thick := 1.0) -> void:
 	var d := b - a
 	var length := d.length()
 	if length < 1e-5 or fade <= 0.01:
@@ -398,7 +533,7 @@ func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: f
 	var u := d / length
 	var nn := (n - u * u.dot(n)).normalized()
 	var aft := (u.cross(nn) * side).normalized()
-	mi.transform = Transform3D(Basis(aft * chord * fade, nn * shape.root_chord() * fade, d), a)
+	mi.transform = Transform3D(Basis(aft * chord * fade, nn * shape.root_chord() * fade * thick, d), a)
 
 
 ## `flip`: the underside copy -- the same surface, wound the other way with its normal down, so each copy
@@ -834,15 +969,12 @@ func apply_pose() -> void:
 				plain_i += 1
 		var fr: Array = _fairings[i]
 		var rc := shape.root_chord()
-		# The propatagium: a straight leading edge shoulder -> wrist, deep enough to reach back over the elbow;
-		# it slackens away as the wing folds.
-		var le := (wrist - sh).normalized() if wrist.distance_to(sh) > 1e-5 else Vector3.RIGHT * s
-		var le_n := (arm_n - le * le.dot(arm_n)).normalized()
-		var le_aft := (le.cross(le_n) * s).normalized()
-		var web := maxf((elbow - sh).dot(le_aft), 0.0) + rc * 0.18
-		_place_limb(fr[0], sh, wrist, arm_n, s, web, 1.0 - fold)
-		_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0)
-		_place_limb(fr[2], elbow, wrist, arm_n, s, rc, 1.0)
+		# The arm wing: one smooth surface over the skin web, the arm and its coverts (it slackens away as the
+		# wing folds); the arm's own pieces sit inside it, slimmed, until folded.
+		_loft_arm(i, fr[0], sh, elbow, wrist, arm_n, s, 1.0 - fold)
+		_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0, lerpf(0.5, 1.0, fold))
+		_place_limb(fr[2], elbow, wrist, arm_n, s, rc, 1.0, lerpf(0.5, 1.0, fold))
+		_place_root_fill(i, sh, wrist, arm_n, s, 1.0 - fold)
 		_place_limb(fr[3], wrist, hand, hand_n, s, rc, 1.0)
 		_pose_bone("humerus." + ("L" if i == 0 else "R"), sh, elbow, arm_n)
 		_pose_bone("forearm." + ("L" if i == 0 else "R"), elbow, wrist, arm_n)
@@ -970,9 +1102,14 @@ func _loft_neck() -> void:
 	var x := (Vector3.RIGHT - tan * tan.x).normalized()
 	var y := tan.cross(x)
 	# The base fits the trunk ring it starts in, so it never pokes out of the back or throat.
+	# Its base is the trunk's own cross-section where it starts (width, back and throat depth), so the neck
+	# grows out of the front of the body rather than plugging into it; its end is nearly the head's width, so
+	# it merges into the head instead of meeting it in a collar.
 	var ring := body.ring_at(a.z)
-	var r0 := clampf(minf(ring[1], minf(ring[2], ring[3])) * 0.85, _L * 0.05, _L * 0.11) * fluff
-	var r1 := body.head_r * 0.7 * fluff
+	var bx := clampf(ring[1] * 0.85, _L * 0.05, _L * 0.14) * fluff
+	var bf := clampf(ring[3] * 0.8, _L * 0.05, _L * 0.14) * fluff   # throat side
+	var bb := clampf(ring[2] * 0.8, _L * 0.05, _L * 0.14) * fluff   # nape side
+	var r1 := body.head_r * minf(body.skull.x, body.skull.y) * 0.85 * fluff
 	var rows: Array = [[]]
 	for j in 10:
 		rows[0].append(a - tan * _L * 0.02)   # capped
@@ -980,11 +1117,12 @@ func _loft_neck() -> void:
 	for k in samples:
 		var u := float(k) / (samples - 1)
 		var pos := a.lerp(b, u)
-		var rad := lerpf(r0, r1, smoothstep(0.0, 1.0, u))
+		var w := smoothstep(0.0, 1.0, u)
 		var row: Array = []
 		for j in 10:
 			var t := TAU * j / 10.0
-			row.append(pos + x * (cos(t) * rad) + y * (sin(t) * rad * 1.1))
+			var ry := lerpf(bf if sin(t) >= 0.0 else bb, r1, w)
+			row.append(pos + x * (cos(t) * lerpf(bx, r1, w)) + y * (sin(t) * ry))
 		rows.append(row)
 	BodyShape.tube_mesh(rows, _neck_mesh, _neck_colors)
 
