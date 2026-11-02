@@ -36,6 +36,10 @@ var stalled := false
 var flare := 0.0            ## 0..1 extra airbrake from the perch assist (visual + drag)
 var extra_accel := Vector3.ZERO  ## world-space push this tick (arena boundary)
 var ground_height := INF        ## m from the bird's underside to the ground below (set by the Bird each tick)
+## Battle damage: the share of each wing's area its lost flight feathers took (x left, y right; Bird.lose_feathers).
+## The wings lose that lift, and the weaker wing drops: the bird rolls toward it unless the stick holds it level.
+var wing_loss := Vector2.ZERO
+const LOSS_ROLL := 1.0          ## bank the stick must hold off, as a share of max bank per unit of loss difference
 
 # --- Assists (0 turns one off) ---------------------------------------------------------------------
 ## Phugoid damper: alpha rises by this * 2 alpha* * (along-path acceleration / g), so the speed-for-height
@@ -140,7 +144,7 @@ func step(dt: float, input: FlightInput) -> void:
 	var p := profile
 	# --- Attitude follows the stick -------------------------------------------------------------
 	var stick := input.stick.clamp(Vector2(-1, -1), Vector2(1, 1))
-	var bank_target := stick.x * deg_to_rad(p.max_bank_deg)
+	var bank_target := stick.x * deg_to_rad(p.max_bank_deg) + (wing_loss.y - wing_loss.x) * LOSS_ROLL * deg_to_rad(p.max_bank_deg)
 	bank = move_toward(bank, bank_target, deg_to_rad(p.roll_rate_deg) * dt)
 	var alpha_target := alpha_for_stick(stick.y)
 	# Turn assist: some of the extra lift a bank needs (1/cos) comes without pulling.
@@ -181,7 +185,7 @@ func step(dt: float, input: FlightInput) -> void:
 	_update_frame()
 	var dir := _last_dir
 	var q := 0.5 * BirdProfile.RHO * speed * speed
-	var area := p.wing_area * (1.0 - p.fold_area_cut * fold)
+	var area := p.wing_area * (1.0 - p.fold_area_cut * fold) * (1.0 - 0.5 * (wing_loss.x + wing_loss.y))
 	# Ground effect: within ground_effect_height the ground cuts the wingtip vortices (less induced drag),
 	# cushions the wing (a little more lift) and gives the downstroke something to push against (stronger
 	# wingbeats, below). Exaggerated past the real thing on purpose: it's what lets a downed bird get back up.

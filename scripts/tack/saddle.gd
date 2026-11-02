@@ -431,7 +431,7 @@ static func _basis_y(n: Vector3) -> Basis:
 ## the hand loops for standing. Each round knows where it leaves from (round_muzzle).
 const POD_KINDS := ["rockets", "seekers"]
 const POD_ROUNDS := {"rockets": 3, "seekers": 2}
-const DEFAULT_LOADOUT: Array[String] = ["rockets", "seekers"]   ## left, right
+const DEFAULT_LOADOUT: Array[String] = ["rockets", "rockets"]   ## left, right (a bird carries one kind: six rockets or four seekers)
 const DEFAULT_TILT := 3.0       ## deg
 const MOUNT_X := 44.0           ## real cm out from the spine: clear of the rider's elbows and knees
 const MOUNT_Z := -38.0          ## real cm, the trunnion: beside the rider's shoulders in the tuck

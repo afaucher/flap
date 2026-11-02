@@ -4,9 +4,11 @@ extends Node3D
 ## Steps everything in _physics_process; draws projectiles, their smoke, bursts and feather puffs in _process, at the
 ## moment the frame draws the birds (Bird.drawn_lag: between the last two ticks, as physics interpolation draws them).
 ##
-## A burst hurts every bird within last m but its shooter: a short stun (no control, as when hitting a tree)
-## and a shove away from it, plus a puff of the bird's own feathers. DOWN_AFTER hits downs a bird (a long
-## stun; it drops) and `downed` is emitted -- the scene decides what happens next.
+## A burst hurts every bird within `blast` m but its shooter: a short stun (no control, as when hitting a tree)
+## and a shove away from it, and it knocks out the flight feathers nearest it (Bird.lose_feathers) -- 2 or 3
+## (FEATHERS_PER_HIT on average) within a fuse's reach, 1 from the blast's outer ring -- in a puff.
+## Bird.DOWN_FEATHERS lost downs a bird (a long stun; it drops) and `downed` is emitted -- the scene decides what
+## happens next.
 
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String)
@@ -14,7 +16,7 @@ signal burst(at: Vector3, why: String)
 static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.fuse)
 const SHOVE := 4.0          ## m/s, push from a burst at its centre
 const HIT_STUN := 0.5       ## s
-const DOWN_AFTER := 3       ## hits
+const FEATHERS_PER_HIT := 2.5   ## on average, within a fuse's reach (Projectile.fuse)
 const DOWN_STUN := 2.5      ## s
 const SMOKE_EVERY := 0.025  ## s between smoke points
 const SMOKE_LIFE := 2.2     ## s
@@ -24,6 +26,7 @@ var birds: Array = []
 var launchers: Array = []
 var projectiles: Array = []
 var hits := {}              ## Bird -> hits taken
+var _rng := RandomNumberGenerator.new()
 var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
 var player: Launcher = null
 
@@ -41,6 +44,7 @@ var _red: StandardMaterial3D
 
 
 func _ready() -> void:
+	_rng.seed = 7
 	_smoke_mesh = ImmediateMesh.new()
 	_fx_mesh = ImmediateMesh.new()
 	add_child(_mesh_node(_smoke_mesh, _fx_material(false)))
@@ -170,9 +174,19 @@ func _burst(at: Vector3, by: Variant, why: String) -> void:   # (by: the shooter
 		hit(b, at, 1.0 - d / blast, by)
 
 
+## How many feathers a burst of `strength` (1 - distance / blast) knocks out: within a proximity fuse's reach
+## FEATHERS_PER_HIT, rounded up or down at random (2 or 3); beyond it, in the blast's outer ring, 1. (Not graded by
+## distance inside the fuse's reach: a fuse goes off as the round enters it, so nearly every burst is at its edge.)
+func feathers_for(strength: float) -> int:
+	if strength < 1.0 - Projectile.fuse / blast - 1e-4:
+		return 1
+	return int(floor(FEATHERS_PER_HIT + _rng.randf()))
+
+
 ## Apply a hit to `b` from a burst at `at` (strength 0..1).
 func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	hits[b] = int(hits.get(b, 0)) + 1
+	var was_up := not b.is_down()
 	var by_player: bool = player != null and is_instance_valid(by) and by == player.bird
 	if by_player:
 		stats.hits += 1
@@ -180,12 +194,12 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	away = away.normalized() if away.length() > 0.01 else Vector3.UP
 	b.model.velocity += away * SHOVE * (0.4 + 0.6 * strength)
 	b.stun = maxf(b.stun, HIT_STUN)
+	b.lose_feathers(at, feathers_for(strength))
 	_feathers(b, away)
-	if int(hits[b]) >= DOWN_AFTER:
+	if was_up and b.is_down():
 		b.stun = DOWN_STUN
 		if by_player:
 			stats.kills += 1
-		hits[b] = 0
 		downed.emit(b)
 
 

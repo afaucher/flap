@@ -1275,6 +1275,104 @@
   ]
  },
  {
+  "id": "damage-roll-wrong-way",
+  "bug": "Feather damage: a wing that lost feathers must drop (the bird rolls toward it); with the sign flipped it rolls away (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "(wing_loss.y - wing_loss.x) * LOSS_ROLL",
+    "replace": "(wing_loss.x - wing_loss.y) * LOSS_ROLL"
+   }
+  ]
+ },
+ {
+  "id": "damage-area-ignored",
+  "bug": "Feather damage: lost flight feathers must cost the wing its lift (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": " * (1.0 - 0.5 * (wing_loss.x + wing_loss.y))",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "damage-feathers-still-drawn",
+  "bug": "Feather damage: the rig must leave a lost feather out of the drawing (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tif lost.has(key):\n\t\t\t\txf = _gone(xf)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "damage-downed-twice",
+  "bug": "Feather damage: a bird already down mustn't be downed (and counted) again by the next hit (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tif was_up and b.is_down():",
+    "replace": "\tif b.is_down():"
+   }
+  ]
+ },
+ {
+  "id": "damage-rearm-no-mend",
+  "bug": "Feather damage: a perch rearms and grows the lost feathers back (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\t\t\tif not bird.lost_feathers.is_empty():\n\t\t\t\tbird.mend()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "flight-menu-rider",
+  "bug": "The menu's Flight is the game with no rider or weapons; the tack mustn't be fitted when --no-rider is given (2026-11-02).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/game.gd",
+    "find": "\tif rider and Tack.RIDDEN.has(pid):\n\t\tTack.fit(bird.rig, bird)",
+    "replace": "\tif Tack.RIDDEN.has(pid):\n\t\tTack.fit(bird.rig, bird)"
+   }
+  ]
+ },
+ {
+  "id": "switch-to-empty-weapon",
+  "bug": "A bird carries one kind of round; switching weapon mustn't select the kind it has none of (2026-11-02).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "if inp.weapon_next and int(capacity[other]) > 0:",
+    "replace": "if inp.weapon_next:"
+   }
+  ]
+ },
+ {
   "id": "sapling-twigs-solid",
   "bug": "Young pines' twigs were solid and in the planner's way: AI birds bumped them eleven times in 90 s, low over the floor (2026-11-02).",
   "tests": [
@@ -1300,6 +1398,34 @@
     "file": "scripts/bird/feather_texture.gdshader",
     "find": "uniform float edge_glow = 1.0;       // the free edges' and tips' glow (0: none)\n",
     "replace": "uniform float edge_glow = 0.0;       // the free edges' and tips' glow (0: none)\n"
+   }
+  ]
+ },
+ {
+  "id": "build-stamp-hidden",
+  "bug": "Builds were stamped but nothing showed the stamp, so a screenshot or recording couldn't say which build it came from (2026-11-02).",
+  "tests": [
+   "test_build_version"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/flight_hud.gd",
+    "find": "\tadd_child(BuildVersion.make_label(true))   # (which build: for playtest reports, screenshots and recordings)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "rearm-any-perch",
+  "bug": "Ammo restocks and feathers grow back only at your base (Launcher.rearm_perch); any perch must not do (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "if bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch)):",
+    "replace": "if bird.state == Bird.State.PERCHED:"
    }
   ]
  },
