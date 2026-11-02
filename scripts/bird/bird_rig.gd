@@ -1389,6 +1389,9 @@ func set_ghost(amount: float) -> void:
 
 
 ## Map a Bird.telemetry() snapshot to the control values (smoothed) and pose the rig.
+signal posed(dt: float)   ## animate() has posed the rig, for `dt` s (what rides on it -- the Tack -- poses with it)
+
+
 func animate(t: Dictionary, dt: float) -> void:
 	if not _built:
 		return
@@ -1568,6 +1571,7 @@ func animate(t: Dictionary, dt: float) -> void:
 	leg_world = lerpf(leg_world, lw_t, 1.0 - exp(-6.0 * dt))
 	Perf.add("rig.animate_logic", p0)
 	apply_pose()
+	posed.emit(dt)
 
 
 ## Sitting, keep the tail and wingtips out of what the bird sits on, as a bird shifts its posture: measure the

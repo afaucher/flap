@@ -1,7 +1,8 @@
 class_name CombatWorld
 extends Node3D
 ## The fight: registered birds and their launchers, projectiles in flight, and what happens when one bursts.
-## Steps everything in _physics_process; draws projectiles, their smoke, bursts and feather puffs in _process.
+## Steps everything in _physics_process; draws projectiles, their smoke, bursts and feather puffs in _process, at the
+## moment the frame draws the birds (Bird.drawn_lag: between the last two ticks, as physics interpolation draws them).
 ##
 ## A burst hurts every bird within last m but its shooter: a short stun (no control, as when hitting a tree)
 ## and a shove away from it, plus a puff of the bird's own feathers. DOWN_AFTER hits downs a bird (a long
@@ -202,17 +203,23 @@ func _feathers(b: Bird, away: Vector3) -> void:
 func _process(_delta: float) -> void:
 	var cam := get_viewport().get_camera_3d()
 	var eye := cam.global_position if cam != null else Vector3.ZERO
-	_draw_bodies()
-	_draw_smoke(eye)
-	_draw_fx(eye)
+	var lag := Bird.drawn_lag()
+	var heads := _draw_bodies(lag)
+	_draw_smoke(eye, _clock - lag, heads)
+	_draw_fx(eye, _clock - lag, lag)
 	# Forget what has faded.
 	_smoke = _smoke.filter(func(s): return s.open or (s.pts.size() > 0 and _clock - float(s.pts[-1][1]) < SMOKE_LIFE))
 	_fx = _fx.filter(func(f): return _clock - float(f.t) < (1.8 if f.type == "feather" else 0.6))
 
 
-func _draw_bodies() -> void:
+## Each projectile where it is at the drawn moment: between its last two ticks, as the birds are (placed here each
+## frame, so not interpolated again by the engine). Returns {id: drawn position}, where its smoke starts.
+func _draw_bodies(lag: float) -> Dictionary:
+	var f := 1.0 - lag * Engine.physics_ticks_per_second
+	var heads := {}
 	while _bodies.size() < projectiles.size():
 		var mi := MeshInstance3D.new()
+		mi.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_bodies.append(mi)
@@ -229,11 +236,15 @@ func _draw_bodies() -> void:
 		var side := d.cross(Vector3.UP if absf(d.y) < 0.95 else Vector3.RIGHT).normalized()
 		# (leaving the pod it's drawn at its true size, a few cm, growing to the readable size over its first metres)
 		var grow := lerpf(0.16 if p.kind == Projectile.Kind.ROCKET else 0.1, 1.0, smoothstep(0.0, 4.0, p.travelled))
-		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)).scaled(Vector3.ONE * grow), p.pos)   # capsule's long axis is Y
+		var at := p.last_pos.lerp(p.pos, f)
+		heads[p.id] = at
+		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)).scaled(Vector3.ONE * grow), at)   # capsule's long axis is Y
+	return heads
 
 
-## Smoke ribbons: each trail's points as a camera-facing strip that widens and fades with age.
-func _draw_smoke(eye: Vector3) -> void:
+## Smoke ribbons: each trail's points as a camera-facing strip that widens and fades with age, as of `now` (the drawn
+## moment): the points laid since then left out, a live round's trail running on to where it is drawn (`heads`).
+func _draw_smoke(eye: Vector3, now: float, heads: Dictionary) -> void:
 	_smoke_mesh.clear_surfaces()
 	var any := false
 	for s in _smoke:
@@ -244,13 +255,13 @@ func _draw_smoke(eye: Vector3) -> void:
 		return
 	var started := false
 	for s in _smoke:
-		var pts: Array = s.pts
+		var pts := smoke_points(s, now, heads)
 		var seeker: bool = s.kind == Projectile.Kind.SEEKER
 		for i in range(1, pts.size()):
 			var a: Vector3 = pts[i - 1][0]
 			var b: Vector3 = pts[i][0]
-			var age_a := _clock - float(pts[i - 1][1])
-			var age_b := _clock - float(pts[i][1])
+			var age_a := now - float(pts[i - 1][1])
+			var age_b := now - float(pts[i][1])
 			if age_b > SMOKE_LIFE:
 				continue
 			var seg := b - a
@@ -275,6 +286,14 @@ func _draw_smoke(eye: Vector3) -> void:
 		_smoke_mesh.surface_end()
 
 
+## A smoke trail's points [pos, t] as of `now`: those laid by then, and a live round's (in `heads`) drawn position.
+static func smoke_points(s: Dictionary, now: float, heads: Dictionary) -> Array:
+	var pts: Array = (s.pts as Array).filter(func(q): return float(q[1]) <= now)
+	if heads.has(s.id):
+		pts.append([heads[s.id], now])
+	return pts
+
+
 ## A trail's half width at `age` s: a thread at the pod's mouth, puffing out over the first moments, then
 ## spreading as it hangs.
 func _smoke_w(age: float) -> float:
@@ -286,15 +305,19 @@ func _smoke_col(age: float, seeker: bool) -> Color:
 	return Color(0.93, 0.92, 0.9, a) if not seeker else Color(0.95, 0.9, 0.86, a)
 
 
-## Bursts (a flash disc and a ring of sparks) and drifting feathers, all camera-facing.
-func _draw_fx(eye: Vector3) -> void:
+## Bursts (a flash disc and a ring of sparks) and drifting feathers, all camera-facing, as of `now` (the drawn moment,
+## `lag` behind the last tick).
+func _draw_fx(eye: Vector3, now: float, lag: float) -> void:
 	_fx_mesh.clear_surfaces()
-	if _fx.is_empty():
+	var live := _fx.filter(func(f): return float(f.t) <= now)   # (a burst this tick shows once the frame draws its moment)
+	if live.is_empty():
 		return
 	_fx_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for f in _fx:
-		var age := _clock - float(f.t)
+	for f in live:
+		var age := now - float(f.t)
 		var pos: Vector3 = f.pos
+		if f.type == "feather":
+			pos -= (f.vel as Vector3) * lag
 		var to_eye := (eye - pos).normalized()
 		var right := to_eye.cross(Vector3.UP).normalized()
 		if right.length() < 0.1:
