@@ -376,9 +376,16 @@ func animate(t: Dictionary, dt: float) -> void:
 	var sweep_t := 12.0 * flare
 	var twist_t := clampf(alpha * 0.6, deg_to_rad(-8.0), deg_to_rad(18.0))
 	if landing:
-		flap_t = deg_to_rad(25.0)
-		fold_t = 0.0
-		twist_t = deg_to_rad(30.0)
+		# The flare: two braking wingbeats with the wings swept forward at a high angle of attack, alula out;
+		# in the last fifth the wings start to fold as the bird settles.
+		var lt: float = t.landing_t
+		var beat := fmod(lt * 2.0, 1.0)
+		flap_t = deg_to_rad(30.0 + 40.0 * cos(beat * TAU))
+		lift_t = 0.0
+		fold_t = smoothstep(0.8, 1.0, lt) * 0.8
+		sweep_t = 18.0 * (1.0 - smoothstep(0.8, 1.0, lt))
+		twist_t = deg_to_rad(40.0)
+		k = 1.0
 	if sitting:
 		flap_t = deg_to_rad(-10.0)
 		fold_t = 1.0

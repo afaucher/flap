@@ -185,7 +185,13 @@ func step(dt: float, input: FlightInput) -> void:
 	# cushions the wing (a little more lift) and gives the downstroke something to push against (stronger
 	# wingbeats, below). Exaggerated past the real thing on purpose: it's what lets a downed bird get back up.
 	ground_effect = clampf(1.0 - ground_height / p.ground_effect_height, 0.0, 1.0)
-	cl = lift_coefficient(alpha) * (1.0 + 0.3 * flare) * (1.0 + p.ground_effect_lift * ground_effect)
+	cl = lift_coefficient(alpha) * (1.0 + p.ground_effect_lift * ground_effect)
+	if flare > 0.0:
+		# A flaring bird pitches up as it slows and holds its lift near its weight (perching studies see no
+		# lift spike and no sag): it brakes without dropping. Top the lift up toward the weight, within the
+		# extra lift a deep-stall, unsteady flare can make (1.6 x CL max).
+		var hold_cl := p.mass * BirdProfile.G / maxf(q * area, 1e-3)
+		cl = lerpf(cl, clampf(hold_cl, cl, p.cl_max * 1.6), flare)
 	var induced_cut := p.k_induced * 0.5 * ground_effect * cl * cl
 	cd = drag_coefficient(cl, alpha, fold) - induced_cut + 1.2 * flare
 	var aero_fade := smoothstep(0.5, 2.0, speed)   # no aero at a standstill (dropping off a perch)

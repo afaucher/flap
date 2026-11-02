@@ -109,11 +109,40 @@ func facing_for(travel: Vector3) -> Vector3:
 	return across * signf(d)
 
 
+## The catch envelope: can the feet reach `grip` from `pos`, moving at `vel`? It follows the relative motion
+## instead of being a sphere round the bird: the feet swing forward and down, so the reach is long ahead
+## (longer the faster the bird is coming in -- it starts its flare earlier), narrow to the sides, deep below,
+## shallow above, and nothing behind. Hovering (nearly still), it is a small sphere.
+static func in_reach(profile: BirdProfile, pos: Vector3, vel: Vector3, grip: Vector3) -> bool:
+	var r := grip - pos
+	var reach := profile.grab_radius
+	var speed := vel.length()
+	if speed < 0.5:
+		return r.length() <= reach * 0.6
+	var d := vel / speed
+	var along := r.dot(d)
+	var ahead := reach * (1.0 + 0.4 * clampf(speed / profile.grab_speed_max, 0.0, 1.0))
+	if along < -reach * 0.15 or along > ahead:
+		return false
+	# Off the flight line: split into up/down (in the vertical plane of the path) and sideways.
+	var off := r - d * along
+	var up_axis := (Vector3.UP - d * d.y)
+	up_axis = up_axis.normalized() if up_axis.length() > 1e-3 else Vector3.UP
+	var above := off.dot(up_axis)          # + = the grip is above the flight line
+	var side := (off - up_axis * above).length()
+	var side_reach := reach * 0.55 * (1.0 - 0.4 * clampf(along / ahead, 0.0, 1.0))
+	if side > side_reach + maxf(0.0, -above) * 0.3:   # (a perch below the line can be a little further to the side)
+		return false
+	# The feet reach forward and down from the flight line, barely up. Relative to the path, not to the world:
+	# a bird swooping up carries itself to a perch above it.
+	return above >= -reach * 0.9 and above <= reach * 0.35
+
+
 ## Can a bird of `profile` at `pos` moving at `vel` catch this perch at `grip` (default: the nearest grip
-## point) right now?
+## point) right now? In the catch envelope (in_reach) and slow enough.
 func catch_status(profile: BirdProfile, pos: Vector3, vel: Vector3, grip = null) -> Catch:
 	var g: Vector3 = grip if grip != null else closest_grip(pos)
-	if pos.distance_to(g) > profile.grab_radius:
+	if not in_reach(profile, pos, vel, g):
 		return Catch.OUT_OF_RANGE
 	return Catch.OK if vel.length() <= profile.grab_speed_max else Catch.TOO_FAST
 

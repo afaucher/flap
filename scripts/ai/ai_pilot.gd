@@ -199,7 +199,9 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 	mode = Mode.FINAL if final else Mode.CRUISE
 	var aim := route[wp]
 	if final and dist_perch < 6.0:
-		aim = target.approach_anchor() + Vector3.UP * 0.2   # the outer branch: the bird lands where its path meets it
+		# The outer branch, aimed a little high: the feet reach forward and down from the flight line, so the
+		# path should meet the branch from level or above (the swoop up from the approach point does that).
+		aim = target.approach_anchor() + Vector3.UP * 0.45
 
 	var desired := (aim - pos).normalized()
 	# A steep bank sheds vertical lift: near the ground, bank gently.

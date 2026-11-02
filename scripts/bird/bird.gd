@@ -26,6 +26,7 @@ const BONK_KEEP := 0.6         ## share of speed kept after a bounce
 const BONK_MIN := 1.0          ## m/s into a surface for a hit to count as a bonk (less is a graze)
 const TURN_RATE := 150.0       ## deg/s a full stick turns a sitting bird
 const AIM_AHEAD := 2.5         ## the landing point is sought along this many catch radii of flight path
+const FLARE_PITCH := 55.0      ## deg, how far the body pitches up mid-landing (the braking flare)
 const TAKEOFF_GRACE := 0.5     ## s after leaving the ground or a perch before touching down counts as landing
 const LEAVE_PASS := 0.35       ## s the bird passes through the tree it just left (it may face along a branch)
 
@@ -44,6 +45,7 @@ var candidate_distance := INF
 var candidate_grip := Vector3.ZERO   ## the candidate's grip point nearest the bird
 var perch_grip := Vector3.ZERO       ## where the feet hold on (landing on / sitting on `perch`)
 var _land_facing := Vector3.FORWARD
+var sit_pitch_deg := 0.0             ## body pitch when perched (+ = upright); set per species
 var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a perch in the last few metres
 var bonks := 0
 var stun := 0.0
@@ -176,27 +178,35 @@ func _update_candidate() -> void:
 		var d := to.length()
 		if d > profile.grab_radius and dir.dot(to / maxf(d, 1e-4)) < 0.5:
 			continue   # behind or off to the side: not where we're headed
-		candidate = p
-		candidate_grip = grip
-		candidate_distance = d
-		candidate_status = p.catch_status(profile, global_position, model.velocity, grip)
-		return
+		var status := p.catch_status(profile, global_position, model.velocity, grip)
+		# The nearest perch ahead is the candidate, unless a further one is actually in reach: that one wins
+		# (a branch just out of reach must not hide the treetop the feet can close on).
+		if candidate == null or (candidate_status == Perch.Catch.OUT_OF_RANGE and status != Perch.Catch.OUT_OF_RANGE):
+			candidate = p
+			candidate_grip = grip
+			candidate_distance = d
+			candidate_status = status
+		if candidate_status != Perch.Catch.OUT_OF_RANGE:
+			return
 
 
 ## Perch assist (auto-flare + a gentle pull onto the perch line) and the arena's soft walls.
 func _apply_assists() -> void:
 	var push := Vector3.ZERO
 	model.flare = 0.0
-	if candidate != null and perch_assist > 0.0 and candidate_distance < 5.0:
+	if candidate != null and perch_assist > 0.0 and candidate_distance < 6.0:
 		var to := candidate_grip - global_position
 		var d := maxf(candidate_distance, 0.01)
-		var near_k := smoothstep(5.0, 1.5, d)
+		var near_k := smoothstep(6.0, 2.5, d)
 		var closing := model.velocity.dot(to / d)
-		var target := profile.grab_speed_max * 0.85
+		var target := profile.grab_speed_max * 0.8
 		if closing > target:
 			model.flare = clampf((closing - target) / (profile.grab_speed_max * 0.5), 0.0, 1.0) * perch_assist * near_k
+		# Steer the flight line onto where the body sits once perched (just above the grip), so the bird
+		# arrives level with or a little above the branch, feet reaching down -- the catch envelope's sweet spot.
 		var dir := model.flight_dir()
-		var lateral := to - dir * to.dot(dir)
+		var to_seat := Perch.seat_at(candidate_grip, profile) - global_position
+		var lateral := to_seat - dir * to_seat.dot(dir)
 		push += lateral * 4.0 * perch_assist * near_k
 	var horiz := Vector2(global_position.x, global_position.z)
 	if horiz.length() > layout.boundary:
@@ -258,7 +268,9 @@ func _begin_landing(p: Perch) -> void:
 	perch_grip = candidate_grip if p == candidate else p.aim_grip(global_position, model.flight_dir(), profile.grab_radius * AIM_AHEAD)
 	_land_facing = p.facing_for(model.velocity)
 	var dist := _land_from.distance_to(Perch.seat_at(perch_grip, profile))
-	_land_dur = clampf(dist / maxf(_land_vel.length(), 1.0) * 1.6, 0.15, 0.45)
+	# Timed from the relative motion: braking evenly from the arrival speed to rest over the distance
+	# takes 2 d / v. Long enough to see the flare, short enough to stay responsive.
+	_land_dur = clampf(2.0 * dist / maxf(_land_vel.length(), 1.0), 0.3, 0.8)
 
 
 func _land(dt: float) -> void:
@@ -272,8 +284,7 @@ func _land(dt: float) -> void:
 	model.velocity = (pos - global_position) / dt if dt > 0.0 else Vector3.ZERO
 	global_position = pos
 	model.position = pos
-	var sit := Basis.looking_at(_land_facing, Vector3.UP)
-	global_basis = _land_from_basis.slerp(sit, smoothstep(0.0, 1.0, s)).orthonormalized()
+	global_basis = _landing_basis(s)
 	model.energy.tick(dt, false, 0.0, true)
 	if s >= 1.0:
 		state = State.PERCHED
@@ -281,6 +292,18 @@ func _land(dt: float) -> void:
 		facing = _land_facing
 		look_pitch = 0.0
 		perched.emit(perch)
+
+
+## The body through a landing: from the flight attitude it turns toward the landing facing and pitches up
+## into the flare (peaking about two-thirds of the way), then settles to the perched posture.
+func _landing_basis(s: float) -> Basis:
+	var flat := Vector3(_land_vel.x, 0.0, _land_vel.z)
+	var from_dir := flat.normalized() if flat.length() > 0.05 else _land_facing
+	var yaw_dir := from_dir.slerp(_land_facing, smoothstep(0.1, 0.85, s)).normalized()
+	var flare := deg_to_rad(FLARE_PITCH) * sin(PI * clampf(s / 0.85, 0.0, 1.0))
+	var pitch := lerpf(flare, deg_to_rad(sit_pitch_deg), smoothstep(0.7, 1.0, s))
+	var target := Basis.looking_at(yaw_dir, Vector3.UP) * Basis(Vector3.RIGHT, pitch)
+	return _land_from_basis.slerp(target.orthonormalized(), smoothstep(0.0, 0.3, s)).orthonormalized() if s < 0.3 else target.orthonormalized()
 
 
 # --- Sitting (perch or ground) -----------------------------------------------------------------

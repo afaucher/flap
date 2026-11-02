@@ -21,8 +21,11 @@ func setup() -> void:
 	var ctl := ScriptedInput.new()
 	var b := _bird(p, ctl)
 	b.perch_assist = 0.0
-	var from := target.position + target.facing * 5.0 + Vector3.UP * 0.3
-	b.fly_from(from, (target.position - from).normalized(), p.grab_speed_max * 0.8)
+	# Coming in from above, aimed a little above the perch: the glide sinks onto it (a path that passes
+	# under a perch can't catch it -- the feet reach forward and down from the flight line, not up).
+	var from := target.position + target.facing * 4.0 + Vector3.UP * 0.6
+	b.fly_from(from, (target.position + Vector3.UP * 0.3 - from).normalized(), p.grab_speed_max * 0.95)
+	ctl.stick = Vector2(0.0, 0.3)   # a little pull holds the slow approach (gliding free, a crow speeds up past catch speed)
 	ctl.catch_hold = true
 	var caught_at := INF
 	for i in 120:
@@ -32,7 +35,7 @@ func setup() -> void:
 		if b.state == Bird.State.PERCHED:
 			break
 	eq(b.state, Bird.State.PERCHED, "holding catch catches")
-	check(caught_at <= p.grab_radius + 0.01 and caught_at > p.grab_radius - 0.5, "caught on entering reach (%.2f m)" % caught_at)
+	check(caught_at <= p.grab_radius * 1.45 and caught_at > p.grab_radius * 0.5, "caught on entering reach (%.2f m)" % caught_at)
 	check(b.global_position.distance_to(Perch.seat_at(b.perch_grip, p)) < 0.01, "seated on its grip point")
 	check(target.distance_to(b.perch_grip) < 1e-4, "the grip point is on the perch")
 	near(b.model.velocity.length(), 0.0, 1e-4, "at rest")
@@ -42,6 +45,7 @@ func setup() -> void:
 
 	# 2. Look around: the stick turns the bird; it takes off (FLAP) the way it faces, with a free wingbeat.
 	ctl.catch_hold = false
+	ctl.stick = Vector2.ZERO
 	var f0 := b.facing
 	ctl.stick = Vector2(1.0, 0.0)
 	await frames(30)
@@ -109,8 +113,8 @@ func setup() -> void:
 	var ctl4 := ScriptedInput.new()
 	var assisted := _bird(p, ctl4)
 	assisted.perch_assist = 1.0
-	var from4 := target.position + target.facing * 7.0 + Vector3.UP * 0.2
-	assisted.fly_from(from4, (target.position - from4).normalized(), p.grab_speed_max * 1.25)
+	var from4 := target.position + target.facing * 7.0 + Vector3.UP * 1.6
+	assisted.fly_from(from4, (target.position + Vector3.UP * 0.8 - from4).normalized(), p.grab_speed_max * 1.25)
 	var assisted_ok := false
 	for i in 90:
 		await frames(1)
@@ -145,7 +149,18 @@ func setup() -> void:
 	check(along.global_position.y < bp.position.y - 0.3, "below the branch")
 	along.queue_free()
 
-	# 8. Rest: perched birds recover stamina.
+	# 8. The catch envelope follows the relative motion: long ahead, nothing behind, barely above the path.
+	var pos := Vector3(0, 10, 0)
+	var vel := Vector3(0, 0, -p.grab_speed_max * 0.8)   # flying toward -Z
+	check(Perch.in_reach(p, pos, vel, pos + Vector3(0, -0.3, -p.grab_radius * 1.2)), "ahead and a little below: in reach")
+	check(not Perch.in_reach(p, pos, vel, pos + Vector3(0, 0, p.grab_radius * 0.5)), "behind: out of reach")
+	check(not Perch.in_reach(p, pos, vel, pos + Vector3(0, p.grab_radius * 0.6, -0.5)), "well above the path: out of reach")
+	check(not Perch.in_reach(p, pos, vel, pos + Vector3(p.grab_radius * 0.9, 0, -0.5)), "far to the side: out of reach")
+	var climbing := Vector3(0, 0.5, -1).normalized() * p.grab_speed_max * 0.8
+	check(Perch.in_reach(p, pos, climbing, pos + Vector3(0, 0.6, -1.2)), "swooping up: a perch above, on the path, is in reach")
+	check(Perch.in_reach(p, pos, Vector3.ZERO, pos + Vector3(0, -0.3, 0.3)), "hovering: a small sphere")
+
+	# 9. Rest: perched birds recover stamina.
 	var ctl5 := ScriptedInput.new()
 	var tired := _bird(p, ctl5)
 	tired.perch_at(target)

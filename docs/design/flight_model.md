@@ -112,7 +112,20 @@ FLYING --settle slowly onto anything flat--> GROUNDED --FLAP--> FLYING (jump up,
 - **Landing point.** The **aim point**: the grip point closest to the bird's line of flight. The path straight ahead is checked out to 2.5 catch radii, and the aim point is where that path passes closest to the branch's grip line (or the treetop's disc). It is the spot you're flying at, not the spot nearest your body.
   - The highlight lights the whole grip line and puts the ring on the aim point.
   - Flying across a branch, you land where your path crosses it.
-- **Catch area.** The aim point must be within `grab_radius` of the bird: 1.5 m for most birds, 1.0 m for the sparrow.
+- **Catch area: an envelope that follows the relative motion** (`Perch.in_reach`), not a sphere. The feet swing forward and down from the flight line, so the envelope's reach depends on direction, where R is `grab_radius` (1.5 m for most birds, 1.0 m for the sparrow):
+
+  | Direction | Reach |
+  |---|---|
+  | Ahead | up to R × (1 + 0.4 × speed / catch speed): a faster bird starts its flare earlier |
+  | Sideways | about 0.55 R, narrowing further out |
+  | Below the flight line | 0.9 R |
+  | Above the flight line | 0.35 R |
+  | Behind | nothing |
+  | Hovering | a small sphere of 0.6 R |
+
+  Above and below are measured from the **flight line**, not the world. A bird swooping up carries itself to a perch above it, but a glide that passes under a perch misses it.
+
+  If a further perch is in reach, it wins over a nearer one that isn't.
 - **Catch speed.** Speed must be ≤ `grab_speed_max` = `grab_speed_factor` × V_stall. That works out to about 6.8 m/s for the crow and 10.6 m/s for the falcon.
   - Every bird's catch speed sits between its stall speed and its best-glide speed. Coming in at glide speed is slightly too fast, so you have to flare a little. That's the skill: dive under the perch and swoop up into it, the way hawks do.
   - The HUD speed tape has a cyan "catch" mark.
@@ -127,7 +140,14 @@ FLYING --settle slowly onto anything flat--> GROUNDED --FLAP--> FLYING (jump up,
   - **Hold to catch:** catch can be held the whole way in.
   - **Tap buffer:** a quick tap stays live for 0.25 s, so a tap a touch early still catches.
   - **Perch assist** (`perch_assist`, default 0.6) works in the last 5 m: it auto-flares when closing faster than 85% of catch speed, and pulls the bird gently onto the perch line.
-- **Transition.** A cubic Hermite blend runs from the bird's position and velocity to the seat at rest over the aim point. Its duration scales with distance over speed, clamped to 0.15–0.45 s. The bird ends up facing **across the branch toward the side it came from**, so its feet wrap the branch. On a treetop it simply faces the way it was flying. The rig spreads the wings forward, fans and drops the tail, and swings the legs forward.
+- **Transition: the flare.** A cubic Hermite blend runs from the bird's position and velocity to rest at the seat over the aim point.
+  - **Timing.** The landing lasts 2 × distance / speed (braking evenly), clamped to 0.3–0.8 s.
+  - **Body.** It pitches up into the flare, peaking at 55° about two-thirds of the way through. Meanwhile it turns to face across the branch toward the side it came from, so its feet wrap the branch. On a treetop it faces the way it was flying. Finally it settles to the perched posture.
+  - **Rig.** Two braking wingbeats with the wings swept forward at a high angle of attack, alula out, tail fanned and pitched down, feet reaching for the grip point. In the last fifth the wings start to fold.
+  - **Perch assist.** It starts 6 m out. It flares when the bird is closing faster than 80% of catch speed, and steers the flight line toward where the body will sit, just above the grip.
+  - **Lift through the flare.** A flaring bird holds its lift near its weight, topped up by up to 1.6 × CL max, so it brakes without dropping. Perching studies see no lift spike and no sag.
+
+  Before/after: `docs/images/landing_before_after.png` (`scenes/landing_reel.tscn`). The rig spreads the wings forward, fans and drops the tail, and swings the legs forward.
 - **Release.**
   - The bird leaves the way it faces at `hop_speed` (2.5–3.5 m/s): about 6° down when it takes off with a flap, 20° down when it lets go.
   - It starts clear of the branch.
