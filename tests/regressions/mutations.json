@@ -13,8 +13,8 @@
    },
    {
     "file": "scripts/bird/bird_rig.gd",
-    "find": "\t\tfold_anchor[i] = elbow + (front - elbow).normalized() * l[1]",
-    "replace": "\t\tfold_anchor[i] = sh + Vector3(s * maxf(_L * 0.155 - shape.shoulder.x, 0.0), 0.0, 0.0) + Vector3(0.0, -0.75, 0.66).normalized() * maxf(absf(l[0] - l[1]) * 1.15, _L * 0.07)"
+    "find": "\t\tfold_anchor[i] = wrist\n",
+    "replace": "\t\tfold_anchor[i] = sh + Vector3(s * maxf(_L * 0.155 - shape.shoulder.x, 0.0), 0.0, 0.0) + Vector3(0.0, -0.75, 0.66).normalized() * maxf(absf(l[0] - l[1]) * 1.15, _L * 0.07)\n"
    }
   ]
  },
