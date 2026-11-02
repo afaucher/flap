@@ -57,7 +57,9 @@ var wing_joints: Array = [[], []]     ## per side: [shoulder, elbow, wrist, hand
 var leg_joints: Array = [[], []]      ## per side: [hip, ankle, foot]
 var head_basis := Basis()
 var fold_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
-static var plain_feathers := false   ## flat-colour feathers, no shader (before/after comparisons)
+## Flat-colour feathers (the default). The feather shader (feather.gdshader) is parked: set this false to
+## try it (rig gallery: --feather-shader). docs/research/feather_rendering.md has its status.
+static var plain_feathers := true
 var feather_material: ShaderMaterial
 var feather_xforms: Array[Transform3D] = []   ## every feather this tick (the MultiMeshes' copy; tests, debug)
 

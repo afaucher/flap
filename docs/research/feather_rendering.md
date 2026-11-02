@@ -49,7 +49,9 @@ So one custom feather shader can do most of it without texture assets.
 
 **Order.** A procedural vane and soft edge first (biggest visual jump), then the anisotropic sheen and backlight, then flutter, then crow iridescence.
 
-## As built (scripts/bird/feather.gdshader)
+## As built (scripts/bird/feather.gdshader). Parked.
+
+**Status:** parked. Side by side, the flat-colour feathers looked better than this first shader pass, so the game uses plain feathers (`BirdRig.plain_feathers = true`). The shader stays in the repo to come back to. Try it with `--feather-shader` in the rig gallery, or by setting `plain_feathers` false.
 
 One spatial shader runs on both feather MultiMeshes:
 - `UV.x` runs -1..1 across the vane, and `UV.y` 0..1 base to tip.
@@ -71,7 +73,7 @@ What it draws:
 
 Body and wing fairings get a soft rim sheen.
 
-Before/after: `docs/images/feathers_before_after.png`. To reproduce it, run `scenes/rig_gallery.tscn` with `--plain-feathers` (before) and without (after); `--time` freezes the flutter.
+Before/after: `docs/images/feathers_before_after.png`. To reproduce it, run `scenes/rig_gallery.tscn` without (before) and with `--feather-shader` (after); `--time` freezes the flutter.
 
 ## Sources
 - [UE-FUR] Unreal forums, "Fur shader": https://forums.unrealengine.com/t/fur-shader/5738/20

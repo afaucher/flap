@@ -1,7 +1,7 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under]
-##       [--only <bird id>] [--sun front|back] [--time <s>] [--plain-feathers] [--shot <png> --shot-after <s>]
+##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--shot <png> --shot-after <s>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots.
 ## glide (default) holds the wings spread; flap animates a wingbeat; folded is the perched pose with feet
@@ -20,7 +20,7 @@ func _ready() -> void:
 		pose = p
 	var view := Boot.arg_value(args, "--view")
 	var only := Boot.arg_value(args, "--only")
-	BirdRig.plain_feathers = args.has("--plain-feathers")
+	BirdRig.plain_feathers = not args.has("--feather-shader")
 	var sun_arg := Boot.arg_value(args, "--sun")
 	var time_arg := Boot.arg_value(args, "--time")
 	if time_arg != "":
