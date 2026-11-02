@@ -1,7 +1,7 @@
 # Flap: combat AI design (draft, 2026-11-02)
 
 A plan for an AI that fights: picks a target, flies for a shot, fires when the shot is good, defends against
-rockets and seekers, and breaks off to rest and rearm on a perch. It builds on the combat range
+rockets and seekers, and breaks off to rest on a perch or fly home to its base to rearm. It builds on the combat range
 (`scripts/combat/`, `.\range.ps1`) and on the flight AI (`scripts/ai/`). Nothing here is built yet.
 
 Read first: `docs/design/flight_model.md` (sections 2, 6 and 8), `docs/design/combat_concepts.html`
@@ -10,6 +10,7 @@ Read first: `docs/design/flight_model.md` (sections 2, 6 and 8), `docs/design/co
 **Decided with the user (2026-11-02):**
 - **Two teams, 3 v 3** for now (player + two AI wingmen against three AI; or 3 AI v 3 AI in tests).
 - A downed bird **respawns at its team's base** (an outpost, section 7).
+- **Ammo restocks only at your own base**; stamina recovers on any perch (section 4.7).
 - Default difficulty is **medium** (the `pilot` preset, section 6).
 - **Ambushing from a perch is a valid tactic** (section 4.7), not only resting.
 - The decision layer is a **Beehave behaviour tree** if a headless spike passes Flap's strict test runner
@@ -142,7 +143,8 @@ behaviour tree composes well, and the sibling projects already use one: `project
 Selector (root)
 ├── Sequence  Defend          [ThreatImminent?] → DefendAgainst(threat)        (rocket sidestep, seeker break, drags)
 ├── Sequence  Recover         [Stunned?] → HoldLevel
-├── Sequence  Rearm           [NeedsRearm?] → Extend → PickSafePerch → LandAndRest
+├── Sequence  Rearm           [OutOfAmmo?] → Extend → FlyHome → LandAndRest
+├── Sequence  Rest            [Tired? or Hurt?] → Extend → PickSafePerch → LandAndRest
 ├── Sequence  Ambush          [StyleAmbushes? and SafePerchWithView?] → PerchAndWatch → DropOnTarget
 ├── Sequence  Support         [TeammateUnderAttack?] → TargetTheAttacker
 ├── Sequence  Fight           [HasTarget?]
@@ -207,7 +209,8 @@ style's preferred height, scanning).
 | **ATTACK** | target inside the current weapon's envelope or about to be | the weapon's pursuit (lead for rockets, pure for a seeker lock), fire control on |
 | **DEFEND** | a threat (4.1) | the defence for that threat (4.6); overrides everything for its duration |
 | **EXTEND** | outmatched (enemy behind me and `ΔE < 0`), or after a missed stoop | unload and run along the clearest line away, flapping, to rebuild speed and height, then re-engage |
-| **REARM** | out of ammo, or stamina < `skill.rest_at`, or 2 hits taken | disengage, pick a safe perch (4.7), sit, rest, rearm, take off |
+| **REARM** | out of ammo | disengage, fly home to the team's base (the only place ammo restocks), land, rearm, take off (4.7) |
+| **REST** | stamina < `skill.rest_at`, or 2 hits taken | disengage, pick a safe perch in reach (the base if it is), rest, take off (4.7) |
 
 These are the branches of the tree in 3.2 (ENGAGE is its Reposition leaf), plus Ambush and Support.
 Each mode has a minimum dwell (0.6 s) and exit hysteresis so the AI doesn't twitch between them. DEFEND has
@@ -287,21 +290,36 @@ Each threat has its own answer; all are flown through `steer()`, so the trees ar
 Defence cost: hard breaks bleed speed and burn burst. The brain counts that: a bird that has just defended
 low and slow goes to EXTEND, not straight back to ATTACK.
 
-### 4.7 Disengage and rest
+### 4.7 Disengage, rest and rearm
 
-REARM when out of ammo, stamina < `skill.rest_at` (default 0.3), or 2 hits taken (one more downs it).
+Ammo is restocked **only at your own team's base** (decided 2026-11-02); stamina recovers on any perch. So
+there are two reasons to leave the fight, with different destinations:
+- **REARM** (ammo): both weapons empty, or one empty and the other down to its last round with no good shot
+  coming. Destination: the team's base rail perch.
+- **REST** (stamina): stamina < `skill.rest_at` (default 0.3), or 2 hits taken (one more downs it), with
+  ammo left. Destination: the safest perch in reach, or the base if it is in reach anyway (rest and top up
+  in one stop).
+
+Both run the same way:
 - **Leave**: EXTEND first, away from every enemy's nose, until no enemy has ATA < 45° on it within 30 m.
-- **Pick a perch** with `AIPilot`'s reach rule (glide + climb budget), scored also by safety: far from
-  enemies, not on their side, and screened by trunks (no line of sight from them).
-- **Sit** for `Launcher.RESTOCK_TIME` (2 s) and until stamina is back above 0.5 (`AIPilot` already waits for
-  that).
+- **Route**: to the base, `FlightPlanner` plans the whole trip (it may be across the wood), and the energy
+  check is the same glide + climb budget `AIPilot` uses; a bird that can't reach the base on its energy
+  rests on a safe perch on the way first.
+- **Pick a rest perch** with `AIPilot`'s reach rule, scored also by safety: far from enemies, not on their
+  side, and screened by trunks (no line of sight from them).
+- **Sit** for `Launcher.RESTOCK_TIME` (2 s, at the base) and until stamina is back above 0.5 (`AIPilot`
+  already waits for that).
+- **Ammo is the fight's clock**: with base-only rearming, the brain rations harder the further it is from
+  base (`min_quality` rises with the trip length), and a team keeps track of who is heading home
+  (`TeamBoard`), so the base is a place enemies will look for birds coming in slow to land.
 - **Perched is vulnerable**: if an enemy within 35 m turns its nose on the perch, drop off early
   (diving off gives speed at once) and fight or EXTEND.
 
 **Ambush** (the tree's Ambush branch; mainly the owl's style, open to any bird the style allows):
 - Pick a perch high above where enemies are flying, screened from them by trunks, with a clear dive lane
   below (`segment_clear` from the perch to a point under it).
-- Sit and watch. A perched bird rests and rearms too, so ambushing is never wasted time.
+- Sit and watch. A perched bird recovers stamina, so ambushing is never wasted time (it rearms only if the
+  perch is its own base, which makes the base itself a good ambush spot against raiders).
 - Drop when an enemy passes inside the dive envelope: below, within ~25 m, crossing or going away (AA <
   90°), and not looking at the perch. The drop is a stoop onto its tail: ATTACK with rockets, or a seeker
   lock built on the way down.
@@ -318,7 +336,11 @@ delayed and blurred like the AI's own memory).
   within 50 m that isn't defending.
 - **Pairs**: by default two members fly as a pair (leader and wingman: the wingman holds a slot 10-15 m
   behind and above, takes the leader's attacker) and one free; each team's style mix decides who leads.
-- **Rearm in turns**: two members don't go to rest at once unless both must.
+- **Rearm in turns**: two members don't go home or to rest at once unless both must; a member flying home
+  low on ammo is escorted by its pair if the other is free.
+- **Base watch**: enemies landing at the base are slow and predictable; a member resting or rearming there
+  defends it (drops off onto an attacker), and an attacking team's style may send one bird to catch birds
+  flying home.
 - With the player on a team, the AI teammates treat the player's bird like any member (reading its target
   from the launcher's bracket); they don't take orders yet.
 
@@ -372,6 +394,9 @@ Every knob degrades a perfect pilot; 0 / the "off" value is the honest maximum. 
    per team: an outpost (`ArenaLayout.outposts`, which the pine wood places on pines and oaks) chosen at the
    start as far apart as the layout allows. `downed` → the scene respawns the bird on its base's rail perch
    after the down stun. The HUD's tally becomes a team score.
+   **Base-only rearming**: `Launcher` restocks only while perched on its team's base perch (a
+   `rearm_perch` id set by the scene; unset keeps today's any-perch rule, so the old range and its tests
+   are unchanged). The player gets the same rule, and the HUD shows the way home when ammo is out.
 4. **A team match in the range**: `--match` mode in `combat_range.gd`
    (`.\range.ps1 -Match -Skill pilot [-Team crow,hawk,sparrow -Enemy falcon,owl,crow]`): you and two AI
    wingmen against three AI, in place of the racetrack target. `--duel` (1 v 1) stays for tuning.
@@ -400,8 +425,8 @@ bases. Every one is also run **mirrored left/right**, and team matches with the 
   sides) and the species order against seekers holds: sparrow survives more than crow, crow more than hawk.
   Tree drag: with a trunk alongside, the seeker bursts on the trunk.
 - `test_combat_ai.gd` (~60 s of sim): a pilot-skill AI downs a non-evading racetrack target within 40 s; it
-  lands more hits on the evading target than today's `--demo` chase does; it goes to REARM when empty,
-  perches, rearms and re-engages; bonks per minute in combat stay within `test_ai_flight`'s per-perch budget.
+  lands more hits on the evading target than today's `--demo` chase does; when empty it flies home, lands on
+  its base, rearms and re-engages, and a perch that isn't its base doesn't rearm it; bonks per minute in combat stay within `test_ai_flight`'s per-perch budget.
 - `test_combat_team.gd` (~90 s of sim, 3 v 3 pilot v pilot): both teams score kills; downed birds respawn
   on their base and rejoin; no two members chase the same target for more than a few seconds unless it's
   attacking one of them; friendly hits stay rare (under 1 in 20 hits).
@@ -435,7 +460,8 @@ birds in a 3 v 3 (`docs/design/performance.md`).
    pursuit (lead, pure, lag), new `AICombat` fire control; range `--duel`. Tests: geometry, fire control.
 3. **Defence**: the Defend branch against rockets, seekers, locks and tails, tree and gimbal drag. Test:
    defence.
-4. **Energy, rest and ambush**: yo-yos, stoops and zooms by style, Extend, Rearm on a safe perch, Ambush.
+4. **Energy, rest and ambush**: yo-yos, stoops and zooms by style, Extend, Rest on a safe perch, Rearm at
+   the base, Ambush.
    Test: combat AI.
 5. **Teams (3 v 3)**: `TeamBoard`, target spread, support, pairs; respawn at base; range `--match`. Test:
    team.
@@ -445,8 +471,6 @@ birds in a 3 v 3 (`docs/design/performance.md`).
 
 ## 10. Open questions
 
-- **Rearming**: any perch (today), or only your own base (the launcher's "later: outposts only", and the
-  concept sheet's nest)? Base-only makes the base worth defending and raiding, and makes Rearm a longer trip.
 - **Bases**: just a respawn and rearm point, or something to attack (a win condition), or a team score from
   kills only?
 - **Your AI wingmen**: should they take simple orders (attack my target, cover me) later, or always fly on
