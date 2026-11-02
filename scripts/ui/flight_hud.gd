@@ -29,6 +29,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_font = ThemeDB.fallback_font
+	add_child(BuildVersion.make_label(true))   # (which build: for playtest reports, screenshots and recordings)
 
 
 func set_state(state: Dictionary) -> void:

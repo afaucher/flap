@@ -382,6 +382,7 @@ func _pick_scenario(i: int) -> void:
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	layer.add_child(BuildVersion.make_label())
 	var panel := PanelContainer.new()
 	panel.position = Vector2(12, 12)
 	panel.custom_minimum_size = Vector2(300, 0)
