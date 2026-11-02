@@ -6,9 +6,10 @@ extends Node3D
 ## rig, flown by a LabPilot through the player's controls.
 ##   .\run.ps1 --scene res://scenes/bird_lab.tscn [--bird <id>] [--scenario <id>] [--speed <0.05..1>] [--onion]
 ##       [--view side|front|three|top|chase] [--dist <m>] [--pause-at <sim s>] [--bones | --bones-only]
-##       [--shot <png> --shot-after <real s>]
+##       [--shot <png> --shot-after <real s>] [--no-rider]
 ## Keys: 1-5 bird, Up/Down scenario, Space pause, . step, R restart, -/= speed, O onion skin, F follow,
-##       V next view, T trail, B bones (off / over the bird / bones only); drag to orbit, wheel to zoom.
+##       V next view, T trail, B bones (off / over the bird / bones only), K rider; drag to orbit, wheel to zoom.
+## Crows, falcons and hawks carry their war tack and rider (Tack), as in the game.
 ## Bones (BoneView): every bone and joint of the rig as it was solved, drawn on top -- the shoulder, elbow,
 ## wrist, hip, knee, ankle, the neck's joints, head and tail, coloured by chain.
 
@@ -36,6 +37,8 @@ var bird_id := "crow"
 var scenario: Dictionary = LabScenarios.LIST[0]
 var speed := 0.5
 var onion := false
+var rider := true             ## the war tack and rider on species that carry them
+var _tack: Tack
 var follow := true
 var trail_on := true
 var loop := true
@@ -68,6 +71,7 @@ var _speed_slider: HSlider
 var _speed_label: Label
 var _readout: Label
 var _onion_box: CheckBox
+var _rider_box: CheckBox
 var _neck_slider: HSlider
 var _fluff_slider: HSlider
 
@@ -86,6 +90,7 @@ func _ready() -> void:
 	if Boot.arg_value(args, "--pause-at") != "":
 		pause_at = float(Boot.arg_value(args, "--pause-at"))
 	onion = args.has("--onion")
+	rider = not args.has("--no-rider")
 	if Boot.arg_value(args, "--dist") != "":
 		_dist_arg = float(Boot.arg_value(args, "--dist"))
 	bones = 2 if args.has("--bones-only") else (1 if args.has("--bones") else 0)
@@ -142,6 +147,7 @@ func restart() -> void:
 	_ended_at = -1.0
 	_trail.clear()
 	_clear_ghosts()
+	_tack = null
 	if bird != null:
 		bird.queue_free()
 		bird = null
@@ -156,6 +162,9 @@ func restart() -> void:
 		var aim := LabScenarios.aim_point(layout.perches[0])
 		pose_rig.position = Perch.seat_at(aim, p) if scenario.pose == "folded" else aim + Vector3(0.0, 0.5, -1.2)
 		_pose_tick()
+		if Tack.RIDDEN.has(p.id):
+			_tack = Tack.fit(pose_rig)
+			_tack.sitting = scenario.pose == "folded"
 	else:
 		bird = Bird.new()
 		bird.name = "LabBird"
@@ -163,6 +172,10 @@ func restart() -> void:
 		bird.setup(p, layout, null)
 		bird.arena = arena
 		pilot = LabScenarios.start(scenario, bird, layout)
+		if Tack.RIDDEN.has(p.id):
+			_tack = Tack.fit(bird.rig, bird)
+	if _tack != null and is_instance_valid(_tack):
+		_tack.visible = rider
 	_dist = _dist_arg if _dist_arg > 0.0 else maxf(1.2, p.span * 2.6)
 	_focus = _target_point()
 	_sync_ui()
@@ -314,6 +327,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_PERIOD: step()
 			KEY_R: restart()
 			KEY_O: _set_onion(not onion)
+			KEY_K: _set_rider(not rider)
 			KEY_F: follow = not follow
 			KEY_T: trail_on = not trail_on
 			KEY_B: bones = (bones + 1) % 3
@@ -336,6 +350,13 @@ func _toggle_pause() -> void:
 func _set_speed(v: float) -> void:
 	speed = clampf(v, 0.05, 1.0)
 	Engine.time_scale = speed
+	_sync_ui()
+
+
+func _set_rider(on: bool) -> void:
+	rider = on
+	if _tack != null and is_instance_valid(_tack):
+		_tack.visible = on
 	_sync_ui()
 
 
@@ -405,6 +426,7 @@ func _build_ui() -> void:
 	_speed_slider.value_changed.connect(_set_speed)
 	box.add_child(_speed_slider)
 	_onion_box = _check(box, "Onion skin (ghosts)", onion, _set_onion)
+	_rider_box = _check(box, "Rider and tack (crow, falcon, hawk)", rider, _set_rider)
 	_check(box, "Camera follows the bird", follow, func(on: bool) -> void: follow = on)
 	_check(box, "Flight path trail", trail_on, func(on: bool) -> void: trail_on = on)
 	_check(box, "Loop", loop, func(on: bool) -> void: loop = on)
@@ -469,3 +491,4 @@ func _sync_ui() -> void:
 	_speed_slider.set_value_no_signal(speed)
 	_speed_label.text = "Speed x%.2f" % speed
 	_onion_box.set_pressed_no_signal(onion)
+	_rider_box.set_pressed_no_signal(rider)

@@ -6,7 +6,8 @@ extends TestCase
 ## rider rides the seat in a racer's tuck in flight (knees into the tank, feet on the side pegs) and stands upright on the footrest perched, knees hinging like knees
 ## (bent forward, within a human range) left and right, hands within reach of the grips; on a shallow perch
 ## (the crow) the rider kneels up instead of standing; the owl and the sparrow carry none; the launcher points
-## along the body and shows the rounds left. The rider's head: the helmet sits snugly on the skull and leaves the
+## each side of the rider (outboard of their limbs, clear of the bird), their lines of fire over the bird's head;
+## loadouts and tilt do what they say; the pods show the rounds left. The rider's head: the helmet sits snugly on the skull and leaves the
 ## face open; the face has a nose and eyes under a brow; the goggles sit on the face, or raised on the helmet.
 
 
@@ -30,7 +31,8 @@ func setup() -> void:
 			_head(id, pose, rig, tack)
 			_goggles(id, pose, tack)
 		_wings(id, rig, tack)
-		_launcher(id, tack)
+		_launcher(id, rig, tack)
+		_loadouts(id, rig)
 		_head_shape(id, tack)
 		rig.queue_free()
 		await frames(1)
@@ -267,17 +269,91 @@ func _head(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
 	eq(hits, 0, "%s %s: the head clears the launcher and the rider" % [id, pose])
 
 
-func _launcher(id: String, tack: Tack) -> void:
-	var s := tack.saddle
-	var axis := (s.muzzle - s.launcher_xf.origin).normalized()
-	check(axis.angle_to(Vector3.FORWARD) < deg_to_rad(5.0), "%s: the launcher points along the body" % id)
-	tack.set_ammo(4, 1)
+func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
+	var sv := tack.saddle
+	var sc := sv.scale.x
+	var k := 1.0 / sv.cm
+	RigPoses.apply(rig, "glide", 0.0)
+	tack.sitting = false
+	tack.update(0.0)
+	# A mount each side, outboard of the rider's limbs, its pod clear of the bird's body.
+	for i in 2:
+		var m: Dictionary = sv.mounts[i]
+		var piv := (m.pivot as Transform3D).origin * sc
+		var s := -1.0 if i == 0 else 1.0
+		check(piv.x * s > 0.0, "%s: mount %d on its side" % [id, i])
+		var half: float = (10.5 if m.kind == "rockets" else 8.5) * k * sc
+		var axis1: Vector3 = (m.muzzles as Array)[0] * sc
+		for key in tack.rider.joints:
+			var j: Vector3 = tack.rider.joints[key]
+			var q := Geometry3D.get_closest_point_to_segment(j, piv, axis1)
+			check(j.distance_to(q) > half + 3.0 * k, "%s: the rider's %s clears mount %d (%.1f real cm)" % [id, key, i, (j.distance_to(q) - half) * sv.cm])
+		var low := INF
+		for u in 9:
+			low = minf(low, rig.body.gap(piv.lerp(axis1, u / 8.0)))
+		check(low > half, "%s: mount %d's pod clears the bird's body" % [id, i])
+	# Every round's line of fire passes over the bird's head (as the rig carries it gliding), along the body's
+	# axis and along a flight path 4 deg below it.
+	var hc: Vector3 = rig.neck_joints[3] + rig.head_offset
+	var hr: float = rig.body.head_r
+	for kind in Saddle.POD_KINDS:
+		for r in tack.capacity(kind):
+			var mz := sv.round_muzzle(kind, r) * sc
+			for down in [0.0, 4.0]:
+				var d := Basis(Vector3.RIGHT, -deg_to_rad(down)) * Vector3.FORWARD
+				var rel := hc - mz
+				var miss := (rel - d * rel.dot(d)).length() - hr
+				check(rel.dot(d) <= 0.0 or miss > 0.2 * hr, "%s: %s round %d's line of fire (%.0f deg down) clears the head (%.2f cm)" % [id, kind, r, down, miss * 100.0])
+	# The pods show what's left (the default loadout: three rockets left, two seekers right); firing hides the
+	# last first, and the one hidden is the round by that muzzle.
+	eq(tack.capacity("rockets"), 3, "%s: a rocket pod holds three" % id)
+	eq(tack.capacity("seekers"), 2, "%s: a seeker rail holds two" % id)
+	tack.set_ammo(2, 1)
 	var shown := 0
-	for r in s.rockets:
-		shown += int(r.visible)
-	eq(shown, 4, "%s: rockets left show in their tubes" % id)
+	for rr in sv.rockets:
+		shown += int(rr.visible)
+	eq(shown, 2, "%s: rockets left show in their tubes" % id)
+	var gone: MeshInstance3D = sv.rockets[2]
+	var nearest := -1
+	var best := INF
+	for r in tack.capacity("rockets"):
+		var d := _mesh_centre(gone).distance_to(sv.round_muzzle("rockets", r))
+		if d < best:
+			best = d
+			nearest = r
+	check(not gone.visible and nearest == 2, "%s: the round hidden is the one whose muzzle fires next" % id)
 	shown = 0
-	for k in s.seekers:
-		shown += int(k.visible)
-	eq(shown, 1, "%s: seekers left show on the rack" % id)
-	eq(s.rockets.size(), 6, "%s: six tubes" % id)
+	for q in sv.seekers:
+		shown += int(q.visible)
+	eq(shown, 1, "%s: seekers left show on the rail" % id)
+	tack.set_ammo(3, 2)
+
+
+## Loadouts (a pod each side: rockets or seekers) and tilt, on fresh tack: what's carried adds up, each round
+## leaves from its own side, and the trunnion's tilt is the pod's measured pitch -- 0 and 8 deg, both sides.
+func _loadouts(id: String, rig: BirdRig) -> void:
+	for lo in [["rockets", "rockets"], ["seekers", "seekers"], ["seekers", "rockets"]]:
+		var pods: Array[String] = [lo[0], lo[1]]
+		var t := Tack.fit(rig, null, pods)
+		var n := {"rockets": 0, "seekers": 0}
+		for p in pods:
+			n[p] += int(Saddle.POD_ROUNDS[p])
+		eq(t.capacity("rockets"), int(n.rockets), "%s %s: rockets carried" % [id, str(lo)])
+		eq(t.capacity("seekers"), int(n.seekers), "%s %s: seekers carried" % [id, str(lo)])
+		for kind in Saddle.POD_KINDS:
+			for r in t.capacity(kind):
+				var mr: Array = t.saddle.round_order[kind][r]
+				var side: float = t.saddle.mounts[mr[0]].side
+				check(t.saddle.round_muzzle(kind, r).x * side > 0.0, "%s %s: %s round %d leaves from its own side" % [id, str(lo), kind, r])
+		t.free()
+	for tilt in [0.0, 8.0]:
+		var t := Tack.fit(rig, null, [], tilt)
+		for m in t.saddle.mounts:
+			var ax: Vector3 = (m.pivot as Transform3D).basis * Vector3.FORWARD   # (the frame the pod is built in)
+			var pitch := rad_to_deg(atan2(ax.y, -ax.z))
+			check(absf(pitch - tilt) < 0.5, "%s: tilt %.0f deg sets the pod's pitch (%.1f, side %d)" % [id, tilt, pitch, int(m.side)])
+		t.free()
+
+
+func _mesh_centre(mi: MeshInstance3D) -> Vector3:
+	return mi.transform * mi.mesh.get_aabb().get_center()

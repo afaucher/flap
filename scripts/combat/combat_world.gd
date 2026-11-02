@@ -227,7 +227,9 @@ func _draw_bodies() -> void:
 		mi.material_override = _brass if p.kind == Projectile.Kind.ROCKET else _red
 		var d := p.vel.normalized() if p.vel.length() > 0.1 else Vector3.FORWARD
 		var side := d.cross(Vector3.UP if absf(d.y) < 0.95 else Vector3.RIGHT).normalized()
-		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)), p.pos)   # capsule's long axis is Y
+		# (leaving the pod it's drawn at its true size, a few cm, growing to the readable size over its first metres)
+		var grow := lerpf(0.16 if p.kind == Projectile.Kind.ROCKET else 0.1, 1.0, smoothstep(0.0, 4.0, p.travelled))
+		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)).scaled(Vector3.ONE * grow), p.pos)   # capsule's long axis is Y
 
 
 ## Smoke ribbons: each trail's points as a camera-facing strip that widens and fades with age.
@@ -255,13 +257,14 @@ func _draw_smoke(eye: Vector3) -> void:
 			if seg.length() < 1e-4:
 				continue
 			var side := seg.cross(eye - b).normalized()
-			var wa := 0.03 + 0.18 * minf(age_a / SMOKE_LIFE, 1.0)
-			var wb := 0.03 + 0.18 * minf(age_b / SMOKE_LIFE, 1.0)
+			var wa := _smoke_w(age_a)
+			var wb := _smoke_w(age_b)
 			var ca := _smoke_col(age_a, seeker)
 			var cb := _smoke_col(age_b, seeker)
-			# Smoke right by the camera (your own launch) would fill the screen: fade it out up close.
-			ca.a *= smoothstep(1.5, 6.0, eye.distance_to(a))
-			cb.a *= smoothstep(1.5, 6.0, eye.distance_to(b))
+			# Smoke right by the camera would fill the screen: fade it out up close (your own launch is thin
+			# enough to show from the chase camera).
+			ca.a *= smoothstep(0.3, 1.5, eye.distance_to(a))
+			cb.a *= smoothstep(0.3, 1.5, eye.distance_to(b))
 			if ca.a < 0.01 and cb.a < 0.01:
 				continue
 			if not started:
@@ -270,6 +273,12 @@ func _draw_smoke(eye: Vector3) -> void:
 			_quad(_smoke_mesh, a - side * wa, a + side * wa, b + side * wb, b - side * wb, ca, ca, cb, cb)
 	if started:
 		_smoke_mesh.surface_end()
+
+
+## A trail's half width at `age` s: a thread at the pod's mouth, puffing out over the first moments, then
+## spreading as it hangs.
+func _smoke_w(age: float) -> float:
+	return 0.004 + 0.026 * smoothstep(0.0, 0.2, age) + 0.18 * minf(age / SMOKE_LIFE, 1.0)
 
 
 func _smoke_col(age: float, seeker: bool) -> Color:

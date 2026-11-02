@@ -118,7 +118,7 @@ func _rack(l: Launcher) -> void:
 		var sel := l.weapon == w
 		var y := base.y + i * 24
 		_text(Vector2(base.x, y + 13), rows[i][1], INK if sel else DIM, 13)
-		var n := int(Launcher.AMMO[w])
+		var n := int(l.capacity[w])
 		for k in n:
 			var r := Rect2(base.x + 80 + k * 18, y + 1, 12, 14)
 			if k < int(l.ammo[w]):

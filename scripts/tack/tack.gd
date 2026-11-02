@@ -3,8 +3,9 @@ extends Node3D
 ## A bird's war tack: the Saddle (with its harness and launcher) and its Rider, fitted to one BirdRig and
 ## riding on it (a child of the rig, so rig space). Reads only the rig's pose and, when it has one, the Bird's
 ## state and velocity: visual only, like the rig.
-##   var tack := Tack.fit(bird.rig, bird)      # or Tack.fit(rig) in a gallery, setting `sitting` / `wind`
+##   var tack := Tack.fit(bird.rig, bird, ["rockets", "seekers"])   # or Tack.fit(rig) in a gallery, setting `sitting` / `wind`
 ##   tack.set_ammo(rockets, seekers)
+##   tack.muzzle_world("rockets", i)   # where round i leaves from
 
 const RIDER_HEIGHT := 0.075   ## m: a 1.75 m man at 1:23
 ## Species that can carry it. Not the owl: its big head sits right over its shoulders, where the launcher goes
@@ -20,14 +21,14 @@ var sitting := false          ## without a Bird: perched (the rider stands)
 var wind := Vector3.ZERO      ## without a Bird: the airflow over it, rig space
 
 
-static func fit(r: BirdRig, b: Bird = null) -> Tack:
+static func fit(r: BirdRig, b: Bird = null, pods: Array = [], tilt := Saddle.DEFAULT_TILT) -> Tack:
 	var t := Tack.new()
 	t.name = "Tack"
 	t.rig = r
 	t.bird = b
 	t.saddle = Saddle.new()
 	t.saddle.name = "Saddle"
-	t.saddle.build(r, RIDER_HEIGHT)
+	t.saddle.build(r, RIDER_HEIGHT, pods, tilt)
 	t.add_child(t.saddle)
 	t.rider = Rider.new()
 	t.rider.name = "Rider"
@@ -40,6 +41,16 @@ static func fit(r: BirdRig, b: Bird = null) -> Tack:
 
 func set_ammo(rockets: int, seekers: int) -> void:
 	saddle.set_ammo(rockets, seekers)
+
+
+## Rounds the mounts hold of `kind` ("rockets" / "seekers").
+func capacity(kind: String) -> int:
+	return saddle.capacity(kind)
+
+
+## Where round `i` of `kind` (in firing order) leaves from, world space.
+func muzzle_world(kind: String, i: int) -> Vector3:
+	return saddle.global_transform * saddle.round_muzzle(kind, i)
 
 
 func _process(dt: float) -> void:

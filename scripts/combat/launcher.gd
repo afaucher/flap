@@ -21,7 +21,11 @@ const RESTOCK_TIME := 2.0     ## s perched to rearm
 var bird: Bird
 var controller: Object = null   ## has sample(launcher: Launcher, dt: float) -> CombatInput
 var weapon := Weapon.ROCKETS
+var capacity := AMMO.duplicate()   ## rounds when full: AMMO, or what the bird's mounts carry (set_mounts)
 var ammo := AMMO.duplicate()
+## Where round i of a weapon leaves from, world space: Callable(weapon: int, i: int) -> Vector3 (the saddle's
+## pods: Tack.muzzle_world). Unset: muzzle().
+var mount := Callable()
 var lock_target: Bird = null
 var lock := 0.0               ## 0..1 lock progress on lock_target
 var cooldown := 0.0
@@ -44,6 +48,16 @@ func muzzle() -> Vector3:
 	return bird.global_position + aim() * bird.profile.body_length * 0.6 + Vector3.UP * bird.profile.body_length * 0.1
 
 
+## Arm from the bird's mounts: `rockets` / `seekers` rounds when full (0: none of that weapon), each fired
+## from where `at` says.
+func set_mounts(rockets: int, seekers: int, at: Callable) -> void:
+	capacity = {Weapon.ROCKETS: rockets, Weapon.SEEKERS: seekers}
+	ammo = capacity.duplicate()
+	mount = at
+	if int(capacity[weapon]) == 0 and int(capacity[Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS]) > 0:
+		weapon = Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
+
+
 func locked() -> bool:
 	return lock_target != null and lock >= 1.0
 
@@ -60,7 +74,7 @@ func step(dt: float, world: CombatWorld) -> void:
 	if bird.state == Bird.State.PERCHED:
 		_perched += dt
 		if _perched >= RESTOCK_TIME:
-			ammo = AMMO.duplicate()
+			ammo = capacity.duplicate()
 	else:
 		_perched = 0.0
 	var want := inp.fire_pressed or (weapon == Weapon.ROCKETS and inp.fire_held)
@@ -73,7 +87,8 @@ func fire(world: CombatWorld) -> Projectile:
 	cooldown = float(COOLDOWN[weapon])
 	shots += 1
 	var k := Projectile.Kind.ROCKET if weapon == Weapon.ROCKETS else Projectile.Kind.SEEKER
-	var p := Projectile.launch(k, muzzle(), bird.model.velocity, aim(), bird, lock_target if locked() else null)
+	var from: Vector3 = mount.call(weapon, int(ammo[weapon])) if mount.is_valid() else muzzle()   # (the round just gone)
+	var p := Projectile.launch(k, from, bird.model.velocity, aim(), bird, lock_target if locked() else null)
 	world.spawn(p)
 	return p
 

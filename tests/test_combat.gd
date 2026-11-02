@@ -3,7 +3,8 @@ extends TestCase
 ## life; fuses arm only after ARM metres and fire at the closest approach; seekers steer toward a crossing
 ## target (left and right) no faster than their turn cap and drop a target outside their gimbal, while an
 ## unguided rocket at the same target misses; the launcher locks only inside its cone and range, spends ammo,
-## switches weapon and rearms on a perch; a hit stuns, shoves and counts, and enough hits down a bird; the
+## switches weapon and rearms on a perch; with the tack, each round leaves from its own tube and the pods set
+## what it carries; a hit stuns, shoves and counts, and enough hits down a bird; the
 ## range scene's demo shooter lands hits on an evading target.
 
 
@@ -24,6 +25,7 @@ func setup() -> void:
 	await _fuses()
 	await _seekers()
 	await _launcher()
+	await _mounted()
 	await _hits()
 	await _range()
 	finish()
@@ -155,6 +157,40 @@ func _launcher() -> void:
 	await frames(int(Launcher.RESTOCK_TIME * 60) + 5)
 	eq(int(l2.ammo[Launcher.Weapon.ROCKETS]), int(Launcher.AMMO[Launcher.Weapon.ROCKETS]), "sitting on a perch rearms")
 	for b in [pr2[0], pr2[1]]:
+		b.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
+## A crow with the tack and two rocket pods: six rockets, no seekers; each leaves from the tube it sat in, on
+## the bird's back (not ahead of its beak), the pods taking turns; a perch rearms to what the pods hold.
+func _mounted() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var pr := _pair(world, layout, Vector3(0, 0, 20))
+	var a: Bird = pr[0]
+	var l: Launcher = pr[2]
+	var pods: Array[String] = ["rockets", "rockets"]
+	var t := Tack.fit(a.rig, a, pods)
+	l.set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world("rockets" if w == Launcher.Weapon.ROCKETS else "seekers", i))
+	await frames(2)
+	eq(int(l.ammo[Launcher.Weapon.ROCKETS]), 6, "two rocket pods: six rockets")
+	eq(int(l.ammo[Launcher.Weapon.SEEKERS]), 0, "two rocket pods: no seekers")
+	var sides := []
+	for shot in 2:
+		var want := t.muzzle_world("rockets", int(l.ammo[Launcher.Weapon.ROCKETS]) - 1)
+		var p := l.fire(world)
+		check(p.pos.distance_to(want) < 1e-4, "rocket %d leaves from its tube's mouth" % shot)
+		check(p.pos.distance_to(a.global_position) < a.profile.body_length * 0.4, "rocket %d leaves from the bird's back, not ahead of its beak" % shot)
+		sides.append(signf((a.global_transform.affine_inverse() * p.pos).x))
+	check(sides[0] != sides[1], "the pods take turns, one side then the other")
+	l.ammo[Launcher.Weapon.ROCKETS] = 0
+	a.perch_at(layout.perches[0])
+	await frames(int(Launcher.RESTOCK_TIME * 60) + 5)
+	eq(int(l.ammo[Launcher.Weapon.ROCKETS]), 6, "a perch rearms to what the pods hold")
+	for b in [pr[0], pr[1]]:
+		world.remove_bird(b)
 		b.queue_free()
 	world.queue_free()
 	await frames(1)

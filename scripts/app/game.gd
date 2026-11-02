@@ -59,6 +59,8 @@ func _ready() -> void:
 		add_child(b)
 		b.setup(BirdProfile.by_id(pid), layout, pilot)
 		b.arena = arena
+		if Tack.RIDDEN.has(pid):
+			Tack.fit(b.rig, b)
 		b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
 		ai_birds.append(b)
 
@@ -111,6 +113,8 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	add_child(bird)
 	bird.setup(BirdProfile.by_id(pid), layout, autopilot if use_autopilot else player)
 	bird.arena = arena
+	if Tack.RIDDEN.has(pid):
+		Tack.fit(bird.rig, bird)   # (crows, falcons and hawks carry a rider and the war tack)
 	bird.perch_at(at)
 	camera.bird = bird
 	camera.snap()

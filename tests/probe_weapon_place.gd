@@ -1,7 +1,7 @@
 extends TestCase
 ## Diagnostic: where each species' launcher is drawn (rig space, the glide pose) against where the combat code
 ## fires from (Launcher.muzzle: 0.6 L ahead of the bird's middle, 0.1 L up), and whether the line of fire
-## from the drawn muzzle clears the bird's head. Units: cm.
+## from the first rocket muzzle clears the bird's head. Units: cm.
 
 func setup() -> void:
 	for id in BirdProfile.IDS:
@@ -19,13 +19,16 @@ func setup() -> void:
 			var tack := Tack.fit(rig)
 			tack.update(0.0)
 			var sc := tack.saddle.scale.x
-			var base := tack.saddle.launcher_xf.origin * sc
-			var mz := tack.saddle.muzzle * sc
-			# the line of fire from the drawn muzzle, forward along -Z: how far it passes from the head's middle
+			var base := (tack.saddle.mounts[0].pivot as Transform3D).origin * sc
+			var mz := tack.saddle.round_muzzle("rockets", 0) * sc
+			var back := tack.saddle.at(Saddle.MOUNT_X, 0.0, Saddle.MOUNT_Z) * sc
+			line += "
+         mount pivot height over the back %.1f cm, over the spine's seat %.1f cm" % [(base.y - back.y) * 100, (base.y - tack.saddle.seat_point.y * sc) * 100]
+			# the line of fire from the first rocket muzzle, forward along -Z: how far it passes from the head's middle
 			var t := maxf(-(hc.z - mz.z), 0.0)
 			var rel := hc - mz
 			var miss := Vector2(rel.x, rel.y).length() - hr
-			line += "\n         drawn base (%.1f, %.1f, %.1f)  drawn muzzle (%.1f, %.1f, %.1f)  muzzle->combat %.1f  fire line passes the head with %.1f cm to spare%s" % [base.x * 100, base.y * 100, base.z * 100, mz.x * 100, mz.y * 100, mz.z * 100, mz.distance_to(combat) * 100, miss * 100, " (head ahead of the muzzle)" if hc.z < mz.z else " (muzzle ahead of the head)"]
+			line += "\n         left pivot (%.1f, %.1f, %.1f)  first rocket muzzle (%.1f, %.1f, %.1f)  muzzle->combat %.1f  fire line passes the head with %.1f cm to spare%s" % [base.x * 100, base.y * 100, base.z * 100, mz.x * 100, mz.y * 100, mz.z * 100, mz.distance_to(combat) * 100, miss * 100, " (head ahead of the muzzle)" if hc.z < mz.z else " (muzzle ahead of the head)"]
 		print(line)
 		rig.queue_free()
 		await frames(1)

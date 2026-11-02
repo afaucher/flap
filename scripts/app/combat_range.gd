@@ -5,6 +5,10 @@ extends Node3D
 ## it comes back a moment later. The target flies a racetrack above the clearing: straights long enough to lock,
 ## turns that break it. Sit on any perch for two seconds to rearm.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
+##       [--loadout rockets,seekers]
+## Crows, falcons and hawks carry the war tack: a pod each side of the rider (--loadout: left,right, each
+## "rockets" -- three -- or "seekers" -- two), and each round leaves from its own tube. Other birds fire from
+## ahead of the beak with the full AMMO.
 ## --demo flies your bird for you (chasing the target and firing), for screenshots and the test.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
 ## T target evasion on/off, R restart, Esc release the mouse.
@@ -29,6 +33,8 @@ var bird_id := "crow"
 var target_id := "crow"
 var start_seekers := false
 var evade := true            ## the target breaks when locked or shot at (T toggles)
+var loadout: Array = []      ## the pods, left and right (empty: Saddle.DEFAULT_LOADOUT)
+var tacks := {}              ## Bird -> Tack
 
 
 func _ready() -> void:
@@ -40,6 +46,9 @@ func _ready() -> void:
 	demo = args.has("--demo")
 	start_seekers = args.has("--seekers")
 	evade = not args.has("--no-evade")
+	var lo := Boot.arg_value(args, "--loadout").split(",", false)
+	if lo.size() == 2 and Saddle.POD_KINDS.has(lo[0]) and Saddle.POD_KINDS.has(lo[1]):
+		loadout = [lo[0], lo[1]]
 	Game.add_environment(self)
 	layout = ArenaLayout.generate(7)
 	arena = ArenaBuilder.new()
@@ -72,6 +81,7 @@ func _ready() -> void:
 
 
 func restart() -> void:
+	tacks.clear()
 	for b in [bird, target]:
 		if b != null and is_instance_valid(b):
 			world.remove_bird(b)
@@ -84,7 +94,7 @@ func restart() -> void:
 	target_pilot.threat = world.threat_to
 	target_pilot.evade = evade
 	target = _spawn(target_id, target_pilot, "Target")
-	world.add_bird(target, null)
+	_arm(target, world.add_bird(target, null))
 	trails.track(target)
 	_launch_target()
 	# You: coming into the clearing from the south, a little above the target.
@@ -103,12 +113,24 @@ func restart() -> void:
 	var along := ((w[1] as Vector3) - (w[0] as Vector3)).normalized()
 	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
 	world.player = world.add_bird(bird, weapons)
+	_arm(bird, world.player)
 	if start_seekers:
 		world.player.weapon = Launcher.Weapon.SEEKERS
 	camera.bird = bird
 	camera.snap()
 	combat_hud.launcher = world.player
 	combat_hud.world = world
+
+
+## Saddle up a bird that can carry the tack, and arm its launcher from the mounts: the rounds they hold, each
+## fired from its own tube.
+func _arm(b: Bird, l: Launcher) -> void:
+	if not Tack.RIDDEN.has(b.profile.id):
+		return
+	var t := Tack.fit(b.rig, b, loadout)
+	tacks[b] = t
+	var kinds := {Launcher.Weapon.ROCKETS: "rockets", Launcher.Weapon.SEEKERS: "seekers"}
+	l.set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(kinds[w], i))
 
 
 func _spawn(id: String, ctl: Object, n: String) -> Bird:
@@ -140,6 +162,10 @@ func _process(_dt: float) -> void:
 		flight_hud.set_state(bird.telemetry())
 	camera.look_input = player_ctl.look
 	combat_hud.note = "target evades (T)" if evade else "target flies straight (T)"
+	# The pods show the rounds left.
+	for l in world.launchers:
+		if tacks.has(l.bird) and is_instance_valid(l.bird):
+			(tacks[l.bird] as Tack).set_ammo(int(l.ammo[Launcher.Weapon.ROCKETS]), int(l.ammo[Launcher.Weapon.SEEKERS]))
 
 
 func _unhandled_input(e: InputEvent) -> void:

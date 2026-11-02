@@ -5,7 +5,8 @@ extends Node3D
 ##       [--shot <png> [--shot-after <s>]] [--sheet <png> [--label <text>]] [--ammo <rockets>,<seekers>]
 ## --sheet renders the standard set of views (flight, perched, close-ups of the rider, launcher, harness and
 ## leather) into one image, for before/after comparisons; with --macros, close-ups of the seat, face, boots and
-## breast ring instead; with --heads, the face and helmet. Keys: Space next view, P pose.
+## breast ring instead; with --heads, the face and helmet; with --mounts, the weapon mounts; with --placement,
+## the lines of fire. --loadout rockets,seekers (left, right) and --tilt <deg> set the mounts. Keys: Space next view, P pose.
 
 const MACROS := [
 	["Seat from behind", "glide", "seat", Vector3(0.2, 0.6, 1.0), 0.05],
@@ -20,6 +21,13 @@ const HEADS := [
 	["Face, goggles up", "rest", "face", Vector3(0.3, 0.12, -1.0), 0.032],
 	["Profile", "rest", "face", Vector3(1.0, 0.05, -0.15), 0.034],
 	["Helmet from behind", "rest", "face", Vector3(-0.6, 0.55, 0.85), 0.036],
+]
+const MOUNTS := [
+	# (anchor "mount0" / "mount1": the left / right mount's trunnion)
+	["Left mount, outside", "glide", "mount0", Vector3(-1.0, 0.35, -0.25), 0.05],
+	["Right mount, outside", "glide", "mount1", Vector3(1.0, 0.35, -0.25), 0.05],
+	["Mounts from ahead", "glide", "seat", Vector3(0.1, 0.35, -1.0), 0.09],
+	["Mounts from behind, above", "glide", "seat", Vector3(0.25, 0.8, 1.0), 0.09],
 ]
 const PLACEMENT := [
 	# (with --placement: the line of fire from the drawn muzzle in red, where the combat code fires from in yellow)
@@ -61,7 +69,11 @@ func _ready() -> void:
 	rig = BirdRig.new()
 	add_child(rig)
 	rig.build(BirdProfile.by_id(bird_id))
-	tack = Tack.fit(rig)
+	var pods: Array[String] = []
+	for p in Boot.arg_value(args, "--loadout").split(",", false):
+		pods.append(p)
+	var tilt_arg := Boot.arg_value(args, "--tilt")
+	tack = Tack.fit(rig, null, pods, float(tilt_arg) if tilt_arg != "" else Saddle.DEFAULT_TILT)
 	var ammo := Boot.arg_value(args, "--ammo")
 	if ammo != "":
 		var p := ammo.split(",")
@@ -94,7 +106,7 @@ func _ready() -> void:
 	_frame(["", pose, "bird", Vector3(0.6, 0.45, 0.9), 1.9])
 	var sheet := Boot.arg_value(args, "--sheet")
 	if sheet != "":
-		await _sheet(sheet, Boot.arg_value(args, "--label"), MACROS if args.has("--macros") else (HEADS if args.has("--heads") else (PLACEMENT if args.has("--placement") else SHOTS)))
+		await _sheet(sheet, Boot.arg_value(args, "--label"), MACROS if args.has("--macros") else (HEADS if args.has("--heads") else (PLACEMENT if args.has("--placement") else (MOUNTS if args.has("--mounts") else SHOTS))))
 		get_tree().quit()
 		return
 	var shot := Boot.arg_value(args, "--shot")
@@ -127,11 +139,13 @@ func _placement_markers() -> void:
 	mat.vertex_color_use_as_albedo = true
 	mat.no_depth_test = true
 	im.surface_begin(Mesh.PRIMITIVE_LINES, mat)
-	var m := tack.saddle.muzzle * tack.saddle.scale.x
-	im.surface_set_color(Color(0.9, 0.1, 0.1))
-	im.surface_add_vertex(m)
-	im.surface_set_color(Color(0.9, 0.1, 0.1))
-	im.surface_add_vertex(m + Vector3.FORWARD * L)
+	for kind in Saddle.POD_KINDS:
+		for i in tack.capacity(kind):
+			var m := tack.saddle.round_muzzle(kind, i) * tack.saddle.scale.x
+			im.surface_set_color(Color(0.9, 0.1, 0.1))
+			im.surface_add_vertex(m)
+			im.surface_set_color(Color(0.9, 0.1, 0.1))
+			im.surface_add_vertex(m + Vector3.FORWARD * L)
 	var c := Vector3(0.0, 0.1 * L, -0.6 * L)
 	for ax in [Vector3.RIGHT, Vector3.UP, Vector3.BACK]:
 		im.surface_set_color(Color(1.0, 0.85, 0.0))
@@ -166,6 +180,8 @@ func _frame(s: Array) -> void:
 			anchor = tack.saddle.to_global(tack.saddle.seat_point)
 		"launcher":
 			anchor = tack.saddle.to_global(tack.saddle.launcher_xf.origin.lerp(tack.saddle.muzzle, 0.45))
+		"mount0", "mount1":
+			anchor = tack.saddle.to_global((tack.saddle.mounts[int(String(s[2]).right(1))].pivot as Transform3D) * (Vector3(0.0, 0.0, -25.0) / tack.saddle.cm))
 		"ring":
 			var z := -0.11 * L
 			anchor = tack.saddle.to_global(tack.saddle.surf.point(z, tack.saddle.surf.half_girth(z)))
