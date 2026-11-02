@@ -62,6 +62,32 @@ All of these come from `Bird.telemetry()`, as the rig's inputs do today.
 - One shared tapered feather mesh, placed per bone with its own length, width and notch. That's about 70 feathers per bird, drawn as one `MultiMesh`.
 - The coverts as a few skinned strips.
 
+**One stacking order, open or folded** (`BirdRig._stack_layer`; `docs/images/wing_fold_stack_ab.png`). On a real wing the feathers' overlap never changes as it closes. Each feather has its own height in one stack. Innermost first:
+1. underwing coverts;
+2. primaries;
+3. primary coverts;
+4. secondaries;
+5. tertials;
+6. the forearm's greater coverts;
+7. lesser coverts;
+8. alula.
+
+Within a row, each inner feather lies on its outer neighbour, at least `FOLD_STEP` (0.05 mm on the sparrow) apart. This replaced per-kind layers, which caused two kinds of z-fighting:
+- neighbours in a row tied, and the cards fought where they overlapped;
+- folded, the Z-fold laid the humerus, forearm and hand over each other, so rows from different bones tied.
+
+Folded, every card also takes the panel's common normal and flattens its arch. Normals taken from each bone, and the arch, had crossed cards through each other.
+
+The humerus and hand fairings tuck into the fold. Their spread-wing "aft" side would otherwise point up once those bones run back along the body, a slab standing above the back.
+
+Spread, the arm loft's trailing lip is raised to lie on the greater coverts, and the arm's own lesser-covert cards are hidden (the loft is those coverts). They come back as the wing folds.
+
+Probes:
+- `tests/probe_coplanar.gd [pose]` lists overlapping cards in one plane;
+- `tests/probe_fold_top.gd` lists how far each folded piece rises above the back.
+
+`test_bird_rig` checks both, on both wings.
+
 **Test:** the rig's drawn wing area must match the profile's `wing_area`. The plan page already checks this for every species: the drawn area is fitted to the model's area, and the drawn aspect ratio matches the model's.
 
 ## Wing shape by species

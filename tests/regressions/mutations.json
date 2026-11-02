@@ -356,5 +356,66 @@
     "replace": "# Flap \u00e2\u20ac\u201d \u00c3\u00a9\n"
    }
   ]
+ },
+ {
+  "id": "fold-arm-slab",
+  "bug": "Folded, the humerus and hand fairings kept their spread-wing chord direction, which points UP once those bones run back along the body: a slab of 'flesh' standing above the back (2026-11-02).",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0, 0.5, ik_w)",
+    "replace": "\t\t_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0, 0.5)"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t_place_limb(fr[3], wrist, hand, hand_n, s, rc, 1.0, 1.0, ik_w)",
+    "replace": "\t\t_place_limb(fr[3], wrist, hand, hand_n, s, rc, 1.0)"
+   }
+  ]
+ },
+ {
+  "id": "fold-arm-underside-out",
+  "bug": "Tucking the folded arm pieces by a plain rotation turned their pale underside outward (a white patch on the owl's folded wing).",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tnn = nn * absf(cos(th)) + aft * sin(th)",
+    "replace": "\t\tnn = nn * cos(th) + aft * sin(th)"
+   }
+  ]
+ },
+ {
+  "id": "fold-feathers-z-fight",
+  "bug": "Folded, the Z-fold laid the humerus, forearm and hand over each other: same-kind feathers from different bones (lesser coverts, greater coverts, the alula) tied in depth, and per-bone normals and the cards' arch crossed them through each other -- striped z-fighting on the folded wing (2026-11-02).",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tvar base: Vector3 = root + n * (_stack_layer(f) * unit)",
+    "replace": "\t\t\tvar base: Vector3 = root + n * (float(f.layer) * unit)"
+   }
+  ]
+ },
+ {
+  "id": "fold-feathers-own-normals",
+  "bug": "Folded feathers kept their own bone's normal, so cards from different bones tilted against each other and crossed.",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t\tn = n.slerp(fold_y, ik_w).normalized()\n",
+    "replace": "\n"
+   }
+  ]
  }
 ]

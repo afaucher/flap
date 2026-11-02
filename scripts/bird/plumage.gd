@@ -79,7 +79,7 @@ const DATA := {
 		"groups": {"primary": ["#4d3d30", "#8f8a82"], "secondary": ["#5a4632", "#8f8a82"], "tail": ["#5a4a3c", "#7f786e"]},
 		"fingers": [0, 0.0, 0.0],
 		"marks": {
-			"lesser_bar_top": ["tip", "#eeeae0", 0.62], "greater_top": ["fringe", "#a0663a", 0.4], "tertial_top": ["fringe", "#b07a46", 0.4],
+			"lesser_bar_top": ["tip", "#eeeae0", 0.8], "greater_top": ["fringe", "#a0663a", 0.4], "tertial_top": ["fringe", "#b07a46", 0.4],
 			"primary_top": ["fringe", "#9a7a58", 0.15], "secondary_top": ["fringe", "#9a7a58", 0.15], "tail_top": ["fringe", "#8e7a62", 0.2],
 		},
 	},

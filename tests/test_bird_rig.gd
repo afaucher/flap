@@ -23,6 +23,10 @@ func setup() -> void:
 			near(lft.x, -r.x, 1e-4, p.id + " left mirrors right (x)")
 			near(lft.y, r.y, 1e-4, p.id + " left mirrors right (y)")
 			near(lft.z, r.z, 1e-4, p.id + " left mirrors right (z)")
+		# One stacking order: no two overlapping feathers in one plane (z-fighting), either wing, spread.
+		for i in 2:
+			var ties := _ties(rig, 100 if i == 0 else 0)
+			check(ties == 0, "%s spread wing (side %d): no overlapping feathers in one plane (%d pairs)" % [p.id, i, ties])
 		# Lengths through a spread of poses.
 		for pose in [[0.6, 0.0, 0.0, 0.0], [-0.5, 0.3, 0.0, 40.0], [0.1, 0.8, 10.0, 0.0], [0.0, 1.0, 0.0, 0.0], [-0.2, 0.65, -5.0, 25.0]]:
 			_pose(rig, pose[0], pose[1], pose[2], pose[3])
@@ -46,7 +50,8 @@ func setup() -> void:
 			check(BirdRig.limb_section(k, 0.0).y > BirdRig.limb_section(k, 1.0).y, "limb %d thins outward" % k)
 		check(BirdRig.limb_section(1, 0.35).y > BirdRig.limb_section(3, 0.0).y * 2.0, "the arm is far thicker than the hand")
 		check(BirdRig.limb_section(2, 0.15).y > BirdRig.limb_section(2, 0.9).y * 1.8, "forearm muscle by the elbow, tendon to the wrist")
-		# The alula is rooted on the thumb: its base on the hand's leading edge, deployed or not.
+		# The alula is rooted on the thumb: its base on the hand's leading edge (over the small coverts there),
+		# deployed or not.
 		for al in [0.0, 1.0]:
 			rig.alula = al
 			_pose(rig, 0.0, 0.0, 0.0, 0.0)
@@ -54,7 +59,7 @@ func setup() -> void:
 				if rig.feather_kinds[k] == WingShape.Kind.ALULA:
 					var o: Vector3 = (rig.feather_xforms[k] as Transform3D).origin
 					var bone_d := o.distance_to(Geometry3D.get_closest_point_to_segment(o, rig.wing_joints[1][2], rig.wing_joints[1][3]))
-					check(bone_d <= w.root_chord() * BirdRig.LIMB[3].t[0] * 0.5, "%s alula touches the hand (alula %.0f, %.1f mm)" % [p.id, al, bone_d * 1000.0])
+					check(bone_d <= w.root_chord() * BirdRig.LIMB[3].t[0] * 0.5 + 0.006 * p.body_length / 0.45, "%s alula touches the hand (alula %.0f, %.1f mm)" % [p.id, al, bone_d * 1000.0])
 		rig.alula = 0.0
 		# Flap up: tips above the shoulder; down: below.
 		_pose(rig, deg_to_rad(50.0), 0.0, 0.0, 0.0)
@@ -72,6 +77,24 @@ func setup() -> void:
 				check(absf(gap) < p.body_length * 0.05, "%s folded joint %d on the body (gap %.2f L)" % [p.id, k, gap / p.body_length])
 			check(rig.wing_joints[i][1].z > rig.wing_joints[i][0].z, p.id + " folded elbow aft of the shoulder")
 			check(rig.wing_joints[i][2].z < rig.wing_joints[i][0].z, p.id + " folded wrist forward of the shoulder")
+			# The arm's pieces (humerus, forearm, hand) tuck into the fold: none rises above the back (the dorsal
+			# outline at the same z), and each still shows its upper face outward, not its pale underside.
+			var s: float = BirdRig.SIDES[i]
+			var above := -INF
+			for k in range(1, 4):
+				var mi: MeshInstance3D = rig._fairings[i][k]
+				if not mi.visible:
+					continue
+				for v in (mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+					var pt: Vector3 = mi.transform * v
+					var ring: PackedFloat32Array = rig.body.ring_at(pt.z)
+					if ring[1] > 1e-4:
+						above = maxf(above, pt.y - (ring[0] + ring[2]))
+				check(mi.transform.basis.y.x * s > 0.0, "%s folded limb piece %d (side %d) shows its upper face outward" % [p.id, k, i])
+			check(above < p.body_length * 0.01, "%s folded arm pieces below the back (side %d: %.3f L above)" % [p.id, i, above / p.body_length])
+			# Folded, the feathers lie in one ordered stack: no two overlapping cards tie in depth or cross (z-fighting).
+			var ties := _ties(rig, 100 if i == 0 else 0)
+			check(ties == 0, "%s folded wing (side %d): no overlapping feathers in one plane (%d pairs)" % [p.id, i, ties])
 		# Every folded wing feather starts on the body, points aft (not fanned out sideways or up like a
 		# propeller) and ends inside the body's silhouette, widened a little for the wingtips over the tail.
 		var L := p.body_length
@@ -229,6 +252,35 @@ func _pose(rig: BirdRig, flap: float, fold: float, sweep: float, hand_lift: floa
 	rig.twist = 0.0
 	rig.slot = 0.0
 	rig.apply_pose()
+
+
+## Pairs of overlapping wing feathers on one side (`offset` 0 right, 100 left: feather_kinds' codes) that lie in
+## nearly one plane -- normals within ~3 deg, the gap between them somewhere under 0.1 mm (scaled to a 45 cm bird):
+## they z-fight or cross.
+func _ties(rig: BirdRig, offset: int) -> int:
+	var tol := 0.0001 * rig._L / 0.45
+	var idx: Array[int] = []
+	for k in rig.feather_xforms.size():
+		if rig.feather_kinds[k] != 6 and rig.feather_kinds[k] >= offset and rig.feather_kinds[k] < offset + 100:
+			idx.append(k)
+	var n := 0
+	for a in idx:
+		var xa: Transform3D = rig.feather_xforms[a]
+		var na := xa.basis.y.normalized()
+		var inv := xa.affine_inverse()
+		for b in idx:
+			if b <= a:
+				continue
+			var xb: Transform3D = rig.feather_xforms[b]
+			if absf(na.dot(xb.basis.y.normalized())) < 0.9985:
+				continue
+			for k in 9:
+				var pt := xb * Vector3(0.0, 0.0, 0.1 + 0.1 * k)
+				var q := inv * pt
+				if q.z > 0.05 and q.z < 0.95 and absf(q.x) < 0.45 and absf((pt - xa.origin).dot(na)) < tol:
+					n += 1
+					break
+	return n
 
 
 ## The widest gap between neighbouring feathers of `kind` (right wing / tail), measured between their edges at

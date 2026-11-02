@@ -462,6 +462,10 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 		var depth := maxf((bone - e).dot(aft_u), 0.0)
 		var chord := (depth + rc * lerpf(0.42, 0.26, u)) * open
 		var thick := rc * lerpf(0.14, 0.055, u) * (1.0 + 0.15 * exp(-pow((u - 0.25) / 0.2, 2.0))) * open
+		# The surface's trailing lip lies ON the greater coverts, as the small coverts do on a wing: raised over the
+		# row (its stack layer, plus the cards' arch) instead of thinning to nothing at the bone's level, where the
+		# coverts broke out through it.
+		var lip := (0.0075 * _L / 0.45 + CAMBER * 0.45 * rc) * open
 		if k == ARM_STATIONS + 1:
 			chord = 0.0
 			thick = 0.0
@@ -475,7 +479,7 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 			var a := TAU * j / ARM_AROUND * (-1.0 if flip else 1.0)
 			var x := 0.5 * (1.0 - cos(a))
 			var half := _naca(x) * thick
-			var y := 0.02 * chord * sin(PI * x) + (-half if sin(a) >= 0.0 else half)
+			var y := 0.02 * chord * sin(PI * x) + lip * smoothstep(0.15, 1.0, x) + (-half if sin(a) >= 0.0 else half)
 			row.append(e + aft_u * (x * chord) + nu * y)
 			crow.append(_arm_col.call(2, x, u, sin(a) >= 0.0))
 		rows.append(row)
@@ -546,7 +550,12 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 	BodyShape.tube_mesh(joined + rows, mi.mesh as ArrayMesh, jcols + cols, juv + auv, juv2 + auv2)
 
 ## Lay a unit limb mesh from `a` to `b`, its chord aft and its thickness along `n`; `chord` scales x (m).
-func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, chord: float, fade: float, thick := 1.0) -> void:
+## `tuck` (0..1): folding, the humerus and the hand run BACK along the body, so their "aft" side -- the muscle
+## and covert padding behind the bone in the spread wing -- would point straight up, a slab standing above the
+## back. Folded, that side turns in, through the body side (-n), until it lies inside the fold (toward the
+## forearm), as the arm's trailing web does on a bird. Past halfway the piece is mirrored rather than turned on,
+## so its upper face (the upperwing's colours) still faces out, not its pale underside.
+func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, chord: float, fade: float, thick := 1.0, tuck := 0.0) -> void:
 	var d := b - a
 	var length := d.length()
 	if length < 1e-5 or fade <= 0.01:
@@ -556,6 +565,11 @@ func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: f
 	var u := d / length
 	var nn := (n - u * u.dot(n)).normalized()
 	var aft := (u.cross(nn) * side).normalized()
+	if tuck > 0.0:
+		var th := PI * tuck
+		var a2 := aft * cos(th) - nn * sin(th)
+		nn = nn * absf(cos(th)) + aft * sin(th)
+		aft = a2
 	mi.transform = Transform3D(Basis(aft * chord * fade, nn * shape.root_chord() * fade * thick, d), a)
 
 
@@ -1035,6 +1049,37 @@ func _place(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int,
 		mmu.set_instance_custom_data(idx, custom)
 
 
+## A feather's layer: its height above its bone (spread) or the folded panel, in units of the bird (as WingShape's
+## `layer`). One stacking order holds open and folded, as on a real wing, where the feathers' overlap never
+## changes as it closes. WingShape's layers were set per kind, so neighbours in a row tied (overlapping cards in
+## one plane), and the Z-fold, laying the humerus, forearm and hand over each other, tied rows from different
+## bones (the humerus's and the forearm's lesser coverts, the hand's and the forearm's greater coverts, the three
+## alula feathers): z-fighting. The stack, innermost first: the underwing coverts, the primaries, the primary
+## coverts, the secondaries, the tertials, the forearm's greater coverts, the lesser coverts (the humerus's, which
+## the scapulars hide on a bird, under the hand's, under the forearm's -- the sparrow's white bar), the alula.
+## Within a row each inner feather lies on its outer neighbour, so feathers that slide over each other as the
+## wing closes keep their order. FOLD_STEP apart at least (0.05 mm on the sparrow).
+const FOLD_STEP := 0.00015
+
+
+static func _stack_layer(f: Dictionary) -> float:
+	var i := float(f.i)
+	match int(f.kind):
+		WingShape.Kind.UNDER_COVERT: return -0.0075 + FOLD_STEP * i
+		WingShape.Kind.PRIMARY: return -0.002 + FOLD_STEP * (10.0 - i)
+		WingShape.Kind.SECONDARY: return 0.0015 + FOLD_STEP * (i - 1.0)
+		WingShape.Kind.TERTIAL: return 0.004 + FOLD_STEP * i
+		WingShape.Kind.ALULA: return 0.0096 + 2.0 * FOLD_STEP * i
+		WingShape.Kind.GREATER_COVERT:
+			return (0.0048 if int(f.bone) == WingShape.Bone.FOREARM else -0.0003) + FOLD_STEP * i
+		WingShape.Kind.LESSER_COVERT:
+			match int(f.bone):
+				WingShape.Bone.FOREARM: return 0.0087 + FOLD_STEP * (i - 4.0)
+				WingShape.Bone.HAND: return 0.0082 + FOLD_STEP * (i - 8.0)
+			return 0.0074 + FOLD_STEP * i
+	return float(f.layer)
+
+
 ## How much a feather bends with the wing's `flex`: the long, outer primaries most, the stiff coverts barely.
 static func _flex_share(f: Dictionary) -> float:
 	match int(f.kind):
@@ -1354,6 +1399,16 @@ func apply_pose() -> void:
 		arm_n = arm_n.slerp(side_n, ik_w).normalized()
 		hand_n = hand_n.slerp(side_n, ik_w).normalized()
 		var segs := [[sh, elbow, arm_n], [elbow, wrist, arm_n], [wrist, hand, hand_n]]
+		# Folded, every feather lies along the side of the body: aft, angled a few degrees down and in, so the
+		# primaries cross over the tail instead of fanning out in a "V" above the back. And they lie as one flat
+		# stack -- a common normal (the panel's), each card's depth set by its layer alone -- so no two cross or
+		# tie: the Z-fold lays the bones over each other, and normals or depths taken from each bone crossed
+		# feathers through each other (z-fighting).
+		var folded_dir := Vector3(-s * 0.05, -0.1, 1.0).normalized()
+		var fold_y := (side_n - folded_dir * folded_dir.dot(side_n)).normalized()
+		var panel := -INF
+		for jp in [sh, elbow, wrist, hand]:
+			panel = maxf(panel, (jp as Vector3).dot(fold_y))
 		for f in defs:
 			var seg: Array = segs[int(f.bone)]
 			var a: Vector3 = seg[0]
@@ -1375,19 +1430,24 @@ func apply_pose() -> void:
 			# Folding, the IK swings the arm bones well away from their FK angles; the feathers instead blend
 			# toward their designed folded direction (aft along the body), so the folded wing lies flat.
 			if ik_w > 0.0:
-				# Folded, every feather lies along the side of the body: aft, angled a few degrees down and in,
-				# so the primaries cross over the tail instead of fanning out in a "V" above the back.
-				var folded_dir := Vector3(-s * 0.05, -0.1, 1.0).normalized()
 				if int(f.bone) != WingShape.Bone.HAND:
 					d = d.slerp(_fk_feather_dir(i, f, fold), ik_w).normalized()
 				d = d.slerp(folded_dir, ik_w * ik_w).normalized()
-			var base: Vector3 = a.lerp(b, f.t) + n * (float(f.layer) * unit)
+				n = n.slerp(fold_y, ik_w).normalized()
+			var root: Vector3 = a.lerp(b, f.t)
+			root += fold_y * ((panel - root.dot(fold_y)) * ik_w)
+			var base: Vector3 = root + n * (_stack_layer(f) * unit)
 			if f.kind == WingShape.Kind.ALULA:
 				# Rooted on the thumb: the base sits on the hand's leading edge (the top of its limb piece) and
 				# stays there; deployed, the feather swings forward and its tip lifts, opening the slot.
-				base = a.lerp(b, f.t) + n * (shape.root_chord() * float(LIMB[3].t[0]) * 0.45)
+				var thumb := shape.root_chord() * float(LIMB[3].t[0])
+				base = root + n * lerpf(thumb * 0.45 + (0.0025 + 2.0 * FOLD_STEP * float(f.i)) * unit, _stack_layer(f) * unit, ik_w)   # (on the thumb, over the coverts there)
 				d = (d + n * 0.35 * alula).normalized()
-			var xf := _feather_xform(base, d, n, f.len, f.w)
+			# (folded, the feathers lie flat in their stack: their arch would cross them through the layer below)
+			var sz := 1.0
+			if f.kind == WingShape.Kind.LESSER_COVERT and int(f.bone) != WingShape.Bone.HAND:
+				sz = maxf(smoothstep(0.3, 0.9, fold), 0.001)   # (spread, the arm's surface is these coverts; they come out as it slackens)
+			var xf := _feather_xform(base, d, n, f.len * sz, f.w * sz, maxf(1.0 - ik_w, 0.02))
 			feather_xforms.append(xf)
 			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
 			if f.emarg:
@@ -1401,9 +1461,10 @@ func apply_pose() -> void:
 		# The arm wing: one smooth surface over the skin web, the arm and its coverts (it slackens away as the
 		# wing folds); the arm's own pieces sit inside it, slimmed, until folded.
 		_loft_arm(i, fr[0], sh, elbow, wrist, arm_n, s, 1.0 - fold)
-		_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0, lerpf(0.5, 1.0, fold))
-		_place_limb(fr[2], elbow, wrist, arm_n, s, rc, 1.0, lerpf(0.5, 1.0, fold))
-		_place_limb(fr[3], wrist, hand, hand_n, s, rc, 1.0)
+		# (slim: folded, they lie under the feather stack, which needs no filling between its layers)
+		_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0, 0.5, ik_w)
+		_place_limb(fr[2], elbow, wrist, arm_n, s, rc, 1.0, 0.5)
+		_place_limb(fr[3], wrist, hand, hand_n, s, rc, 1.0, 1.0, ik_w)
 		_pose_bone("humerus." + ("L" if i == 0 else "R"), sh, elbow, arm_n)
 		_pose_bone("forearm." + ("L" if i == 0 else "R"), elbow, wrist, arm_n)
 		_pose_bone("hand." + ("L" if i == 0 else "R"), wrist, hand, hand_n)
@@ -1679,12 +1740,13 @@ func _tail_shape(u: float) -> float:
 	return 1.0
 
 
-## A feather's instance transform: the unit feather (+Z along, X across, Y normal) laid along `d`.
-static func _feather_xform(base: Vector3, d: Vector3, n: Vector3, length: float, width: float) -> Transform3D:
+## A feather's instance transform: the unit feather (+Z along, X across, Y normal) laid along `d`; `arch` scales
+## its camber (1: CAMBER of its length).
+static func _feather_xform(base: Vector3, d: Vector3, n: Vector3, length: float, width: float, arch := 1.0) -> Transform3D:
 	var z := d.normalized()
 	var x := n.cross(z).normalized()
 	var y := z.cross(x).normalized()
-	return Transform3D(Basis(x * width, y * length, z * length), base)   # (y scales the arch with the feather)
+	return Transform3D(Basis(x * width, y * length * arch, z * length), base)   # (y scales the arch with the feather)
 
 
 func _place_capsule(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
