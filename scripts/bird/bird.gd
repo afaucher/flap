@@ -28,6 +28,7 @@ const TURN_RATE := 150.0       ## deg/s a full stick turns a sitting bird
 const AIM_AHEAD := 2.5         ## the landing point is sought along this many catch radii of flight path
 const FLARE_PITCH := 55.0      ## deg, how far the body pitches up mid-landing (the braking flare)
 const TAKEOFF_GRACE := 0.5     ## s after leaving the ground or a perch before touching down counts as landing
+const PUSH_TIME := 0.15        ## s the feet keep pushing on the perch after take-off (the leap)
 const LEAVE_PASS := 0.35       ## s the bird passes through the tree it just left (it may face along a branch)
 
 var profile: BirdProfile
@@ -68,6 +69,10 @@ var _rig_dt := 0.0
 var _rig_tick := 0
 var _pass_body: Node = null
 var _pass_left := 0.0
+var _state_age := 0.0
+var _age_state := -1
+var _push_grip := Vector3.ZERO   ## the perch or ground just pushed off from (the legs extend toward it)
+var _push_left := 0.0
 
 
 func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
@@ -129,6 +134,12 @@ func _physics_process(dt: float) -> void:
 		State.FLYING: _fly(dt, inp)
 		State.LANDING: _land(dt)
 		State.PERCHED, State.GROUNDED: _sit(dt, inp)
+	if state != _age_state:
+		_age_state = state
+		_state_age = 0.0
+	else:
+		_state_age += dt
+	_push_left = maxf(0.0, _push_left - dt)
 	_animate_rig(dt)
 
 
@@ -331,6 +342,8 @@ func _sit(dt: float, inp: FlightInput) -> void:
 		if inp.flap_pressed or inp.catch_pressed:
 			_leave_perch(inp.flap_pressed)
 	elif inp.flap_pressed:
+		_push_grip = Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)
+		_push_left = PUSH_TIME
 		# Jump and beat: mostly up, a little forward, with ground effect helping the first wingbeats.
 		var v := facing * profile.hop_speed * 0.6 + Vector3.UP * maxf(3.5, profile.hop_speed * 1.1)
 		model.launch(global_position + Vector3.UP * 0.05, v.normalized(), v.length())
@@ -342,6 +355,8 @@ func _sit(dt: float, inp: FlightInput) -> void:
 ## FLAP: push off with a free wingbeat; CATCH: just let go and drop.
 func _leave_perch(with_flap: bool) -> void:
 	var left := perch
+	_push_grip = perch_grip
+	_push_left = PUSH_TIME
 	var dir := (facing + Vector3.DOWN * (0.1 if with_flap else 0.35)).normalized()
 	global_position = Perch.seat_at(perch_grip, profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)
 	model.launch(global_position, dir, profile.hop_speed)
@@ -419,6 +434,7 @@ func telemetry() -> Dictionary:
 		"bonks": bonks,
 		"stunned": stun > 0.0,
 		"landing_t": clampf(_land_t / _land_dur, 0.0, 1.0) if state == State.LANDING else 0.0,
+		"state_age": _state_age,
 	}
 
 
@@ -442,6 +458,8 @@ func _grip_point() -> Variant:
 			return perch_grip if perch != null else null
 		State.GROUNDED:
 			return Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)
+	if _push_left > 0.0:
+		return _push_grip   # the leap: the feet stay on what they pushed off from while the legs extend
 	if candidate != null and candidate_distance < 3.0:
 		return candidate_grip
 	return null

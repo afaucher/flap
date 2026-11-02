@@ -92,12 +92,14 @@ The model uses 1.5 spans with a 1.5 m minimum, a deliberate exaggeration so down
   - `calibrate()` fits an overall scale and a chord factor.
   - The drawn wing then matches the flight model's span, area and aspect ratio exactly. `test_wing_shape` checks this.
 - **`scripts/bird/bird_rig.gd` (`BirdRig`)** is the model.
-  - A `Skeleton3D` holds the bones: body, head, tail, and per side the humerus, forearm, hand, tibia and tarsus.
+  - A `Skeleton3D` holds the bones: body, three neck bones, head, tail, and per side the humerus, forearm, hand, femur, tibia and tarsus.
+  - The body (`BodyShape`, `scripts/bird/body_shape.gd`; plan in `body_rig_plan.html`) is a rigid trunk whose shell is lofted through rings placed from the landmarks (shoulders, keel, hips, tail base). The neck retracts into an S on the perch and reaches out in flight (`neck_ext`); its feather tube runs straight from inside the trunk to the head. The folded wing's elbow and wrist are slid onto the shell.
   - Every tick, `apply_pose()` solves the wing, legs and head, writes the skeleton, and lays out about 120 feathers. Feathers use one shared tapered mesh in two `MultiMesh`es, plain and emarginated (slotted).
   - The solve is analytic, in GDScript:
     - The wing is FK from the control values, plus a two-bone IK onto the flank anchor as it folds.
-    - The legs are two-bone IK, with the ankle bending aft.
-    - The head look is clamped to ±110° yaw and ±60° pitch, and the head stays level with the world.
+    - The legs are a short femur held near level in the world (the knee stays inside the belly), then two-bone IK with the ankle bending aft. An owl's outer toe swings back when it grips.
+    - The head look is clamped to ±110° yaw (owl ±135°) and ±60° pitch, and the head stays level with the world. It also holds still in world space through the trunk's jolts (the touchdown dip, the pitch from flare to perch) and catches up within a few frames.
+    - Small motion: the trunk dips on touchdown while the feet stay on the grip; the tail pumps a few times; the plumage fluffs perched (owl most) and sleeks fast; the bird breathes. On take-off the feet keep pushing on the perch for 0.15 s, so the legs extend.
   - Godot's own `TwoBoneIK3D` / `LookAtModifier3D` give the same result. Solving in code keeps the feathers, which ride on the solved bones, in step with the pose in the same tick, and keeps the solve testable headless.
   - While folding, feather directions blend from following their IK-moved bone to their designed folded direction (aft along the body), so the folded wing lies flat.
 - **Telemetry** now also carries `look_target` and `grip`:

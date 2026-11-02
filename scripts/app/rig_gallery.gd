@@ -111,6 +111,8 @@ func _pose_all(time: float) -> void:
 		r.tail_spread = 0.3
 		r.tail_pitch = 0.0
 		r.toe_grip = 0.0
+		r.neck_ext = r.body.neck_flight
+		r.fluff = 1.0
 		for i in 2:
 			r.foot_targets[i] = r._tucked_foot(i)
 		match pose:
@@ -128,6 +130,8 @@ func _pose_all(time: float) -> void:
 				r.tail_spread = 0.0
 				r.tail_pitch = deg_to_rad(float(pose.tail_down)) if not BirdRig.flat_perch else 0.15
 				r.toe_grip = 1.0
+				r.neck_ext = 0.05
+				r.fluff = r.body.fluff_perched
 				for i in 2:
 					var grip_world := r.position + Vector3(BirdRig.SIDES[i] * r._L * 0.04, -r._L * 0.35, 0.0)
 					r.foot_targets[i] = r.transform.affine_inverse() * grip_world
@@ -142,4 +146,5 @@ func _pose_all(time: float) -> void:
 				for i in 2:
 					r.foot_targets[i] = r._hip[i] + Vector3(0.0, -r._L * 0.22, -r._L * 0.16)
 		r.look_dir = Vector3(0, -0.2, -1).normalized()
+		r.world_up = (r.basis.inverse() * Vector3.UP).normalized()
 		r.apply_pose()

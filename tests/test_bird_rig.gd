@@ -43,12 +43,12 @@ func setup() -> void:
 			# The folded wing lies on the body: every joint on the capsule's surface, the elbow aft of the
 			# shoulder and the wrist forward of it (a Z-fold, not a "V" raised above the back).
 			for k in 4:
-				var gap := _body_gap(rig.wing_joints[i][k], p.body_length)
+				var gap := rig.body.gap(rig.wing_joints[i][k])
 				check(absf(gap) < p.body_length * 0.05, "%s folded joint %d on the body (gap %.2f L)" % [p.id, k, gap / p.body_length])
 			check(rig.wing_joints[i][1].z > rig.wing_joints[i][0].z, p.id + " folded elbow aft of the shoulder")
 			check(rig.wing_joints[i][2].z < rig.wing_joints[i][0].z, p.id + " folded wrist forward of the shoulder")
 		for xf in rig.feather_xforms.slice(0, rig.feather_xforms.size() - BirdRig.TAIL_FEATHERS):
-			var gap := _body_gap((xf as Transform3D).origin, p.body_length)
+			var gap := rig.body.gap((xf as Transform3D).origin)
 			check(gap < p.body_length * 0.08, "%s folded feather base on the body (gap %.2f L)" % [p.id, gap / p.body_length])
 		check(_tip_x(rig, 1.0) < half * 0.5, "%s folded feathers stay near the body (%.2f of %.2f)" % [p.id, _tip_x(rig, 1.0), half])
 		# Skeleton mirrors the solve.
@@ -56,19 +56,49 @@ func setup() -> void:
 		check(rig.skeleton.get_bone_global_pose(fr).origin.distance_to(rig.wing_joints[1][1]) < 1e-4, p.id + " skeleton forearm at the elbow")
 		var hl := rig.skeleton.find_bone("hand.L")
 		check(rig.skeleton.get_bone_global_pose(hl).origin.distance_to(rig.wing_joints[0][2]) < 1e-4, p.id + " skeleton hand at the wrist")
-		# Legs: a reachable target is reached, the ankle bends aft, lengths kept.
+		# Legs: hip -> knee (femur) -> ankle -> foot. A reachable target is reached, the ankle bends aft, lengths
+		# kept, the knee hidden inside the body.
 		var hip: Vector3 = rig._hip[1]
-		rig.foot_targets[1] = hip + Vector3(0.0, -p.body_length * 0.25, -p.body_length * 0.05)
+		rig.foot_targets[1] = hip + Vector3(0.0, -p.body_length * 0.3, -p.body_length * 0.05)
 		rig.apply_pose()
 		var lj: Array = rig.leg_joints[1]
-		check(lj[2].distance_to(rig.foot_targets[1]) < 1e-4, p.id + " foot on its target")
-		near(lj[0].distance_to(lj[1]), rig._tib, 1e-4, "tibia length")
-		near(lj[1].distance_to(lj[2]), rig._tars, 1e-4, "tarsus length")
-		check(lj[1].z > (lj[0].z + lj[2].z) * 0.5, p.id + " ankle bends aft")
+		check(lj[3].distance_to(rig.foot_targets[1]) < 1e-4, p.id + " foot on its target")
+		near(lj[0].distance_to(lj[1]), rig.body.femur, 1e-4, "femur length")
+		near(lj[1].distance_to(lj[2]), rig._tib, 1e-4, "tibiotarsus length")
+		near(lj[2].distance_to(lj[3]), rig._tars, 1e-4, "tarsus length")
+		check(lj[2].z > (lj[1].z + lj[3].z) * 0.5, p.id + " ankle bends aft")
+		check(rig.body.gap(lj[1]) < 0.0, "%s knee inside the body (gap %.3f m)" % [p.id, rig.body.gap(lj[1])])
+		check(rig.body.gap(lj[0]) < 0.0, p.id + " hip inside the body")
+		var fm := rig.skeleton.find_bone("tibia.R")
+		check(rig.skeleton.get_bone_global_pose(fm).origin.distance_to(lj[1]) < 1e-4, p.id + " skeleton tibia at the knee")
 		# Out of reach: as far as the leg goes, toward it.
 		rig.foot_targets[1] = hip + Vector3(0.0, -5.0, 0.0)
 		rig.apply_pose()
-		near(rig.leg_joints[1][0].distance_to(rig.leg_joints[1][2]), rig._tib + rig._tars, 1e-3, p.id + " straight leg toward a far target")
+		near(rig.leg_joints[1][1].distance_to(rig.leg_joints[1][3]), rig._tib + rig._tars, 1e-3, p.id + " straight leg toward a far target")
+		# The shell: fitted to the landmarks, about the old capsule's volume (the silhouette doesn't jump).
+		var bs := rig.body
+		var cap := PI * pow(p.body_length * 0.15, 2.0) * p.body_length * 0.32 + 4.0 / 3.0 * PI * pow(p.body_length * 0.15, 3.0)
+		check(absf(bs.volume() / cap - 1.0) < 0.12, "%s shell volume %.2f of the old capsule's" % [p.id, bs.volume() / cap])
+		check(absf(bs.gap(rig.wing_joints[1][0])) < p.body_length * 0.02, p.id + " shoulder on the shell")
+		check(bs.gap(rig._tail_base) < p.body_length * 0.02, p.id + " tail base at the shell")
+		check(bs.gap(Vector3(0, 0, 0)) < 0.0 and bs.gap(Vector3(0, p.body_length, 0)) > 0.0, p.id + " gap sign")
+		# Neck: three bones keep their lengths from retracted to reaching; the head rides on the end; reaching
+		# puts the head further out and further forward.
+		var heads: Array = []
+		for ext in [0.0, 0.5, 1.0]:
+			rig.neck_ext = ext
+			rig.apply_pose()
+			var nj: Array = rig.neck_joints
+			for k in 3:
+				near(nj[k].distance_to(nj[k + 1]), bs.neck_bone, 1e-4, "%s neck bone %d length at %.1f" % [p.id, k, ext])
+			check(rig._head.position.distance_to(nj[3]) < 1e-5, p.id + " head on the neck")
+			heads.append(nj[3])
+		check(heads[2].distance_to(bs.neck_base) > heads[0].distance_to(bs.neck_base) + p.body_length * 0.05, p.id + " reaching neck is longer")
+		check(heads[2].z < heads[0].z, p.id + " reaching neck puts the head forward")
+		check(rig.body.gap(rig.neck_joints[0]) < 0.0, p.id + " neck leaves from inside the trunk")
+		var hb := rig.skeleton.find_bone("head")
+		check(rig.skeleton.get_bone_global_pose(hb).origin.distance_to(rig.neck_joints[3]) < 1e-4, p.id + " skeleton head at the atlas")
+		rig.neck_ext = 0.3
 		# Head: looks right when told; clamps when told to look straight back.
 		rig.look_dir = Vector3.RIGHT
 		rig.apply_pose()
@@ -76,7 +106,7 @@ func setup() -> void:
 		rig.look_dir = Vector3.BACK
 		rig.apply_pose()
 		var hf := -rig.head_basis.z
-		check(absf(atan2(hf.x, -hf.z)) <= deg_to_rad(110.5), p.id + " head yaw clamped")
+		check(absf(atan2(hf.x, -hf.z)) <= deg_to_rad(rig.body.head_yaw + 0.5), p.id + " head yaw clamped")
 		# Solid surfaces: neighbouring tail feathers overlap even fully fanned, and neighbouring secondaries
 		# overlap in the spread wing, out to 85% of their length (only the slotted wingtip may gap).
 		for spread in [0.3, 1.0]:
@@ -111,22 +141,32 @@ func setup() -> void:
 		shaded.queue_free()
 		rig.queue_free()
 
-	# A perched bird's feet are on its perch.
+	# A perched bird of every species: feet on its perch, knees inside the body, wings folded, neck retracted,
+	# the touchdown dip settled; an owl grips 2 + 2.
 	var layout := ArenaLayout.generate(7)
 	var arena := ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)
 	await frames(2)
-	var b := Bird.new()
-	add_child(b)
-	b.setup(BirdProfile.crow(), layout, ScriptedInput.new())
 	var perch := layout.start_perch()
-	b.perch_at(perch)
-	await frames(30)
-	for i in 2:
-		var foot_world: Vector3 = b.rig.global_transform * (b.rig.leg_joints[i][2] as Vector3)
-		check(foot_world.distance_to(perch.position) < 0.04, "perched foot %d on the perch (%.3f m)" % [i, foot_world.distance_to(perch.position)])
-	check(b.rig.fold > 0.95, "perched wings folded")
+	for p in BirdProfile.all():
+		var b := Bird.new()
+		add_child(b)
+		b.setup(p, layout, ScriptedInput.new())
+		b.perch_at(perch)
+		await frames(60)
+		for i in 2:
+			var foot_world: Vector3 = b.rig.global_transform * (b.rig.leg_joints[i][3] as Vector3)
+			check(foot_world.distance_to(perch.position) < p.body_length * 0.1, "%s perched foot %d on the perch (%.3f m)" % [p.id, i, foot_world.distance_to(perch.position)])
+			check(b.rig.body.gap(b.rig.leg_joints[i][1]) < 0.0, p.id + " perched knee inside the body")
+		check(b.rig.fold > 0.95, p.id + " perched wings folded")
+		check(b.rig.neck_ext < 0.15, p.id + " perched neck retracted")
+		check(b.rig.position.length() < 1e-3, p.id + " touchdown dip settled")
+		check(b.rig.head_offset.length() < p.body_length * 0.02, p.id + " head settled on its neck")
+		var toe_back: float = (b.rig._leg_meshes[1][4] as MeshInstance3D).transform.origin.z - b.rig.leg_joints[1][3].z
+		check((toe_back > 0.0) == (p.id == "owl"), p.id + " outer toe back only on the owl")
+		b.queue_free()
+		await frames(1)
 	finish()
 
 
@@ -157,12 +197,6 @@ func _worst_gap(rig: BirdRig, kind: int) -> float:
 		var g := pa.distance_to(pb) - (a.basis.x.length() + b.basis.x.length()) * half
 		worst = maxf(worst, g)
 	return worst
-
-
-## Distance of a rig-space point outside the body capsule (radius 0.15 L along Z, 0.62 L long); - = inside.
-func _body_gap(pt: Vector3, length: float) -> float:
-	var half := length * (0.31 - 0.15)
-	return pt.distance_to(Vector3(0.0, 0.0, clampf(pt.z, -half, half))) - length * 0.15
 
 
 ## The furthest feather tip on one side (x * side), from the rig's feather transforms.
