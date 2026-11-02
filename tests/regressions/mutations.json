@@ -515,5 +515,61 @@
     "replace": "\t\tvar p := first[j] - dirs[0] * float(spec.pad_r) * L * 0.2\n"
    }
   ]
+ },
+ {
+  "id": "toes-stale-branch",
+  "bug": "The legs' rebuild cache left the branch radius out of its key, so toes kept the curl of the last branch they gripped (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "fwd_h.x, fwd_h.y, fwd_h.z, grip, swing, rig.grip_radius])",
+    "replace": "fwd_h.x, fwd_h.y, fwd_h.z, grip, swing])"
+   }
+  ]
+ },
+ {
+  "id": "toe-chord-in-bark",
+  "bug": "Each toe bone was a chord with both ends on the bark's circle, so its middle cut into the branch (the single-bone hallux most) (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\tvar grow := sqrt(1.0 + pow(l / (2.0 * eb), 2.0))",
+    "replace": "\t\tvar grow := 1.0"
+   }
+  ]
+ },
+ {
+  "id": "foot-pad-in-bark",
+  "bug": "The foot pad was centred on the grip point, half inside the branch, so the toes and claws sank into the bark (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\ttarget += up_w * legs.sole_height()\n",
+    "replace": "\t\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "toe-fit-ignores-heading",
+  "bug": "The toe fit bent every toe on the branch's own circle, so toes running at an angle to it (the inner and outer) curled too far and dug in (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tvar c := maxf(absf(base.dot(fr[3] as Vector3)), 0.22)",
+    "replace": "\tvar c := 1.0"
+   }
+  ]
  }
 ]

@@ -16,15 +16,16 @@ extends RefCounted
 ## Per species, as fractions of body length L (starting values to tune in the bird lab): neck length from
 ## the trunk to the head retracted / reaching; trunk depth at the breast; head radius (about 1.2x life; the owl's at
 ## life size -- docs/research/eyes_and_beaks.md 4.1, option A, so real-proportioned beaks fit); tibiotarsus and
-## tarsometatarsus; neck extension in flight (0 retracted .. 1 reaching); head yaw range (deg); owl-style
+## tarsometatarsus (the measured bones, docs/research/legs_and_feet.md 1.3: the tibiotarsus 1.3 to 1.9 times the
+## tarsus, so a perched bird's ankle hangs below its belly; the owl is a barn owl's long legs); neck extension in flight (0 retracted .. 1 reaching); head yaw range (deg); owl-style
 ## reversible outer toe; plumage fluff when perched; the skull's shape (head sphere scale x, y, z) and brow ridge
 ## (docs/research/eyes_and_beaks.md 4.2: the crow's long head, the hawk's flat crown and frown, the owl's flat face).
 const DATA := {
-	"crow": {"neck": [0.14, 0.26], "depth": 0.32, "head": 0.06, "legs": [0.18, 0.20], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [0.88, 0.9, 1.15], "brow": 0.0},
-	"owl": {"neck": [0.1, 0.18], "depth": 0.34, "head": 0.15, "legs": [0.16, 0.14], "neck_flight": 0.3, "head_yaw": 135.0, "zygo": true, "fluff": 1.1, "skull": [1.0, 1.05, 0.7], "brow": 0.0},
-	"hawk": {"neck": [0.12, 0.22], "depth": 0.3, "head": 0.065, "legs": [0.17, 0.17], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.88, 1.08], "brow": 1.0},
-	"falcon": {"neck": [0.1, 0.18], "depth": 0.32, "head": 0.07, "legs": [0.16, 0.15], "neck_flight": 0.8, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.95, 1.02], "brow": 0.7},
-	"sparrow": {"neck": [0.09, 0.15], "depth": 0.33, "head": 0.08, "legs": [0.16, 0.14], "neck_flight": 0.5, "head_yaw": 110.0, "zygo": false, "fluff": 1.05, "skull": [0.95, 0.95, 1.0], "brow": 0.0},
+	"crow": {"neck": [0.14, 0.26], "depth": 0.32, "head": 0.06, "legs": [0.19, 0.13], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [0.88, 0.9, 1.15], "brow": 0.0},
+	"owl": {"neck": [0.1, 0.18], "depth": 0.34, "head": 0.15, "legs": [0.29, 0.21], "neck_flight": 0.3, "head_yaw": 135.0, "zygo": true, "fluff": 1.1, "skull": [1.0, 1.05, 0.7], "brow": 0.0},
+	"hawk": {"neck": [0.12, 0.22], "depth": 0.3, "head": 0.065, "legs": [0.2, 0.15], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.88, 1.08], "brow": 1.0},
+	"falcon": {"neck": [0.1, 0.18], "depth": 0.32, "head": 0.07, "legs": [0.19, 0.12], "neck_flight": 0.8, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.95, 1.02], "brow": 0.7},
+	"sparrow": {"neck": [0.09, 0.15], "depth": 0.33, "head": 0.08, "legs": [0.18, 0.12], "neck_flight": 0.5, "head_yaw": 110.0, "zygo": false, "fluff": 1.05, "skull": [0.95, 0.95, 1.0], "brow": 0.0},
 }
 const N_TOP := 2.6   ## back: flatter than an ellipse (2), squarer at the shoulders
 const N_BOT := 1.8   ## breast: deeper and narrower toward the keel

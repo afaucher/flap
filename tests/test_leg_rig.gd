@@ -10,6 +10,8 @@ extends TestCase
 ## - toe -> claw: one tube, the claw's rings running on from the toe's last ring, horn-coloured, tapering to a
 ##   point, curved by the species' arc, sized by its talon ratios; pads bulge under the toes;
 ## - the left leg mirrors the right point for point; normals face out; the tarsus's front plates face forward.
+## - the toes wrap the branch they grip (the folded pose's, 2.5 x as thick, and an arena branch's 8 cm): the pad on
+##   its top, every claw tip down on the bark, no toe in it.
 ## And a perched Bird with the detailed legs on: feet on the perch.
 
 
@@ -18,6 +20,8 @@ func _init() -> void:
 
 
 func setup() -> void:
+	var stamp := FileAccess.get_file_as_string(ScaleTile.STAMP_PATH).strip_edges()
+	eq(stamp, ScaleTile.source_md5(), "the leg scale PNGs are baked from today's ScaleTile (re-run tools/bake_feathers.gd -- --scales)")
 	var was := LegRig.enabled
 	LegRig.enabled = true
 	for p in BirdProfile.all():
@@ -25,8 +29,14 @@ func setup() -> void:
 		add_child(rig)
 		rig.build(p)
 		check(rig.legs != null and rig._leg_meshes[0].is_empty(), p.id + " detailed legs replace the capsules")
-		var bones: Array = LegRig.BONES[p.id]
-		near(rig._tib, float(bones[0]) * p.body_length, 1e-6, p.id + " tibiotarsus from the measured bones")
+		check(rig.legs.skin_mat.get_shader_parameter("scales") != null and rig.legs.skin_mat.get_shader_parameter("scales_n") != null, p.id + " the skin reads the baked scale tile")
+		# The measured proportions (docs/research/legs_and_feet.md 1.3): the drawn tibiotarsus 1.3 to 1.9 times the
+		# tarsus, and the perched ankle below the belly (the trousers show).
+		RigPoses.apply(rig, "folded", 0.0)
+		var lj: Array = rig.leg_joints[1]
+		var ratio := (lj[1] as Vector3).distance_to(lj[2]) / (lj[2] as Vector3).distance_to(lj[3])
+		check(ratio > 1.3 and ratio < 1.95, "%s tibiotarsus / tarsus %.2f, as measured" % [p.id, ratio])
+		check(rig.legs.exit_on[1] == "tibia", "%s perched: the tibia leaves the belly (exit on %s)" % [p.id, rig.legs.exit_on[1]])
 		var seen := {}
 		for pose in ["folded", "flare", "glide"]:
 			RigPoses.apply(rig, pose, 0.0)
@@ -35,6 +45,14 @@ func setup() -> void:
 				_joins(rig, i, pose, seen)
 			if pose != "glide":
 				_mirror(rig, pose)
+		# The toes wrap the branch they grip, thin or thick: every claw tip comes down onto the bark, no toe sinks
+		# into it, and the pad sits on top of it.
+		for k in [1.0, 2.5, 0.08 / (RigPoses.BRANCH_R * p.body_length)]:   # (0.08 m: an arena branch)
+			RigPoses.apply(rig, "folded", 0.0)
+			rig.grip_radius *= k
+			rig.breath = 0.0
+			rig.apply_pose()
+			_grip_fit(rig, "%s branch x%.1f" % [p.id, k])
 		check(seen.has("shell"), p.id + " the trunk -> trousers join was checked")
 		check(seen.has("toes"), p.id + " the toe joins were checked")
 		check(seen.has("hem") or p.id == "owl", p.id + " the trousers -> tarsus join was checked")
@@ -64,6 +82,35 @@ func setup() -> void:
 		await frames(1)
 	LegRig.enabled = was
 	finish()
+
+
+## Measured on the drawn toes against the branch the folded pose grips: its top is the grip point (the foot target),
+## its axis runs across the bird (the bird faces across the branch).
+func _grip_fit(rig: BirdRig, tag: String) -> void:
+	var r := rig.grip_radius
+	var up: Vector3 = rig._world_frame()[0]
+	var right: Vector3 = (rig._world_frame()[1] as Vector3).cross(up).normalized()
+	var lr := rig.legs
+	var r0 := float(lr.spec.toe_r) * lr.L
+	for i in 2:
+		var axis: Vector3 = rig.foot_targets[i] - up * r
+		var from_axis := func(q: Vector3) -> float:
+			var d := q - axis
+			return (d - right * d.dot(right)).length()
+		var a := _arrays(lr.skin_mi[i])
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var pad: Vector3 = lr.pad_centre[i]
+		near(from_axis.call(pad), r + lr.sole_height(), r0 * 0.1, "%s leg %d: the pad sits on the bark" % [tag, i])
+		var worst_in := INF
+		for k in 4:
+			var rows := _rows(lr.parts_s[i]["toe%d" % k])
+			var nclaw: int = lr.claw_rows[i][k]
+			var tip := v[(rows[rows.size() - 1] as PackedInt32Array)[0]]
+			var dt: float = from_axis.call(tip)
+			check(dt > r - r0 * 0.2 and dt < r + r0 * 0.6, "%s leg %d toe %d: the claw tip on the bark (%.4f from the axis, bark %.4f)" % [tag, i, k, dt, r])
+			for j in range(2, rows.size() - nclaw):
+				worst_in = minf(worst_in, from_axis.call(_centroid(v, rows[j])) - r)
+		check(worst_in > r0 * 0.5, "%s leg %d: no toe sinks into the bark (closest centreline %.4f over it, toe radius %.4f)" % [tag, i, worst_in, r0])
 
 
 func _arrays(mi: MeshInstance3D) -> Array:
@@ -397,4 +444,6 @@ func _mirror(rig: BirdRig, pose: String) -> void:
 		if ok:
 			for k in va.size():
 				worst = maxf(worst, va[k].distance_to(vb[k] * Vector3(-1, 1, 1)))
-		check(ok and worst < L * 1e-4, "%s %s: left %s mirror the right (%d / %d points, worst %.6f m)" % [rig.profile.id, pose, pair[1], va.size(), vb.size(), worst])
+		# (3e-4 L: the trunk mesh's own normals mirror only to ~0.005, and the trousers' fillet leaves the trunk along
+		# them -- about 0.1 mm on the owl)
+		check(ok and worst < L * 3e-4, "%s %s: left %s mirror the right (%d / %d points, worst %.6f m)" % [rig.profile.id, pose, pair[1], va.size(), vb.size(), worst])

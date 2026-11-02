@@ -22,6 +22,9 @@ A/B sheets, capsules on the left and detailed legs on the right:
 | `docs/images/legs_ab_side.png` | perched, side view, `--zoom 2.2 --ortho` |
 | `docs/images/legs_ab_feet.png` | perched, feet close up |
 | `docs/images/legs_ab_flare.png` | landing flare, feet reaching |
+| `docs/images/legs_fit_ab.png` | second pass: toes fitted to the branch, baked scales, the barn owl |
+| `docs/images/legs_bones_ab.png` | second pass: the measured bones for every bird, perched as the game stands them |
+| `docs/images/legs_toes_wrap.png` | second pass: `--view toes`, a cut along the branch, every species |
 
 ---
 
@@ -33,21 +36,24 @@ Each leg was six `CapsuleMesh`es:
 - four tan toe stubs.
 
 Every capsule poked into the next one, and none of them joined the body. There were no claws, scales or trousers,
-every species had the same tan legs, and the toes were 30 to 40 % too short. `BodyShape.DATA`'s tarsus is also too
-long for every species: the real tibiotarsus is 1.3 to 1.9 times the tarsus, the rig's 0.9 to 1.15 times (research §1.3).
+every species had the same tan legs, and the toes were 30 to 40 % too short. `BodyShape.DATA`'s tarsus was also too
+long for every species: the real tibiotarsus is 1.3 to 1.9 times the tarsus, the rig's was 0.9 to 1.15 times (research
+§1.3). `BodyShape.DATA` now holds the measured bones, for the capsule legs too.
 
 ## 2. Per species
 
-The numbers are `LegRig.SPEC` and `LegRig.BONES`, fractions of body length L, picked from the research's tables (§7.2).
+The numbers are `LegRig.SPEC` and `BodyShape.DATA.legs`, fractions of body length L, picked from the research's tables
+(§7.2). The owl is a barn owl (its face, plumage and size already were): long legs, feathered down the tarsus to the
+toes, the toes bare and bristled.
 
 | | Crow | Owl | Hawk | Falcon | Sparrow |
 |---|---|---|---|---|---|
-| Tibiotarsus / tarsus (L) | 0.19 / 0.13 | 0.25 / 0.16 | 0.20 / 0.15 | 0.19 / 0.12 | 0.18 / 0.12 |
-| Feathered to | the ankle | the toes | the ankle, flags hanging over the tarsus | the ankle, barred trousers | the ankle |
+| Tibiotarsus / tarsus (L) | 0.19 / 0.13 | 0.29 / 0.21 | 0.20 / 0.15 | 0.19 / 0.12 | 0.18 / 0.12 |
+| Feathered to | the ankle | the toes (bare, bristled toes) | the ankle, flags hanging over the tarsus | the ankle, barred trousers | the ankle |
 | Trousers | the belly's own black | pale buff `#e6d8bd`, down to the pad | pale `#e2d4bc`, flags 0.22 of the tarsus | `#bdb6ae`, 0.15 | the flanks' own grey |
 | Tarsus skin | black `#232327` (lifted from `#121214` so the scales read) | not seen | yellow `#e3c04a` | yellow `#e8c547` | pinkish brown `#b38b7c` |
 | Tarsus scales | scutes in front | none (feathered) | scutes in front, reticulate behind | reticulate all round | finer scutes in front |
-| Toes | perching, flat pads under the bones | feathered (soft streaks), 2 + 2 grip, bulging pads | pads bulging under the joints | long thin toes, bulging pads | perching, flat pads |
+| Toes | perching, flat pads under the bones | bare, pinkish grey with pale bristles and a few scutes, 2 + 2 grip, bulging pads | pads bulging under the joints | long thin toes, bulging pads | perching, flat pads |
 | Claws, I : II : III : IV | 1.31 : 1.08 : 1.29 : 1, 115° | 1.05 : 1.19 : 1.16 : 1, 95° | 1.8 : 1.65 : 1.2 : 1, 115° | 1.27 : 1.13 : 1.11 : 1, 118° | 1.31 : 1.08 : 1.29 : 1, 110° |
 | Claw colour | black | blackish grey | black | black | dark horn |
 
@@ -115,8 +121,8 @@ trunk shell ──loop on the shell──▶ trousers ──hem ring = tarsus's 
 - **The skirt.** Below the ankle the trousers hang as a skirt: longer behind than in front (the "flags"), and
   narrowing. Its hem tucks back up onto the tarsus. Hawk 0.22 and falcon 0.15 of the tarsus; crow and sparrow 0.06.
   When the ankle is tucked in the belly, the belly's feathers hang at least 0.12 of the tarsus over its top.
-- **The owl.** The tube runs on down the tarsus, narrowing to `end_r`, and ends on a loop on the foot pad: it is
-  feathered to the toes.
+- **The owl.** The tube runs on down the tarsus, narrowing to `end_r`, and ends on a loop on the foot pad: the barn
+  owl is feathered to its toes, which are bare.
 
 ### 4.3 Bare tarsus and foot pad
 
@@ -152,24 +158,29 @@ trunk shell ──loop on the shell──▶ trousers ──hem ring = tarsus's 
   (0.62 of its depth), with a narrower underside. The vertex colour turns to horn 6 % of the way along, and COLOR.a
   (keratin) switches the shader to smooth and glossy.
 
-### 4.5 Curling round a branch (designed, not built)
+### 4.5 Curling round a branch (built)
 
-The prototype curls each toe by a fixed total angle. On the gallery's branch the claws sink a little into the bark.
-That is in the A/B sheets and is close to how talons grip, but it doesn't follow the branch's size. The design:
-
-1. Pass the grip's branch radius to the rig. `Bird` knows the perch's radius, and `telemetry()` carries the grip
-   point already.
-2. For each toe, solve its joint angles so its joints lie on a circle of radius (branch + toe radius) round the
-   branch's axis, from where the root meets the top of the branch:
-   - each phalanx is a chord of that circle;
-   - the claw's arc ends touching the bark.
-   This is a closed form: each chord turns by 2·asin(length / 2R).
-3. The hallux wraps the back of the branch, opposite the middle toe. The owl's outer toe joins it.
-4. On a branch thicker than the foot can wrap, the curl saturates at the species' total, and the toes lie on top.
-5. On the ground, grip is 0 and the toes lie flat, as now.
-
-This needs the branch radius in `telemetry()`, a small change to `bird.gd` that is outside this branch's leg-only
-scope.
+- **The branch.** `Bird.telemetry()` carries `grip_radius` (the perch's `thickness` while landing or perched; 0 on
+  the ground) and `BirdRig.grip_radius` holds it. The folded pose grips a branch of `RigPoses.BRANCH_R` (0.045 L),
+  which the gallery's `--branch` draws.
+- **The pad sits on the bark.** The IK's foot target is the grip point raised by the pad's half-height
+  (`LegRig.sole_height`). Before, the pad was centred on the bark's top, half inside it, and the toes and claws sank
+  in (mutation `foot-pad-in-bark`).
+- **Each toe in its own vertical plane** (`LegRig._curl`). A toe running at θ to the branch's circumference cuts
+  the bark in an ellipse there, R high and R / |cos θ| long. The middle toe and the hallux wrap furthest round; the
+  inner and outer toes, angled along the branch, less (mutation `toe-fit-ignores-heading`).
+- **Phalanges are chords** from the joint before onto that ellipse, grown by the toe's radius and by the chord's
+  sagitta, so a bone's middle doesn't cut into the bark. The single-bone hallux needed the sagitta most (mutation
+  `toe-chord-in-bark`).
+- **The claw's base** is turned (bisection) until its curved tip comes down onto the bark.
+- **Thick and thin.** On a thick branch, such as the arena's 4 to 12 cm, the toes lie over its top with their claws
+  on the bark. On a twig the curl saturates at `CURL_MAX` (1.8) × the species' curl. With no branch, the old fixed
+  curl stands (`_curl_fixed`).
+- **The cache.** The skin's rebuild key includes the radius (mutation `toes-stale-branch`).
+- **Look at it** with `--view toes`: a cut along the branch, the near plane taking away the wing and the near foot.
+- **The stance.** Perched, the hips ride `BirdRig.POSE.stance` of the leg's reach over the branch: 0.78, and 0.68 for
+  the upright owl, whose long legs would otherwise leave the trunk at its tail end. The folded pose stands the same
+  way, so the gallery shows what the game does.
 
 ## 5. Feathering
 
@@ -194,7 +205,23 @@ scope.
 
 ## 6. Texturing
 
-**Built: procedural** (`leg_skin.gdshader`). It is read through coordinates every skin piece carries:
+**Built: baked** (`ScaleTile`, `assets/legs/leg_scales*.png`, read by `leg_skin.gdshader`). The first prototype drew
+the scales procedurally; the bake replaced it as the higher-quality option:
+- the domes and slopes are worked out once, at 64 px a scale;
+- the GPU's mipmaps average them away smoothly with distance, so nothing shimmers and nothing has to fade out;
+- the relief is a normal from precomputed slopes in a cotangent frame (as the body feathers'), not a per-pixel-quad
+  derivative bump.
+
+The tile is 8 × 8 scales, wrapping:
+- R: domed reticulate scales;
+- G: overlapping scute plates;
+- B: a tone per scale;
+- A: bristles.
+
+Its normals: RG the domes', B the plates'. `tools/bake_feathers.gd -- --scales` bakes it in about 3 s, and
+`test_leg_rig` checks its MD5 stamp. The shader bows the plates' edges down round the sides.
+
+The shader reads it through coordinates every skin piece carries:
 - UV is (u round the tube, v along it), in scales: u = 0 on the tarsus's front and the top of each toe;
 - UV2 is (u's period, how much front plates may show);
 - COLOR.a is keratin: 0 for skin, 1 for claw.
@@ -203,23 +230,7 @@ The shader draws:
 - **Scutes:** transverse plates, each overlapping the next one down, in a band down the front (|u| < 0.2 of the
   girth) where `scutes` × UV2.y allows (hawk, crow, sparrow; the falcon has none);
 - **Reticulate scales** elsewhere: a jittered cell pattern, its edges as grooves;
-- **The owl's feathered toes** (`fuzz`): soft streaks instead.
-
-Height bumps the normal through screen derivatives, so the meshes need no tangents. The whole pattern fades out where
-a scale drops under about two pixels, so a distant leg is its plain colour and does not shimmer.
-
-**Alternative: baked.** This would follow `feather_atlas.gd` and `tools/bake_feathers.gd`:
-- a 512 × 512 `scale_tile.png`, baked by a `FeatherAtlas.bake_scales()`:
-  - R height;
-  - G groove;
-  - B a random value per scale;
-  - A a front-plate mask in u;
-- the same MD5 stamp so `test_feather_texture` catches a stale bake.
-
-Baking buys hand-tuned shapes (scutes that taper round the sides, papillae on the soles) and a cheaper fragment. It
-costs a texture fetch and a new asset. The procedural version costs about 18 hash evaluations a pixel, but only on a
-few hundred pixels per bird, and the GPU measurement (§7) shows no difference. Switch if the legs ever fill the
-screen in gameplay, or if the scales need to look drawn rather than generated (open choice 4).
+- **The barn owl's bristles** (`bristles`): fine pale hairs lying along the toes, over the scales.
 
 ## 7. Cost
 
@@ -271,12 +282,18 @@ the constants that build them. Every species is checked, both legs, perched, fla
   - The drawn arc is within 30° of the species' (measured between ring centres).
   - The hallux claw against the outer one matches the species' ratio within 12 %.
 - **Pads.** The sole's radius against the side's varies along each toe by at least 0.6 × the species' bulge.
-- **Mirror and normals.** The left leg mirrors the right point for point (< 0.01 % L). Normals face out of their
+- **Mirror and normals.** The left leg mirrors the right point for point (< 0.03 % L: the trunk mesh's own normals
+  mirror only to about 0.005, and the trousers' fillet leaves along them). Normals face out of their
   rings along the tubes. In the perched pose, the tarsus's front plates face forward.
-- **The bones and the game's path.** The tibiotarsus is the measured one. A perched `Bird` with the detailed legs on
-  (hawk, owl) has its feet on the perch, both feet drawn, and the outer toe back only on the owl.
-- **Regressions.** `tests/regressions/mutations.json` has four entries, all KILLED by `test_leg_rig`:
-  `leg-loop-off-shell`, `leg-hem-not-shared`, `leg-ankle-fold` and `toe-base-off-pad`.
+- **The bones and the game's path.** The drawn tibiotarsus is 1.3 to 1.9 times the tarsus, and perched the tibia
+  leaves the belly. A perched `Bird` with the detailed legs on (hawk, owl) has its feet on the perch, both feet
+  drawn, and the outer toe back only on the owl.
+- **The branch.** On the folded pose's branch, one 2.5 × as thick and an arena branch of 8 cm: the pad sits on the
+  bark, every claw tip comes down onto it, and no toe's centreline comes within half its radius of it.
+- **The bake.** The scale PNGs carry `ScaleTile`'s MD5, and the skin reads them.
+- **Regressions.** `tests/regressions/mutations.json` has eight entries, all KILLED by `test_leg_rig`:
+  `leg-loop-off-shell`, `leg-hem-not-shared`, `leg-ankle-fold`, `toe-base-off-pad`, `toes-stale-branch`,
+  `toe-chord-in-bark`, `foot-pad-in-bark` and `toe-fit-ignores-heading`.
 - **Other tests.** The rest of the suite runs with the switch off (the capsules), including `test_bird_rig`. Its
   owl-toe check now reads `BirdRig.toe_tips`, which both paths fill. The runner's rule that any engine `ERROR:` or
   `WARNING:` fails a test caught two format-string bugs in the test itself.
@@ -287,29 +304,18 @@ the constants that build them. Every species is checked, both legs, perched, fla
 |---|---|
 | Lofted, tapered trousers and tarsus; the trunk loop and fillet; the hem; the rounded ankle; the owl's feathered tarsus | **built** |
 | Foot pad; toes with phalanges, curl at the joints, arthral and mesarthral pads; curved, tapered, horn-coloured claws by Fowler's ratios | **built** |
-| Procedural scutes, reticulate scales and feathered toes; per-species colours | **built** |
-| The measured bone proportions, applied while the switch is on | **built** |
+| Baked scutes, reticulate scales and the barn owl's bristles; per-species colours | **built** |
+| The measured bone proportions, in `BodyShape.DATA` for every bird | **built** |
 | Join tests, mirror, normals, four mutation entries; cost probe | **built** |
-| Toes fitted to the branch's radius (§4.5) | designed |
+| Toes fitted to the branch's radius (§4.5) | **built** |
 | Fringe cards on the trousers' hem (§5) | designed |
 | Barred trousers (falcon, western Red-tail) | designed (a body shader term) |
-| Baked scale tile (§6) | designed |
+| Baked scale tile (§6) | **built** |
 | Skinned legs and a level of detail (§7) | designed |
 
 ## 10. Open choices
 
-1. **Turn it on by default?** The A/B sheets are in `docs/images/legs_ab_*.png`. The CPU cost while legs move (§7) is
-   the reason it is off.
-2. **Take the measured bone lengths into `BodyShape.DATA`** for everyone, not only while the switch is on. They lift
-   a perched bird's ankle below its belly so the trousers show, and they shorten the tarsus about 25 to 50 %.
-   `body_shape.gd` is shared with the body work, so this is left as a choice.
-3. **Fringe cards on the trousers' hem** for close-ups (§5).
-4. **Procedural or baked scales** (§6).
-5. **Fit the toes to the branch** (§4.5). This needs the branch radius in `telemetry()`.
-6. **Which owl?** The owl is a blend:
-   - the barn owl has a long tarsus with bare, bristled toes;
-   - the great horned owl has a short tarsus and is feathered to the claws.
-
-   The prototype's owl is feathered to the claws, with the barn owl's longer legs.
-7. **The juvenile Peregrine's greenish feet and the crow's blacker legs.** The research's hexes are used as given,
-   except the crow's skin, which is lifted to `#232327` so its scutes read.
+Decided (2026-11-02): the barn owl; the measured bones for every bird; toes fitted to the branch; baked scales; the
+colours as given. Still open:
+1. **Turn it on by default?** The CPU cost while legs move (§7) is the reason it is off.
+2. **Fringe cards on the trousers' hem** for close-ups (§5).

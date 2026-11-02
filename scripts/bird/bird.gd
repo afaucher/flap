@@ -400,6 +400,7 @@ func telemetry() -> Dictionary:
 		"look_target": _look_target(),
 		"has_grip": _grip_point() != null,
 		"grip": _grip_point() if _grip_point() != null else Vector3.ZERO,
+		"grip_radius": perch.thickness if perch != null and state in [State.LANDING, State.PERCHED] else 0.0,   # (the branch the toes wrap)
 		"speed": m.speed if state == State.FLYING else m.velocity.length(),
 		"v_best": p.v_best,
 		"v_stall": p.v_stall,

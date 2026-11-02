@@ -31,13 +31,15 @@ const TAIL_FAN_MAX := 100.0   ## deg, full tail spread
 ## Sitting posture per species (docs/research/body_poses_and_folded_wings.md; the angles are estimates to
 ## tune against photos): body pitch when perched and on the ground (+ = upright), and how far the tail bends
 ## down from the body line. Raptors and owls sit upright with the tail in line; crows and sparrows sit
-## more level with the tail angled down.
+## more level with the tail angled down. `stance`: perched, how high the hips ride over the branch, a share of
+## the leg's reach (with the measured leg bones the ankle then hangs below the belly; the owl crouches more, or
+## its long legs would leave the upright body at its tail end).
 const POSE := {
-	"sparrow": {"perch_pitch": 25.0, "ground_pitch": 10.0, "tail_down": 15.0},
-	"crow": {"perch_pitch": 35.0, "ground_pitch": 10.0, "tail_down": 20.0},
-	"hawk": {"perch_pitch": 60.0, "ground_pitch": 30.0, "tail_down": 5.0},
-	"falcon": {"perch_pitch": 65.0, "ground_pitch": 35.0, "tail_down": 5.0},
-	"owl": {"perch_pitch": 72.0, "ground_pitch": 45.0, "tail_down": 5.0},
+	"sparrow": {"perch_pitch": 25.0, "ground_pitch": 10.0, "tail_down": 15.0, "stance": 0.78},
+	"crow": {"perch_pitch": 35.0, "ground_pitch": 10.0, "tail_down": 20.0, "stance": 0.78},
+	"hawk": {"perch_pitch": 60.0, "ground_pitch": 30.0, "tail_down": 5.0, "stance": 0.78},
+	"falcon": {"perch_pitch": 65.0, "ground_pitch": 35.0, "tail_down": 5.0, "stance": 0.78},
+	"owl": {"perch_pitch": 72.0, "ground_pitch": 45.0, "tail_down": 5.0, "stance": 0.68},
 }
 const CAMBER := 0.03   ## feather arch height, as a share of its length
 const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
@@ -76,6 +78,7 @@ var look_dir := Vector3.FORWARD ## rig space, where the head looks
 var world_up := Vector3.UP      ## rig space, for head stabilisation
 var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var toe_grip := 0.0             ## 0 open .. 1 curled round a branch
+var grip_radius := 0.0          ## the branch under the feet (m; 0: none, or the ground): the detailed toes wrap it
 var neck_ext := 0.3             ## 0 retracted (head on the shoulders) .. 1 reaching
 var head_offset := Vector3.ZERO ## rig space, head stabilisation: where the head lags its neck target
 var fluff := 1.0                ## plumage volume (1 sleek .. ~1.15 fluffed)
@@ -1364,15 +1367,16 @@ func animate(t: Dictionary, dt: float) -> void:
 	var dip := 0.0
 	if sitting and age < 0.4:
 		dip = sin(PI * age / 0.4) * (1.0 - age / 0.4) * _L * 0.12
-	# Stance: sitting, the body rides at a natural height over its feet -- the hips about 70% of the leg's reach
-	# above a branch (perched birds crouch), 85% above the ground -- so the feet meet the surface whatever the
+	# Stance: sitting, the body rides at a natural height over its feet -- the hips POSE.stance of the leg's reach
+	# above a branch (perched birds crouch a little, the upright owl more: its long legs leave the body low), 85%
+	# above the ground -- so the feet meet the surface whatever the
 	# species' proportions. Visual only: the bird's body for the game doesn't move.
 	var stance_t := 0.0
 	if sitting and t.has_grip:
 		var parent_xf := get_parent_node_3d().global_transform if get_parent_node_3d() != null else Transform3D()
 		var hip_w := parent_xf * ((_hip[0] + _hip[1]) * 0.5)
 		var reach := body.femur + _tib + _tars
-		var want_h := reach * (0.7 if state == Bird.State.PERCHED else 0.85)
+		var want_h := reach * (float(POSE.get(profile.id, POSE["crow"]).stance) if state == Bird.State.PERCHED else 0.85)
 		stance_t = want_h - (hip_w - (t.grip as Vector3)).dot(Vector3.UP)
 	_stance = lerpf(_stance, stance_t, 1.0 if age < 0.05 else 1.0 - exp(-10.0 * dt))
 	position = transform.basis * (world_up * (_stance - dip))
@@ -1408,6 +1412,7 @@ func animate(t: Dictionary, dt: float) -> void:
 			want_foot = _hip[i] + Vector3(0.0, -_L * 0.22, -_L * 0.16)
 		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
 		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
+	grip_radius = float(t.get("grip_radius", 0.0)) if t.has_grip else 0.0
 	apply_pose()
 
 
@@ -1667,6 +1672,8 @@ func apply_pose() -> void:
 		fdir = (fdir + (target - hip).normalized() * 0.2).normalized()
 		var knee := hip + fdir * body.femur
 		var pole := knee - fwd_h * _L * 0.3 - up_w * _L * 0.05
+		if legs != null:   # (the foot pad sits on the surface, not half in it)
+			target += up_w * legs.sole_height()
 		var ankle := two_bone(knee, target, _tib, _tars, pole)
 		var foot := chain_end(ankle, target, _tars)
 		leg_joints[i] = [hip, knee, ankle, foot]

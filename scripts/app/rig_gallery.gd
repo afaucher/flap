@@ -1,6 +1,6 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
-##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
+##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile|feet|toes]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
 ##       [--zoom <x>] [--ortho] [--light studio|flat] [--no-cards] [--no-down] [--legs detail|capsules] [--branch]
 ##       [--shot <png> --shot-after <s>] [--measure <frames>]
@@ -10,7 +10,7 @@ extends Node3D
 ## glide (default) holds the wings spread; flap animates a wingbeat; folded is the perched pose with feet
 ## gripping; flare is the landing pose (wings forward, alula out, tail fanned down, feet reaching).
 ## --legs detail draws the detailed legs and feet (LegRig; docs/design/legs_and_feet.md); --view feet frames them
-## close up from the front quarter; --branch draws the branch the folded pose grips; --ortho an orthographic camera.
+## close up from the front quarter, --view toes along the branch (how the toes wrap it); --branch draws the branch the folded pose grips; --ortho an orthographic camera.
 
 var rigs: Array[BirdRig] = []
 var pose := "glide"
@@ -102,8 +102,8 @@ func _ready() -> void:
 		for r in rigs:
 			var branch := MeshInstance3D.new()
 			var cyl := CylinderMesh.new()
-			cyl.top_radius = r._L * 0.045
-			cyl.bottom_radius = r._L * 0.045
+			cyl.top_radius = r._L * RigPoses.BRANCH_R
+			cyl.bottom_radius = r._L * RigPoses.BRANCH_R
 			cyl.height = r._L * 0.6
 			branch.mesh = cyl
 			var bm := StandardMaterial3D.new()
@@ -111,15 +111,23 @@ func _ready() -> void:
 			bm.roughness = 0.95
 			branch.material_override = bm
 			branch.rotation_degrees = Vector3(0, 0, 90)
-			branch.position = r.position + Vector3(0.0, -r._L * 0.35 - r._L * 0.045, 0.0)
+			branch.position = Vector3(r.position.x, r.to_global(r.foot_targets[1]).y - r._L * RigPoses.BRANCH_R, r.position.z)
 			add_child(branch)
 	var focus := mid
-	if view == "feet":   # close on the feet, from the front quarter and a little below the belly
+	if view == "feet" or view == "toes":   # close on the feet: from the front quarter, or (toes) along the branch
 		var f := rigs[0].to_global((rigs[0].leg_joints[1][3] as Vector3).lerp(rigs[0].leg_joints[0][3], 0.5))
 		var at := f + Vector3(0.0, profiles[0].body_length * 0.08, 0.0)
 		focus = at
 		cam.near = 0.002
-		cam.look_at_from_position(at + Vector3(0.9, 0.35, -0.75).normalized() * profiles[0].body_length * 0.75 / (float(Boot.arg_value(args, "--zoom")) if Boot.arg_value(args, "--zoom") != "" else 1.0), at, Vector3.UP)
+		var from := Vector3(0.9, 0.35, -0.75)
+		if view == "toes":   # (level with the branch's axis, the near plane cutting away the wing and the near foot)
+			from = Vector3(1.0, 0.0, 0.0)
+			at = f - Vector3(0.0, profiles[0].body_length * RigPoses.BRANCH_R, 0.0)
+			focus = at
+		var dist := profiles[0].body_length * 0.75 / (float(Boot.arg_value(args, "--zoom")) if Boot.arg_value(args, "--zoom") != "" else 1.0)
+		cam.look_at_from_position(at + from.normalized() * dist, at, Vector3.UP)
+		if view == "toes":
+			cam.near = dist - profiles[0].body_length * 0.02
 	if view == "head" or view == "profile":   # close on the face: three-quarter front, or side on
 		var h := rigs[0].to_global(rigs[0]._head_pos)
 		var off := Vector3(0.45, 0.15, -1.0) if view == "head" else Vector3(1.0, 0.05, -0.05)

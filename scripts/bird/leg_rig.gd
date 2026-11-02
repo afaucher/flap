@@ -36,35 +36,32 @@ const HANDOVER := [0.35, 0.7]   ## the trousers' first rings: how far their char
 const LOOP_FLARE := 1.6     ## the trousers' loop on the trunk: the first ring spread this much
 
 ## Per species (docs/research/legs_and_feet.md §7.2; sizes as fractions of L, our picks from its numbers):
-## skin / claw / trouser (leg feathers; "" = the body's own colour where the leg leaves it) / toe_col (the owl's
-## feathered toes); feathered: "ankle" (bare tarsus) or "foot" (the owl); flag: how far the trousers hang past the
+## skin / claw / trouser (leg feathers; "" = the body's own colour where the leg leaves it); feathered: "ankle"
+## (bare tarsus) or "foot" (the owl: a barn owl, feathered down the tarsus to its toes, which are bare and
+## bristled -- docs/research/legs_and_feet.md 2); flag: how far the trousers hang past the
 ## ankle, share of the tarsus; thigh / shank: the feather tube's radius at the body and at the ankle; tars_r: the
 ## bare tarsus; toe: the middle toe's length without its claw; toe_r: a toe's radius at its base; claws: [I, II,
 ## III, IV] claw lengths (Fowler et al. 2009's ratios); arc: the claw's curve (deg); pads: "joint" (raptors) or
-## "bone" (perchers) and how much they bulge; scutes: front plates (0 = reticulate all round: falcons); pad_r: the
+## "bone" (perchers) and how much they bulge; scutes: front plates (0 = reticulate all round: falcons); bristles:
+## fine hairs on the toes (the barn owl's); pad_r: the
 ## foot pad's half-width; curl: total curl of a toe at full grip (deg); toe_len: [II, III, IV, I] / middle toe.
 const SPEC := {
 	"crow": {"skin": "#232327", "claw": "#0e0e10", "trouser": "", "feathered": "ankle", "flag": 0.06, "thigh": 0.05, "shank": 0.022,
 		"tars_r": 0.0085, "toe": 0.075, "toe_r": 0.0054, "claws": [0.025, 0.0205, 0.0245, 0.019], "arc": 115.0, "pads": "bone", "bulge": 0.25,
-		"scutes": 1.0, "fuzz": 0.0, "pad_r": 0.018, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
-	"owl": {"skin": "#958280", "claw": "#2e3035", "trouser": "#e6d8bd", "toe_col": "#dccdb2", "feathered": "foot", "flag": 0.0, "thigh": 0.06, "shank": 0.03,
+		"scutes": 1.0, "pad_r": 0.018, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
+	"owl": {"skin": "#958280", "claw": "#2e3035", "trouser": "#e6d8bd", "feathered": "foot", "flag": 0.0, "thigh": 0.06, "shank": 0.03,
 		"tars_r": 0.012, "toe": 0.075, "toe_r": 0.0072, "claws": [0.036, 0.04, 0.039, 0.034], "arc": 95.0, "pads": "joint", "bulge": 0.4,
-		"scutes": 0.0, "fuzz": 1.0, "pad_r": 0.024, "curl": 105.0, "toe_len": [0.85, 1.0, 0.85, 0.7], "end_r": 0.019},
+		"scutes": 0.6, "bristles": 1.0, "pad_r": 0.024, "curl": 105.0, "toe_len": [0.85, 1.0, 0.85, 0.7], "end_r": 0.019},
 	"hawk": {"skin": "#e3c04a", "claw": "#161514", "trouser": "#e2d4bc", "feathered": "ankle", "flag": 0.22, "thigh": 0.058, "shank": 0.03,
 		"tars_r": 0.0105, "toe": 0.085, "toe_r": 0.0062, "claws": [0.047, 0.043, 0.031, 0.026], "arc": 115.0, "pads": "joint", "bulge": 0.5,
-		"scutes": 1.0, "fuzz": 0.0, "pad_r": 0.02, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
+		"scutes": 1.0, "pad_r": 0.02, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
 	"falcon": {"skin": "#e8c547", "claw": "#141416", "trouser": "#bdb6ae", "feathered": "ankle", "flag": 0.15, "thigh": 0.055, "shank": 0.028,
 		"tars_r": 0.0105, "toe": 0.09, "toe_r": 0.006, "claws": [0.028, 0.025, 0.0245, 0.022], "arc": 118.0, "pads": "joint", "bulge": 0.5,
-		"scutes": 0.0, "fuzz": 0.0, "pad_r": 0.02, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
+		"scutes": 0.0, "pad_r": 0.02, "curl": 105.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
 	"sparrow": {"skin": "#b38b7c", "claw": "#4e423a", "trouser": "", "feathered": "ankle", "flag": 0.06, "thigh": 0.05, "shank": 0.022,
 		"tars_r": 0.0085, "toe": 0.078, "toe_r": 0.0054, "claws": [0.0275, 0.023, 0.027, 0.021], "arc": 110.0, "pads": "bone", "bulge": 0.25,
-		"scutes": 0.8, "fuzz": 0.0, "pad_r": 0.018, "curl": 100.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
+		"scutes": 0.8, "pad_r": 0.018, "curl": 100.0, "toe_len": [0.78, 1.0, 0.8, 0.62]},
 }
-## The leg bones (tibiotarsus, tarsometatarsus) as fractions of L, from the measured bones (docs/research/
-## legs_and_feet.md §1.3): a longer tibiotarsus and a shorter tarsus than BodyShape.DATA's estimates, so a perched
-## bird's ankle hangs below its belly and the feathered tibia shows. Applied to the rig when the detailed legs are
-## on (BirdRig's IK and stance read them; BodyShape keeps its own until this is taken).
-const BONES := {"crow": [0.19, 0.13], "owl": [0.25, 0.16], "hawk": [0.2, 0.15], "falcon": [0.19, 0.12], "sparrow": [0.18, 0.12]}
 ## Toes in BirdRig's order [inner II, middle III, outer IV, hallux I]: the phalanges before the claw (shares of the
 ## toe; toe I has 2 phalanges, II 3, III 4, IV 5, the last one inside the claw), the claw's index in SPEC.claws, and
 ## the toe's heading off the bird's forward (deg, + outward). The front toes splay so their bases on the pad don't
@@ -73,6 +70,7 @@ const PHALANGES := [[0.55, 0.45], [0.38, 0.32, 0.3], [0.32, 0.25, 0.22, 0.21], [
 const CLAW_OF := [1, 2, 3, 0]
 const YAW := [-36.0, 6.0, 50.0, 190.0]
 const OWL_SWING_YAW := 125.0   ## the owl's outer toe when it swings back (2 + 2)
+const CURL_MAX := 1.8   ## a toe fitted to a branch curls at most this x the species' curl (deg, SPEC.curl)
 
 var rig: BirdRig
 var spec: Dictionary
@@ -92,7 +90,6 @@ var toe_heading: Array = [[], []]        ## per side, each toe's first phalanx (
 
 var _skin_col: Color
 var _claw_col: Color
-var _toe_col: Color
 var _unit_s := 0.003   ## a scale's size (m)
 var _unit_t := 0.002   ## a toe scale's size
 var _key_f: Array = [PackedFloat32Array(), PackedFloat32Array()]
@@ -106,21 +103,18 @@ func _init(r: BirdRig) -> void:
 	rig = r
 	L = r._L
 	spec = SPEC.get(r.profile.id, SPEC["crow"])
-	var bones: Array = BONES.get(r.profile.id, BONES["crow"])
-	r._tib = float(bones[0]) * L
-	r._tars = float(bones[1]) * L
 	_skin_col = Color.html(spec.skin)
 	_claw_col = Color.html(spec.claw)
-	_toe_col = Color.html(spec.get("toe_col", spec.skin))
 	_skin_col.a = 0.0   # (COLOR.a is the keratin mask: 0 skin, 1 claw)
-	_toe_col.a = 0.0
 	_unit_s = float(spec.tars_r) * L * 0.55
 	_unit_t = float(spec.toe_r) * L * 0.7
 	skin_mat = ShaderMaterial.new()
 	skin_mat.shader = SKIN_SHADER
 	skin_mat.set_shader_parameter("scutes", float(spec.scutes))
-	skin_mat.set_shader_parameter("fuzz", float(spec.fuzz))
-	skin_mat.set_shader_parameter("scale_m", _unit_s)
+	skin_mat.set_shader_parameter("bristles", float(spec.get("bristles", 0.0)))
+	skin_mat.set_shader_parameter("scales", ScaleTile.load_scales())
+	skin_mat.set_shader_parameter("scales_n", ScaleTile.load_normals())
+	skin_mat.set_shader_parameter("tile", ScaleTile.TILE)
 	plain_mat = StandardMaterial3D.new()
 	plain_mat.albedo_color = Color.WHITE
 	plain_mat.vertex_color_use_as_albedo = true
@@ -147,7 +141,7 @@ func _init(r: BirdRig) -> void:
 func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, grip: float, swing: float) -> Array:
 	var st := rig.fluff * (1.0 + 0.012 * rig.breath)   # (the trunk's scale this pose: BirdRig sets it after the legs)
 	var kf := PackedFloat32Array([knee.x, knee.y, knee.z, ankle.x, ankle.y, ankle.z, foot.x, foot.y, foot.z, st])
-	var ks := PackedFloat32Array([ankle.x, ankle.y, ankle.z, foot.x, foot.y, foot.z, up_w.x, up_w.y, up_w.z, fwd_h.x, fwd_h.y, fwd_h.z, grip, swing])
+	var ks := PackedFloat32Array([ankle.x, ankle.y, ankle.z, foot.x, foot.y, foot.z, up_w.x, up_w.y, up_w.z, fwd_h.x, fwd_h.y, fwd_h.z, grip, swing, rig.grip_radius])
 	if spec.feathered == "foot":   # (the owl's feather tube ends on the pad: it moves with the foot's frame too)
 		kf.append_array(ks)
 	var fmat: Material = rig.body_texture_material if rig.body_texture_material != null else plain_mat
@@ -669,6 +663,11 @@ func _pad_frame(i: int, foot: Vector3, up_w: Vector3, fwd_h: Vector3) -> Array:
 	return [foot, right * s, up_w, fwd_h, pr, pr * PAD_FLAT]
 
 
+## How far the pad's centre (the foot point) sits above the surface it stands on.
+func sole_height() -> float:
+	return float(spec.pad_r) * L * PAD_FLAT
+
+
 static func _pad_local(p: Vector3, fr: Array) -> Vector3:
 	var q: Vector3 = p - fr[0]
 	return Vector3(q.dot(fr[1]) / float(fr[4]), q.dot(fr[2]) / float(fr[5]), q.dot(fr[3]) / float(fr[4]))
@@ -724,7 +723,7 @@ func _build_skin(i: int, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Ve
 	var fr := _pad_frame(i, foot, up_w, fwd_h)
 	pad_centre[i] = foot
 	var owl: bool = spec.feathered == "foot"
-	var pad_col := _toe_col if owl else _skin_col
+	var pad_col := _skin_col
 	var t2 := (foot - ankle).normalized()
 	var tars := ankle.distance_to(foot)
 	var f2 := _frame(t2, s)
@@ -849,22 +848,22 @@ func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float,
 	var side := (up.cross(base) * s).normalized()
 	var phal: Array = PHALANGES[k]
 	var length := float(spec.toe) * L * float(spec.toe_len[k])
-	var total := deg_to_rad(float(spec.curl)) * grip
-	var per_joint := total * 0.85 / phal.size()
+	var r0 := float(spec.toe_r) * L
+	var claw_len := float(spec.claws[CLAW_OF[k]]) * L
+	var arc := deg_to_rad(float(spec.arc))
+	var turns := _curl(phal, length, r0, claw_len, arc, base, fr) if rig.grip_radius > 0.0 else _curl_fixed(phal.size())
 	# The chain: joints from the pad's centre; each phalanx turned down by the curl at the joint before it.
 	var dirs: Array[Vector3] = []
 	var joints: Array[Vector3] = [fr[0]]
 	var xs := PackedFloat32Array([0.0])
-	var d := base.rotated(side, s * total * 0.15)
+	var d := base
 	for p in phal.size():
-		if p > 0:
-			d = d.rotated(side, s * per_joint)
+		d = d.rotated(side, s * turns[p] * grip)
 		dirs.append(d)
 		joints.append(joints[p] + d * length * float(phal[p]))
 		xs.append(xs[p] + length * float(phal[p]))
-	var claw_dir := d.rotated(side, s * per_joint)
+	var claw_dir := d.rotated(side, s * turns[phal.size()] * grip)
 	toe_heading[i][k] = dirs[0]
-	var r0 := float(spec.toe_r) * L
 	var r_tip := r0 * 0.72
 	var bulge := float(spec.bulge)
 	var at_joint: bool = spec.pads == "joint"
@@ -907,8 +906,6 @@ func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float,
 		uv2s.append(_fill_v2(n + 1, Vector2(per, 1.0)))
 	# The claw: the toe's last ring runs on along an arc curving down (ventral), tapering to a point, flattened
 	# side to side; its colour turns to horn just past the base.
-	var claw_len := float(spec.claws[CLAW_OF[k]]) * L
-	var arc := deg_to_rad(float(spec.arc))
 	var R := claw_len / arc
 	var p_end: Vector3 = joints[phal.size()]
 	var dors := (claw_dir.cross(side) * s).normalized()
@@ -959,6 +956,75 @@ func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float,
 	var lc := col
 	bld.tube("toe%d" % k, [loop, mid] + rows, [fr[0], c0.lerp(fr[0], 0.5)] + centres, [_fill_c(n, lc), _fill_c(n, lc)] + cols, [luv, mid_uv] + uvs, [luv2, mid_uv2] + uv2s)
 	return tip
+
+
+## A toe's curl with no branch to fit (on the ground the grip is 0 anyway): the species' total, 15 % at the root
+## and the rest shared between the joints. [root turn, each joint's, the claw's base] (rad, at full grip).
+func _curl_fixed(nphal: int) -> PackedFloat32Array:
+	var total := deg_to_rad(float(spec.curl))
+	var out := PackedFloat32Array([total * 0.15])
+	for p in range(1, nphal):
+		out.append(total * 0.85 / nphal)
+	out.append(total * 0.85 / nphal)
+	return out
+
+
+## A toe's curl fitted to the branch (docs/design/legs_and_feet.md §4.5), worked out in the toe's own vertical plane
+## (x along its heading, y up, from the branch's axis under the pad). A toe running at an angle θ to the branch's
+## circumference cuts the bark in an ellipse there, R high and R / |cos θ| long, so it wraps less far round than the
+## middle toe and the hallux. Each phalanx is a chord from the joint before onto that ellipse (grown by the toe's
+## radius -- its centreline -- and by the chord's sagitta, so the bone's middle doesn't cut into the bark), and
+## the claw's base is turned so its curved tip comes down onto the bark. On a thick branch the toes lie over its
+## top; on a twig the curl saturates at CURL_MAX x the species' curl. [root turn, each joint's, the claw's base]
+## (rad, downward, at full grip).
+func _curl(phal: Array, length: float, r0: float, claw_len: float, arc: float, base: Vector3, fr: Array) -> PackedFloat32Array:
+	var r := rig.grip_radius
+	var c := maxf(absf(base.dot(fr[3] as Vector3)), 0.22)
+	var ea := (r + r0) / c   # (the centreline's ellipse)
+	var eb := r + r0
+	var ell := func(phi: float) -> Vector2: return Vector2(ea * sin(phi), eb * cos(phi))
+	var at := Vector2(0.0, r + sole_height())   # (the pad's centre, over the top of the bark)
+	var out := PackedFloat32Array()
+	var ang := 0.0   # (the last chord's angle below the heading)
+	for p in phal.size():
+		var l := length * float(phal[p])
+		var grow := sqrt(1.0 + pow(l / (2.0 * eb), 2.0))   # (joints out by the chord's sagitta: its middle stays on the bark)
+		var lo := atan2(at.x / ea, at.y / eb)   # (the ellipse's point level with this joint)
+		var hi := lo + PI
+		for it in 24:   # (bisection: the chord's far end slides on along the ellipse)
+			var m := (lo + hi) * 0.5
+			if ((ell.call(m) as Vector2) * grow).distance_to(at) < l:
+				lo = m
+			else:
+				hi = m
+		var d: Vector2 = (ell.call((lo + hi) * 0.5) as Vector2) * grow - at
+		var a2 := atan2(-d.y, d.x)
+		out.append(a2 - ang)
+		ang = a2
+		at += Vector2(cos(a2), -sin(a2)) * l
+	# The claw, from the last joint: turned until its tip, curving round its own arc, reaches the bark's ellipse.
+	var rcl := claw_len / arc
+	var lo := ang - 1.0
+	var hi := ang + 1.5
+	for it in 16:   # (more turn brings the tip in)
+		var m := (lo + hi) * 0.5
+		var dir := Vector2(cos(m), -sin(m))
+		var dors := Vector2(sin(m), cos(m))
+		var tip := at - dors * rcl + rcl * (dors * cos(arc) + dir * sin(arc))
+		var bark := r + r0 * 0.15
+		if pow(tip.x * c / bark, 2.0) + pow(tip.y / bark, 2.0) > 1.0:
+			lo = m
+		else:
+			hi = m
+	out.append((lo + hi) * 0.5 - ang)
+	var total := 0.0
+	for t in out:
+		total += maxf(t, 0.0)
+	var cap := deg_to_rad(float(spec.curl)) * CURL_MAX
+	if total > cap:
+		for p in out.size():
+			out[p] *= cap / total
+	return out
 
 
 ## Mesh arrays built tube by tube, normals from the faces (each tube's seam column shares its first column's).
