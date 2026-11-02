@@ -10,6 +10,9 @@ extends Node3D
 ## Bird.DOWN_FEATHERS lost downs a bird (a long stun; it drops) and `downed` is emitted -- the scene decides what
 ## happens next.
 
+## Teams: each bird is on one (add_bird's `team`; unset, a team of its own, so everyone is an enemy). Locks and
+## the HUD's target pick only enemies; bursts still hurt anyone but the shooter (friendly fire stays on).
+
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String)
 
@@ -26,6 +29,9 @@ var birds: Array = []
 var launchers: Array = []
 var projectiles: Array = []
 var hits := {}              ## Bird -> hits taken
+var teams := {}             ## Bird -> team id
+var _next_team := 100       ## (the teams of birds added without one)
+const LANE := 1.3           ## m off the line of fire within which a teammate is in the way (a burst's reach)
 var _rng := RandomNumberGenerator.new()
 var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
 var player: Launcher = null
@@ -86,9 +92,13 @@ static func _fx_material(bright: bool) -> StandardMaterial3D:
 	return m
 
 
-func add_bird(b: Bird, controller: Object = null) -> Launcher:
+func add_bird(b: Bird, controller: Object = null, team := -1) -> Launcher:
 	birds.append(b)
 	hits[b] = 0
+	if team < 0:
+		team = _next_team
+		_next_team += 1
+	teams[b] = team
 	var l := Launcher.new(b, controller)
 	launchers.append(l)
 	return l
@@ -97,6 +107,7 @@ func add_bird(b: Bird, controller: Object = null) -> Launcher:
 func remove_bird(b: Bird) -> void:
 	birds.erase(b)
 	hits.erase(b)
+	teams.erase(b)
 	for l in launchers.duplicate():
 		if l.bird == b:
 			launchers.erase(l)
@@ -130,6 +141,31 @@ func _physics_process(dt: float) -> void:
 		if f.type == "feather":
 			f.vel = f.vel * exp(-2.5 * dt) + Vector3.DOWN * 0.6 * dt
 			f.pos += f.vel * dt
+
+
+## Are `a` and `b` on the same team? (A bird is its own friend.)
+func friends(a: Bird, b: Bird) -> bool:
+	return teams.get(a, -1) == teams.get(b, -2)
+
+
+## The nearest teammate of `l`'s bird in its line of fire: ahead along the aim, 2 to 45 m out, within LANE of the
+## line. Null when the lane is clear. (The HUD shows it; firing isn't blocked.)
+func friend_in_line(l: Launcher) -> Bird:
+	var from := l.muzzle()
+	var aim := l.aim()
+	var best: Bird = null
+	var best_d := INF
+	for b in birds:
+		if b == l.bird or not is_instance_valid(b) or not friends(b, l.bird):
+			continue
+		var d: Vector3 = b.global_position - from
+		var along := d.dot(aim)
+		if along < 2.0 or along > 45.0:
+			continue
+		if (d - aim * along).length() < LANE and along < best_d:
+			best = b
+			best_d = along
+	return best
 
 
 ## What threatens `b` that it could see (for evading): the nearest projectile within 25 m heading at it, else a

@@ -34,6 +34,7 @@ var shots := 0
 var rearm_perch := -1          ## the base's perch (Perch.id): the only place to rearm and mend (-1: any perch)
 var _perched := 0.0
 var _birds: Array = []
+var _world: CombatWorld = null
 
 
 func _init(b: Bird, ctl: Object = null) -> void:
@@ -66,6 +67,7 @@ func locked() -> bool:
 
 func step(dt: float, world: CombatWorld) -> void:
 	_birds = world.birds
+	_world = world
 	cooldown = maxf(0.0, cooldown - dt)
 	var inp: CombatInput = controller.sample(self, dt) if controller != null else CombatInput.new()
 	var other := Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
@@ -120,7 +122,7 @@ func _update_lock(dt: float) -> void:
 	var best: Bird = null
 	var best_a := LOCK_CONE
 	for b in _birds:
-		if b == bird or not is_instance_valid(b):
+		if not is_instance_valid(b) or not is_enemy(b):   # (never a lock on a teammate)
 			continue
 		var br := bearing(b)
 		if br.x <= best_a and br.y >= LOCK_RANGE.x and br.y <= LOCK_RANGE.y:
@@ -131,14 +133,19 @@ func _update_lock(dt: float) -> void:
 		lock = 0.0
 
 
-## The bird the HUD brackets: the locked or locking one, else the nearest within TARGET_RANGE in front.
+## Is `b` an enemy of this launcher's bird (another team)? Every other bird is, outside a CombatWorld.
+func is_enemy(b: Bird) -> bool:
+	return b != bird and (_world == null or not _world.friends(bird, b))
+
+
+## The bird the HUD brackets: the locked or locking one, else the nearest enemy within TARGET_RANGE in front.
 func target() -> Bird:
 	if lock_target != null and is_instance_valid(lock_target):
 		return lock_target
 	var best: Bird = null
 	var best_score := INF
 	for b in _birds:
-		if b == bird or not is_instance_valid(b):
+		if not is_instance_valid(b) or not is_enemy(b):
 			continue
 		var br := bearing(b)
 		if br.y > TARGET_RANGE or br.x > 70.0:

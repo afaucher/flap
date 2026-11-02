@@ -5,7 +5,9 @@ extends Node3D
 ## flight feathers (2.5 on average); eight lost down it, and it comes back a moment later, mended. The target
 ## flies a racetrack above the clearing: straights long enough to lock, turns that break it. Your base is the
 ## outpost nearest the clearing (with no outposts, the start perch): sit on its rail for two seconds to rearm
-## and grow lost feathers back; the HUD points home when you need it.
+## and grow lost feathers back; the HUD points home when you need it. Two sides: you and a wingman (a crow on
+## its own racetrack above the target's; --no-wingman leaves it out) against the target. The HUD marks friend
+## and foe; locks only take enemies, but a burst still hurts a teammate.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
 ## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
 ## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
@@ -16,6 +18,9 @@ extends Node3D
 const CIRCUIT_CENTRE := Vector3(0.0, 20.0, 0.0)   ## over the clearing, up among the emergent trees
 const CIRCUIT_LENGTH := 40.0   ## m of straight: time to lock
 const CIRCUIT_R := 12.0        ## m, the turns that break it
+const WINGMAN_ABOVE := 9.0     ## m: the wingman's racetrack, over the target's
+const YOUR_TEAM := 0
+const THEIR_TEAM := 1
 
 var layout: ArenaLayout
 var arena: ArenaBuilder
@@ -36,6 +41,9 @@ var evade := true            ## the target breaks when locked or shot at (T togg
 var loadout: Array = []      ## the pods, left and right: both of one kind (empty: Saddle.DEFAULT_LOADOUT)
 var tacks := {}              ## Bird -> Tack
 var home: Perch              ## your base's perch: where you rearm and mend
+var wingman: Bird            ## your side's other bird (null: --no-wingman)
+var wingman_pilot: CircuitPilot
+var with_wingman := true
 
 
 func _ready() -> void:
@@ -47,6 +55,7 @@ func _ready() -> void:
 	demo = args.has("--demo")
 	start_seekers = args.has("--seekers")
 	evade = not args.has("--no-evade")
+	with_wingman = not args.has("--no-wingman")
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
@@ -93,7 +102,7 @@ func _ready() -> void:
 
 func restart() -> void:
 	tacks.clear()
-	for b in [bird, target]:
+	for b in [bird, target, wingman]:
 		if b != null and is_instance_valid(b):
 			world.remove_bird(b)
 			trails.untrack(b)
@@ -105,9 +114,19 @@ func restart() -> void:
 	target_pilot.threat = world.threat_to
 	target_pilot.evade = evade
 	target = _spawn(target_id, target_pilot, "Target")
-	_arm(target, world.add_bird(target, null))
-	trails.track(target)
+	_arm(target, world.add_bird(target, null, THEIR_TEAM))
+	trails.track(target, CombatHud.ENEMY)
 	_launch_target()
+	# Your wingman: a racetrack of its own, above the target's, half a lap round.
+	wingman = null
+	if with_wingman:
+		wingman_pilot = CircuitPilot.new()
+		wingman_pilot.waypoints = CircuitPilot.clear_racetrack(layout, CIRCUIT_CENTRE + Vector3.UP * WINGMAN_ABOVE, CIRCUIT_LENGTH, CIRCUIT_R)
+		wingman_pilot.threat = world.threat_to
+		wingman = _spawn(target_id, wingman_pilot, "Wingman")
+		_arm(wingman, world.add_bird(wingman, null, YOUR_TEAM))
+		trails.track(wingman, CombatHud.FRIEND)
+		_launch_wingman()
 	# You: coming into the clearing from the south, a little above the target.
 	var flight: Object = player_ctl
 	var weapons: Object = PlayerCombat.new()
@@ -123,7 +142,7 @@ func restart() -> void:
 	var w: Array = target_pilot.waypoints   # come in behind the target's first straight, a little high
 	var along := ((w[1] as Vector3) - (w[0] as Vector3)).normalized()
 	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
-	world.player = world.add_bird(bird, weapons)
+	world.player = world.add_bird(bird, weapons, YOUR_TEAM)
 	_arm(bird, world.player)
 	home = _home()
 	world.player.rearm_perch = home.id
@@ -176,7 +195,20 @@ func _launch_target() -> void:
 	target.fly_from(w[0], ((w[1] as Vector3) - (w[0] as Vector3)).normalized(), target.profile.v_best)
 
 
+func _launch_wingman() -> void:
+	wingman.mend()
+	var w: Array = wingman_pilot.waypoints
+	var h: int = floori(w.size() * 0.5)
+	wingman_pilot.wp = (h + 1) % w.size()
+	wingman.fly_from(w[h], ((w[(h + 1) % w.size()] as Vector3) - (w[h] as Vector3)).normalized(), wingman.profile.v_best)
+
+
 func _on_downed(b: Bird) -> void:
+	if b == wingman:
+		await get_tree().create_timer(2.5).timeout
+		if is_instance_valid(wingman):
+			_launch_wingman()
+		return
 	if b != target:
 		return
 	await get_tree().create_timer(2.5).timeout

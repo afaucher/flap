@@ -37,6 +37,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
   that area and drops (`FlightModel.wing_loss`); eight down the bird; your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
+- Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
+  locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The
+  HUD: enemies warm (`CombatHud.ENEMY`), teammates a teal caret (`FRIEND`), a teal cross over the gunsight while a
+  teammate is in the line of fire; trails in team colour. The range: you and a wingman v the target.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, speed on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
