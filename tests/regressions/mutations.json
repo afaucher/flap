@@ -908,5 +908,24 @@
     "replace": "const LEAP_START := 1.0 "
    }
   ]
+ },
+ {
+  "id": "wingbeat-jump",
+  "bug": "Wingbeats were followed exactly with no easing: starting to flap, a new flap, or the flare's beats taking over at the catch jumped the wings to wherever the beat's phase was (a crow's wings went from level to raised in one frame) (2026-11-02).",
+  "tests": [
+   "test_wingbeat_onset"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t_beat_off = Vector2(flap - flap_t, hand_lift - lift_t)\n",
+    "replace": "\t\t\t_beat_off = Vector2.ZERO\n"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const BEAT_FADE := 0.12 ",
+    "replace": "const BEAT_FADE := 0.0001 "
+   }
+  ]
  }
 ]

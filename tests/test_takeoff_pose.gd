@@ -80,6 +80,19 @@ func setup() -> void:
 		check(off < 1.0, "%s steady flight: drawn as the Bird's own attitude (%.2f deg off)" % [p.id, off])
 		b.queue_free()
 		await frames(1)
+	# Straight up, the head looks along the heading, not back along the body's flattened nose (which points behind
+	# once the nose is past vertical).
+	for p in BirdProfile.all():
+		var up := Bird.new()
+		add_child(up)
+		up.setup(p, ArenaLayout.generate(7), ScriptedInput.new())
+		up.fly_from(Vector3(0, 30, 0), Vector3(0.08, 1.0, 0.0).normalized(), 8.0)
+		await frames(1)
+		var to: Vector3 = (up.telemetry().look_target as Vector3) - up.global_position
+		var flat := Vector3(to.x, 0.0, to.z)
+		check(flat.length() > 0.1 and flat.normalized().dot(up.model.heading_dir()) > 0.5, "%s climbing straight up looks along its heading (%.2f)" % [p.id, flat.normalized().dot(up.model.heading_dir())])
+		up.queue_free()
+		await frames(1)
 	# Off a perch: the push moves the bird off at its launch speed from the first tick, no shove ahead of it (the
 	# bird was once moved clear of the branch in one tick, a third of a metre for a hawk).
 	var lab := ArenaLayout.lab()

@@ -83,6 +83,13 @@ var lean := 0.0                 ## sitting: 0 the species' posture .. 1 the body
                                 ## tail and wingtips off what the bird sits on: BirdRig._posture)
 const LEAN_PITCH := 5.0         ## deg: the body's pitch at full lean
 const ATT_RATE := 400.0         ## deg/s: the drawn body turns at most this fast (the game's attitude can snap)
+const BEAT_FADE := 0.12         ## s: wingbeats fade in and out over this (BirdRig.animate)
+var _beat := 0.0                ## 0 .. 1: how far the wings follow the beat (flapping, or the flare's braking beats)
+var _beat_flap := 0.0           ## the beat's flap and hand lift this tick (kept while it fades out)
+var _beat_lift := 0.0
+var _beat_src := 0              ## what drives the beat: 0 none, 1 flapping, 2 the flare's braking beats
+var _beat_phase := 0.0
+var _beat_off := Vector2.ZERO   ## the drawn wings' flap and hand lift against the beat's, easing out (a beat change)
 var _att := Quaternion.IDENTITY
 var _att_set := false
 var neck_ext := 0.3             ## 0 retracted (head on the shoulders) .. 1 reaching
@@ -1316,12 +1323,15 @@ func animate(t: Dictionary, dt: float) -> void:
 
 	var flap_t := deg_to_rad(5.0)
 	var lift_t := 0.0
+	# Wingbeats are followed exactly (they are fast), but they fade in and out over BEAT_FADE: starting to flap,
+	# or the flare's braking beats starting at the catch, the wings swing from where they were into the beat
+	# rather than jumping to wherever the beat's phase is (a crow's wings went from level to raised in one frame).
+	var beating := false
 	if t.flapping and not sitting:
 		var ph: float = t.flap_phase
-		flap_t = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))   # top at 0, bottom at 0.5
-		if ph > 0.5:
-			lift_t = 50.0 * sin((ph - 0.5) * TAU)
-		k = 1.0   # wingbeats are fast: no smoothing
+		_beat_flap = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))   # top at 0, bottom at 0.5
+		_beat_lift = 50.0 * sin((ph - 0.5) * TAU) if ph > 0.5 else 0.0
+		beating = true
 	var fold_t: float = t.fold
 	var sweep_t := 12.0 * flare
 	var twist_t := clampf(alpha * 0.6, deg_to_rad(-8.0), deg_to_rad(18.0))
@@ -1330,17 +1340,37 @@ func animate(t: Dictionary, dt: float) -> void:
 		# in the last fifth the wings start to fold as the bird settles.
 		var lt: float = t.landing_t
 		var beat := fmod(lt * 2.0, 1.0)
-		flap_t = deg_to_rad(30.0 + 40.0 * cos(beat * TAU))
-		lift_t = 0.0
+		_beat_flap = deg_to_rad(30.0 + 40.0 * cos(beat * TAU))
+		_beat_lift = 0.0
+		beating = true
 		fold_t = smoothstep(0.8, 1.0, lt) * 0.8
 		sweep_t = 18.0 * (1.0 - smoothstep(0.8, 1.0, lt))
 		twist_t = deg_to_rad(40.0)
-		k = 1.0 - exp(-30.0 * dt)   # (fast, but eased: the wings swing into the braking beats, they don't jump)
 	if sitting:
 		flap_t = deg_to_rad(-10.0)
 		fold_t = 1.0
 		sweep_t = 0.0
 		twist_t = 0.0
+	_beat = move_toward(_beat, 1.0 if beating and not sitting else 0.0, dt / BEAT_FADE)
+	if _beat > 0.0 and not sitting:
+		var sb := smoothstep(0.0, 1.0, _beat)
+		flap_t = lerpf(flap_t, _beat_flap, sb)
+		lift_t = lerpf(lift_t, _beat_lift, sb)
+		# Where the beat changes -- the flare's braking beats taking over at the catch, a new flap starting --
+		# the wings carry on from where they are and the difference eases out over BEAT_FADE.
+		var src := 2 if landing else (1 if beating else 0)
+		var phase: float = t.get("flap_phase", 0.0)
+		if src != _beat_src or (src == 1 and phase < _beat_phase - 0.2):
+			_beat_off = Vector2(flap - flap_t, hand_lift - lift_t)
+		_beat_src = src
+		_beat_phase = phase
+		_beat_off = _beat_off.move_toward(Vector2.ZERO, _beat_off.length() * minf(dt / BEAT_FADE, 1.0) + 1e-4)
+		flap_t += _beat_off.x
+		lift_t += _beat_off.y
+		k = 1.0
+	else:
+		_beat_src = 0
+		_beat_off = Vector2.ZERO
 	flap = lerpf(flap, flap_t, k)
 	hand_lift = lerpf(hand_lift, lift_t, k)
 	# Feathers flex under load: in a downstroke the tips bend up, in the upstroke they trail back and down; a
