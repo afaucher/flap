@@ -8,6 +8,8 @@ extends Control
 ##   bracket    on the target: range and closing speed
 ##   arrow      at the screen edge when the target is off-screen or behind
 ##   rack       bottom right: rockets and seekers left, the selected one bright
+##   health     over the rack: your bird's feathers (Bird.health), a notch per feather it can lose; and a short bar
+##              under the target's bracket
 ##   tally      top right: shots, hits, downed
 ## Reads the launcher (and through it the birds) and the combat world's stats; draws in screen space.
 
@@ -58,6 +60,7 @@ func _draw() -> void:
 			var tp := cam.unproject_position(tpos)
 			var r := 18.0
 			_bracket(tp, r, LOCKED if l.locked() else INK)
+			_bar(Rect2(tp.x - r, tp.y + r + 5, r * 2.0, 4), float(t.telemetry().health), 0)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_text(tp + Vector2(r + 6, -r + 30), "%+.0f" % closing, DIM, 13)
 			if l.weapon == Launcher.Weapon.ROCKETS:
@@ -69,6 +72,8 @@ func _draw() -> void:
 			elif l.lock_target == t:
 				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
 	_rack(l)
+	_text(Vector2(size.x - 210, size.y - 77), "HEALTH", INK, 13)
+	_bar(Rect2(size.x - 130, size.y - 88, 106, 12), float(l.bird.telemetry().health), Bird.DOWN_FEATHERS)
 	if world != null:
 		var s := world.stats
 		var acc := 100.0 * float(s.hits) / maxf(float(s.shots), 1.0)
@@ -108,6 +113,16 @@ func _edge_arrow(cam: Camera3D, world_pos: Vector3) -> void:
 	var p := c + dir * r
 	var n := Vector2(-dir.y, dir.x)
 	draw_colored_polygon(PackedVector2Array([p + dir * 14.0, p + n * 9.0, p - n * 9.0]), INK)
+
+
+## A health bar: filled to `h` (0..1), red when low; `notches` marks between the feathers it counts.
+func _bar(r: Rect2, h: float, notches: int) -> void:
+	draw_rect(r.grow(1.0), Color(0, 0, 0, 0.45))
+	draw_rect(Rect2(r.position, Vector2(r.size.x * h, r.size.y)), LOCKED if h <= 0.375 else INK)
+	for k in range(1, notches):
+		var x := r.position.x + r.size.x * k / notches
+		draw_line(Vector2(x, r.position.y), Vector2(x, r.end.y), Color(0, 0, 0, 0.5), 1.0)
+	draw_rect(r, DIM, false, 1.0)
 
 
 func _rack(l: Launcher) -> void:

@@ -1273,5 +1273,75 @@
     "replace": "\tif is_nan(_posed_t):\n\t\t_posed_t = at\n"
    }
   ]
+ },
+ {
+  "id": "damage-roll-wrong-way",
+  "bug": "Feather damage: a wing that lost feathers must drop (the bird rolls toward it); with the sign flipped it rolls away (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "(wing_loss.y - wing_loss.x) * LOSS_ROLL",
+    "replace": "(wing_loss.x - wing_loss.y) * LOSS_ROLL"
+   }
+  ]
+ },
+ {
+  "id": "damage-area-ignored",
+  "bug": "Feather damage: lost flight feathers must cost the wing its lift (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": " * (1.0 - 0.5 * (wing_loss.x + wing_loss.y))",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "damage-feathers-still-drawn",
+  "bug": "Feather damage: the rig must leave a lost feather out of the drawing (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tif lost.has(key):\n\t\t\t\txf = _gone(xf)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "damage-downed-twice",
+  "bug": "Feather damage: a bird already down mustn't be downed (and counted) again by the next hit (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tif was_up and b.is_down():",
+    "replace": "\tif b.is_down():"
+   }
+  ]
+ },
+ {
+  "id": "damage-rearm-no-mend",
+  "bug": "Feather damage: a perch rearms and grows the lost feathers back (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\t\t\tif not bird.lost_feathers.is_empty():\n\t\t\t\tbird.mend()\n",
+    "replace": ""
+   }
+  ]
  }
 ]

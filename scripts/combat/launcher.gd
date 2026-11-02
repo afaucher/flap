@@ -4,7 +4,7 @@ extends RefCounted
 ## you aim it by flying the bird, like a First World War fighter. Two weapons:
 ##   ROCKETS  6 rounds, 4 a second while fire is held; unguided, so you fly the gunsight onto the lead marker.
 ##   SEEKERS  3 rounds; hold a target inside the LOCK_CONE for LOCK_TIME to lock, then fire.
-## Ammo is restocked by sitting on a perch for RESTOCK_TIME (later: outposts only).
+## Ammo is restocked, and lost feathers grown back, by sitting on a perch for RESTOCK_TIME (later: outposts only).
 ## Stepped by CombatWorld; reads the bird's public state only (state, model, global transform).
 
 enum Weapon { ROCKETS, SEEKERS }
@@ -75,6 +75,8 @@ func step(dt: float, world: CombatWorld) -> void:
 		_perched += dt
 		if _perched >= RESTOCK_TIME:
 			ammo = capacity.duplicate()
+			if not bird.lost_feathers.is_empty():
+				bird.mend()
 	else:
 		_perched = 0.0
 	var want := inp.fire_pressed or (weapon == Weapon.ROCKETS and inp.fire_held)

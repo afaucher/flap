@@ -1,8 +1,8 @@
 extends Node3D
 ## The combat range (proof of concept for ranged combat, docs/design/combat_concepts.html): the forest arena,
 ## your bird with a saddle launcher, and a target bird flying a figure-eight through the clearing. Fly onto
-## it and fire: rockets (lead it) or seekers (hold it in the cone for a second to lock). Three hits down it;
-## it comes back a moment later. The target flies a racetrack above the clearing: straights long enough to lock,
+## it and fire: rockets (lead it) or seekers (hold it in the cone for a second to lock). Each hit knocks out
+## flight feathers (2.5 on average); eight lost down it, and it comes back a moment later, mended. The target flies a racetrack above the clearing: straights long enough to lock,
 ## turns that break it. Sit on any perch for two seconds to rearm.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
 ##       [--loadout rockets,seekers]
@@ -143,6 +143,7 @@ func _spawn(id: String, ctl: Object, n: String) -> Bird:
 
 
 func _launch_target() -> void:
+	target.mend()
 	var w: Array = target_pilot.waypoints
 	target_pilot.wp = 1
 	target.fly_from(w[0], ((w[1] as Vector3) - (w[0] as Vector3)).normalized(), target.profile.v_best)
