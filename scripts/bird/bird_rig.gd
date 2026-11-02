@@ -142,7 +142,9 @@ var _last_carrier := Vector3.ZERO
 var _clock_t := 0.0
 var _stance := 0.0
 var flex := 0.0                 ## feather bend along the length: + tips up (downstroke load), - tips back/down (upstroke)
-var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4]
+var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4] (the capsule legs)
+var legs: LegRig                      ## the detailed legs and feet (LegRig.enabled; docs/design/legs_and_feet.md)
+var toe_tips: Array = [[], []]        ## per side, each toe's tip as drawn [inner, middle, outer, hallux] (tests)
 var _fairings: Array = [[], []]       ## per side: [patagium, humerus, forearm, hand] (the wing's thickness)
 var _built := false
 var _defs: Array = []
@@ -296,18 +298,21 @@ func _build_body(tint: Color) -> void:
 	head.material_override = body_mat
 	_head.add_child(head)
 	_build_face(skull, body_mat, hr)
-	for i in 2:
-		var parts: Array = []
-		for k in 6:
-			var mi := MeshInstance3D.new()
-			var c := CapsuleMesh.new()
-			c.radius = _L * (0.03 if k == 0 else (0.018 if k == 1 else 0.01))
-			c.height = 1.0   # rescaled per frame
-			mi.mesh = c
-			mi.material_override = _material(_body_color_at(0.6, -0.6, 0.8)) if k == 0 else leg_mat   # (the feathered drumstick)
-			add_child(mi)
-			parts.append(mi)
-		_leg_meshes[i] = parts
+	if LegRig.enabled:
+		legs = LegRig.new(self)
+	else:
+		for i in 2:
+			var parts: Array = []
+			for k in 6:
+				var mi := MeshInstance3D.new()
+				var c := CapsuleMesh.new()
+				c.radius = _L * (0.03 if k == 0 else (0.018 if k == 1 else 0.01))
+				c.height = 1.0   # rescaled per frame
+				mi.mesh = c
+				mi.material_override = _material(_body_color_at(0.6, -0.6, 0.8)) if k == 0 else leg_mat   # (the feathered drumstick)
+				add_child(mi)
+				parts.append(mi)
+			_leg_meshes[i] = parts
 
 
 ## The wing's thickness, from the anatomy (the arm is not a cylinder):
@@ -1443,18 +1448,10 @@ func apply_pose() -> void:
 		var ankle := two_bone(knee, target, _tib, _tars, pole)
 		var foot := chain_end(ankle, target, _tars)
 		leg_joints[i] = [hip, knee, ankle, foot]
-		var parts: Array = _leg_meshes[i]
-		_place_capsule(parts[0], knee, ankle)
-		_place_capsule(parts[1], ankle, foot)
-		var curl := deg_to_rad(70.0) * toe_grip
-		var s: float = SIDES[i]
-		# Three toes forward and one back; an owl swings its outer toe back too when it grips (2 + 2).
-		var outer := Vector3(s * 0.35, 0.0, -1.0).lerp(Vector3(s * 0.6, 0.0, 0.8), toe_grip if body.zygo else 0.0)
-		var toes := [Vector3(-s * 0.35, 0.0, -1.0), Vector3(0.0, 0.0, -1.0), outer, Vector3(0.0, 0.0, 1.0)]
-		for k in 4:
-			var td: Vector3 = (toes[k] as Vector3).normalized()
-			td = td.rotated(td.cross(Vector3.UP).normalized(), -curl)   # every toe curls down round the branch
-			_place_capsule(parts[2 + k], foot, foot + td * _L * (0.05 if k == 3 else 0.07))
+		if legs != null:   # (the detailed legs: lofted, joined, segmented toes, claws)
+			toe_tips[i] = legs.pose(i, knee, ankle, foot, up_w, fwd_h, toe_grip, toe_grip if body.zygo else 0.0)
+		else:
+			_place_capsule_legs(i, knee, ankle, foot)
 		var side := "L" if i == 0 else "R"
 		_pose_bone("femur." + side, hip, knee, Vector3.BACK)
 		_pose_bone("tibia." + side, knee, ankle, Vector3.BACK)
@@ -1500,6 +1497,25 @@ func apply_pose() -> void:
 	_head.basis = head_basis
 	_loft_neck()   # (after the head's basis: its end takes the head's colours in the head's frame)
 	_pose_bone("head", _head_pos, _head_pos + fwd * _L * 0.1, up)
+
+
+## The capsule legs (LegRig.enabled off): tibia and tarsus capsules, and four toe capsules from the foot.
+func _place_capsule_legs(i: int, knee: Vector3, ankle: Vector3, foot: Vector3) -> void:
+	var parts: Array = _leg_meshes[i]
+	_place_capsule(parts[0], knee, ankle)
+	_place_capsule(parts[1], ankle, foot)
+	var curl := deg_to_rad(70.0) * toe_grip
+	var s: float = SIDES[i]
+	# Three toes forward and one back; an owl swings its outer toe back too when it grips (2 + 2).
+	var outer := Vector3(s * 0.35, 0.0, -1.0).lerp(Vector3(s * 0.6, 0.0, 0.8), toe_grip if body.zygo else 0.0)
+	var toes := [Vector3(-s * 0.35, 0.0, -1.0), Vector3(0.0, 0.0, -1.0), outer, Vector3(0.0, 0.0, 1.0)]
+	var tips := []
+	for k in 4:
+		var td: Vector3 = (toes[k] as Vector3).normalized()
+		td = td.rotated(td.cross(Vector3.UP).normalized(), -curl)   # every toe curls down round the branch
+		tips.append(foot + td * _L * (0.05 if k == 3 else 0.07))
+		_place_capsule(parts[2 + k], foot, tips[k])
+	toe_tips[i] = tips
 
 
 ## [world up, level forward] in rig space: the frame the neck and femur hold to, whatever the trunk's pitch.

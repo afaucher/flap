@@ -2,12 +2,14 @@ extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
-##       [--zoom <x>] [--shot <png> --shot-after <s>] [--measure <frames>]
+##       [--zoom <x>] [--shot <png> --shot-after <s>] [--measure <frames>] [--legs detail|capsules] [--ortho] [--branch]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots. --measure prints the mean GPU render time and pose time over that many
 ## frames (after a warm-up) and quits: the plumage levels' cost (docs/research/feather_texture_study.md).
 ## glide (default) holds the wings spread; flap animates a wingbeat; folded is the perched pose with feet
 ## gripping; flare is the landing pose (wings forward, alula out, tail fanned down, feet reaching).
+## --legs detail draws the detailed legs and feet (LegRig; docs/design/legs_and_feet.md); --view feet frames them
+## close up from the front quarter; --branch draws the branch the folded pose grips; --ortho an orthographic camera.
 
 var rigs: Array[BirdRig] = []
 var pose := "glide"
@@ -28,6 +30,8 @@ func _ready() -> void:
 	var only := Boot.arg_value(args, "--only")
 	BirdRig.plain_feathers = not args.has("--feather-shader")
 	BirdRig.flat_perch = args.has("--flat-perch")
+	if Boot.arg_value(args, "--legs") != "":
+		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"
 	if Boot.arg_value(args, "--plumage") != "":
 		Plumage.level = int(Boot.arg_value(args, "--plumage"))
 	var sun_arg := Boot.arg_value(args, "--sun")
@@ -108,6 +112,32 @@ func _ready() -> void:
 	cam.fov = 50.0
 	cam.current = true
 	_pose_all(0.0)
+	if args.has("--branch") and pose == "folded":   # (the branch under the folded pose's grip point, across the bird)
+		for r in rigs:
+			var branch := MeshInstance3D.new()
+			var cyl := CylinderMesh.new()
+			cyl.top_radius = r._L * 0.045
+			cyl.bottom_radius = r._L * 0.045
+			cyl.height = r._L * 0.6
+			branch.mesh = cyl
+			var bm := StandardMaterial3D.new()
+			bm.albedo_color = Color(0.36, 0.3, 0.24)
+			bm.roughness = 0.95
+			branch.material_override = bm
+			branch.rotation_degrees = Vector3(0, 0, 90)
+			branch.position = r.position + Vector3(0.0, -r._L * 0.35 - r._L * 0.045, 0.0)
+			add_child(branch)
+	var focus := mid
+	if view == "feet":   # close on the feet, from the front quarter and a little below the belly
+		var f := rigs[0].to_global((rigs[0].leg_joints[1][3] as Vector3).lerp(rigs[0].leg_joints[0][3], 0.5))
+		var at := f + Vector3(0.0, profiles[0].body_length * 0.08, 0.0)
+		focus = at
+		cam.near = 0.002
+		cam.look_at_from_position(at + Vector3(0.9, 0.35, -0.75).normalized() * profiles[0].body_length * 0.75 / (float(Boot.arg_value(args, "--zoom")) if Boot.arg_value(args, "--zoom") != "" else 1.0), at, Vector3.UP)
+	if args.has("--ortho"):   # (same framing, no perspective: A/B sheets line up)
+		var dist := cam.global_position.distance_to(focus)
+		cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+		cam.size = 2.0 * dist * tan(deg_to_rad(cam.fov * 0.5))
 	if view == "head" or view == "profile":   # close on the face: three-quarter front, or side on
 		var h := rigs[0].to_global(rigs[0]._head_pos)
 		var off := Vector3(0.45, 0.15, -1.0) if view == "head" else Vector3(1.0, 0.05, -0.05)
