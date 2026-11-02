@@ -45,7 +45,7 @@ func _pines(a: ArenaLayout) -> void:
 		var limbs_up := 0
 		for br in t.branches:
 			if br.dead:
-				if br.root.distance_to(br.tip) > 0.9 + t.radius:
+				if br.root.distance_to(br.tip) > 1.4 + t.radius:
 					long_stubs += 1
 			elif br.root.y < t.crown_base - 0.01:
 				low_live += 1

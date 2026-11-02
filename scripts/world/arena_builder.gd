@@ -299,6 +299,8 @@ func _pinewood() -> void:
 			var lk := "stub" if br.dead else ("oak_limb" if oak else "limb")
 			batches[lk][2].append(Transform3D(b * Basis.from_scale(Vector3(br.radius, length, br.radius)), (br.root + br.tip) * 0.5))
 			custom[lk].append(Color(br.radius, length, fmod(seed + br.root.y * 0.37, 1.0), 0.6))
+			if not br.solid:
+				continue
 			var bcs := CollisionShape3D.new()
 			var cap := CapsuleShape3D.new()
 			cap.radius = br.radius

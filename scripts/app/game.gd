@@ -4,6 +4,7 @@ extends Node3D
 ## camera and the HUD. Optional AI birds fly perch to perch around it. Command-line options (after `--`):
 ##   --bird <id>        crow | owl | hawk | falcon | sparrow (default crow)
 ##   --seed <n>         arena seed (default 7)
+##   --forest greybox   the old grey test arena (default: the pine wood, Pinewood, in ForestLight)
 ##   --ai <n>           AI birds flying around (default 3)
 ##   --autopilot        the player's bird flies itself (P toggles in game)
 ##   --legs <kind>      detail (default) | capsules: the legs drawn
@@ -46,7 +47,7 @@ func _ready() -> void:
 	if Boot.arg_value(args, "--legs") != "":
 		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"
 
-	var pinewood := Boot.arg_value(args, "--forest") == "pinewood"   # (--forest pinewood: the pine wood, in its own light)
+	var pinewood := Boot.arg_value(args, "--forest") != "greybox"   # (the pine wood in its own light; --forest greybox: the old test arena)
 	if pinewood:
 		ForestLight.setup(self)
 	else:

@@ -222,6 +222,12 @@ That gives three distinct altitude bands that play differently. Those bands are 
 
 ## 6. The AI pilot (`scripts/ai/ai_pilot.gd`, `scripts/ai/flight_planner.gd`)
 
+> **Known gap (2026-11-02): trunk bumps.** The AI clips trees about once per perch reached: in the greybox
+> (seed 7: 25 bumps for 25 perches, the test's limit) and more in the pine wood (`Pinewood`, the game's
+> default arena), where `test_ai_flight` allows 1.3 bumps a perch for now. Most are pine trunks at 4-10 m and,
+> coming in to land, the limbs and trunk of the perch's own tree (the planner skips that tree). The goal is
+> to bring the pine wood back to 1.0; `tests/probe_pinewood_bonks.gd` lists what each bump hits.
+
 The AI drives a bird with **exactly the player's inputs** (`FlightInput`: stick, flap, catch). While perched, it turns to face its route out before taking off. On final, it holds catch. It sees only the bird's own state and the arena geometry. It works in four layers:
 
 1. **Goal.** Pick a perch it can reach on its energy.
