@@ -36,6 +36,9 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
+	if FlightHud.style != "dev":
+		_draw_styled()
+		return
 	var cam := get_viewport().get_camera_3d()
 	if cam == null or launcher == null or not is_instance_valid(launcher.bird):
 		return
@@ -92,11 +95,11 @@ func _cone_px(cam: Camera3D, deg: float) -> float:
 	return f * tan(deg_to_rad(deg))
 
 
-func _bracket(c: Vector2, r: float, col: Color) -> void:
+func _bracket(c: Vector2, r: float, col: Color, wd := 2.0) -> void:
 	var k := r * 0.45
 	for q in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-		draw_line(c + Vector2(q.x * r, q.y * (r - k)), c + q * r, col, 2.0)
-		draw_line(c + q * r, c + Vector2(q.x * (r - k), q.y * r), col, 2.0)
+		draw_line(c + Vector2(q.x * r, q.y * (r - k)), c + q * r, col, wd)
+		draw_line(c + q * r, c + Vector2(q.x * (r - k), q.y * r), col, wd)
 
 
 func _diamond(c: Vector2, r: float, col: Color, fill: bool) -> void:
@@ -136,6 +139,104 @@ func _home_marker(cam: Camera3D, at: Vector3, dist: float) -> void:
 	_text(c + Vector2(14, 6), label, INK, 13)
 
 
+## classic / ring: the same marks, outlined; your health and rounds in the top-left block (classic) or on the
+## aim ring (ring: health on its right, rounds along its bottom).
+func _draw_styled() -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or launcher == null or not is_instance_valid(launcher.bird):
+		return
+	var l := launcher
+	var sight := l.muzzle() + l.aim() * 25.0
+	var sight_ok := not cam.is_position_behind(sight)
+	var sp := cam.unproject_position(sight)
+	if sight_ok:
+		for pass_i in 2:
+			var col: Color = Color(0, 0, 0, 0.6) if pass_i == 0 else INK
+			var wd := 4.0 if pass_i == 0 else 2.0
+			draw_arc(sp, 12.0, 0, TAU, 32, col, wd)
+			draw_line(sp + Vector2(-24, 0), sp + Vector2(-15, 0), col, wd)
+			draw_line(sp + Vector2(15, 0), sp + Vector2(24, 0), col, wd)
+	var t := l.target()
+	if l.weapon == Launcher.Weapon.SEEKERS and sight_ok:
+		var rc := FlightHud.ring_centre if FlightHud.style == "ring" else sp   # (one circle: the ring is the lock cone)
+		draw_arc(rc, _cone_px(cam, Launcher.LOCK_CONE), 0, TAU, 64, Color(DIM, 0.3), 1.5)
+	if t != null:
+		var tpos: Vector3 = t.global_position
+		var br := l.bearing(t)
+		if cam.is_position_behind(tpos) or not get_viewport_rect().has_point(cam.unproject_position(tpos)):
+			_edge_arrow(cam, tpos)
+		else:
+			var tp := cam.unproject_position(tpos)
+			var r := 20.0
+			_bracket(tp, r + 1.0, Color(0, 0, 0, 0.6), 5.0)
+			_bracket(tp, r, LOCKED if l.locked() else INK, 2.5)
+			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
+			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)
+			if l.weapon == Launcher.Weapon.ROCKETS:
+				var lead := l.lead_point(t)
+				if not cam.is_position_behind(lead):
+					var lp := cam.unproject_position(lead)
+					draw_dashed_line(tp, lp, DIM, 1.0, 4.0)
+					_diamond(lp, 7.0, INK, false)
+			elif l.lock_target == t:
+				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
+	# Your health and rounds.
+	var kind := Launcher.Weapon.ROCKETS if int(l.capacity[Launcher.Weapon.ROCKETS]) > 0 else Launcher.Weapon.SEEKERS
+	var n := int(l.capacity[kind])
+	var health := float(l.bird.telemetry().health)
+	if FlightHud.style == "ring":
+		_ring_health(health)
+		_ring_rounds(n, int(l.ammo[kind]))
+	else:
+		var o := FlightHud.status_anchor()
+		var w := 200.0
+		_bar(Rect2(o.x, o.y, w, 12), health, Bird.DOWN_FEATHERS)
+		_text(Vector2(o.x + w + 8, o.y + 11), "health", INK, 12)
+		var pip := Vector2(12, 16)
+		var y := o.y + 22
+		for k in n:
+			var rr := Rect2(o.x + k * (pip.x + 5), y, pip.x, pip.y)
+			draw_rect(rr.grow(1.0), Color(0, 0, 0, 0.5))
+			draw_rect(rr, INK if k < int(l.ammo[kind]) else Color(0, 0, 0, 0.0))
+			draw_rect(rr, DIM, false, 1.0)
+		_text(Vector2(o.x + n * (pip.x + 5) + 6, y + pip.y - 2), "rockets" if kind == Launcher.Weapon.ROCKETS else "seekers", INK, 12)
+	if home != null and l.bird.state != Bird.State.PERCHED and (_empty(l) or l.bird.health() < 1.0):
+		_home_marker(cam, home, l.bird.global_position.distance_to(home))
+	if world != null:
+		var s := world.stats
+		_text(Vector2(size.x - 24, 34), "hits %d   downed %d" % [s.hits, s.kills], INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
+
+
+## Health on the aim ring's right: a segment per feather the bird can lose, the remaining ones lit from the
+## bottom up, red when low.
+func _ring_health(h: float) -> void:
+	var c := FlightHud.ring_centre
+	var r := FlightHud.ring_r
+	var n := Bird.DOWN_FEATHERS
+	var a_bot := 0.6
+	var a_top := -0.6
+	var step := (a_top - a_bot) / n
+	var lit := roundi(h * n)
+	draw_arc(c, r, a_top, a_bot, 32, Color(0, 0, 0, 0.7), 7.0)
+	for k in n:
+		var s0 := a_bot + step * k + step * 0.08
+		var s1 := a_bot + step * (k + 1) - step * 0.08
+		var col: Color = (LOCKED if h <= 0.375 else INK) if k < lit else Color(0, 0, 0, 0.35)
+		draw_arc(c, r, minf(s0, s1), maxf(s0, s1), 6, col, 4.0)
+
+
+## Rounds along the aim ring's bottom: a tick each, lit while loaded.
+func _ring_rounds(n: int, left: int) -> void:
+	var c := FlightHud.ring_centre
+	var r := FlightHud.ring_r
+	for k in n:
+		var a := PI * 0.5 + (k - (n - 1) * 0.5) * 0.1
+		var p0 := c + Vector2(cos(a), sin(a)) * (r - 6.0)
+		var p1 := c + Vector2(cos(a), sin(a)) * (r + 8.0)
+		draw_line(p0, p1, Color(0, 0, 0, 0.7), 7.0)
+		draw_line(p0, p1, INK if k < left else Color(DIM, 0.25), 4.0)
+
+
 ## A health bar: filled to `h` (0..1), red when low; `notches` marks between the feathers it counts.
 func _bar(r: Rect2, h: float, notches: int) -> void:
 	draw_rect(r.grow(1.0), Color(0, 0, 0, 0.45))
@@ -170,5 +271,7 @@ func _text(p: Vector2, s: String, c: Color, fs := 15, align := HORIZONTAL_ALIGNM
 	if align == HORIZONTAL_ALIGNMENT_RIGHT:
 		var w := _font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		p.x -= w
+	if FlightHud.style != "dev":
+		draw_string_outline(_font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.7))
 	draw_string(_font, p + Vector2(1, 1), s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.6))
 	draw_string(_font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, c)

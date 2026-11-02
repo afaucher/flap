@@ -49,6 +49,8 @@ func _ready() -> void:
 	evade = not args.has("--no-evade")
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
+	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
+		FlightHud.style = Boot.arg_value(args, "--hud")
 	if Boot.arg_value(args, "--loadout") == "seekers":
 		start_seekers = true
 	if start_seekers:

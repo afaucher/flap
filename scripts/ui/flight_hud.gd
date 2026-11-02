@@ -9,6 +9,17 @@ extends Control
 ##   Prompts (centre): catch / too fast / perched / stall.
 ##   F3 debug: angle of attack, CL, L/D, load factor and the wing areas (planform after tuck, and the
 ##   frontal "airbrake" area S_eff |sin alpha|) -- the wing-area readout planned for the full HUD.
+## `style` (--hud) picks the layout (docs/images/hud_styles.jpg; classic is the default):
+##   dev      all of the above on screen at once
+##   classic  the bird's status in the top-left corner (name, burst, stamina; the combat HUD adds health and
+##            rounds under it); the instruments (speed tape, pitch ladder, bank arc, stick) only with F3; key hints at the bottom left, fading after a few seconds (F1 brings them
+##            back)
+##   ring     everything wrapped round the edge of the aim ring (the seeker's lock circle round the point 25 m
+##            down the flight path), nothing on the bird: burst and stamina along the top, (the combat HUD)
+##            health on the right and rounds along the bottom
+##   In both, speed is shown only where it matters, on the perch being caught: the perch is marked only while
+##   catch is held (show_perch), with a speed gauge on it -- your speed against the most you can catch at,
+##   green when you can, red when too fast. (Stall still has its prompt; the speed tape is under F3.)
 
 const FG := Color(0.92, 0.95, 0.9, 0.9)
 const DIM := Color(0.92, 0.95, 0.9, 0.35)
@@ -17,7 +28,15 @@ const WARN := Color(1.0, 0.75, 0.25, 0.95)
 const BAD := Color(1.0, 0.35, 0.3, 0.95)
 const CYAN := Color(0.4, 0.9, 1.0, 0.95)
 
+static var style := "classic"   ## "classic" (the game's) | "ring" | "dev" (every instrument on screen)
+const STYLES := ["dev", "classic", "ring"]
+const HINT_TIME := 8.0      ## s the key hints stay up (classic, ring)
+const RING_DEG := 15.0      ## the aim ring: the seeker's lock cone (Launcher.LOCK_CONE), drawn this many deg out
+static var ring_centre := Vector2.ZERO   ## this frame's aim ring on screen (the combat HUD draws on it too)
+static var ring_r := 0.0
+const OUTLINE := Color(0, 0, 0, 0.7)
 var debug := false
+var hints_left := HINT_TIME
 var autopilot := false
 var gamepad := false        ## label prompts for the gamepad (else keyboard + mouse)
 var _band := -1
@@ -34,13 +53,37 @@ func _ready() -> void:
 
 func set_state(state: Dictionary) -> void:
 	t = state
+	hints_left = maxf(0.0, hints_left - get_process_delta_time())
 	queue_redraw()
+
+
+func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F1:
+		hints_left = HINT_TIME if hints_left <= 0.0 else 0.0
+
+
+## Whether the scene should mark the candidate perch: always (dev), else only while catch is held.
+static func show_perch(catch_armed: bool) -> bool:
+	return style == "dev" or catch_armed
+
+
+## classic: where the combat HUD's status rows go, under the flight HUD's in the top-left block.
+static func status_anchor() -> Vector2:
+	return Vector2(24, 104)
+
+
+## The point on the aim ring at angle `a` (screen: 0 right, PI/2 down), `out` px outside it.
+static func on_ring(a: float, out := 0.0) -> Vector2:
+	return ring_centre + Vector2(cos(a), sin(a)) * (ring_r + out)
 
 
 func _draw() -> void:
 	if t.is_empty():
 		return
 	var sz := get_viewport_rect().size
+	if style != "dev":
+		_draw_styled(sz)
+		return
 	_speed_tape(Vector2(70, sz.y * 0.5))
 	_pitch_ladder(Vector2(sz.x - 110, sz.y * 0.5))
 	_roll_arc(Vector2(sz.x * 0.5, 120))
@@ -57,7 +100,104 @@ func _draw() -> void:
 
 
 func _text(pos: Vector2, s: String, c: Color, fs := 16, align := HORIZONTAL_ALIGNMENT_LEFT, w := -1.0) -> void:
+	if style != "dev":   # (an outline, so it reads on the bright haze and sky)
+		draw_string_outline(_font, pos, s, align, w, fs, 4, OUTLINE)
 	draw_string(_font, pos, s, align, w, fs, c)
+
+
+## classic / ring: the status where the style puts it, speed on the perch, the instruments only with F3.
+func _draw_styled(sz: Vector2) -> void:
+	_place_ring(sz)
+	_perch_gauge()
+	if style == "classic":
+		_text(Vector2(24, 34), "%s%s" % [t.bird, "   [AUTOPILOT]" if autopilot else ""], FG, 20)
+		_text(Vector2(24, 54), "alt %.0f m" % t.altitude, DIM, 14)
+		_bars(Vector2(24, 66), 200.0)
+	else:
+		_text(Vector2(24, 34), "%s   alt %.0f m%s" % [t.bird, t.altitude, "   [AUTOPILOT]" if autopilot else ""], DIM, 15)
+		_ring_energy()
+	_prompts(Vector2(sz.x * 0.5, sz.y - 120), 17)
+	if hints_left > 0.0:
+		var a := clampf(hints_left, 0.0, 1.0)
+		var line := "left stick: bank / pitch   right stick: look   LT: flap   A (hold): catch   Back: bird   Start: respawn   Y: autopilot" if gamepad else "mouse: bank / pitch   space: flap   ctrl (hold): catch   1-5 bird   R respawn   P autopilot   F1 keys   F3 instruments"
+		_text(Vector2(24, sz.y - 24), line, Color(DIM, DIM.a * a * 2.0), 13)
+	if debug:
+		_speed_tape(Vector2(70, sz.y * 0.5))
+		_pitch_ladder(Vector2(sz.x - 110, sz.y * 0.5))
+		_roll_arc(Vector2(sz.x * 0.5, 120))
+		_stick(Vector2(sz.x * 0.5, sz.y - 190))
+		_debug(Vector2(sz.x - 330, 40))
+
+
+## Burst and stamina as two bars at `o`, `w` wide (thin, without labels, under the screen's middle).
+func _bars(o: Vector2, w: float, thin := false) -> void:
+	var hgt := 5.0 if thin else 10.0
+	var gap := 9.0 if thin else 16.0
+	var burst_f: float = float(t.burst) / float(t.burst_max)
+	var cap_f: float = float(t.burst_cap) / float(t.burst_max)
+	draw_rect(Rect2(o.x - 1, o.y - 1, w + 2, hgt + 2), Color(0, 0, 0, 0.45))
+	draw_rect(Rect2(o.x + w * cap_f, o.y, w * (1.0 - cap_f), hgt), Color(0.3, 0.1, 0.1, 0.5))
+	draw_rect(Rect2(o.x, o.y, w * burst_f, hgt), Color(1.0, 0.8, 0.3, 0.9))
+	draw_rect(Rect2(o.x - 1, o.y + gap - 1, w + 2, hgt + 2), Color(0, 0, 0, 0.45))
+	draw_rect(Rect2(o.x, o.y + gap, w * float(t.stamina), hgt), Color(0.35, 0.65, 1.0, 0.9))
+	if not thin:
+		_text(Vector2(o.x + w + 8, o.y + hgt), "burst", FG, 12)
+		_text(Vector2(o.x + w + 8, o.y + gap + hgt), "stamina", FG, 12)
+
+
+## On the perch being caught (catch held): a short bar of your speed against the catch speed (the notch), the
+## number above it; green when the catch would hold, red when it's too fast ("slow to N").
+func _perch_gauge() -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or not show_perch(bool(t.catch_armed)) or style == "dev" or int(t.state) != Bird.State.FLYING or float(t.candidate_distance) > 30.0:
+		return
+	var g: Vector3 = t.candidate_grip
+	if cam.is_position_behind(g):
+		return
+	var p := cam.unproject_position(g) + Vector2(0, -30)
+	var speed: float = t.speed
+	var grab: float = t.grab_speed
+	var status := int(t.candidate_status)   # (the catch's own verdict once in reach; before that, airspeed)
+	var ok := status == Perch.Catch.OK or (status == Perch.Catch.OUT_OF_RANGE and speed <= grab)
+	var col := GOOD if ok else BAD
+	var w := 80.0
+	var f := clampf(speed / (grab * 2.0), 0.0, 1.0)
+	draw_rect(Rect2(p.x - w * 0.5 - 1, p.y - 1, w + 2, 8), OUTLINE)
+	draw_rect(Rect2(p.x - w * 0.5, p.y, w * f, 6), col)
+	draw_line(Vector2(p.x, p.y - 4), Vector2(p.x, p.y + 10), FG, 2.0)
+	_text(Vector2(p.x - 60, p.y - 8), "%.0f m/s" % speed if ok else "%.0f  slow to %.0f" % [speed, grab], col, 15, HORIZONTAL_ALIGNMENT_CENTER, 120)
+
+
+## The aim ring this frame: round the point 25 m down the flight path (perched: where the bird faces), its
+## radius the seeker's lock cone; off screen or behind, the screen's middle.
+func _place_ring(sz: Vector2) -> void:
+	var cam := get_viewport().get_camera_3d()
+	ring_centre = sz * 0.5
+	ring_r = 160.0
+	if cam == null:
+		return
+	var dir: Vector3 = t.flight_dir if int(t.state) == Bird.State.FLYING else t.facing
+	var at: Vector3 = (t.position as Vector3) + dir * 25.0
+	if not cam.is_position_behind(at):
+		ring_centre = cam.unproject_position(at)
+	ring_r = (sz.y * 0.5) / tan(deg_to_rad(cam.fov) * 0.5) * tan(deg_to_rad(RING_DEG))
+
+
+## An arc on the aim ring from `a0` to `a1` (rad), filled to `f` of it in `col` over a dark track.
+func _ring_arc(a0: float, a1: float, f: float, col: Color, out := 0.0, wd := 4.0) -> void:
+	var r := ring_r + out
+	draw_arc(ring_centre, r, a0, a1, 24, OUTLINE, wd + 3.0)
+	draw_arc(ring_centre, r, a0, a1, 24, Color(0, 0, 0, 0.35), wd)
+	if f > 0.001:
+		draw_arc(ring_centre, r, a0, lerpf(a0, a1, clampf(f, 0.0, 1.0)), 24, col, wd)
+
+
+## Burst (inner) and stamina (outer) along the ring's top, left to right.
+func _ring_energy() -> void:
+	var a0 := -PI * 0.5 - 0.4
+	var a1 := -PI * 0.5 + 0.4
+	_ring_arc(a0, a1, float(t.burst) / float(t.burst_max), Color(1.0, 0.8, 0.3, 0.9), 0.0, 4.0)
+	_ring_arc(a0, a1, float(t.stamina), Color(0.35, 0.65, 1.0, 0.9), 8.0, 3.0)
 
 
 func _speed_tape(c: Vector2) -> void:
@@ -151,7 +291,7 @@ func _stick(c: Vector2) -> void:
 	draw_circle(c + s * r, 4.0, WARN)
 
 
-func _prompts(c: Vector2) -> void:
+func _prompts(c: Vector2, fs := 22) -> void:
 	var msg := ""
 	var col := FG
 	match int(t.state):
@@ -185,7 +325,7 @@ func _prompts(c: Vector2) -> void:
 					msg = "EXHAUSTED - find a perch"
 					col = WARN
 	if msg != "":
-		_text(Vector2(c.x - 300, c.y), msg, col, 22, HORIZONTAL_ALIGNMENT_CENTER, 600)
+		_text(Vector2(c.x - 300, c.y), msg, col, fs, HORIZONTAL_ALIGNMENT_CENTER, 600)
 
 
 func _debug(o: Vector2) -> void:
