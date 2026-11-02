@@ -59,16 +59,23 @@ func setup() -> void:
 		var hm := (rig._head.get_node("HeadSurface") as MeshInstance3D).mesh as ArrayMesh
 		var hv := hm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 		var nv := (rig._neck_mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		# (the neck pairs with the head's ring at the head's own resolution, a third of a neck step: so by each
+		# twentieth of the ring there is a neck vertex, and it is one of the head's)
 		var head_worst := 0.0
+		var step := TAU * hr * maxf(rig.body.skull.x, rig.body.skull.z) / BirdRig.HEAD_AROUND * 1.5
 		for j in BirdRig.TRUNK_AROUND:
 			var target: Vector3 = rig._head.transform * rig._head_point(rig._neck_entry, -TAU * j / BirdRig.TRUNK_AROUND)
 			var best_n := INF
+			var near_n := Vector3.ZERO
 			for q in nv:
-				best_n = minf(best_n, q.distance_to(target))
+				if q.distance_to(target) < best_n:
+					best_n = q.distance_to(target)
+					near_n = q
 			var best_h := INF
 			for q in hv:
-				best_h = minf(best_h, (rig._head.transform * q).distance_to(target))
-			head_worst = maxf(head_worst, maxf(best_n, best_h))
+				best_h = minf(best_h, (rig._head.transform * q).distance_to(near_n))
+			check(best_n < step, "%s a neck vertex by the head ring's point %d (%.5f m)" % [p.id, j, best_n])
+			head_worst = maxf(head_worst, best_h)
 		check(head_worst < 1e-4, "%s neck ends on the head's own vertices (%.5f m)" % [p.id, head_worst])
 		# The wing's surface starts on the body: its first loop lies on the trunk's surface.
 		rig.look_dir = Vector3.FORWARD

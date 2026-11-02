@@ -14,6 +14,7 @@ perches to rest. This is the flight-model prototype; combat comes next.
 .\run.ps1 --scene res://scenes/rig_gallery.tscn --only hawk --view under --sun back   # one bird, backlit (add --feather-shader for the parked feather shader)
 .\run.ps1 --scene res://scenes/bird_lab.tscn   # the bird lab: species, poses, take-offs and landings from several approaches; slow-mo, pause/step, onion-skin ghosts, orbit camera
 .\run.ps1 --scene res://scenes/bird_lab.tscn --bird hawk --scenario land_above --speed 0.25 --onion   # start straight into one
+.\run.ps1 --scene res://scenes/bird_lab.tscn --bird owl --scenario pose_folded --bones   # the skeleton drawn over the bird (B cycles: off / over / bones only)
 .\test_runner.ps1 -TestAll     # headless tests
 .\build.ps1                    # tests, then export build\windows\Flap.exe + zip
 ```

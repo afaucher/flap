@@ -1,7 +1,7 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
-##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..5]
+##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
 ##       [--zoom <x>] [--shot <png> --shot-after <s>] [--measure <frames>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots. --measure prints the mean GPU render time and pose time over that many
@@ -63,6 +63,12 @@ func _ready() -> void:
 		var r := BirdRig.new()
 		add_child(r)
 		r.build(pr)
+		if args.has("--chart") and r.body_texture_material != null:   # (level 6: the body's feather chart as a grid)
+			r.body_texture_material.set_shader_parameter("show_chart", true)
+		for knob in ["relief", "variety"]:   # (level 6 tuning: the texture's relief and variation, body and feathers)
+			if Boot.arg_value(args, "--" + knob) != "" and r.body_texture_material != null:
+				r.body_texture_material.set_shader_parameter(knob, float(Boot.arg_value(args, "--" + knob)))
+				r.marks_material.set_shader_parameter(knob, float(Boot.arg_value(args, "--" + knob)))
 		x += pr.span * 0.5 + (0.15 if i > 0 else 0.0)
 		r.position = Vector3(x, 0, 0)
 		x += pr.span * 0.5

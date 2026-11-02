@@ -209,10 +209,21 @@ func volume(steps := 200) -> float:
 
 ## The trunk shell as a mesh (built once; the trunk never bends). `color` (optional) colours each vertex from
 ## (u along the trunk 0 front .. 1 back, v up its side -1 keel .. 1 spine, side 0 midline .. 1 widest).
-func trunk_mesh(slices := 30, around := 20, color := Callable(), z_from := -INF) -> ArrayMesh:
+## Feather coordinates (`unit` > 0, m per coordinate unit; `size` (z) the feathers' size there, a share of the
+## unit): u round each ring from the spine (signed, periodic in the girth), v along each lengthwise line from
+## `v0` at the front ring (one per point round it), tips toward +v (the tail). Kept in trunk_uv / trunk_uv2 / trunk_z for lookups.
+var trunk_uv: Array = []
+var trunk_uv2: Array = []
+var trunk_z := PackedFloat32Array()
+
+
+func trunk_mesh(slices := 30, around := 20, color := Callable(), z_from := -INF, unit := 0.0, size := Callable(), v0 := PackedFloat32Array()) -> ArrayMesh:
 	var pts: Array = []
 	var cols: Array = []
 	var z0 := maxf(z_from, front_z())   # (from `z_from` the front is left open: the neck carries on from it)
+	trunk_uv.clear()
+	trunk_uv2.clear()
+	trunk_z.clear()
 	for i in slices + 1:
 		var z := lerpf(z0, back_z(), float(i) / slices)
 		var r := ring_at(z)
@@ -226,36 +237,123 @@ func trunk_mesh(slices := 30, around := 20, color := Callable(), z_from := -INF)
 				crow.append(color.call(u_at(z), sin(t), absf(cos(t))))
 		pts.append(row)
 		cols.append(crow)
-	return tube_mesh(pts, null, cols if color.is_valid() else [])
+		if unit > 0.0:
+			var s: float = size.call(z)
+			var arcs: Array = ring_arcs(row, around / 4, unit * s)   # (j = around / 4: the spine)
+			var uv := PackedVector2Array()
+			var uv2 := PackedVector2Array()
+			for j in around + 1:
+				var v: float = v0[j % around] if not v0.is_empty() else 0.0
+				if i > 0:   # (along each lengthwise line, in the feathers' size between the rings)
+					var pz := trunk_z[i - 1]
+					v = (trunk_uv[i - 1] as PackedVector2Array)[j].y + (row[j % around] as Vector3).distance_to(pts[i - 1][j % around]) / (unit * 0.5 * (s + float(size.call(pz))))
+				uv.append(Vector2(arcs[0][j], v))
+				uv2.append(Vector2(arcs[1], sin(TAU * j / around)))
+			trunk_uv.append(uv)
+			trunk_uv2.append(uv2)
+			trunk_z.append(z)
+	return tube_mesh(pts, null, cols if color.is_valid() else [], trunk_uv, trunk_uv2)
+
+
+## The trunk's feather coordinates at a point on (or by) its surface (trunk space): [uv, uv2], read from the
+## mesh's grid (trunk_mesh with a unit).
+func uv_at(p: Vector3) -> Array:
+	var n := trunk_z.size()
+	if n < 2:
+		return [Vector2.ZERO, Vector2(1000.0, 0.0)]
+	var fi := clampf((p.z - trunk_z[0]) / (trunk_z[n - 1] - trunk_z[0]) * (n - 1), 0.0, n - 1.001)
+	var i := int(fi)
+	var r := ring_at(clampf(p.z, trunk_z[0], trunk_z[n - 1]))
+	var dy := p.y - r[0]
+	var h := r[2] if dy >= 0.0 else r[3]
+	var nexp := N_TOP if dy >= 0.0 else N_BOT
+	# The ring angle: invert the superellipse (x = w cos^(2/n), y = h sin^(2/n)).
+	var cx := signf(p.x) * pow(clampf(absf(p.x) / maxf(r[1], 1e-5), 0.0, 1.0), nexp / 2.0)
+	var sy := signf(dy) * pow(clampf(absf(dy) / maxf(h, 1e-5), 0.0, 1.0), nexp / 2.0)
+	var around: int = (trunk_uv[0] as PackedVector2Array).size() - 1
+	var fj := fposmod(atan2(sy, cx), TAU) / TAU * around
+	var j := mini(int(fj), around - 1)
+	var out := []
+	for grid in [trunk_uv, trunk_uv2]:
+		var a: PackedVector2Array = grid[i]
+		var b: PackedVector2Array = grid[i + 1]
+		var lo := a[j].lerp(a[j + 1], fj - j)
+		var hi := b[j].lerp(b[j + 1], fj - j)
+		out.append(lo.lerp(hi, fi - i))
+	return out
 
 
 ## A closed tube through rows of points (each row one ring, rows in order): quads between rows, the end rows
 ## pinched to their centre. Clockwise front faces seen from outside (Godot's convention). `colors`, if given,
 ## is one colour per point, in the same rows.
-static func tube_mesh(rows: Array, mesh: ArrayMesh = null, colors: Array = []) -> ArrayMesh:
+## Feather coordinates (plumage level 6, body_feathers.gdshader): `uvs` one per point PLUS one more per row (the
+## ring's first point again, closing it: a feather coordinate runs on round the ring, so it can't wrap on a
+## shared vertex); `uv2s` the same shape, (period, up) -- `period` is the ring's girth in the same units, the
+## shader treats u as periodic in it. With `per_triangle`, uvs has one per point and each triangle unwraps its
+## own corners' u to within half a period of its first (for a coordinate whose seam crosses the rows).
+static func tube_mesh(rows: Array, mesh: ArrayMesh = null, colors: Array = [], uvs: Array = [], uv2s: Array = [], per_triangle := false) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var n: int = rows[0].size()
-	for i in rows.size():
-		for j in n:
-			if not colors.is_empty():
-				st.set_color(colors[i][j])
-			st.add_vertex(rows[i][j])
 	var m := rows.size()
-	for i in m - 1:
-		for j in n:
-			var a := i * n + j
-			var b := i * n + (j + 1) % n
-			var c := (i + 1) * n + j
-			var d := (i + 1) * n + (j + 1) % n
-			st.add_index(a)
-			st.add_index(c)
-			st.add_index(b)
-			st.add_index(b)
-			st.add_index(c)
-			st.add_index(d)
-	st.generate_normals()
+	if per_triangle and not uvs.is_empty():
+		var tri := func(ids: Array) -> void:
+			var u0: float = (uvs[ids[0].x][ids[0].y] as Vector2).x
+			for q in ids:
+				var uv: Vector2 = uvs[q.x][q.y]
+				var uv2: Vector2 = uv2s[q.x][q.y]
+				if uv2.x > 1e-6:
+					uv.x -= uv2.x * roundf((uv.x - u0) / uv2.x)
+				if not colors.is_empty():
+					st.set_color(colors[q.x][q.y])
+				st.set_uv(uv)
+				st.set_uv2(uv2)
+				st.add_vertex(rows[q.x][q.y])
+		for i in m - 1:
+			for j in n:
+				var jb := (j + 1) % n
+				tri.call([Vector2i(i, j), Vector2i(i + 1, j), Vector2i(i, jb)])
+				tri.call([Vector2i(i, jb), Vector2i(i + 1, j), Vector2i(i + 1, jb)])
+		st.generate_normals()
+		st.index()
+	else:
+		var w := n + 1 if not uvs.is_empty() else n   # (with feather coordinates the ring's first column again)
+		for i in m:
+			for j in w:
+				if not colors.is_empty():
+					st.set_color(colors[i][j % n])
+				if not uvs.is_empty():
+					st.set_uv(uvs[i][j])
+					st.set_uv2(uv2s[i][j])
+				st.add_vertex(rows[i][j % n])
+		for i in m - 1:
+			for j in n:
+				var a := i * w + j
+				var b := i * w + (j + 1) % w
+				var c := (i + 1) * w + j
+				var d := (i + 1) * w + (j + 1) % w
+				st.add_index(a)
+				st.add_index(c)
+				st.add_index(b)
+				st.add_index(b)
+				st.add_index(c)
+				st.add_index(d)
+		st.generate_normals()
 	if mesh == null:
 		return st.commit()
 	mesh.clear_surfaces()
 	return st.commit(mesh)
+
+
+## Feather coordinates round one ring of points (rig units): each point's arc length from the ring's dorsal
+## point `dorsal` (an index, the ring's top), signed, running on round the ring in its own order (n + 1 values,
+## the last closing it), and the ring's girth; both divided by `unit` (m per coordinate unit).
+static func ring_arcs(row: Array, dorsal: int, unit: float) -> Array:
+	var n := row.size()
+	var acc := PackedFloat32Array([0.0])
+	for j in n:
+		acc.append(acc[j] + (row[j] as Vector3).distance_to(row[(j + 1) % n]))
+	var out := PackedFloat32Array()
+	for j in n + 1:
+		out.append((acc[j] - acc[dorsal]) / unit)
+	return [out, acc[n] / unit]

@@ -11,12 +11,12 @@ extends RefCounted
 ##        sparrow's bib
 ##   5  + marks along each feather from a small generated colour strip: dark tips, the dark trailing edge,
 ##        tail bands, bars, the sparrow's white wing bar (the only step with a shader, and it only sets colour)
-##   6  + feather texture (EXPERIMENT, docs/research/feather_texture_study.md): the strip read through a baked
+##   6  + feather texture (the default; docs/research/feather_texture_study.md): the strip read through a baked
 ##        feather atlas (FeatherAtlas: shaft, barbs, spots, fringes, layer shadows; `TEXTURE` below), and small
 ##        overlapping contour feathers on the body. Only the hawk has its own look so far.
 ## Below level 5 each feather is one flat colour: its strip averaged (bars and fringes read as a mid-tone).
 
-static var level := 5
+static var level := 6
 
 ## Per species. body: dorsal back -> rump, ventral breast -> belly -> vent, flanks; countershade `line`
 ## (-1 belly .. 1 back) and `soft`; optional `band` [colour, from, to] (along the body, 0 front .. 1 back),

@@ -1,4 +1,8 @@
-# Feather texture study (experiment)
+# Feather texture study
+
+**Status (2026-11-02).** Adopted: level 6 is the default plumage. The first pass (below, from "What was built")
+was the experiment. "Second pass" right after this note records what changed when it was taken: the body's
+feather chart, a sharper bake with relief, variation against repeats, and a note on going further.
 
 **Question.** The birds have shape and colour but no feather texture. Can baked feather textures get us toward
 the two concept images (rows of overlapping feathers, each with a shaft, soft rounded tip, spots or bars toward
@@ -10,7 +14,7 @@ plain colour, and it costs almost nothing. It is not yet the photographic look o
 underside is mixed, and the body pattern is a stand-in until the body mesh carries UVs. **Recommendation:
 proceed**, on the conditions under "Recommendation" at the end.
 
-**How to see it.** `--plumage 6` in the rig gallery (`Plumage.level = 6`; the game stays on level 5):
+**How to see it.** `--plumage 6` in the rig gallery (now the default everywhere):
 
     .\run.ps1 --scene res://scenes/rig_gallery.tscn --only hawk --pose glide --view top --zoom 1.8 --plumage 6
 
@@ -21,6 +25,147 @@ barbs, layer shadows) with no spots or fringes.
 
 `docs/images/feather_texture_ab.png`: A is level 5, the current look (the colour strip on plain cards); B is
 level 6. Same pose, camera and frozen clock in each pair.
+
+## Second pass: taken, sharper, less repetitive
+
+![A/B, second pass](../images/feather_texture_v2_ab.png)
+
+`docs/images/feather_texture_v2_ab.png`: A is the first bake on its own branch (before the body joins); B is
+now. The hawk, same poses and cameras.
+
+### One feather chart over the body (the "What the body mesh must provide" list, done)
+
+The trunk, neck, head and the wing's arm loft (and its limb pieces) now carry feather coordinates as UVs, and
+share one material, so the contour feathers run on across every join. That includes the wing-to-body joint,
+which the first pass left untextured. (`BirdRig`, "Feather coordinates"; `BodyShape.trunk_mesh`,
+`BodyShape.uv_at`, `BodyShape.ring_arcs`; `body_feathers.gdshader`.)
+
+- **UV** = (u across the flow, v along it), in tiles, with tips toward +v. **UV2** = (u's period, up).
+  **COLOR.a** = the texture's strength there.
+- **Trunk.** u is the arc round each ring from the spine, signed. v is the arc back along each lengthwise line.
+  Both are divided by the local feather size: 0.75 of the tile at the breast's front, 1.0 mid-body, 1.12 on the
+  rump.
+- **One seam, no mirror.** u runs on round the ring and is periodic in the ring's girth. The shader wraps it,
+  and within `seam_band` of the seam (under the belly and the chin) it cross-fades with the other side's read.
+  So there is no seam and no mirror line: the first pass's herringbone down the keel is gone.
+- **Head.** Polar coordinates round a pole just above the bill. The head is projected stereographically from
+  the neck's pole, so the neck's ring becomes a circle, and a disk automorphism moves the pole toward the bill
+  (`HEAD_POLE`).
+  - Every point of the neck ring gets the same v, so the neck's rows start level.
+  - u is measured by where the point's flow line meets the ring, round the ring itself. So it is spaced evenly
+    there, like the neck's.
+  - The feathers run back from the bill over the crown, the cheeks and the chin.
+  - The texture fades near the pole, where rows crowd. The head is built with per-triangle unwrapping
+    (`BodyShape.tube_mesh(..., per_triangle)`), because its u seam crosses the mesh's rings.
+- **Neck.** Each vertex blends its coordinates from its trunk partner's to its head partner's, as its position
+  does. So the feathers stretch and twist with the neck and never slide. It now pairs with the head's ring at
+  the head's own resolution (60 points, not 20), so the neck's feathers don't jump a whole step as the head
+  turns.
+- **Arm loft.** It starts from the trunk's own coordinates at its edge loop on the shoulder. Then u runs
+  outward along the arm and v aft across the chord, in the coverts' size (0.7). Its coordinates are fixed per
+  station and section point, so the coverts ride on the surface as it flexes and folds.
+
+Two things the debug view (`--chart` in the gallery: u lines red, v lines green, the seam's cross-fade blue)
+showed:
+
+- **The head's chart.** A conformal chart centred on the bill gave the neck's ring very different v front and
+  back. That turned the breast's rows lengthwise, which read as streaks. The current chart fixes it.
+- **The first bake wasn't isometric.** Its projection used z for v, and stretched the rows about 1.45 times
+  apart. That stretch is what made its scallops so crisp and regular. The chart is now true to the surface, and
+  `row_spacing` (1.45) keeps that look on purpose: it shows more of each feather.
+
+`tests/test_feather_texture.gd` checks that the coordinates agree where the neck meets the trunk and the head,
+and where the wing's surface meets the body. `tests/probe_feather_chart.gd` prints the neck's two ends.
+
+### Sharper close up
+
+- **Twice the resolution.** The atlas is 2048 x 1536: a flight-feather cell is 256 px across, 128 px per
+  half-width. The body tile is 1024, 256 px per contour feather.
+- **Finer barbs.** The barbs are finer (12 per half-width, and a finer barbule sheen) and quieter. The first try
+  at full strength read as herringbone wallpaper.
+- **Relief maps** (`*_n.png`), baked from a height field:
+  - feathers: the vane's cup, the shaft's ridge, the barbs, a split's groove;
+  - body: each feather rising toward its tip, domed, and stepping down onto the row behind.
+  - They are applied in a cotangent frame from screen derivatives [SCHULER13], so they work on any of these
+    meshes, on either face and either wing, with no tangents.
+  - This is most of the "texture under light" gain: rows read as layers even where colour alone is flat.
+- **Ragged outlines.** Vane edges are a little ragged where barbs part, with a notch where a split reaches the
+  edge. Body feathers have uneven rims. The alpha scissor cuts the outline from the baked edge distance, so the
+  silhouette is less card-like.
+- **Cost.** 5 flapping birds, `--measure 900`, two runs each:
+  - GPU: 1.80 ms at level 5 against 1.97 ms at level 6, about 0.035 ms per bird.
+  - CPU pose: 17.7 ms against 18.9 ms, about 0.25 ms per bird, for the coordinates the neck and arm loft
+    recompute each pose.
+  - The pose baseline itself, about 3.5 ms per bird since the body joins, is the real cost to look at next.
+  - VRAM: about 22 MB lossless with mipmaps (atlas, body tile and their relief). VRAM compression (BC7 for the
+    masks, RGTC for the relief) would cut that about 4 times.
+  - The baker takes 25 s and stamps its own MD5 next to the PNGs. The test compares the stamp instead of
+    re-baking.
+
+### Randomness against repeats: what is appropriate
+
+Real plumage is regular in structure and irregular in detail. Bars line up across a wing, rows run in tracts,
+and the feathers of a tract are one kind. But no two feathers are identical, and wear is uneven. So the rule
+here is: randomise per feather and over large patches, and never break the things that line up on a real
+bird.
+
+**Done:**
+
+- **Atlas variants with no repeated neighbours.** There are 4 covert variants (they are the most numerous and
+  most visible units) and 2 per flight feather. The order along a row is random, but two neighbours never
+  match (`FeatherAtlas.cell`), so a row of coverts doesn't read as a stamp.
+- **Per-feather variation** (a seed per instance, `INSTANCE_CUSTOM.a`; a random value baked per body feather):
+  - tone ±4 %;
+  - warmth ±2 %;
+  - spot size ±17 % and spot amount ±25 %;
+  - fringe width ±30 %: fringes wear unevenly, and the tips abrade first.
+- **Large-patch variation of the body tile.** The tile is read at an offset that wanders with a slow noise, a
+  few tiles across. Where it changes it uses two reads, switching where one read's feather lies further inside
+  its outline than the other's, so the switch follows feather edges rather than blurring across them
+  [IQ-REP]. A slow ±4 % mottle sits over the tracts.
+
+**Deliberately not randomised:**
+
+- the bars' position along flight feathers, which stay in register across the wing as on a real bird;
+- feather direction, or tile rotation, which would break the flow of the tracts;
+- the tract layout itself.
+
+**Next:**
+
+- small per-feather length and angle jitter in `WingShape`, a degree or two;
+- an occasional slightly worn or displaced feather;
+- per-individual variation, so two hawks differ: shift the seed per bird;
+- hex-tiling [HEX22] if the wandering offset's change-overs ever show.
+
+`--variety 0` in the gallery turns all of it off for comparison; `--relief 0` the relief.
+
+### Going further: higher realism
+
+In order of value for the cost:
+
+1. **Silhouette and parallax, with geometry.** The texture can't lift a feather's edge.
+   - Add 20-40 contour-feather cards per bird where the outline shows: scapulars over the wing root, flank
+     feathers over the folded wing, the "trousers", the rump over the tail.
+   - Add a median covert row and smaller, more numerous lesser coverts in `WingShape`.
+   - This is the main thing the reference art has that we don't.
+2. **Lighting.**
+   - Shadows and ambient occlusion between rows.
+   - A soft sky and bounce light.
+   - A little view-dependent sheen on flight feathers (anisotropic, along the barbs). The parked
+     `feather.gdshader` sheen flooded, so it needs to be subtle and masked by the relief.
+   - Translucency for backlit primaries.
+   - The gallery has none of these. Much of the references' realism is light, not texture.
+3. **Per-species looks.** Tune `TEXTURE` for the owl (soft, barred and mottled), the falcon (barred
+   blue-grey), the sparrow (dark centres, buff fringes) and the crow (gloss on the shaft only).
+4. **Shell or fin fur for down** at the silhouette (owl), and loose barbs at the edge, at a close-up level of
+   detail only.
+5. **Painted or photo-sourced masks.** A hand-painted or photo-derived atlas would beat procedural barbs at
+   very close range. It would keep the same channels and cells, so nothing else changes.
+6. **Skinned, sculpted art** (Blender) only if the procedural body reaches its limit. The chart, the masks and
+   the shader would carry over as the art's UVs.
+
+Feather cards on top of the textured body (1) and better light (2) would close most of the remaining gap to
+the references. Textures alone are near their limit at this camera distance.
 
 ## What was built
 
@@ -257,6 +402,13 @@ the barbs and splits (`detail` 0) and keep only the spots, fringes, rounded tips
 most of the gain.
 
 ## Sources
+
+- [SCHULER13] Christian Schüler, *Followup: Normal Mapping Without Precomputed Tangents* (2013):
+  http://www.thetenthplanet.de/archives/1180 (a tangent frame from screen-space derivatives).
+- [IQ-REP] Inigo Quilez, *Texture repetition*: https://iquilezles.org/articles/texturerepetition/ (reading a
+  tile at noise-driven offsets and blending by content).
+- [HEX22] Morten S. Mikkelsen, *Practical Real-Time Hex-Tiling*, Journal of Computer Graphics Techniques, 2022:
+  https://jcgt.org/published/0011/03/05/ (offset tiles on a hex grid, blended with contrast preserved).
 
 - [FEO15] Feo, Field & Prum (2015), *Barb geometry of asymmetrical feathers reveals a transitional morphology
   in the evolution of avian flight*, Proc. R. Soc. B: https://pmc.ncbi.nlm.nih.gov/articles/PMC4345455/

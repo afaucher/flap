@@ -5,9 +5,12 @@ extends Node3D
 ## the body, wings, tail and legs adjust. Live scenarios are the real game: Bird, FlightModel, perch logic and
 ## rig, flown by a LabPilot through the player's controls.
 ##   .\run.ps1 --scene res://scenes/bird_lab.tscn [--bird <id>] [--scenario <id>] [--speed <0.05..1>] [--onion]
-##       [--view side|front|three|top|chase] [--dist <m>] [--pause-at <sim s>] [--shot <png> --shot-after <real s>]
+##       [--view side|front|three|top|chase] [--dist <m>] [--pause-at <sim s>] [--bones | --bones-only]
+##       [--shot <png> --shot-after <real s>]
 ## Keys: 1-5 bird, Up/Down scenario, Space pause, . step, R restart, -/= speed, O onion skin, F follow,
-##       V next view, T trail; drag to orbit, wheel to zoom.
+##       V next view, T trail, B bones (off / over the bird / bones only); drag to orbit, wheel to zoom.
+## Bones (BoneView): every bone and joint of the rig as it was solved, drawn on top -- the shoulder, elbow,
+## wrist, hip, knee, ankle, the neck's joints, head and tail, coloured by chain.
 
 const VIEWS := {
 	"side": Vector3(1.0, 0.15, -0.35),
@@ -43,6 +46,8 @@ var view := "three"
 var sim_t := 0.0              ## scenario time (sim seconds)
 var pause_at := -1.0
 var _dist_arg := -1.0
+var bones := 0                ## 0 off, 1 the skeleton over the bird, 2 the skeleton only
+var _bone_view: BoneView
 
 var _yaw := 0.0
 var _pitch := 0.0
@@ -83,6 +88,7 @@ func _ready() -> void:
 	onion = args.has("--onion")
 	if Boot.arg_value(args, "--dist") != "":
 		_dist_arg = float(Boot.arg_value(args, "--dist"))
+	bones = 2 if args.has("--bones-only") else (1 if args.has("--bones") else 0)
 
 	Game.add_environment(self)
 	world = Node3D.new()
@@ -102,6 +108,8 @@ func _ready() -> void:
 	trail.material_override = tm
 	trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(trail)
+	_bone_view = BoneView.new()
+	add_child(_bone_view)
 	cam = Camera3D.new()
 	cam.fov = 50.0
 	cam.current = true
@@ -242,7 +250,18 @@ func _process(delta: float) -> void:
 	var dir := Vector3(sin(_yaw) * cos(_pitch), sin(_pitch), cos(_yaw) * cos(_pitch))
 	cam.look_at_from_position(_focus + dir * _dist, _focus, Vector3.UP if absf(dir.y) < 0.99 else Vector3.FORWARD)
 	_draw_trail()
+	_show_bones()
 	_readout.text = _status()
+
+
+## The bone view on whichever rig is live (the posed one, or the flying bird's), and the rig hidden for
+## bones only.
+func _show_bones() -> void:
+	var rig: BirdRig = pose_rig if pose_rig != null else (bird.rig if bird != null else null)
+	_bone_view.rig = rig
+	_bone_view.visible = bones > 0
+	if rig != null:
+		rig.visible = bones < 2
 
 
 func _draw_trail() -> void:
@@ -264,6 +283,8 @@ func _status() -> String:
 		lines.append("flare %.2f   landing %.0f%%   neck %.2f   fold %.2f" % [t.flare, 100.0 * float(t.landing_t), bird.rig.neck_ext, bird.rig.fold])
 	elif pose_rig != null:
 		lines.append("neck %.2f   fluff %.2f   fold %.2f" % [pose_rig.neck_ext, pose_rig.fluff, pose_rig.fold])
+	if bones > 0:
+		lines.append("bones (B): spine white  neck yellow  L wing orange  R wing cyan  legs green")
 	return "\n".join(lines)
 
 
@@ -295,6 +316,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_O: _set_onion(not onion)
 			KEY_F: follow = not follow
 			KEY_T: trail_on = not trail_on
+			KEY_B: bones = (bones + 1) % 3
 			KEY_V: _set_view(VIEWS.keys()[(VIEWS.keys().find(view) + 1) % VIEWS.size()])
 			KEY_MINUS: _set_speed(speed * 0.5)
 			KEY_EQUAL: _set_speed(speed * 2.0)
@@ -407,7 +429,7 @@ func _build_ui() -> void:
 	_readout.add_theme_font_size_override("font_size", 14)
 	info.add_child(_readout)
 	var help := Label.new()
-	help.text = "1-5 bird  Up/Down scenario  Space pause  . step\nR restart  -/= speed  O ghosts  F follow  V view\nDrag to orbit, wheel to zoom"
+	help.text = "1-5 bird  Up/Down scenario  Space pause  . step\nR restart  -/= speed  O ghosts  F follow  V view\nB bones  Drag to orbit, wheel to zoom"
 	help.add_theme_font_size_override("font_size", 11)
 	help.modulate = Color(1, 1, 1, 0.7)
 	box.add_child(help)
