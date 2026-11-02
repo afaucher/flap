@@ -148,28 +148,37 @@ static func beak_meshes(id: String, r: float, base: Vector3) -> Array:
 	return out
 
 
-## The owl's facial disc: a shallow heart-shaped dish over the front of the head (the Barn Owl's), pale with a
-## dark rim; `z_rim` where its rim sits (head space), `depth` how far its centre is recessed.
-static func disc_mesh(r: float, z_rim: float, depth: float, face: Color, rim: Color) -> ArrayMesh:
+## The owl's facial disc: the Barn Owl's heart-shaped dish of feathers over the front of the head, pale with a
+## dark rim. It follows the head's front (`skull`: the head sphere's scale), raised a little and rising toward
+## the rim into a ruff, then wraps back onto the head just past it, so it is part of the head, not a mask.
+static func disc_mesh(r: float, face: Color, rim: Color, skull := Vector3.ONE) -> ArrayMesh:
 	var rows: Array = []
 	var cols: Array = []
-	var rings := 8
-	var n := 24
-	for k in rings + 1:
-		var s := float(k) / rings
+	var rings := 16
+	var n := 48
+	for k in rings + 3:
+		var s := minf(float(k) / rings, 1.0 + 0.03 * (k - rings))   # (two rings past the rim: down onto the head)
 		var row: Array = []
 		var crow: Array = []
 		for j in n:
 			var t := -TAU * j / n   # (wound to face forward)
 			var x := 0.95 * r * sin(t) * s
 			var y := r * (0.75 * cos(t) - 0.25 * cos(2.0 * t)) * s - 0.1 * r
-			var z := z_rim + depth * (1.0 - s * s) - 0.04 * r * exp(-pow((s - 0.93) / 0.06, 2.0))   # the rim ridge
-			row.append(Vector3(x, y, z))
+			row.append(Vector3(x, y, disc_z(x, y, s, r, skull)))
 			crow.append(face.lerp(rim, smoothstep(0.82, 0.92, s)))
 		rows.append(row)
 		cols.append(crow)
 	return BodyShape.tube_mesh(rows, null, cols)
 
+
+## The disc's surface depth at (x, y) for disc radius fraction `s` (head space; -Z forward): the head's front
+## surface, raised 0.03 r at the centre rising to a 0.12 r ruff at the rim, back onto the head past it.
+static func disc_z(x: float, y: float, s: float, r: float, skull: Vector3) -> float:
+	var q := 1.0 - pow(x / (skull.x * r), 2.0) - pow(y / (skull.y * r), 2.0)
+	var surf := -skull.z * r * sqrt(maxf(q, 0.0))
+	if s > 1.0:
+		return surf + 0.01 * r
+	return surf - r * (0.03 + 0.06 * pow(s, 3.0) + 0.03 * exp(-pow((s - 0.93) / 0.06, 2.0)))
 
 ## A fixation time (s): log-normal round `mean`, as raptor inter-saccade intervals are (docs §3.4).
 static func fixation(rng: RandomNumberGenerator, mean: float) -> float:

@@ -175,7 +175,7 @@ static func _basis_along(d: Vector3) -> Basis:
 
 ## The grip set, drawn on the wood: a pale strip along the top of the branch, or a disc on the trunk top.
 func _perch_marker(p: Perch) -> void:
-	var mi := _grip_mesh(p, 0.012)
+	var mi := _grip_mesh(p, 0.004)   # (a thin line flush with the branch top, where the feet grip)
 	mi.material_override = _mat("perch", Color(0.85, 0.78, 0.45), 0.6)
 	add_child(mi)
 
@@ -186,13 +186,13 @@ func _grip_mesh(p: Perch, lift: float) -> MeshInstance3D:
 		var cyl := CylinderMesh.new()
 		cyl.top_radius = p.disc
 		cyl.bottom_radius = p.disc
-		cyl.height = 0.02
+		cyl.height = 0.006
 		cyl.radial_segments = 16
 		mi.mesh = cyl
 		mi.position = p.position + Vector3.UP * lift
 	else:
 		var box := BoxMesh.new()
-		box.size = Vector3(maxf(0.03, p.thickness * 0.9), 0.02, p.a.distance_to(p.b))
+		box.size = Vector3(maxf(0.03, p.thickness * 0.9), 0.006, p.a.distance_to(p.b))
 		mi.mesh = box
 		mi.position = p.position + Vector3.UP * lift
 		mi.basis = Basis.looking_at((p.b - p.a).normalized(), Vector3.UP)

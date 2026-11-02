@@ -34,7 +34,7 @@ const DATA := {
 	},
 	"owl": {
 		"body": {"back": "#a8875a", "rump": "#b8996a", "breast": "#efe4cf", "belly": "#f1e8d6", "vent": "#f3ece0", "flanks": "#e6d3b0", "line": 0.2, "soft": 0.3},
-		"head": {"crown": "#a8875a", "nape": "#a8875a", "face": "#f2ece0", "throat": "#efe6d6", "cap": 0.45, "disc": ["#f2ece0", "#8a6a48"]},
+		"head": {"crown": "#a8875a", "nape": "#a8875a", "face": "#b8996a", "throat": "#efe6d6", "cap": 0.45, "disc": ["#f2ece0", "#8a6a48"]},
 		"wing": {"lesser": "#a07c50", "greater": "#b08a58", "tertial": "#b08a5a", "alula": "#a07c50", "under": "#f4ede0", "patagial": "#f4ede0", "carpal": "#e9dcc4"},
 		"groups": {"primary": ["#b8905c", "#e8dcc6"], "secondary": ["#b89462", "#ebe0cc"], "tail": ["#c09a64", "#ece2cf"]},
 		"fingers": [2, 0.1, 0.25],
@@ -231,10 +231,7 @@ static func head(id: String, d: Vector3, eye: Vector3) -> Color:
 	var c := hex(h.face)
 	c = c.lerp(hex(h.nape), smoothstep(-0.1, 0.45, -front))                    # the back of the head
 	c = c.lerp(throat, smoothstep(-0.25, -0.55, d.y) * smoothstep(-0.3, 0.1, front))
-	if h.has("disc"):   # the owl's facial disc: a pale dish on the front, rimmed dark
-		var ang := acos(clampf(front, -1.0, 1.0))
-		c = c.lerp(hex(h.disc[0]), 1.0 - smoothstep(0.85, 0.95, ang))
-		c = c.lerp(hex(h.disc[1]), smoothstep(0.82, 0.92, ang) * (1.0 - smoothstep(1.02, 1.12, ang)))
+	# (the owl's facial disc is its own mesh, Face.disc_mesh, with these colours: the head round it is buff)
 	if h.has("malar"):   # a dark stripe from below the eye down the cheek
 		var e := Vector2(absf(d.x) - absf(eye.x) * 0.9, d.z - eye.z).length()
 		var below := smoothstep(eye.y + 0.05, eye.y - 0.1, d.y) * smoothstep(eye.y - 0.8, eye.y - 0.55, d.y)

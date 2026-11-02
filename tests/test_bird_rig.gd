@@ -212,7 +212,7 @@ func setup() -> void:
 			check(b.rig.body.gap(b.rig.leg_joints[i][1]) < 0.0, p.id + " perched knee inside the body")
 		check(b.rig.fold > 0.95, p.id + " perched wings folded")
 		check(b.rig.neck_ext < 0.15, p.id + " perched neck retracted")
-		check(b.rig.position.length() < 1e-3, p.id + " touchdown dip settled")
+		check(absf(b.rig.position.length() - absf(b.rig._stance)) < 1e-3, p.id + " touchdown dip settled (only the stance offset left)")
 		check(b.rig.head_offset.length() < p.body_length * 0.02, p.id + " head settled on its neck")
 		var toe_back: float = (b.rig._leg_meshes[1][4] as MeshInstance3D).transform.origin.z - b.rig.leg_joints[1][3].z
 		check((toe_back > 0.0) == (p.id == "owl"), p.id + " outer toe back only on the owl")

@@ -16,7 +16,7 @@ func setup() -> void:
 		var tip_z := 0.0
 		for v in (upper.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
 			tip_z = minf(tip_z, (v as Vector3).z)
-		var base_z := -hr * rig.body.skull.z * 0.85 if not fd.has("disc") else -hr * rig.body.skull.z - 0.06 * hr + 0.05 * hr
+		var base_z := -hr * rig.body.skull.z * 0.85 if not fd.has("disc") else Face.disc_z(0.0, -0.14 * hr, 0.1, hr, rig.body.skull) + 0.04 * hr
 		var expect := base_z - float(fd.beak.len) * hr * cos(deg_to_rad(float(fd.beak.pitch)))
 		near(tip_z, expect, absf(expect) * 0.25, p.id + " beak reaches its length ahead of the head")
 		check(rig._head.has_node("Jaw/BeakLower"), p.id + " lower mandible on its jaw pivot")

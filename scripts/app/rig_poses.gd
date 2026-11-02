@@ -22,6 +22,7 @@ static func apply(r: BirdRig, pose: String, time: float, neck := -1.0, fluff := 
 	r.toe_grip = 0.0
 	r.neck_ext = r.body.neck_flight
 	r.fluff = 1.0
+	r.flex = 0.0
 	if pose != "folded":
 		r.rotation_degrees.x = 0.0
 	for i in 2:
@@ -31,6 +32,7 @@ static func apply(r: BirdRig, pose: String, time: float, neck := -1.0, fluff := 
 			var ph := fmod(time * 2.0, 1.0) if pose == "flap" else 0.75
 			r.flap = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))
 			r.hand_lift = 50.0 * sin((ph - 0.5) * TAU) if ph > 0.5 else 0.0
+			r.flex = 0.16 * sin(ph * TAU) + 0.03   # (tips bend up in the downstroke, trail down in the upstroke)
 		"folded":
 			# Perched: the species' posture, tail at its angle, feet gripping a branch under the body.
 			var sit: Dictionary = BirdRig.POSE.get(r.profile.id, BirdRig.POSE["crow"])

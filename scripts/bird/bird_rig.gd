@@ -136,6 +136,8 @@ var _root_fill: Array[MeshInstance3D] = []
 var arm_web: Array = [{}, {}]         ## per side, the arm wing's loft this pose: {from, to, depth (elbow behind the edge), chord_at_elbow}
 var _last_carrier := Vector3.ZERO
 var _clock_t := 0.0
+var _stance := 0.0
+var flex := 0.0                 ## feather bend along the length: + tips up (downstroke load), - tips back/down (upstroke)
 var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4]
 var _fairings: Array = [[], []]       ## per side: [patagium, humerus, forearm, hand] (the wing's thickness)
 var _built := false
@@ -439,9 +441,14 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 	for k in ARM_STATIONS + 3:
 		var u := clampf((k - 1.0) / ARM_STATIONS, 0.0, 1.0)
 		var e := sh + le * span * u
+		# Near the body the surface flexes rather than pivots: its sections ease from the body's plane at the root
+		# to the wing's by about 40% of the way out, so a raised or lowered wing bends at the shoulder.
+		var nu := Vector3.UP.slerp(nn, smoothstep(0.0, 0.4, u))
+		nu = (nu - le * le.dot(nu)).normalized()
+		var aft_u := (le.cross(nu) * s).normalized()
 		var arc := u * (l_h + l_f)
 		var bone := sh.lerp(elbow, arc / maxf(l_h, 1e-5)) if arc <= l_h else elbow.lerp(wrist, (arc - l_h) / maxf(l_f, 1e-5))
-		var depth := maxf((bone - e).dot(aft), 0.0)
+		var depth := maxf((bone - e).dot(aft_u), 0.0)
 		var chord := (depth + rc * lerpf(0.42, 0.26, u)) * open
 		var thick := rc * lerpf(0.14, 0.055, u) * (1.0 + 0.15 * exp(-pow((u - 0.25) / 0.2, 2.0))) * open
 		if k == 0 or k == ARM_STATIONS + 2:
@@ -455,7 +462,7 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 			var x := 0.5 * (1.0 - cos(a))
 			var half := _naca(x) * thick
 			var y := 0.02 * chord * sin(PI * x) + (-half if sin(a) >= 0.0 else half)
-			row.append(e + aft * (x * chord) + nn * y)
+			row.append(e + aft_u * (x * chord) + nu * y)
 		rows.append(row)
 	arm_web[i] = {"from": sh, "to": wrist, "depth": depth_elbow, "chord_at_elbow": chord_elbow}
 	var cols := _arm_colors
@@ -501,8 +508,12 @@ func _place_root_fill(i: int, sh: Vector3, wrist: Vector3, n_in: Vector3, s: flo
 	var le := (wrist - sh).normalized()
 	var nn := (n_in - le * le.dot(n_in)).normalized()
 	var aft := (le.cross(nn) * s).normalized()
-	var c := sh + aft * rc * 0.32 - le * _L * 0.02
-	mi.transform = Transform3D(Basis(le * _L * 0.2 * open, nn * rc * 0.2 * open, aft * rc * 0.85), c)
+	# (halfway between the body's plane and the wing's: it flexes with the flap, like the surface it covers)
+	var nm := Vector3.UP.slerp(nn, 0.35)
+	nm = (nm - le * le.dot(nm)).normalized()
+	var am := (le.cross(nm) * s).normalized()
+	var c := sh + am * rc * 0.32 - le * _L * 0.02
+	mi.transform = Transform3D(Basis(le * _L * 0.2 * open, nm * rc * 0.2 * open, am * rc * 0.85), c)
 
 
 ## Lay a unit limb mesh from `a` to `b`, its chord aft and its thickness along `n`; `chord` scales x (m).
@@ -615,8 +626,6 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 	var id := profile.id
 	var fd := Face.spec(id)
 	var disc: bool = fd.has("disc")
-	var z_rim := -hr * body.skull.z - 0.06 * hr
-	var disc_depth := 0.1 * hr
 	if disc:
 		var dm := MeshInstance3D.new()
 		dm.name = "FacialDisc"
@@ -625,10 +634,10 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 		if Plumage.level > 0 and Plumage.spec(id).head.has("disc"):
 			face_c = Plumage.hex(Plumage.spec(id).head.disc[0])
 			rim_c = Plumage.hex(Plumage.spec(id).head.disc[1])
-		dm.mesh = Face.disc_mesh(hr, z_rim, disc_depth, face_c, rim_c)
+		dm.mesh = Face.disc_mesh(hr, face_c, rim_c, body.skull)
 		dm.material_override = body_mat
 		_head.add_child(dm)
-	var beak_base := Vector3(0.0, -0.05 * hr, -hr * body.skull.z * 0.85) if not disc else Vector3(0.0, -0.14 * hr, z_rim + disc_depth * 0.5)
+	var beak_base := Vector3(0.0, -0.05 * hr, -hr * body.skull.z * 0.85) if not disc else Vector3(0.0, -0.14 * hr, Face.disc_z(0.0, -0.14 * hr, 0.1, hr, body.skull) + 0.04 * hr)
 	var bm: Array = Face.beak_meshes(id, hr, beak_base)
 	var bill_mat := _material(Color.WHITE)
 	bill_mat.vertex_color_use_as_albedo = true
@@ -666,8 +675,8 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 		if disc:   # the owl's eyes sit in its disc, looking forward
 			var px := e * 0.32 * hr
 			var py := 0.12 * hr
-			var s2 := pow(px / (0.95 * hr), 2.0) + pow((py + 0.1 * hr) / (0.75 * hr), 2.0)
-			eye.position = Vector3(px, py, z_rim + disc_depth * (1.0 - s2) - 0.01 * hr)
+			var s2 := sqrt(pow(px / (0.95 * hr), 2.0) + pow((py + 0.1 * hr) / (0.75 * hr), 2.0))
+			eye.position = Vector3(px, py, Face.disc_z(px, py, s2, hr, body.skull) - 0.005 * hr)
 			_head.add_child(eye)
 		else:
 			eye.position = dir * hr * 0.97
@@ -731,21 +740,26 @@ func _head_mesh(sph: SphereMesh) -> ArrayMesh:
 
 ## Lay one feather (top copy, and its underside copy when two-sided); its colours only when they change (at
 ## build), since they don't move.
-func _place(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int, fi: int, bone: int, custom: Color) -> void:
+func _place(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int, fi: int, bone: int, custom: Color, bend := 0.0) -> void:
 	mm.set_instance_transform(idx, xf)
 	if mmu != null:
 		mmu.set_instance_transform(idx, xf)
+	var g := Plumage.group(kind, fi, bone)
+	if marks_material != null and not _paint_dirty:   # (the bend changes every pose; the rest only at build)
+		mm.set_instance_custom_data(idx, Color(Plumage.row_index(g, false), bend, 0, 0))
+		if mmu != null:
+			mmu.set_instance_custom_data(idx, Color(Plumage.row_index(g, true), bend, 0, 0))
+		return
 	if not _paint_dirty:
 		return
 	var id := profile.id
-	var g := Plumage.group(kind, fi, bone)
 	var fm: Array = Plumage.finger(id, fi) if kind == WingShape.Kind.PRIMARY else [1.0, 1.0]
 	if marks_material != null:   # level 5: colour from the strip, the instance colour darkens
 		mm.set_instance_color(idx, Color(fm[0], fm[0], fm[0]))
-		mm.set_instance_custom_data(idx, Color(Plumage.row_index(g, false), 0, 0, 0))
+		mm.set_instance_custom_data(idx, Color(Plumage.row_index(g, false), bend, 0, 0))
 		if mmu != null:
 			mmu.set_instance_color(idx, Color(fm[1], fm[1], fm[1]))
-			mmu.set_instance_custom_data(idx, Color(Plumage.row_index(g, true), 0, 0, 0))
+			mmu.set_instance_custom_data(idx, Color(Plumage.row_index(g, true), bend, 0, 0))
 		return
 	var top: Color = _colors.get(kind, _colors["tail"])
 	var under := top
@@ -759,6 +773,17 @@ func _place(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int,
 	if mmu != null:
 		mmu.set_instance_color(idx, under)
 		mmu.set_instance_custom_data(idx, custom)
+
+
+## How much a feather bends with the wing's `flex`: the long, outer primaries most, the stiff coverts barely.
+static func _flex_share(f: Dictionary) -> float:
+	match int(f.kind):
+		WingShape.Kind.PRIMARY: return 0.6 + 0.04 * float(f.i)
+		WingShape.Kind.SECONDARY: return 0.5
+		WingShape.Kind.TERTIAL: return 0.3
+		WingShape.Kind.GREATER_COVERT, WingShape.Kind.UNDER_COVERT: return 0.15
+		WingShape.Kind.LESSER_COVERT: return 0.05
+	return 0.0
 
 
 static func _scaled(c: Color, k: float) -> Color:
@@ -817,7 +842,7 @@ func animate(t: Dictionary, dt: float) -> void:
 		fold_t = smoothstep(0.8, 1.0, lt) * 0.8
 		sweep_t = 18.0 * (1.0 - smoothstep(0.8, 1.0, lt))
 		twist_t = deg_to_rad(40.0)
-		k = 1.0
+		k = 1.0 - exp(-30.0 * dt)   # (fast, but eased: the wings swing into the braking beats, they don't jump)
 	if sitting:
 		flap_t = deg_to_rad(-10.0)
 		fold_t = 1.0
@@ -825,6 +850,16 @@ func animate(t: Dictionary, dt: float) -> void:
 		twist_t = 0.0
 	flap = lerpf(flap, flap_t, k)
 	hand_lift = lerpf(hand_lift, lift_t, k)
+	# Feathers flex under load: in a downstroke the tips bend up, in the upstroke they trail back and down; a
+	# little upward bend in a glide; none on a perch.
+	var flex_t := 0.0
+	if landing:
+		flex_t = 0.12 * sin(fmod(float(t.landing_t) * 2.0, 1.0) * TAU)
+	elif t.flapping and not sitting:
+		flex_t = 0.16 * sin(float(t.flap_phase) * TAU) + 0.03
+	elif not sitting:
+		flex_t = 0.03 * clampf(float(t.load), 0.0, 3.0)
+	flex = lerpf(flex, flex_t, k)
 	fold = lerpf(fold, fold_t, 1.0 - exp(-10.0 * dt))
 	sweep = lerpf(sweep, sweep_t, ks)
 	twist = lerpf(twist, twist_t, ks)
@@ -864,7 +899,18 @@ func animate(t: Dictionary, dt: float) -> void:
 	var dip := 0.0
 	if sitting and age < 0.4:
 		dip = sin(PI * age / 0.4) * (1.0 - age / 0.4) * _L * 0.12
-	position = transform.basis * (-world_up * dip)
+	# Stance: sitting, the body rides at a natural height over its feet -- the hips about 70% of the leg's reach
+	# above a branch (perched birds crouch), 85% above the ground -- so the feet meet the surface whatever the
+	# species' proportions. Visual only: the bird's body for the game doesn't move.
+	var stance_t := 0.0
+	if sitting and t.has_grip:
+		var parent_xf := get_parent_node_3d().global_transform if get_parent_node_3d() != null else Transform3D()
+		var hip_w := parent_xf * ((_hip[0] + _hip[1]) * 0.5)
+		var reach := body.femur + _tib + _tars
+		var want_h := reach * (0.7 if state == Bird.State.PERCHED else 0.85)
+		stance_t = want_h - (hip_w - (t.grip as Vector3)).dot(Vector3.UP)
+	_stance = lerpf(_stance, stance_t, 1.0 if age < 0.05 else 1.0 - exp(-10.0 * dt))
+	position = transform.basis * (world_up * (_stance - dip))
 
 	# Head: look at the target, level with the world.
 	var inv := global_transform.affine_inverse()
@@ -892,7 +938,7 @@ func animate(t: Dictionary, dt: float) -> void:
 			var reach := body.femur + _tib + _tars
 			if (g + side_off).distance_to(_hip[i]) < reach * 1.6:
 				want_foot = g + side_off
-				grip = 1.0 if sitting else 0.0
+				grip = 1.0 if state == Bird.State.PERCHED else 0.0   # (on the ground the toes lie flat)
 		elif flare > 0.3:
 			want_foot = _hip[i] + Vector3(0.0, -_L * 0.22, -_L * 0.16)
 		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
@@ -1032,6 +1078,12 @@ func apply_pose() -> void:
 		var elbow := two_bone(sh, target, lengths[0], lengths[1], pole)
 		var wrist := chain_end(elbow, target, lengths[1])
 		var hand := wrist + (hd_fk - wr_fk)
+		# Fluffed (the owl on its perch), the flank feathers stand out and the folded wing rides on them.
+		var puff := Vector3(s * (fluff * (1.0 + 0.012 * breath) - 1.0) * _L * 0.2 * ik_w, 0.0, 0.0)
+		sh += puff
+		elbow += puff
+		wrist += puff
+		hand += puff
 		wing_joints[i] = [sh, elbow, wrist, hand]
 		var hand_n := arm_n
 		if absf(hand_lift) > 1e-3:
@@ -1047,6 +1099,12 @@ func apply_pose() -> void:
 			var b: Vector3 = seg[1]
 			var u := (b - a).normalized()
 			var n: Vector3 = seg[2]
+			# Across the wrist the surface twists smoothly from the arm's plane to the hand's: the inner primaries and
+			# the secondaries by the wrist take a share of both, so the wing bends there instead of breaking into plates.
+			if int(f.bone) == WingShape.Bone.HAND and f.kind != WingShape.Kind.ALULA:
+				n = hand_n.slerp(arm_n, 0.5 * (1.0 - smoothstep(1.0, 4.0, float(f.i))))
+			elif int(f.bone) == WingShape.Bone.FOREARM:
+				n = arm_n.slerp(hand_n, 0.5 * smoothstep(0.7, 1.0, float(f.t)))
 			n = (n - u * u.dot(n)).normalized()
 			var aft := (u.cross(n) * s).normalized()
 			var rel := deg_to_rad(f.rel)
@@ -1072,10 +1130,10 @@ func apply_pose() -> void:
 			feather_xforms.append(xf)
 			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
 			if f.emarg:
-				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0))
+				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), flex * _flex_share(f))
 				emarg_i += 1
 			else:
-				_place(_plain, _plain_u, plain_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0))
+				_place(_plain, _plain_u, plain_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), flex * _flex_share(f))
 				plain_i += 1
 		var fr: Array = _fairings[i]
 		var rc := shape.root_chord()

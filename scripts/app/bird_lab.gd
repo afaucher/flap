@@ -5,7 +5,7 @@ extends Node3D
 ## the body, wings, tail and legs adjust. Live scenarios are the real game: Bird, FlightModel, perch logic and
 ## rig, flown by a LabPilot through the player's controls.
 ##   .\run.ps1 --scene res://scenes/bird_lab.tscn [--bird <id>] [--scenario <id>] [--speed <0.05..1>] [--onion]
-##       [--view side|front|three|top|chase] [--pause-at <sim s>] [--shot <png> --shot-after <real s>]
+##       [--view side|front|three|top|chase] [--dist <m>] [--pause-at <sim s>] [--shot <png> --shot-after <real s>]
 ## Keys: 1-5 bird, Up/Down scenario, Space pause, . step, R restart, -/= speed, O onion skin, F follow,
 ##       V next view, T trail; drag to orbit, wheel to zoom.
 
@@ -42,6 +42,7 @@ var fluff := 1.0
 var view := "three"
 var sim_t := 0.0              ## scenario time (sim seconds)
 var pause_at := -1.0
+var _dist_arg := -1.0
 
 var _yaw := 0.0
 var _pitch := 0.0
@@ -80,6 +81,8 @@ func _ready() -> void:
 	if Boot.arg_value(args, "--pause-at") != "":
 		pause_at = float(Boot.arg_value(args, "--pause-at"))
 	onion = args.has("--onion")
+	if Boot.arg_value(args, "--dist") != "":
+		_dist_arg = float(Boot.arg_value(args, "--dist"))
 
 	Game.add_environment(self)
 	world = Node3D.new()
@@ -152,7 +155,7 @@ func restart() -> void:
 		bird.setup(p, layout, null)
 		bird.arena = arena
 		pilot = LabScenarios.start(scenario, bird, layout)
-	_dist = maxf(1.2, p.span * 2.6)
+	_dist = _dist_arg if _dist_arg > 0.0 else maxf(1.2, p.span * 2.6)
 	_focus = _target_point()
 	_sync_ui()
 

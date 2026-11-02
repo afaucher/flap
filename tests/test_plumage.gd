@@ -19,7 +19,7 @@ func setup() -> void:
 	check(Plumage.head("falcon", Vector3(0, 1, 0), eye).get_luminance() < 0.2 and Plumage.head("falcon", Vector3(0, -0.8, -0.6).normalized(), eye).get_luminance() > 0.7, "falcon: dark hood, white throat")
 	check(Plumage.head("falcon", Vector3(eye.x * 0.9, eye.y - 0.35, eye.z).normalized(), eye).get_luminance() < 0.25, "falcon moustache below the eye")
 	check(Plumage.head("sparrow", Vector3(0, -0.8, -0.6).normalized(), eye).get_luminance() < 0.15, "sparrow black bib")
-	check(Plumage.head("owl", Vector3(0, 0, -1), eye).get_luminance() > 0.8, "owl pale facial disc")
+	check(Plumage.hex(Plumage.spec("owl").head.disc[0]).get_luminance() > 0.8, "owl pale facial disc")
 	var prim: PackedColorArray = Plumage.row("hawk", "primary", true)
 	check(prim[Plumage.STRIP - 2].get_luminance() < prim[Plumage.STRIP / 2].get_luminance() * 0.5, "hawk primaries dark-tipped below")
 	var band: PackedColorArray = Plumage.row("hawk", "tail", false)
