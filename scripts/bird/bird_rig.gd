@@ -1250,14 +1250,17 @@ func _world_frame() -> Array:
 	return [up_w, fwd_h]
 
 
-## Where the neck puts the head (rig space): retracted, up and a little forward of the neck base, sitting
-## on the shoulders; reaching, out ahead. Both relative to the world, so an upright bird's head still sits on
-## top of it.
+## Where the neck puts the head (rig space): retracted, on top of the neck base; reaching, out ahead (level in
+## the world).
 func _neck_target(offset: Vector3) -> Vector3:
 	var frame := _world_frame()
 	var up_w: Vector3 = frame[0]
 	var fwd_h: Vector3 = frame[1]
-	var rest_dir := (up_w + fwd_h * 0.7).normalized()
+	# Retracted, the head sits up and along the BODY's forward axis (rig -Z): on a level bird that is up and
+	# ahead of the shoulders; on an upright owl or hawk the body's axis already points up, so the head sits
+	# squarely on top, its nape flowing into the back (pushed forward in the world, the neck's back stood up
+	# behind the head as a separate ridge).
+	var rest_dir := (up_w + Vector3.FORWARD * 0.7).normalized()
 	var reach_dir := (up_w * 0.15 + fwd_h).normalized()
 	var dir := rest_dir.slerp(reach_dir, neck_ext)
 	return body.neck_base + dir * lerpf(body.neck_rest, body.neck_reach, neck_ext) + offset
