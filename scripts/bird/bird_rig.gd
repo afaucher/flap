@@ -46,6 +46,7 @@ const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
 const MARKS_SHADER := preload("res://scripts/bird/feather_marks.gdshader")
 const TEXTURE_SHADER := preload("res://scripts/bird/feather_texture.gdshader")   ## plumage level 6
 const BODY_TEXTURE_SHADER := preload("res://scripts/bird/body_feathers.gdshader")
+const MEMBRANE_SHADER := preload("res://scripts/bird/membrane.gdshader")
 static var outline_down := true   ## plumage level 6: the outline frays (body_feathers.gdshader `fray`; gallery --no-down)
 ## Per-species feather look (docs/research/feather_rendering.md): glossy iridescent crow, matte barred soft
 ## owl, barred hawk with darker tips, falcon with buff margins, sparrow with pale edges and dark centres.
@@ -81,6 +82,9 @@ var grip_radius := 0.0          ## the branch under the feet (m; 0: none, or the
 var lean := 0.0                 ## sitting: 0 the species' posture .. 1 the body level and the tail raised (to keep the
                                 ## tail and wingtips off what the bird sits on: BirdRig._posture)
 const LEAN_PITCH := 5.0         ## deg: the body's pitch at full lean
+const ATT_RATE := 400.0         ## deg/s: the drawn body turns at most this fast (the game's attitude can snap)
+var _att := Quaternion.IDENTITY
+var _att_set := false
 var neck_ext := 0.3             ## 0 retracted (head on the shoulders) .. 1 reaching
 var head_offset := Vector3.ZERO ## rig space, head stabilisation: where the head lags its neck target
 var fluff := 1.0                ## plumage volume (1 sleek .. ~1.15 fluffed)
@@ -131,7 +135,8 @@ var _neck_mesh: ArrayMesh
 var _head_world := Vector3.INF
 var _body_tint := Color.WHITE
 var _jaw: Node3D
-var _membranes: Array[Node3D] = []
+var _membranes: Array[MeshInstance3D] = []
+var _brows: Array[MeshInstance3D] = []
 var blink := 0.0                ## 0 open .. 1 the nictitating membrane across
 static var face_anim := true     ## saccades, idle scanning and blinks (off: the head eases onto its target, no blinks)
 var _rng := RandomNumberGenerator.new()
@@ -735,6 +740,8 @@ func _texture_body() -> void:
 	_trunk.material_override = m
 	_neck_mi.material_override = m
 	(_head.get_node("HeadSurface") as MeshInstance3D).material_override = m
+	for b in _brows:
+		b.material_override = m
 	for i in 2:
 		for k in 4:
 			(_fairings[i][k] as MeshInstance3D).material_override = m
@@ -900,12 +907,9 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 	eye_mat.vertex_color_use_as_albedo = true
 	eye_mat.vertex_color_is_srgb = true
 	eye_mat.roughness = 0.2
-	var memb_mat := StandardMaterial3D.new()
-	memb_mat.albedo_color = Color(0.86, 0.9, 0.95, 0.65)
-	memb_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	memb_mat.roughness = 0.3
 	var er := float(fd.eye.r) * hr
 	_membranes.clear()
+	_brows.clear()
 	for e: float in [-1.0, 1.0]:
 		var dir := Face.eye_dir(id, e)
 		var eye := Node3D.new()
@@ -923,36 +927,65 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 		cap.mesh = Face.eye_mesh(id, er)
 		cap.material_override = eye_mat
 		eye.add_child(cap)
-		# The nictitating membrane: a translucent lid sweeping across from the bill side and back.
+		# The nictitating membrane: a translucent film sweeping across from the bill side and back, drawn on a copy
+		# of the eye's cap just over it (membrane.gdshader), so it never shows outside the eye.
 		var bill_side := eye.basis.inverse() * Vector3.FORWARD
 		var v := Vector2(bill_side.x, bill_side.y)
 		v = v.normalized() if v.length() > 1e-3 else Vector2(1.0, 0.0)
-		var pivot := Node3D.new()
-		pivot.position = Vector3(v.x * er, v.y * er, -0.26 * er)
-		pivot.rotation.z = atan2(v.y, v.x)
-		eye.add_child(pivot)
 		var mem := MeshInstance3D.new()
-		var ms := SphereMesh.new()
-		ms.radius = er * 1.04
-		ms.height = er * 2.08
-		mem.mesh = ms
-		mem.material_override = memb_mat
-		mem.position = Vector3(-er, 0.0, 0.0)
-		mem.scale = Vector3(1.0, 1.0, 0.25)
-		pivot.add_child(mem)
-		pivot.visible = false
-		_membranes.append(pivot)
+		mem.mesh = cap.mesh
+		mem.scale = Vector3(1.0, 1.0, 1.25)   # (its dome a little proud of the eye's)
+		mem.position = Vector3(0.0, 0.0, -0.004 * er)
+		var mm := ShaderMaterial.new()
+		mm.shader = MEMBRANE_SHADER
+		mm.set_shader_parameter("dir", v)
+		mm.set_shader_parameter("radius", er)
+		mem.material_override = mm
+		mem.visible = false
+		eye.add_child(mem)
+		_membranes.append(mem)
 		if body.brow > 0.0 and not disc:   # the raptor's brow ridge over the eye: the frown
+			# Bone under the head's own feathers: drawn with the head's colour and, at plumage level 6, its feather
+			# texture (the body material, _texture_body), the small feathers running back over it.
 			var brow := MeshInstance3D.new()
-			var bs := SphereMesh.new()
-			bs.radius = 0.5
-			bs.height = 1.0
-			brow.mesh = bs
-			brow.material_override = _material(_body_tint if Plumage.level == 0 else Plumage.head(id, Vector3.UP, dir))
+			var head_col: Color = _body_tint if Plumage.level == 0 else Plumage.head(id, Vector3.UP, dir)
+			brow.mesh = _brow_mesh(head_col)
+			brow.material_override = _material(Color.WHITE)
+			(brow.material_override as StandardMaterial3D).vertex_color_use_as_albedo = true
+			(brow.material_override as StandardMaterial3D).vertex_color_is_srgb = true
+			_brows.append(brow)
 			brow.position = eye.position + Vector3(e * 0.03, 0.2, 0.02) * hr
 			brow.rotation = Vector3(deg_to_rad(-15.0), e * deg_to_rad(-35.0), 0.0)
 			brow.scale = Vector3(0.42, 0.14 * body.brow, 0.34) * hr
 			skull.add_child(brow)
+
+
+## The brow ridge's mesh: a unit sphere (scaled flat by its node) carrying the feather chart -- UV in feather tiles,
+## v running back over it with the head's feathers; UV2 (no seam, up); the head's colour, texture at full strength.
+static func _brow_mesh(col: Color) -> ArrayMesh:
+	var sm := SphereMesh.new()
+	sm.radius = 0.5
+	sm.height = 1.0
+	sm.radial_segments = 24
+	sm.rings = 12
+	var arr := sm.get_mesh_arrays()
+	var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	var n := uv.size()
+	var uvs := PackedVector2Array()
+	var uv2s := PackedVector2Array()
+	var cols := PackedColorArray()
+	var c := col
+	c.a = 1.0
+	for k in n:
+		uvs.append(Vector2(uv[k].x * 2.5, uv[k].y * 1.2))
+		uv2s.append(Vector2(1000.0, 1.0))
+		cols.append(c)
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_TEX_UV2] = uv2s
+	arr[Mesh.ARRAY_COLOR] = cols
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return m
 
 
 ## The body's colour at (u along the trunk, v up its side, side round to the flank); the old flat tint at
@@ -1388,9 +1421,10 @@ func animate(t: Dictionary, dt: float) -> void:
 		_head_world = desired
 	else:
 		_head_world += carrier - _last_carrier
-		_head_world = _head_world.lerp(desired, 1.0 - exp(-15.0 * dt))
+		_head_world = _head_world.lerp(desired, 1.0 - exp(-(15.0 if sitting else 25.0) * dt))
 	_last_carrier = carrier
-	head_offset = (inv * _head_world - _neck_target(Vector3.ZERO)).limit_length(_L * 0.1)
+	# (in the air, where wingbeats and the leap jolt the body, it lags less: a long lag stretches the neck)
+	head_offset = (inv * _head_world - _neck_target(Vector3.ZERO)).limit_length(_L * (0.1 if sitting else 0.05))
 
 	# Feet: on the grip point when there is one in reach, reaching forward in a flare, else tucked.
 	for i in 2:
@@ -1437,7 +1471,23 @@ func _posture(t: Dictionary, dt: float, sitting: bool) -> void:
 	var sit_pitch: float = float(POSE.get(profile.id, POSE["crow"]).perch_pitch)
 	if t.state == Bird.State.GROUNDED:
 		sit_pitch = float(POSE.get(profile.id, POSE["crow"]).ground_pitch)
-	basis = Basis(Vector3.RIGHT, -deg_to_rad(maxf(sit_pitch - LEAN_PITCH, 0.0)) * smoothstep(0.0, 1.0, lean))
+	var local_t := Basis(Vector3.RIGHT, -deg_to_rad(maxf(sit_pitch - LEAN_PITCH, 0.0)) * smoothstep(0.0, 1.0, lean))
+	# The drawn body's attitude in the world turns toward the Bird's (and the lean) at most ATT_RATE: the game snaps
+	# from standing to the flight attitude in a frame at a take-off (38 deg); drawn, that is a quick swing. Ordinary
+	# flight turns more slowly and is followed exactly. A jump past 100 deg (a respawn) is taken at once.
+	var parent := get_parent_node_3d()
+	if parent == null:
+		basis = local_t
+		return
+	var pq := parent.global_transform.basis.orthonormalized().get_rotation_quaternion()
+	var want := pq * local_t.get_rotation_quaternion()
+	var ang := _att.angle_to(want) if _att_set else INF
+	if ang > deg_to_rad(100.0):
+		_att = want
+	elif ang > 1e-6:
+		_att = _att.slerp(want, minf(1.0, deg_to_rad(ATT_RATE) * dt / ang))
+	_att_set = true
+	basis = Basis(pq.inverse() * _att)
 
 
 ## How far `p` (world) is inside the surface: + inside, - clear of it.
@@ -1754,18 +1804,24 @@ func apply_pose() -> void:
 	var fwd := look_dir
 	var yaw := atan2(fwd.x, -fwd.z)
 	var pitch := asin(clampf(fwd.y, -1.0, 1.0))
+	if fwd.z > 0.0 and absf(fwd.x) < absf(fwd.y):
+		# Behind, but more below (or above) than aside: past the body's straight down (up), as the horizon is to a
+		# body pitched past vertical. A big pitch, clamped -- not the yaw swung round to look the other way.
+		yaw = asin(clampf(fwd.x, -1.0, 1.0))
+		pitch = signf(fwd.y) * atan2(absf(fwd.y), -fwd.z)
 	var fd := Face.spec(profile.id)
 	yaw = clampf(yaw, deg_to_rad(-float(fd.head_yaw)), deg_to_rad(float(fd.head_yaw)))
 	pitch = clampf(pitch, deg_to_rad(float(fd.head_pitch[0])), deg_to_rad(float(fd.head_pitch[1])))
 	for m in _membranes:   # the blink
 		m.visible = blink > 0.01
-		m.scale = Vector3(maxf(blink, 0.001), 1.0, 1.0)
+		(m.material_override as ShaderMaterial).set_shader_parameter("sweep", blink)
 	fwd = Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
 	var up := world_up.slerp(Vector3.UP, 0.3)
 	if absf(fwd.dot(up.normalized())) > 0.98:
 		up = Vector3.BACK
 	head_basis = Basis.looking_at(fwd, up)
 	_head.basis = head_basis
+
 	_loft_neck()   # (after the head's basis: its end takes the head's colours in the head's frame)
 	_pose_bone("head", _head_pos, _head_pos + fwd * _L * 0.1, up)
 
@@ -1815,6 +1871,22 @@ func _neck_target(offset: Vector3) -> Vector3:
 
 const TRUNK_AROUND := 20
 const NECK_ROWS := 10
+
+
+## The drawn neck's centreline, a cubic [from, control, control, to]: from the trunk's front ring's centre, leaving
+## along the body's axis, to the head's neck ring's centre (`cb`, or worked out here), entering along the head's
+## neck axis. The loft (_loft_neck) runs its rows along it; the neck bones are laid along it.
+func _neck_curve(cb := Vector3.INF) -> Array:
+	var ring := body.ring_at(body.collar_z)
+	var st := fluff * (1.0 + 0.012 * breath)
+	var ca := Vector3(0.0, ring[0], body.collar_z) * st
+	if cb == Vector3.INF:
+		cb = Vector3.ZERO
+		for q in TRUNK_AROUND:
+			cb += _head.transform * _head_point(_neck_entry, -TAU * q / TRUNK_AROUND) / TRUNK_AROUND
+	var d := ca.distance_to(cb)
+	var tb := (_head.transform.basis * -_neck_axis()).normalized()
+	return [ca, ca + Vector3.FORWARD * d * 0.45, cb - tb * d * 0.35, cb]
 
 
 ## The neck's feathered surface, lofted each pose between two fixed edge loops: the trunk's open front ring
@@ -1872,10 +1944,9 @@ func _loft_neck() -> void:
 			var ref := ua[0].x / pa * pb if j == 0 else ub[j - 1].x
 			raw.x -= pb * roundf((raw.x - ref) / pb)
 			ub.append(raw)
-	var d := ca.distance_to(cb)
-	var tb := (_head.transform.basis * -_neck_axis()).normalized()
-	var p1 := ca + Vector3.FORWARD * d * 0.45
-	var p2 := cb - tb * d * 0.35
+	var cv := _neck_curve(cb)
+	var p1: Vector3 = cv[1]
+	var p2: Vector3 = cv[2]
 	var rows: Array = []
 	var cols: Array = []
 	var uvs: Array = []

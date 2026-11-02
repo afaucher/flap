@@ -448,7 +448,13 @@ func _look_target() -> Vector3:
 	if state == State.FLYING:
 		if candidate != null:
 			return candidate_grip
-		return global_position + model.flight_dir() * 8.0
+		# Where it's going, but held near the horizon, as birds hold their heads: a steep climb out of a take-off
+		# would otherwise point the beak at the sky (a third of the path's pitch, at most 25 deg).
+		var dir := model.flight_dir()
+		var flat := Vector3(dir.x, 0.0, dir.z)
+		flat = flat.normalized() if flat.length() > 0.2 else model.heading_dir()   # (straight up: its heading)
+		var pitch := clampf(asin(clampf(dir.y, -1.0, 1.0)) * 0.35, deg_to_rad(-25.0), deg_to_rad(25.0))
+		return global_position + (flat * cos(pitch) + Vector3.UP * sin(pitch)) * 8.0
 	return global_position + facing * 8.0 + Vector3.UP * look_pitch * 4.0
 
 

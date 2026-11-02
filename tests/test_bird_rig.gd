@@ -157,6 +157,27 @@ func setup() -> void:
 		check(heads[2].distance_to(bs.neck_base) > heads[0].distance_to(bs.neck_base) + p.body_length * 0.05, p.id + " reaching neck is longer")
 		check(heads[2].z < heads[0].z, p.id + " reaching neck puts the head forward")
 		check(rig.body.gap(rig.neck_joints[0]) < 0.0, p.id + " neck leaves from inside the trunk")
+		# The neck bones inside the drawn neck: their inner joints near its centreline, retracted and reaching, the
+		# head turned up, down and aside (the bones once folded their own S out through the feathers).
+		var neck_r: float = rig.body.ring_at(rig.body.collar_z)[1]
+		for ext in [0.0, 1.0]:
+			for look: Vector3 in [Vector3.FORWARD, Vector3(0, 0.8, -0.6), Vector3(0, -0.6, -0.8), Vector3(0.8, 0, -0.6)]:
+				rig.neck_ext = ext
+				rig.look_dir = look.normalized()
+				rig.apply_pose()
+				var cv := rig._neck_curve()
+				for k in [1, 2]:
+					var far := INF
+					for u in 41:
+						far = minf(far, (rig.neck_joints[k] as Vector3).distance_to(BirdRig._bezier(cv[0], cv[1], cv[2], cv[3], u / 40.0)))
+					check(far < neck_r * 0.75, "%s neck joint %d inside the drawn neck (ext %.0f, look %s: %.4f m off its centreline, neck %.4f)" % [p.id, k, ext, look, far, neck_r])
+		rig.look_dir = Vector3.FORWARD
+		# Told to look behind and below (the horizon, to a body pitched past vertical), the head pitches down to its
+		# limit; it doesn't swing round to look backward.
+		rig.look_dir = Vector3(0.0, -0.6, 0.8)
+		rig.apply_pose()
+		check((rig.head_basis * Vector3.FORWARD).z < 0.0, p.id + " behind and below: the head pitches down, not round")
+		rig.look_dir = Vector3.FORWARD
 		var hb := rig.skeleton.find_bone("head")
 		check(rig.skeleton.get_bone_global_pose(hb).origin.distance_to(rig.neck_joints[3]) < 1e-4, p.id + " skeleton head at the atlas")
 		rig.neck_ext = 0.3

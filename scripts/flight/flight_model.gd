@@ -59,6 +59,7 @@ var ground_effect := 0.0    ## 0 (clear of the ground) .. 1 (on it)
 var _last_drag_accel := 0.0
 var _last_dir := Vector3.FORWARD
 var _heading_dir := Vector3.FORWARD   ## last horizontal direction of flight (survives a vertical path)
+var _display_sign := 1.0   ## body_basis: +-1 on lift_dir, so the shown body doesn't flip through a vertical path
 
 
 func _init(p: BirdProfile) -> void:
@@ -260,6 +261,10 @@ func _update_frame() -> void:
 	up_perp = up_perp.normalized()
 	var right := dir.cross(up_perp).normalized()
 	lift_dir = (up_perp * cos(bank) + right * sin(bank)).normalized()
+	# The body as shown keeps its back away from its heading through a near-vertical path: there the lift plane
+	# (from world up) flips whenever the path wobbles past straight up -- a hovering climb's sideways drift changing
+	# sign -- and the body would flip 180 deg with it. Display only: the forces use lift_dir as it is.
+	_display_sign = -1.0 if absf(dir.y) > 0.85 and lift_dir.dot(_heading_dir) > 0.0 else 1.0
 
 
 ## Direction of flight (unit), even at a standstill.
@@ -267,11 +272,13 @@ func flight_dir() -> Vector3:
 	return _last_dir
 
 
-## The body's orientation: nose `alpha` above the flight path, rolled by `bank`. -Z is the nose.
+## The body's orientation: nose `alpha` above the flight path, rolled by `bank`. -Z is the nose. (Near vertical
+## its back keeps facing away from its heading: _display_sign, _update_frame.)
 func body_basis() -> Basis:
 	var dir := _last_dir
-	var nose := (dir * cos(alpha) + lift_dir * sin(alpha)).normalized()
-	var up := (lift_dir * cos(alpha) - dir * sin(alpha)).normalized()
+	var lift := lift_dir * _display_sign
+	var nose := (dir * cos(alpha) + lift * sin(alpha)).normalized()
+	var up := (lift * cos(alpha) - dir * sin(alpha)).normalized()
 	var right := nose.cross(up).normalized()
 	return Basis(right, up, -nose).orthonormalized()
 
@@ -280,6 +287,11 @@ func body_basis() -> Basis:
 func nose_pitch() -> float:
 	var nose := -body_basis().z
 	return asin(clampf(nose.y, -1.0, 1.0))
+
+
+## The last horizontal direction of flight (unit): kept through a vertical climb or dive.
+func heading_dir() -> Vector3:
+	return _heading_dir
 
 
 ## Heading of the flight path in the horizontal plane (rad, 0 = -Z, + toward +X).
