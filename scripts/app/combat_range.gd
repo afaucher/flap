@@ -7,7 +7,8 @@ extends Node3D
 ## outpost nearest the clearing (with no outposts, the start perch): sit on its rail for two seconds to rearm
 ## and grow lost feathers back; the HUD points home when you need it. Two sides: you and a wingman (a crow on
 ## its own racetrack above the target's; --no-wingman leaves it out) against the target. The HUD marks friend
-## and foe; locks only take enemies, but a burst still hurts a teammate. Each side has a base: yours as above,
+## and foe; locks only take enemies, but a burst still hurts a teammate. --return-fire: the target shoots back
+## (the HUD warns of its locks and rounds). Each side has a base: yours as above,
 ## theirs the outpost farthest from it. A downed bird comes back at its side's base once its down stun is over
 ## (mended, rearmed), and the circuit birds fly out from there and back to their racetracks. The score: the
 ## enemy birds each side has downed.
@@ -48,6 +49,7 @@ var their_base: Perch        ## the other side's
 var wingman: Bird            ## your side's other bird (null: --no-wingman)
 var wingman_pilot: CircuitPilot
 var with_wingman := true
+var return_fire := false     ## the target fires back at you (AICombat), for the HUD's warnings
 
 
 func _ready() -> void:
@@ -60,6 +62,7 @@ func _ready() -> void:
 	start_seekers = args.has("--seekers")
 	evade = not args.has("--no-evade")
 	with_wingman = not args.has("--no-wingman")
+	return_fire = args.has("--return-fire")
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
@@ -122,7 +125,7 @@ func restart() -> void:
 	target_pilot.threat = world.threat_to
 	target_pilot.evade = evade
 	target = _spawn(target_id, target_pilot, "Target")
-	var tl := world.add_bird(target, null, THEIR_TEAM)
+	var tl := world.add_bird(target, AICombat.new() if return_fire else null, THEIR_TEAM)
 	tl.rearm_perch = their_base.id
 	_arm(target, tl)
 	trails.track(target, CombatHud.ENEMY)

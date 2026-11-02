@@ -11,7 +11,9 @@ extends TestCase
 ## target is never a teammate, a teammate in the line of fire is reported (left and right of it, not wide of
 ## it), a burst still hurts a teammate, and trails take their team's colour; the other side's base is the
 ## outpost farthest from yours; downing an enemy scores for your side, downing a teammate doesn't; a downed bird
-## respawns on its side's base, mended and rearmed; the range scene's demo shooter lands hits on an evading
+## respawns on its side's base, mended and rearmed; warnings: a round coming at a bird and an enemy's lock on it
+## are reported (not its own rounds, not one going away), nearest first, and the HUD puts each on the side
+## it comes from (left and right); the range scene's demo shooter lands hits on an evading
 ## target, with a wingman on its side and the target on the other, and the downed target comes back at its
 ## base and flies out again.
 
@@ -39,6 +41,7 @@ func setup() -> void:
 	_wing_loss_flight()
 	await _teams()
 	_far_base()
+	await _warnings()
 	await _range()
 	finish()
 
@@ -410,6 +413,63 @@ func _teams() -> void:
 		world.remove_bird(b)
 		b.queue_free()
 	trails.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
+func _warnings() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var a := Bird.new()
+	var e := Bird.new()
+	for b in [a, e]:
+		add_child(b)
+		(b as Bird).setup(BirdProfile.crow(), layout, null)
+	a.fly_from(Vector3(0, 40, 0), Vector3(0, 0, 1), 9.0)
+	e.fly_from(Vector3(0, 40, -20), Vector3(0, 0, 1), 9.0)   # (behind a, flying the same way: on its tail)
+	var la := world.add_bird(a, null, 0)
+	var le := world.add_bird(e, null, 1)
+	await frames(2)
+	eq((world.warnings_for(a).rounds as Array).size() + (world.warnings_for(a).locks as Array).size(), 0, "nothing to warn of at first")
+	# A round at it, one of its own, one going away: only the first is a warning.
+	var at_a := Projectile.launch(Projectile.Kind.ROCKET, a.global_position + Vector3(0, 0, -15), Vector3.ZERO, Vector3(0, 0, 1), e)
+	var own := Projectile.launch(Projectile.Kind.ROCKET, a.global_position + Vector3(0, 0, -10), Vector3.ZERO, Vector3(0, 0, 1), a)
+	var away := Projectile.launch(Projectile.Kind.ROCKET, a.global_position + Vector3(0, 0, -8), Vector3.ZERO, Vector3(0, 0, -1), e)
+	world.projectiles = [own, away, at_a]
+	var w := world.warnings_for(a)
+	eq((w.rounds as Array).size(), 1, "a round coming at it is warned of, not its own or one going away")
+	if not (w.rounds as Array).is_empty():
+		check(float(w.rounds[0].tgo) > 0.1 and float(w.rounds[0].tgo) < 1.0, "with its time to go (%.2f s)" % float(w.rounds[0].tgo))
+	check(world.threat_to(a) == at_a.pos, "threat_to is the nearest warning")
+	# A lock on it.
+	world.projectiles = []
+	le.lock_target = a
+	le.lock = 0.8
+	w = world.warnings_for(a)
+	check((w.locks as Array).size() == 1 and not w.locks[0].locked, "a lock building on it is warned of")
+	le.lock = 1.0
+	check(world.warnings_for(a).locks[0].locked, "and once it's locked")
+	# The HUD puts the warning on the side it comes from.
+	var cam := Camera3D.new()
+	add_child(cam)
+	cam.look_at_from_position(a.global_position + Vector3(0, 0.5, -3), a.global_position + Vector3(0, 0, 10))
+	cam.current = true
+	var hud := CombatHud.new()
+	add_child(hud)
+	hud.world = world
+	await frames(1)   # (full-rect: its size is the viewport's)
+	le.lock = 0.0
+	le.lock_target = null
+	for side: float in [-1.0, 1.0]:
+		var from := a.global_position + cam.global_basis.x * side * 15.0 + Vector3(0, 0, 8)
+		world.projectiles = [Projectile.launch(Projectile.Kind.ROCKET, from, Vector3.ZERO, (a.global_position - from).normalized(), e)]
+		var marks := hud.warning_marks(cam, la)
+		var centre := FlightHud.ring_centre if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else hud.size * 0.5
+		check(marks.size() == 1 and signf((marks[0][0] as Vector2).x - centre.x) == side, "a round from the %s is marked on the %s" % ["left" if side < 0 else "right", "left" if side < 0 else "right"])
+	world.projectiles = []
+	for n in [hud, cam, a, e]:
+		n.queue_free()
 	world.queue_free()
 	await frames(1)
 

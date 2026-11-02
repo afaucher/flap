@@ -1540,5 +1540,33 @@
     "replace": "\treturn true"
    }
   ]
+ },
+ {
+  "id": "warned-of-own-rounds",
+  "bug": "A bird is warned of rounds coming at it, never its own (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif p.shooter == b or not p.alive:",
+    "replace": "\t\tif not p.alive:"
+   }
+  ]
+ },
+ {
+  "id": "warning-wrong-side",
+  "bug": "The HUD puts a warning on the side the threat comes from (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\tvar d := Vector2(local.x, -local.y)\n\treturn d.normalized() if d.length() > 1e-4 else Vector2(0, 1)",
+    "replace": "\tvar d := Vector2(-local.x, -local.y)\n\treturn d.normalized() if d.length() > 1e-4 else Vector2(0, 1)"
+   }
+  ]
  }
 ]
