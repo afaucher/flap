@@ -7,7 +7,10 @@ extends Node3D
 ## outpost nearest the clearing (with no outposts, the start perch): sit on its rail for two seconds to rearm
 ## and grow lost feathers back; the HUD points home when you need it. Two sides: you and a wingman (a crow on
 ## its own racetrack above the target's; --no-wingman leaves it out) against the target. The HUD marks friend
-## and foe; locks only take enemies, but a burst still hurts a teammate.
+## and foe; locks only take enemies, but a burst still hurts a teammate. Each side has a base: yours as above,
+## theirs the outpost farthest from it. A downed bird comes back at its side's base once its down stun is over
+## (mended, rearmed), and the circuit birds fly out from there and back to their racetracks. The score: the
+## enemy birds each side has downed.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
 ## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
 ## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
@@ -41,6 +44,7 @@ var evade := true            ## the target breaks when locked or shot at (T togg
 var loadout: Array = []      ## the pods, left and right: both of one kind (empty: Saddle.DEFAULT_LOADOUT)
 var tacks := {}              ## Bird -> Tack
 var home: Perch              ## your base's perch: where you rearm and mend
+var their_base: Perch        ## the other side's
 var wingman: Bird            ## your side's other bird (null: --no-wingman)
 var wingman_pilot: CircuitPilot
 var with_wingman := true
@@ -108,13 +112,19 @@ func restart() -> void:
 			trails.untrack(b)
 			b.queue_free()
 	world.stats = {"shots": 0, "hits": 0, "kills": 0}
+	world.score = {YOUR_TEAM: 0, THEIR_TEAM: 0}
+	home = _home()
+	their_base = CombatWorld.far_base(layout, home.position)
+	world.bases = {YOUR_TEAM: home, THEIR_TEAM: their_base}
 	# The target: a figure-eight through the clearing.
 	target_pilot = CircuitPilot.new()
 	target_pilot.waypoints = CircuitPilot.clear_racetrack(layout, CIRCUIT_CENTRE, CIRCUIT_LENGTH, CIRCUIT_R)
 	target_pilot.threat = world.threat_to
 	target_pilot.evade = evade
 	target = _spawn(target_id, target_pilot, "Target")
-	_arm(target, world.add_bird(target, null, THEIR_TEAM))
+	var tl := world.add_bird(target, null, THEIR_TEAM)
+	tl.rearm_perch = their_base.id
+	_arm(target, tl)
 	trails.track(target, CombatHud.ENEMY)
 	_launch_target()
 	# Your wingman: a racetrack of its own, above the target's, half a lap round.
@@ -124,7 +134,9 @@ func restart() -> void:
 		wingman_pilot.waypoints = CircuitPilot.clear_racetrack(layout, CIRCUIT_CENTRE + Vector3.UP * WINGMAN_ABOVE, CIRCUIT_LENGTH, CIRCUIT_R)
 		wingman_pilot.threat = world.threat_to
 		wingman = _spawn(target_id, wingman_pilot, "Wingman")
-		_arm(wingman, world.add_bird(wingman, null, YOUR_TEAM))
+		var wl := world.add_bird(wingman, null, YOUR_TEAM)
+		wl.rearm_perch = home.id
+		_arm(wingman, wl)
 		trails.track(wingman, CombatHud.FRIEND)
 		_launch_wingman()
 	# You: coming into the clearing from the south, a little above the target.
@@ -144,7 +156,6 @@ func restart() -> void:
 	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
 	world.player = world.add_bird(bird, weapons, YOUR_TEAM)
 	_arm(bird, world.player)
-	home = _home()
 	world.player.rearm_perch = home.id
 	combat_hud.home = home.position
 	if start_seekers:
@@ -203,17 +214,21 @@ func _launch_wingman() -> void:
 	wingman.fly_from(w[h], ((w[(h + 1) % w.size()] as Vector3) - (w[h] as Vector3)).normalized(), wingman.profile.v_best)
 
 
+## Downed: once the down stun is over, back at its side's base; the circuit birds then fly out and rejoin.
 func _on_downed(b: Bird) -> void:
-	if b == wingman:
-		await get_tree().create_timer(2.5).timeout
-		if is_instance_valid(wingman):
-			_launch_wingman()
+	await get_tree().create_timer(CombatWorld.DOWN_STUN).timeout
+	if not is_instance_valid(b) or not world.birds.has(b):
 		return
-	if b != target:
+	world.respawn(b)
+	var base := world.base_of(b)
+	if base == null:
 		return
-	await get_tree().create_timer(2.5).timeout
-	if is_instance_valid(target):
-		_launch_target()
+	if b == target:
+		target_pilot.rejoin(b.global_position, base.facing)
+	elif b == wingman:
+		wingman_pilot.rejoin(b.global_position, base.facing)
+	elif b == bird:
+		camera.snap()
 
 
 func _process(_dt: float) -> void:

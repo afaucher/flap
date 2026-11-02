@@ -11,7 +11,10 @@ extends Node3D
 ## happens next.
 
 ## Teams: each bird is on one (add_bird's `team`; unset, a team of its own, so everyone is an enemy). Locks and
-## the HUD's target pick only enemies; bursts still hurt anyone but the shooter (friendly fire stays on).
+## the HUD's target pick only enemies; bursts still hurt anyone but the shooter (friendly fire stays on). Each
+## team may have a base (`bases`: a perch, an outpost's rail) where its birds rearm and mend and where a downed
+## bird comes back (respawn: the scene calls it once the down stun is over). `score`: the enemy birds each team
+## has downed (downing a teammate scores nothing).
 
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String)
@@ -30,6 +33,8 @@ var launchers: Array = []
 var projectiles: Array = []
 var hits := {}              ## Bird -> hits taken
 var teams := {}             ## Bird -> team id
+var bases := {}             ## team id -> Perch: where its birds rearm, mend and respawn
+var score := {}             ## team id -> enemy birds it has downed
 var _next_team := 100       ## (the teams of birds added without one)
 const LANE := 1.3           ## m off the line of fire within which a teammate is in the way (a burst's reach)
 var _rng := RandomNumberGenerator.new()
@@ -143,6 +148,47 @@ func _physics_process(dt: float) -> void:
 			f.pos += f.vel * dt
 
 
+## `b`'s team's base, or null.
+func base_of(b: Bird) -> Perch:
+	return bases.get(teams.get(b, -1), null)
+
+
+## Bring a downed bird back at its team's base (if it has one): on the rail, every feather back, a full rack.
+## Returns whether it was moved.
+func respawn(b: Bird) -> bool:
+	var at := base_of(b)
+	b.mend()
+	b.stun = 0.0
+	for l in launchers:
+		if l.bird == b:
+			l.ammo = l.capacity.duplicate()
+	if at == null:
+		return false
+	b.perch_at(at)
+	return true
+
+
+## The rail perch of the outpost farthest from `from` (across the ground), for the other side's base; with no
+## outposts, the perch farthest from it.
+static func far_base(layout: ArenaLayout, from: Vector3) -> Perch:
+	var best: Perch = null
+	var best_d := -1.0
+	for o in layout.outposts:
+		var od := o as ArenaLayout.OutpostData
+		var d := Vector2(od.centre.x - from.x, od.centre.z - from.z).length()
+		if od.rail_perch_id >= 0 and d > best_d:
+			best_d = d
+			best = layout.perches[od.rail_perch_id]
+	if best != null:
+		return best
+	for p in layout.perches:
+		var d := Vector2(p.position.x - from.x, p.position.z - from.z).length()
+		if d > best_d:
+			best_d = d
+			best = p
+	return best
+
+
 ## Are `a` and `b` on the same team? (A bird is its own friend.)
 func friends(a: Bird, b: Bird) -> bool:
 	return teams.get(a, -1) == teams.get(b, -2)
@@ -236,6 +282,8 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 		b.stun = DOWN_STUN
 		if by_player:
 			stats.kills += 1
+		if is_instance_valid(by) and teams.has(by) and not friends(by, b):
+			score[teams[by]] = int(score.get(teams[by], 0)) + 1
 		downed.emit(b)
 
 

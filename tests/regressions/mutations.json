@@ -1512,5 +1512,33 @@
     "replace": "const LANE := 4.0 "
    }
   ]
+ },
+ {
+  "id": "teamkill-scores",
+  "bug": "Downing a teammate scores nothing; only enemy birds count for a side (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif is_instance_valid(by) and teams.has(by) and not friends(by, b):",
+    "replace": "\t\tif is_instance_valid(by) and teams.has(by):"
+   }
+  ]
+ },
+ {
+  "id": "respawn-in-place",
+  "bug": "A downed bird respawns at its side's base, not where it fell (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tb.perch_at(at)\n\treturn true",
+    "replace": "\treturn true"
+   }
+  ]
  }
 ]

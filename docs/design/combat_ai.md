@@ -401,8 +401,10 @@ Every knob degrades a perfect pilot; 0 / the "off" value is the honest maximum. 
    locks the player can't see.
 3. **Teams and bases** in `CombatWorld` (**teams done 2026-11-02**: `add_bird(b, controller, team)`,
    `friends()`, `friend_in_line()` for the lane check, `Launcher.is_enemy` -- locks and the HUD's target take
-   enemies only -- and the HUD's friend / foe marks; still to do: a base per team, respawn there, the team
-   score): `team` per bird (`add_bird(b, controller, team)`), bursts still hurt
+   enemies only -- and the HUD's friend / foe marks; **bases, respawn and score done too**: `bases` (team ->
+   perch), `base_of()`, `respawn()`, `far_base()` for the other side's, `score` (team -> enemies downed; a
+   teamkill scores nothing), the range respawning downed birds on their base and `CircuitPilot.rejoin()`):
+   `team` per bird (`add_bird(b, controller, team)`), bursts still hurt
    anyone but the shooter (friendly fire stays on, so the AI must check its lane for teammates), and a base
    per team: an outpost (`ArenaLayout.outposts`, which the pine wood places on pines and oaks) chosen at the
    start as far apart as the layout allows. `downed` → the scene respawns the bird on its base's rail perch

@@ -9,8 +9,11 @@ extends TestCase
 ## feathers lifts less and drops (the bird rolls toward it, either side); eight feathers down a bird, once, and a
 ## perch or a respawn mends it; teams: a lock never takes a teammate (dead ahead) but takes an enemy, the HUD's
 ## target is never a teammate, a teammate in the line of fire is reported (left and right of it, not wide of
-## it), a burst still hurts a teammate, and trails take their team's colour; the range scene's demo shooter
-## lands hits on an evading target, with a wingman on its side and the target on the other.
+## it), a burst still hurts a teammate, and trails take their team's colour; the other side's base is the
+## outpost farthest from yours; downing an enemy scores for your side, downing a teammate doesn't; a downed bird
+## respawns on its side's base, mended and rearmed; the range scene's demo shooter lands hits on an evading
+## target, with a wingman on its side and the target on the other, and the downed target comes back at its
+## base and flies out again.
 
 
 class FakeModel:
@@ -35,6 +38,7 @@ func setup() -> void:
 	_feather_counts()
 	_wing_loss_flight()
 	await _teams()
+	_far_base()
 	await _range()
 	finish()
 
@@ -378,6 +382,24 @@ func _teams() -> void:
 	# Friendly fire stays on.
 	world._burst(f.global_position + Vector3(0.3, 0, 0), a, "fuse")
 	check(f.lost_feathers.size() > 0, "a burst still hurts a teammate")
+	# Score: downing an enemy counts for your side, downing a teammate doesn't.
+	world.score = {0: 0, 1: 0}
+	f.mend()
+	e.mend()
+	while not e.is_down():
+		world.hit(e, e.global_position, 1.0, a)
+	while not f.is_down():
+		world.hit(f, f.global_position, 1.0, a)
+	eq(int(world.score[0]), 1, "downing an enemy scores one, downing a teammate nothing")
+	# Respawn at the side's base, mended and rearmed.
+	world.bases = {0: layout.perches[0], 1: layout.perches[1]}
+	var el: Launcher = null
+	for q in world.launchers:
+		if q.bird == e:
+			el = q
+	el.ammo[el.weapon] = 0
+	check(world.respawn(e) and e.state == Bird.State.PERCHED and e.perch == layout.perches[1], "a downed bird respawns on its side's base")
+	check(e.health() == 1.0 and int(el.ammo[el.weapon]) == int(el.capacity[el.weapon]), "mended and rearmed")
 	# Trails in their team's colour.
 	var trails := WingTrails.new()
 	add_child(trails)
@@ -392,6 +414,22 @@ func _teams() -> void:
 	await frames(1)
 
 
+## The other side's base: the outpost farthest from yours (the pine wood has several).
+func _far_base() -> void:
+	var pw := Pinewood.generate(7)
+	var home: Perch = pw.perches[(pw.outposts[0] as ArenaLayout.OutpostData).rail_perch_id]
+	var far := CombatWorld.far_base(pw, home.position)
+	var rails := {}
+	var best := 0.0
+	for o in pw.outposts:
+		var od := o as ArenaLayout.OutpostData
+		rails[od.rail_perch_id] = true
+		best = maxf(best, Vector2(od.centre.x - home.position.x, od.centre.z - home.position.z).length())
+	check(far != null and rails.has(far.id) and far != home, "the other base is an outpost's rail, not yours")
+	var d := Vector2(far.position.x - home.position.x, far.position.z - home.position.z).length()
+	check(d > best - 2.0, "and the farthest one (%.0f m of %.0f)" % [d, best])
+
+
 func _range() -> void:
 	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 	add_child(r)
@@ -403,6 +441,22 @@ func _range() -> void:
 	var s: Dictionary = r.world.stats
 	check(int(s.shots) >= 3 and int(s.hits) >= 1, "the demo shooter fires and lands hits on an evading target (%s)" % s)
 	check(r.wingman != null and r.world.friends(r.bird, r.wingman) and not r.world.friends(r.bird, r.target), "the range: a wingman on your side, the target on the other")
+	check(r.their_base != null and r.their_base != r.home, "each side has its own base")
+	# The target downed: back on its base once the down stun is over, then out again.
+	var tg: Bird = r.target
+	while not tg.is_down():
+		r.world.hit(tg, tg.global_position, 1.0, r.bird)
+	var at_base := false
+	for f in int(CombatWorld.DOWN_STUN * 60) + 40:   # (it's on the rail for a moment: its pilot takes off at once)
+		await frames(1)
+		if tg.state == Bird.State.PERCHED and tg.perch == r.their_base:
+			at_base = true
+			break
+	check(at_base, "the downed target is back at its base")
+	eq(tg.health(), 1.0, "mended")
+	await frames(60 * 3)
+	check(tg.state == Bird.State.FLYING and tg.global_position.distance_to(r.their_base.position) > 5.0, "and flies out again")
+	check(int(r.world.score[r.YOUR_TEAM]) >= 1, "your side scored (%s)" % str(r.world.score))
 	var home: Perch = r.home
 	check(home != null and r.world.player.rearm_perch == home.id, "the range gives you a base to rearm at")
 	var rails := []
