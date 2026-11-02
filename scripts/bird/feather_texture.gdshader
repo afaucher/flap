@@ -1,8 +1,8 @@
 // Feather texture (Plumage level 6; docs/research/feather_texture_study.md): the level-5 look -- colour along
 // the feather from the plumage strip -- read through a baked feather atlas (FeatherAtlas): the shaft, soft barb
 // striations and splits, spots, pale fringes, a darker rim and the shadow where the row in front ends. Lit
-// matte like the plain material (roughness 0.9, no sheen, translucency or highlight: the parked
-// feather.gdshader's sheen flooded the flat cards).
+// with each group's own sheen and translucency (Plumage.GLOSS; gentle: the parked feather.gdshader's sheen
+// flooded the flat cards).
 // Per instance: INSTANCE_CUSTOM.r = the strip row (group and face), .g = the bend, .b = (atlas cell + 1) *
 // the side the leading (outer-vane) edge is on (+1: +UV.x), .a = a random value per feather (its own small
 // variation: tone, warmth, spot size, fringe wear). The instance colour multiplies (the darker wingtip
@@ -24,6 +24,8 @@ uniform float variety = 1.0;   // each feather's own variation (0: all alike)
 uniform vec4 spot[18];         // spot colour (sRGB), amount
 uniform vec4 fringe[18];       // fringe colour (sRGB), width (edge-distance units: 1 = half a vane in)
 uniform vec4 misc[18];         // spot size (0..1), shaft tone (x colour), texture strength, vane cup
+uniform vec4 gloss[18];        // roughness, specular, transmission (light through the vane from behind), -
+uniform float sheen = 1.0;     // scales the flight feathers' sheen and translucency (0: the old matte cards)
 uniform float strength = 1.0;  // all texture detail (0: the level-5 look plus the cup)
 
 varying flat float row;
@@ -76,8 +78,18 @@ void fragment() {
 	col = mix(col, fr.rgb, (1.0 - smoothstep(fw * 0.45, fw, t.a)) * step(0.001, fr.a) * k);
 	col = mix(col, col * m.y, t.g * k);
 	ALBEDO = to_linear(col) * mix(1.0, t.r * 1.1, k);
-	ROUGHNESS = 0.9;
-	SPECULAR = 0.35;
+	// Sheen: smooth vanes; the fringe's worn barbs and the shaft rougher. Translucency: a low sun behind the
+	// feather shines through the vane (the shaft, opaque, stays dark; thicker toward the base).
+	vec4 gl = gloss[r];
+	float edge = 1.0 - smoothstep(0.0, 0.25, t.a);
+	ROUGHNESS = mix(0.9, clamp(gl.x + 0.2 * edge + 0.15 * t.g, 0.0, 1.0), sheen);
+	SPECULAR = mix(0.35, gl.y, sheen);
+	// (transmittance, not BACKLIGHT: the feather above shadows each card from a sun behind it, and BACKLIGHT is
+	// shadowed with it; transmittance reads the thickness off the shadow map, so a thin vane glows through)
+	float through = gl.z * sheen * (1.0 - 0.8 * t.g) * mix(0.6, 1.0, v);
+	SSS_TRANSMITTANCE_COLOR = vec4(ALBEDO * through * 3.0, 1.0);
+	SSS_TRANSMITTANCE_DEPTH = 0.02;
+	SSS_TRANSMITTANCE_BOOST = 0.3;
 	// Soft round tips: the atlas's outline rounds the card's tip off (its edge distance is 0 outside).
 	ALPHA = t.a;
 	ALPHA_SCISSOR_THRESHOLD = 0.01;

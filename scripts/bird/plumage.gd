@@ -112,6 +112,18 @@ const TEXTURE := {
 		"body": {"tile": 0.18, "spot": ["#8c7361", 0.55, 0.3, 0.3], "fringe": ["#c0a07a", 0.25, 0.25]},
 	},
 }
+## Level 6: how each feather group takes the light, [roughness, specular, transmission]. The flight feathers'
+## vanes are smooth, tightly zipped barbs: a soft sheen, and thin enough that a low sun behind them shines through
+## (the shaft, opaque, stays dark). Coverts are softer, matte and denser. Per species over "default"; the crow is
+## glossy (its iridescence is not modelled yet), the owl's velvety flight feathers matte.
+const GLOSS := {
+	"default": {"primary": [0.62, 0.45, 0.4], "secondary": [0.65, 0.45, 0.35], "tertial": [0.7, 0.4, 0.3], "tail": [0.62, 0.45, 0.4],
+		"alula": [0.7, 0.4, 0.25], "greater": [0.8, 0.38, 0.2], "lesser": [0.85, 0.35, 0.15], "lesser_bar": [0.85, 0.35, 0.15],
+		"under_covert": [0.85, 0.35, 0.25]},
+	"crow": {"primary": [0.42, 0.6, 0.3], "secondary": [0.45, 0.6, 0.28], "tertial": [0.5, 0.55, 0.25], "tail": [0.42, 0.6, 0.3],
+		"greater": [0.55, 0.5, 0.15], "lesser": [0.6, 0.5, 0.12]},
+	"owl": {"primary": [0.85, 0.3, 0.45], "secondary": [0.85, 0.3, 0.42], "tail": [0.85, 0.3, 0.42]},
+}
 const STRIP := 64   ## texels along a feather in the mark strip
 ## Rows of the mark strip: one per feather group and face.
 const GROUPS := ["primary", "secondary", "tertial", "greater", "lesser", "lesser_bar", "alula", "under_covert", "tail"]
@@ -235,6 +247,11 @@ static func texture_look(id: String, g: String, under: bool) -> Dictionary:
 		key = "lesser_%s" % ("under" if under else "top")
 	out.merge(sp.get(key, {}), true)
 	return out
+
+
+## Level 6: a feather group's [roughness, specular, transmission] (GLOSS).
+static func gloss(id: String, g: String) -> Array:
+	return GLOSS.get(id, {}).get(g, GLOSS["default"].get(g, [0.9, 0.35, 0.0]))
 
 
 ## Level 6: the species' contour-feather tile look (TEXTURE "body").

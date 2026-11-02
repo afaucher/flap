@@ -2,7 +2,7 @@ extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
-##       [--zoom <x>] [--ortho] [--shot <png> --shot-after <s>] [--measure <frames>]
+##       [--zoom <x>] [--ortho] [--light studio|flat] [--shot <png> --shot-after <s>] [--measure <frames>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots. --measure prints the mean GPU render time and pose time over that many
 ## frames (after a warm-up) and quits: the plumage levels' cost (docs/research/feather_texture_study.md).
@@ -35,25 +35,8 @@ func _ready() -> void:
 	if time_arg != "":
 		t = float(time_arg)
 		frozen = true
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.82, 0.85, 0.83)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.75, 0.78, 0.8)
-	env.ambient_light_energy = 0.7
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	var sun := DirectionalLight3D.new()
-	# Back: low sun behind the bird, shining toward the camera (feather translucency).
-	sun.rotation_degrees = Vector3(-60, -30, 0) if sun_arg != "back" else Vector3(-25, 10, 0)
-	sun.light_energy = 1.2
-	add_child(sun)
-	var bounce := DirectionalLight3D.new()   # light off the ground, so undersides read
-	bounce.rotation_degrees = Vector3(70, 20, 0)
-	bounce.light_energy = 0.35
-	bounce.light_color = Color(0.95, 0.92, 0.85)
-	add_child(bounce)
+	# (--light flat: the old look, one ambient colour and no shadows)
+	Lighting.studio(self, Boot.arg_value(args, "--light") if Boot.arg_value(args, "--light") != "" else "studio", sun_arg == "back")
 	var x := 0.0
 	var profiles := BirdProfile.all()
 	if only != "":

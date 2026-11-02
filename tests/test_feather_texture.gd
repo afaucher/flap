@@ -34,6 +34,27 @@ func setup() -> void:
 	add_child(rig)
 	rig.build(BirdProfile.by_id("hawk"))
 	check(rig.marks_material != null and rig.marks_material.shader == BirdRig.TEXTURE_SHADER, "level 6 feathers use the texture shader")
+	# Light: flight feathers smoother and more translucent than the coverts (per row of the material), and the
+	# crow's glossier than the owl's velvety ones.
+	var gl: PackedVector4Array = rig.marks_material.get_shader_parameter("gloss")
+	var prim := gl[Plumage.row_index("primary", false)]
+	var cov := gl[Plumage.row_index("lesser", false)]
+	check(gl.size() == Plumage.GROUPS.size() * 2 and prim.x < cov.x and prim.z > cov.z, "flight feathers smoother and more translucent than coverts (%s vs %s)" % [prim, cov])
+	check(float(Plumage.gloss("crow", "primary")[0]) < float(Plumage.gloss("hawk", "primary")[0]) and float(Plumage.gloss("owl", "primary")[0]) > float(Plumage.gloss("hawk", "primary")[0]), "crow glossy, owl matte")
+	# The game's light at a bird's scale: the sun's first shadow cascade holds the bird the chase camera follows,
+	# and ambient occlusion has a radius of centimetres, not metres.
+	var scene := Node3D.new()
+	add_child(scene)
+	Game.add_environment(scene)
+	var sun: DirectionalLight3D = scene.find_children("*", "DirectionalLight3D", false, false)[0]
+	var env: Environment = (scene.find_children("*", "WorldEnvironment", false, false)[0] as WorldEnvironment).environment
+	var first := sun.directional_shadow_max_distance * sun.directional_shadow_split_1
+	var cam := ChaseCamera.new()
+	var follow := cam.distance
+	cam.free()
+	check(sun.shadow_enabled and first > follow * 1.2 and first < 10.0, "first shadow cascade holds the followed bird (%.1f m)" % first)
+	check(env.ssao_enabled and env.ssao_radius < 0.5, "bird-scale ambient occlusion")
+	scene.queue_free()
 	var trunk_m := rig._trunk.material_override as ShaderMaterial
 	check(trunk_m != null and trunk_m.shader == BirdRig.BODY_TEXTURE_SHADER, "level 6 trunk uses the body-feather shader")
 	for i in 2:

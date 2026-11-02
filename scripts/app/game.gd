@@ -87,6 +87,7 @@ static func add_environment(parent: Node) -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = 0.8
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	Lighting.bird_occlusion(env, 1.0, 0.25)   # (the bird a few metres off: rows and the wing root)
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.78, 0.82, 0.85)
 	env.fog_density = 0.0035
@@ -97,8 +98,7 @@ static func add_environment(parent: Node) -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, -35, 0)
 	sun.light_energy = 1.1
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 120.0
+	Lighting.bird_shadows(sun, 120.0, 5.0)   # (the first cascade holds the bird the chase camera follows)
 	parent.add_child(sun)
 
 

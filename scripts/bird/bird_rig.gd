@@ -659,8 +659,11 @@ func _texture_feathers(m: ShaderMaterial) -> void:
 	var spots := PackedVector4Array()
 	var fringes := PackedVector4Array()
 	var misc := PackedVector4Array()
+	var gloss := PackedVector4Array()
 	for g in Plumage.GROUPS:
 		for u in 2:
+			var gl := Plumage.gloss(profile.id, g)
+			gloss.append(Vector4(float(gl[0]), float(gl[1]), float(gl[2]), 0.0))
 			var look := Plumage.texture_look(profile.id, g, u == 1)
 			var sc := Plumage.hex(look.spot[0])
 			var fc := Plumage.hex(look.fringe[0])
@@ -670,6 +673,7 @@ func _texture_feathers(m: ShaderMaterial) -> void:
 	m.set_shader_parameter("spot", spots)
 	m.set_shader_parameter("fringe", fringes)
 	m.set_shader_parameter("misc", misc)
+	m.set_shader_parameter("gloss", gloss)
 
 
 ## Plumage level 6: one contour-feather material (body_feathers.gdshader) over the trunk, neck, head and the
