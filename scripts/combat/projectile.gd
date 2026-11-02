@@ -27,6 +27,7 @@ const G := 9.81
 
 var kind := Kind.ROCKET
 var pos := Vector3.ZERO
+var last_pos := Vector3.ZERO   ## where it was a tick ago: it's drawn between the two (CombatWorld, as the birds are)
 var vel := Vector3.ZERO
 var age := 0.0
 var travelled := 0.0
@@ -40,6 +41,7 @@ static func launch(k: int, from: Vector3, carrier_vel: Vector3, aim: Vector3, by
 	var p := Projectile.new()
 	p.kind = k
 	p.pos = from
+	p.last_pos = from
 	p.vel = carrier_vel + aim.normalized() * float(SPEC[k].launch)
 	p.shooter = by
 	p.target = at if k == Kind.SEEKER else null
@@ -56,6 +58,7 @@ static func velocity_of(o: Object) -> Vector3:
 func step(dt: float, layout: ArenaLayout, birds: Array) -> Dictionary:
 	if not alive:
 		return {}
+	last_pos = pos
 	var s: Dictionary = SPEC[kind]
 	age += dt
 	var speed := vel.length()

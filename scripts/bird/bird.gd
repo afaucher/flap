@@ -66,10 +66,18 @@ var _land_from := Vector3.ZERO
 var _land_vel := Vector3.ZERO
 var _land_from_basis := Basis()
 var _grace := 0.0
+## Pose the rig every rendered frame (_process), for the moment the frame draws the bird (`drawn_lag` behind the last
+## tick), with physics interpolation off on the rig: the whole rig -- feathers, lofted surfaces, skinned legs, tack --
+## then moves each frame with the interpolated body. False: on the frame's first physics tick, the feathers interpolated
+## tick to tick but the lofts and legs only stepping with the ticks (the game's `--rig-tick`, for comparison).
+static var rig_in_process := true
 var _rig_dt := 0.0
 var _rig_due := 0.0   ## simulated time since the rig was last posed
 var _rig_frame := -1  ## the rendered frame the rig was last posed in
 var _rig_tick := 0
+var _per_frame := true   ## this bird's rig posed per frame (rig_in_process when it was set up)
+var _sim_t := 0.0     ## simulated time (s): the physics ticks run
+var _posed_t := NAN   ## the simulated moment the rig was last posed for (NAN: not yet)
 var _pass_body: Node = null
 var _pass_left := 0.0
 var _state_age := 0.0
@@ -95,6 +103,9 @@ func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
 	rig = BirdRig.new()
 	rig.build(p)
 	add_child(rig)
+	_per_frame = rig_in_process
+	if _per_frame:   # (posed every frame for the drawn moment: the engine mustn't interpolate it again)
+		rig.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	var pose: Dictionary = BirdRig.POSE.get(p.id, BirdRig.POSE["crow"])
 	sit_pitch_deg = pose.perch_pitch
 	ground_pitch_deg = pose.ground_pitch
@@ -148,10 +159,12 @@ func _physics_process(dt: float) -> void:
 		_state_age += dt
 	_push_left = maxf(0.0, _push_left - dt)
 	Perf.add("bird.move", p0)
-	# The rig is posed at most once per rendered frame, on its first physics tick, for the time since it was last
-	# posed. A frame catching up runs several ticks but draws once: posing on each was wasted work, and under load it
-	# multiplied with the catch-up ticks, so one slow frame made the next slower. It stays in the physics tick, where
-	# the feathers' transforms are interpolated from tick to tick; a frame of one tick is posed as before.
+	_sim_t += dt
+	if _per_frame:
+		return
+	# (--rig-tick) The rig is posed at most once per rendered frame, on its first physics tick, for the time since it
+	# was last posed. A frame catching up runs several ticks but draws once: posing on each was wasted work, and under
+	# load it multiplied with the catch-up ticks, so one slow frame made the next slower.
 	_rig_due += dt
 	var frame := Engine.get_process_frames()
 	if frame != _rig_frame:
@@ -160,6 +173,31 @@ func _physics_process(dt: float) -> void:
 		_animate_rig(_rig_due)
 		_rig_due = 0.0
 		Perf.add("bird.rig", p0)
+
+
+## The rig, once per rendered frame, for the simulated moment the frame draws (rig_in_process).
+func _process(_dt: float) -> void:
+	if not _per_frame:
+		return
+	var at := _sim_t - drawn_lag()
+	if is_nan(_posed_t):   # (first drawn: posed for a tick, as the tick it was placed on would have)
+		_posed_t = at - 1.0 / Engine.physics_ticks_per_second
+	if at <= _posed_t:
+		return
+	var p0 := Perf.t()
+	_animate_rig(at - _posed_t)
+	_posed_t = at
+	Perf.add("bird.rig", p0)
+
+
+## How far the drawn world is behind the simulation (s). With physics interpolation on, a frame draws each body between
+## its last two ticks, (1 - fraction) of a tick behind the latest; what's placed by hand in _process (the rig, a round in
+## flight, smoke, trails) is placed for that same moment, so it moves with the birds every frame.
+static func drawn_lag() -> float:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or not tree.physics_interpolation:
+		return 0.0
+	return (1.0 - Engine.get_physics_interpolation_fraction()) / Engine.physics_ticks_per_second
 
 
 # --- Flying ------------------------------------------------------------------------------------

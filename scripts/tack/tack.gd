@@ -37,6 +37,9 @@ static func fit(r: BirdRig, b: Bird = null, pods: Array = [], tilt := Saddle.DEF
 	t.add_child(t.rider)
 	r.add_child(t)
 	t.update(0.0)
+	if b != null:   # (on a Bird: posed when the rig is, so the rider moves with the bird under them; in a gallery,
+		r.posed.connect(t.update)   # each frame, or as the gallery calls update())
+		t.set_process(false)
 	return t
 
 
