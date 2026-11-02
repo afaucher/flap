@@ -848,8 +848,8 @@
   "edits": [
    {
     "file": "scripts/tack/rider.gd",
-    "find": "\t\tvar toe_dir := ride_toe.slerp(stand_dir, st).normalized()\n",
-    "replace": "\t\tvar toe_dir := (tang - sn * 0.3).normalized().slerp(stand_dir, st).normalized()\n"
+    "find": "const ANKLE_ANGLE := 118.0 ",
+    "replace": "const ANKLE_ANGLE := 165.0 "
    }
   ]
  },
@@ -869,15 +869,48 @@
  },
  {
   "id": "riding-boot-off-peg",
-  "bug": "Riding, the boots hung in the air short of their rear-set pegs (2026-11-02).",
+  "bug": "Riding, the boots hung in the air short of their rear-set pegs: the ankle went to a fixed spot, not where the sole meets the peg (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t\tfor it in 5:\n",
+    "replace": "\t\t\tfor it in 0:\n"
+   },
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t\tankle = (saddle.ride_pegs[i] * sc - (toe_dir * BALL - fy * SOLE) * k).lerp(on_bar, st)\n",
+    "replace": "\t\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "hands-along-forearm",
+  "bug": "The hands were laid along the forearms, not closed round the grips: the grips ran through the backs of the gloves (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t_place(\"hand%d\" % i, wrist - hy * 1.0 * k, Basis(fx, hy, fx.cross(hy).normalized()))\n",
+    "replace": "\t\t_place_seg(\"hand%d\" % i, wrist, wrist + (wrist - el).normalized() * 9.0 * k, -sn)\n"
+   }
+  ]
+ },
+ {
+  "id": "buttons-out-of-reach",
+  "bug": "The firing buttons sat at the grips' inner ends, away from the hands, where no thumb could reach them (2026-11-02).",
   "tests": [
    "test_tack"
   ],
   "edits": [
    {
     "file": "scripts/tack/saddle.gd",
-    "find": "const PEG := Vector2(13.0, 27.0)",
-    "replace": "const PEG := Vector2(8.0, 27.0)"
+    "find": "\t\tvar bp: Vector3 = grips[i] - grip_dirs[i] * 2.5 * k + up_g * 1.6 * k\n",
+    "replace": "\t\tvar bp: Vector3 = grips[i] - grip_dirs[i] * 8.5 * k + up_g * 1.6 * k\n"
    }
   ]
  }
