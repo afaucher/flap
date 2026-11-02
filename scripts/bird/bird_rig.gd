@@ -118,7 +118,19 @@ var _neck_mi: MeshInstance3D
 var _neck_mesh: ArrayMesh
 var _head_world := Vector3.INF
 var _body_tint := Color.WHITE
-var _neck_colors: Array = []
+var _jaw: Node3D
+var _membranes: Array[Node3D] = []
+var blink := 0.0                ## 0 open .. 1 the nictitating membrane across
+static var face_anim := true     ## saccades, idle scanning and blinks (off: the head eases onto its target, no blinks)
+var _rng := RandomNumberGenerator.new()
+var _sac_t := -1.0
+var _sac_dur := 0.1
+var _sac_from := Vector3.FORWARD
+var _sac_to := Vector3.FORWARD
+var _goal := Vector3.FORWARD
+var _fix_left := 0.0
+var _blink_t := -1.0
+var _blink_cool := 0.0
 var _arm_colors: Array = []
 var _root_fill: Array[MeshInstance3D] = []
 var arm_web: Array = [{}, {}]         ## per side, the arm wing's loft this pose: {from, to, depth (elbow behind the edge), chord_at_elbow}
@@ -138,6 +150,7 @@ func build(p: BirdProfile) -> void:
 	shape = WingShape.for_profile(p)
 	_L = p.body_length
 	body = BodyShape.for_profile(p, shape)
+	_rng.seed = hash(p.id)
 	_sh_up = body.shoulder.y
 	_tib = body.tib
 	_tars = body.tars
@@ -246,8 +259,7 @@ func _build_body(tint: Color) -> void:
 	# The trunk shell, lofted once round the landmarks; the neck tube is re-lofted each pose.
 	_trunk = MeshInstance3D.new()
 	_trunk.name = "Trunk"
-	_trunk.mesh = body.trunk_mesh(30, 20, _body_color_at)
-	_neck_colors = _neck_color_rows()
+	_trunk.mesh = body.trunk_mesh(30, TRUNK_AROUND, _body_color_at, body.neck_base.z)
 	_trunk.material_override = body_mat
 	add_child(_trunk)
 	_neck_mesh = ArrayMesh.new()
@@ -273,36 +285,7 @@ func _build_body(tint: Color) -> void:
 	head.mesh = _head_mesh(sph)
 	head.material_override = body_mat
 	skull.add_child(head)
-	var beak := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.0
-	cone.bottom_radius = _L * 0.035
-	cone.height = _L * (0.07 if profile.id == "owl" else 0.12)
-	beak.mesh = cone
-	beak.rotation.x = -PI * 0.5
-	beak.position = Vector3(0.0, -_L * 0.01, -hr * body.skull.z - cone.height * 0.4)
-	beak.material_override = leg_mat
-	_head.add_child(beak)
-	for e in [-1.0, 1.0]:   # eyes: dark dots so the look direction reads
-		var eye := MeshInstance3D.new()
-		var es := SphereMesh.new()
-		es.radius = hr * 0.18
-		es.height = hr * 0.36
-		eye.mesh = es
-		eye.material_override = _material(Color(0.05, 0.05, 0.05))
-		eye.position = Vector3(e * hr * (0.45 if profile.id == "owl" else 0.75), hr * 0.25, -hr * (0.8 if profile.id == "owl" else 0.55))
-		skull.add_child(eye)
-		if body.brow > 0.0:   # the raptor's brow ridge over the eye: the frown
-			var brow := MeshInstance3D.new()
-			var bs := SphereMesh.new()
-			bs.radius = 0.5
-			bs.height = 1.0
-			brow.mesh = bs
-			brow.material_override = _material(_body_tint if Plumage.level == 0 else Plumage.head(profile.id, Vector3.UP, Vector3(0.75, 0.25, -0.55).normalized()))
-			brow.position = eye.position + Vector3(e * 0.03, 0.2, 0.02) * hr
-			brow.rotation = Vector3(deg_to_rad(-15.0), e * deg_to_rad(-35.0), 0.0)
-			brow.scale = Vector3(0.42, 0.14 * body.brow, 0.34) * hr
-			skull.add_child(brow)
+	_build_face(skull, body_mat, hr)
 	for i in 2:
 		var parts: Array = []
 		for k in 6:
@@ -626,6 +609,106 @@ func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> Mul
 	return mm
 
 
+## The face (Face; docs/research/eyes_and_beaks.md): the beak's two mandibles (the lower on a jaw pivot), the
+## eyes as lens caps with their nictitating membranes, the hawk's and falcon's brow ridges, the owl's disc.
+func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
+	var id := profile.id
+	var fd := Face.spec(id)
+	var disc: bool = fd.has("disc")
+	var z_rim := -hr * body.skull.z - 0.06 * hr
+	var disc_depth := 0.1 * hr
+	if disc:
+		var dm := MeshInstance3D.new()
+		dm.name = "FacialDisc"
+		var face_c := _body_tint
+		var rim_c := _body_tint.darkened(0.25)
+		if Plumage.level > 0 and Plumage.spec(id).head.has("disc"):
+			face_c = Plumage.hex(Plumage.spec(id).head.disc[0])
+			rim_c = Plumage.hex(Plumage.spec(id).head.disc[1])
+		dm.mesh = Face.disc_mesh(hr, z_rim, disc_depth, face_c, rim_c)
+		dm.material_override = body_mat
+		_head.add_child(dm)
+	var beak_base := Vector3(0.0, -0.05 * hr, -hr * body.skull.z * 0.85) if not disc else Vector3(0.0, -0.14 * hr, z_rim + disc_depth * 0.5)
+	var bm: Array = Face.beak_meshes(id, hr, beak_base)
+	var bill_mat := _material(Color.WHITE)
+	bill_mat.vertex_color_use_as_albedo = true
+	bill_mat.vertex_color_is_srgb = true
+	bill_mat.roughness = 0.45
+	var upper := MeshInstance3D.new()
+	upper.name = "BeakUpper"
+	upper.mesh = bm[0]
+	upper.material_override = bill_mat
+	_head.add_child(upper)
+	_jaw = Node3D.new()   # the lower mandible hinges at the gape (a joint for calls and bites later)
+	_jaw.name = "Jaw"
+	_jaw.position = beak_base
+	_head.add_child(_jaw)
+	var lower := MeshInstance3D.new()
+	lower.name = "BeakLower"
+	lower.mesh = bm[1]
+	lower.material_override = bill_mat
+	lower.position = -beak_base
+	_jaw.add_child(lower)
+	var eye_mat := _material(Color.WHITE)
+	eye_mat.vertex_color_use_as_albedo = true
+	eye_mat.vertex_color_is_srgb = true
+	eye_mat.roughness = 0.2
+	var memb_mat := StandardMaterial3D.new()
+	memb_mat.albedo_color = Color(0.86, 0.9, 0.95, 0.65)
+	memb_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	memb_mat.roughness = 0.3
+	var er := float(fd.eye.r) * hr
+	_membranes.clear()
+	for e: float in [-1.0, 1.0]:
+		var dir := Face.eye_dir(id, e)
+		var eye := Node3D.new()
+		eye.name = "Eye" + ("L" if e < 0.0 else "R")
+		if disc:   # the owl's eyes sit in its disc, looking forward
+			var px := e * 0.32 * hr
+			var py := 0.12 * hr
+			var s2 := pow(px / (0.95 * hr), 2.0) + pow((py + 0.1 * hr) / (0.75 * hr), 2.0)
+			eye.position = Vector3(px, py, z_rim + disc_depth * (1.0 - s2) - 0.01 * hr)
+			_head.add_child(eye)
+		else:
+			eye.position = dir * hr * 0.97
+			skull.add_child(eye)
+		eye.basis = Basis.looking_at(dir, Vector3.UP)
+		var cap := MeshInstance3D.new()
+		cap.mesh = Face.eye_mesh(id, er)
+		cap.material_override = eye_mat
+		eye.add_child(cap)
+		# The nictitating membrane: a translucent lid sweeping across from the bill side and back.
+		var bill_side := eye.basis.inverse() * Vector3.FORWARD
+		var v := Vector2(bill_side.x, bill_side.y)
+		v = v.normalized() if v.length() > 1e-3 else Vector2(1.0, 0.0)
+		var pivot := Node3D.new()
+		pivot.position = Vector3(v.x * er, v.y * er, -0.26 * er)
+		pivot.rotation.z = atan2(v.y, v.x)
+		eye.add_child(pivot)
+		var mem := MeshInstance3D.new()
+		var ms := SphereMesh.new()
+		ms.radius = er * 1.04
+		ms.height = er * 2.08
+		mem.mesh = ms
+		mem.material_override = memb_mat
+		mem.position = Vector3(-er, 0.0, 0.0)
+		mem.scale = Vector3(1.0, 1.0, 0.25)
+		pivot.add_child(mem)
+		pivot.visible = false
+		_membranes.append(pivot)
+		if body.brow > 0.0 and not disc:   # the raptor's brow ridge over the eye: the frown
+			var brow := MeshInstance3D.new()
+			var bs := SphereMesh.new()
+			bs.radius = 0.5
+			bs.height = 1.0
+			brow.mesh = bs
+			brow.material_override = _material(_body_tint if Plumage.level == 0 else Plumage.head(id, Vector3.UP, dir))
+			brow.position = eye.position + Vector3(e * 0.03, 0.2, 0.02) * hr
+			brow.rotation = Vector3(deg_to_rad(-15.0), e * deg_to_rad(-35.0), 0.0)
+			brow.scale = Vector3(0.42, 0.14 * body.brow, 0.34) * hr
+			skull.add_child(brow)
+
+
 ## The body's colour at (u along the trunk, v up its side, side round to the flank); the old flat tint at
 ## plumage level 0.
 func _body_color_at(u: float, v: float, side: float) -> Color:
@@ -637,37 +720,13 @@ func _head_mesh(sph: SphereMesh) -> ArrayMesh:
 	var arrays := sph.get_mesh_arrays()
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var cols := PackedColorArray()
-	var eye := Vector3(0.75, 0.25, -0.55).normalized() if profile.id != "owl" else Vector3(0.45, 0.25, -0.8).normalized()
+	var eye := Face.eye_dir(profile.id, 1.0)
 	for v in verts:
 		cols.append(_body_tint if Plumage.level == 0 else Plumage.head(profile.id, v.normalized(), eye))
 	arrays[Mesh.ARRAY_COLOR] = cols
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return m
-
-
-## The neck tube's colours (rows x 10, as _loft_neck lays it out): the body's at the base, blending to the
-## head's throat in front and nape behind.
-func _neck_color_rows() -> Array:
-	var rows: Array = [[]]
-	for j in 10:
-		rows[0].append(_body_color_at(0.02, 0.0, 0.0))
-	var eye := Vector3(0.75, 0.25, -0.55).normalized()
-	for k in 6:
-		var u := k / 5.0
-		var row: Array = []
-		for j in 10:
-			var a := TAU * j / 10.0
-			var base := _body_color_at(0.02, -sin(a), absf(cos(a)))
-			var top := _body_tint
-			if Plumage.level > 0:
-				var front := Plumage.head(profile.id, Vector3(0.0, -0.6, -0.8).normalized(), eye)
-				var back := Plumage.head(profile.id, Vector3(0.0, 0.1, 1.0).normalized(), eye)
-				var flank := Plumage.head(profile.id, Vector3(1.0, -0.1, 0.1).normalized(), eye)
-				top = back.lerp(front, sin(a) * 0.5 + 0.5).lerp(flank, absf(cos(a)) * 0.5)
-			row.append(base.lerp(top, smoothstep(0.2, 0.9, u)))
-		rows.append(row)
-	return rows
 
 
 ## Lay one feather (top copy, and its underside copy when two-sided); its colours only when they change (at
@@ -810,9 +869,7 @@ func animate(t: Dictionary, dt: float) -> void:
 	# Head: look at the target, level with the world.
 	var inv := global_transform.affine_inverse()
 	var target_rig: Vector3 = inv * (t.look_target as Vector3)
-	var want := (target_rig - _head_pos)
-	if want.length() > 0.01:
-		look_dir = look_dir.slerp(want.normalized(), 1.0 - exp(-10.0 * dt)).normalized()
+	_gaze(target_rig - _head_pos, dt, sitting)
 	# Head stabilisation: the head rides along with the bird but holds still through the trunk's jolts and
 	# turns (the touchdown dip, the pitch from flare to perch), catching up within a few frames.
 	var desired := global_transform * _neck_target(Vector3.ZERO)
@@ -841,6 +898,59 @@ func animate(t: Dictionary, dt: float) -> void:
 		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
 		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
 	apply_pose()
+
+
+## Where the head looks, as birds do it: hold a fixation (log-normal, the species' mean), then snap to the
+## target in a fast saccade (eased out); a new target more than 10 deg off ends the fixation early. Perched with
+## nothing new to look at, it scans: each fixation picks a point a little off the target. A big saccade usually
+## comes with a nictitating blink, and there are background blinks at the species' rate.
+func _gaze(want: Vector3, dt: float, sitting: bool) -> void:
+	if want.length() < 0.01:
+		return
+	var w := want.normalized()
+	var fd := Face.spec(profile.id)
+	if not face_anim:
+		look_dir = look_dir.slerp(w, 1.0 - exp(-10.0 * dt)).normalized()
+		blink = 0.0
+		return
+	if _sac_t >= 0.0:
+		_sac_t += dt
+		var k := clampf(_sac_t / _sac_dur, 0.0, 1.0)
+		look_dir = _sac_from.slerp(_sac_to, 1.0 - pow(1.0 - k, 3.0)).normalized()
+		if k >= 1.0:
+			_sac_t = -1.0
+			_fix_left = Face.fixation(_rng, float(fd.fix_s) * (1.0 if sitting else 0.5))
+	else:
+		_fix_left -= dt
+		if rad_to_deg(_goal.angle_to(w)) > 10.0 or _fix_left <= 0.0:
+			var to := w
+			if sitting and rad_to_deg(_goal.angle_to(w)) <= 10.0:   # idle: scan round the target
+				to = w.rotated(Vector3.UP, deg_to_rad(_rng.randf_range(-35.0, 35.0)))
+				to = to.rotated(to.cross(Vector3.UP).normalized() if absf(to.y) < 0.95 else Vector3.RIGHT, deg_to_rad(_rng.randf_range(-12.0, 12.0))).normalized()
+			_goal = w
+			var amp := rad_to_deg(look_dir.angle_to(to))
+			_sac_from = look_dir
+			_sac_to = to
+			_sac_dur = maxf(amp / float(fd.sac_speed), 0.03)
+			_sac_t = 0.0
+			if amp > 17.0 and _rng.randf() < 0.75:
+				_start_blink()
+	_blink_cool -= dt
+	if _blink_t >= 0.0:
+		_blink_t += dt
+		blink = sin(PI * clampf(_blink_t / Face.BLINK_S, 0.0, 1.0))
+		if _blink_t >= Face.BLINK_S:
+			_blink_t = -1.0
+			blink = 0.0
+	elif _rng.randf() < float(fd.blink_pm) / 60.0 * dt:
+		_start_blink()
+
+
+func _start_blink() -> void:
+	if _blink_cool > 0.0 or _blink_t >= 0.0:
+		return
+	_blink_t = 0.0
+	_blink_cool = 0.5
 
 
 func _tucked_foot(i: int) -> Vector3:
@@ -1049,7 +1159,6 @@ func apply_pose() -> void:
 	neck_joints = [nbase, nj1, nj2, atlas]
 	_head_pos = atlas
 	_head.position = atlas
-	_loft_neck()
 	_trunk.scale = Vector3.ONE * fluff * (1.0 + 0.012 * breath)
 	_pose_bone("neck.0", nbase, nj1, Vector3.UP)
 	_pose_bone("neck.1", nj1, nj2, Vector3.UP)
@@ -1059,14 +1168,19 @@ func apply_pose() -> void:
 	var fwd := look_dir
 	var yaw := atan2(fwd.x, -fwd.z)
 	var pitch := asin(clampf(fwd.y, -1.0, 1.0))
-	yaw = clampf(yaw, deg_to_rad(-body.head_yaw), deg_to_rad(body.head_yaw))
-	pitch = clampf(pitch, deg_to_rad(-60.0), deg_to_rad(60.0))
+	var fd := Face.spec(profile.id)
+	yaw = clampf(yaw, deg_to_rad(-float(fd.head_yaw)), deg_to_rad(float(fd.head_yaw)))
+	pitch = clampf(pitch, deg_to_rad(float(fd.head_pitch[0])), deg_to_rad(float(fd.head_pitch[1])))
+	for m in _membranes:   # the blink
+		m.visible = blink > 0.01
+		m.scale = Vector3(maxf(blink, 0.001), 1.0, 1.0)
 	fwd = Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
 	var up := world_up.slerp(Vector3.UP, 0.3)
 	if absf(fwd.dot(up.normalized())) > 0.98:
 		up = Vector3.BACK
 	head_basis = Basis.looking_at(fwd, up)
 	_head.basis = head_basis
+	_loft_neck()   # (after the head's basis: its end takes the head's colours in the head's frame)
 	_pose_bone("head", _head_pos, _head_pos + fwd * _L * 0.1, up)
 
 
@@ -1091,41 +1205,69 @@ func _neck_target(offset: Vector3) -> Vector3:
 	return body.neck_base + dir * lerpf(body.neck_rest, body.neck_reach, neck_ext) + offset
 
 
-## The neck's feather tube: the feathers smooth over the vertebrae's S, so it runs straight from inside the
-## trunk to the head, as thick as the front of the trunk at the base and tapering into the head (a retracted
-## neck vanishes between them).
-func _loft_neck() -> void:
-	var a: Vector3 = neck_joints[0]
-	var b: Vector3 = neck_joints[3]
-	var tan := (b - a).normalized() if a.distance_to(b) > 1e-5 else Vector3.UP
-	a -= tan * _L * 0.06
-	var x := (Vector3.RIGHT - tan * tan.x).normalized()
-	var y := tan.cross(x)
-	# The base fits the trunk ring it starts in, so it never pokes out of the back or throat.
-	# Its base is the trunk's own cross-section where it starts (width, back and throat depth), so the neck
-	# grows out of the front of the body rather than plugging into it; its end is nearly the head's width, so
-	# it merges into the head instead of meeting it in a collar.
-	var ring := body.ring_at(a.z)
-	var bx := clampf(ring[1] * 0.85, _L * 0.05, _L * 0.14) * fluff
-	var bf := clampf(ring[3] * 0.8, _L * 0.05, _L * 0.14) * fluff   # throat side
-	var bb := clampf(ring[2] * 0.8, _L * 0.05, _L * 0.14) * fluff   # nape side
-	var r1 := body.head_r * minf(body.skull.x, body.skull.y) * 0.85 * fluff
-	var rows: Array = [[]]
-	for j in 10:
-		rows[0].append(a - tan * _L * 0.02)   # capped
-	var samples := 6
-	for k in samples:
-		var u := float(k) / (samples - 1)
-		var pos := a.lerp(b, u)
-		var w := smoothstep(0.0, 1.0, u)
-		var row: Array = []
-		for j in 10:
-			var t := TAU * j / 10.0
-			var ry := lerpf(bf if sin(t) >= 0.0 else bb, r1, w)
-			row.append(pos + x * (cos(t) * lerpf(bx, r1, w)) + y * (sin(t) * ry))
-		rows.append(row)
-	BodyShape.tube_mesh(rows, _neck_mesh, _neck_colors)
+const TRUNK_AROUND := 20
+const NECK_ROWS := 10
 
+
+## The neck's feathered surface, lofted each pose as the trunk's own continuation: its first ring IS the trunk's
+## open front ring (same shape, same vertices, same colours), it leaves the chest along the body's axis and
+## curves up into the head, its cross-section easing from the trunk's to the head's, and it ends on the head's
+## surface just short of its centre, where its colours are the head's own there. One surface, no seams: the
+## feathers smooth over the vertebrae's S, so it doesn't follow the neck bones' bends.
+func _loft_neck() -> void:
+	var ring := body.ring_at(body.neck_base.z)   # [cy, w, top, bot]
+	var st := fluff * (1.0 + 0.012 * breath)      # (the trunk's scale, so the first ring lands on it)
+	var p0 := Vector3(0.0, ring[0], body.neck_base.z) * st
+	var head_c: Vector3 = neck_joints[3]
+	var d := p0.distance_to(head_c)
+	var p1 := p0 + Vector3.FORWARD * d * 0.45
+	var t3 := (head_c - p1).normalized()
+	var hr := body.head_r * fluff
+	var p3 := head_c - t3 * hr * 0.25            # end on the head's surface, a little short of its centre
+	var p2 := p3 - t3 * d * 0.3
+	var shrink := sqrt(1.0 - 0.25 * 0.25)         # the head's section there
+	var hx := hr * body.skull.x * shrink
+	var hy := hr * lerpf(body.skull.y, body.skull.z, absf(t3.dot(world_up))) * shrink
+	var inv_head := head_basis.inverse()
+	var eye := Face.eye_dir(profile.id, 1.0)
+	var u_neck := body.u_at(body.neck_base.z)
+	var rows: Array = []
+	var cols: Array = []
+	for k in range(NECK_ROWS - 1, -1, -1):   # (head end first, so the faces wind outward like the trunk's)
+		var u := float(k) / (NECK_ROWS - 1)
+		var pos := _bezier(p0, p1, p2, p3, u)
+		var v := 1.0 - u   # (the curve's exact tangent: at the base it is the trunk's axis, so the rings meet exactly)
+		var tan := ((p1 - p0) * v * v + (p2 - p1) * 2.0 * v * u + (p3 - p2) * u * u).normalized()
+		var x := (Vector3.RIGHT - tan * tan.x).normalized()
+		var up := x.cross(tan)
+		var s := smoothstep(0.0, 1.0, u)
+		var w := lerpf(ring[1] * st, hx, s)
+		var top := lerpf(ring[2] * st, hy, s)
+		var bot := lerpf(ring[3] * st, hy, s)
+		var nt := lerpf(BodyShape.N_TOP, 2.0, s)
+		var nb := lerpf(BodyShape.N_BOT, 2.0, s)
+		var row: Array = []
+		var crow: Array = []
+		for j in TRUNK_AROUND:
+			var a := TAU * j / TRUNK_AROUND
+			var q := BodyShape.section(a, w, top, bot, nt, nb)
+			var pt := pos + x * q.x + up * q.y
+			row.append(pt)
+			# Colour: the trunk's at the base, the head's (in its own frame) at the end; smooth between.
+			var c_base := _body_color_at(u_neck, sin(a), absf(cos(a)))
+			var c_head := _body_tint
+			if Plumage.level > 0:
+				var rel := pt - head_c if pt.distance_to(head_c) > 1e-5 else x * cos(a) + up * sin(a)
+				c_head = Plumage.head(profile.id, (inv_head * rel).normalized(), eye)   # (the head's colour right where the neck meets it)
+			crow.append(c_base.lerp(c_head, smoothstep(0.1, 0.9, u)))
+		rows.append(row)
+		cols.append(crow)
+	BodyShape.tube_mesh(rows, _neck_mesh, cols)
+
+
+static func _bezier(a: Vector3, b: Vector3, c: Vector3, d: Vector3, u: float) -> Vector3:
+	var v := 1.0 - u
+	return a * v * v * v + b * 3.0 * v * v * u + c * 3.0 * v * u * u + d * u * u * u
 
 ## A feather's direction in the FK pose (its bone at the FK angle in the wing plane), in rig space.
 func _fk_feather_dir(i: int, f: Dictionary, fold_v: float) -> Vector3:

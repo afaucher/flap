@@ -61,6 +61,6 @@ static func apply(r: BirdRig, pose: String, time: float, neck := -1.0, fluff := 
 		r.neck_ext = neck
 	if fluff >= 0.0:
 		r.fluff = fluff
-	r.look_dir = Vector3(0, -0.2, -1).normalized()
+	r.look_dir = (r.basis.inverse() * Vector3(0, -0.2, -1)).normalized()   # (level ahead in the world, whatever the posture)
 	r.world_up = (r.basis.inverse() * Vector3.UP).normalized()
 	r.apply_pose()

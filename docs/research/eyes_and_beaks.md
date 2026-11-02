@@ -483,6 +483,8 @@ Where each value comes from:
 
 ### 4.8 Build order (biggest visual win first)
 
+**Status (built, `scripts/bird/face.gd` and `BirdRig._build_face` / `_gaze`):** items 1-4 -- lens-cap eyes (pupil, iris, eye-ring, lid rim), brow ridges, lofted two-piece beaks (taper, droop, hook, falcon tooth, cere, crow bristles), option A head sizes (§4.1), the saccade-and-fixate head with blinks (a nictitating membrane sweeping from the bill side), and the Barn Owl's heart-shaped disc. One deviation: the eye caps sit on the head's surface rather than sunk by `sink` (a lens cap sunk 0.3 r would be hidden inside the head). The jaw has its pivot but isn't driven yet; head roll, peering, the crow's walking bob and eye-in-socket movement (items 5-8) are not built. A/B: `docs/images/faces_before_after.png`.
+
 1. **Eyes that read** (about half a day).
    - Replace the black spheres with lens caps: iris, pupil and lid ring as vertex colours. Use the per-species size and placement, the falcon's yellow ring and the owl's dark rim.
    - Add the **brow ridge** on hawk and falcon.

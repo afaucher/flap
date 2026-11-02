@@ -14,16 +14,17 @@ extends RefCounted
 ## feathers round it off.
 
 ## Per species, as fractions of body length L (starting values to tune in the bird lab): neck length from
-## the trunk to the head retracted / reaching; trunk depth at the breast; head radius; tibiotarsus and
+## the trunk to the head retracted / reaching; trunk depth at the breast; head radius (about 1.2x life; the owl's at
+## life size -- docs/research/eyes_and_beaks.md 4.1, option A, so real-proportioned beaks fit); tibiotarsus and
 ## tarsometatarsus; neck extension in flight (0 retracted .. 1 reaching); head yaw range (deg); owl-style
 ## reversible outer toe; plumage fluff when perched; the skull's shape (head sphere scale x, y, z) and brow ridge
 ## (docs/research/eyes_and_beaks.md 4.2: the crow's long head, the hawk's flat crown and frown, the owl's flat face).
 const DATA := {
-	"crow": {"neck": [0.14, 0.26], "depth": 0.32, "head": 0.105, "legs": [0.18, 0.20], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [0.88, 0.9, 1.15], "brow": 0.0},
-	"owl": {"neck": [0.1, 0.18], "depth": 0.34, "head": 0.15, "legs": [0.16, 0.14], "neck_flight": 0.3, "head_yaw": 135.0, "zygo": true, "fluff": 1.1, "skull": [1.0, 1.05, 0.8], "brow": 0.0},
-	"hawk": {"neck": [0.12, 0.22], "depth": 0.3, "head": 0.105, "legs": [0.17, 0.17], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.88, 1.08], "brow": 1.0},
-	"falcon": {"neck": [0.1, 0.18], "depth": 0.32, "head": 0.1, "legs": [0.16, 0.15], "neck_flight": 0.8, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.95, 1.02], "brow": 0.7},
-	"sparrow": {"neck": [0.09, 0.15], "depth": 0.33, "head": 0.11, "legs": [0.16, 0.14], "neck_flight": 0.5, "head_yaw": 110.0, "zygo": false, "fluff": 1.05, "skull": [0.95, 0.95, 1.0], "brow": 0.0},
+	"crow": {"neck": [0.14, 0.26], "depth": 0.32, "head": 0.06, "legs": [0.18, 0.20], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [0.88, 0.9, 1.15], "brow": 0.0},
+	"owl": {"neck": [0.1, 0.18], "depth": 0.34, "head": 0.15, "legs": [0.16, 0.14], "neck_flight": 0.3, "head_yaw": 135.0, "zygo": true, "fluff": 1.1, "skull": [1.0, 1.05, 0.7], "brow": 0.0},
+	"hawk": {"neck": [0.12, 0.22], "depth": 0.3, "head": 0.065, "legs": [0.17, 0.17], "neck_flight": 0.75, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.88, 1.08], "brow": 1.0},
+	"falcon": {"neck": [0.1, 0.18], "depth": 0.32, "head": 0.07, "legs": [0.16, 0.15], "neck_flight": 0.8, "head_yaw": 110.0, "zygo": false, "fluff": 1.0, "skull": [1.0, 0.95, 1.02], "brow": 0.7},
+	"sparrow": {"neck": [0.09, 0.15], "depth": 0.33, "head": 0.08, "legs": [0.16, 0.14], "neck_flight": 0.5, "head_yaw": 110.0, "zygo": false, "fluff": 1.05, "skull": [0.95, 0.95, 1.0], "brow": 0.0},
 }
 const N_TOP := 2.6   ## back: flatter than an ellipse (2), squarer at the shoulders
 const N_BOT := 1.8   ## breast: deeper and narrower toward the keel
@@ -58,7 +59,7 @@ static func for_profile(p: BirdProfile, wing: WingShape) -> BodyShape:
 	b.shoulder = Vector3(wing.shoulder.x, l * 0.06, wing.shoulder.y)
 	b.hip = Vector3(l * 0.05, -l * 0.02, l * 0.03)
 	b.tail_base = Vector3(0.0, l * 0.02, l * 0.24)
-	b.neck_base = Vector3(0.0, l * 0.03, -l * 0.25)
+	b.neck_base = Vector3(0.0, l * 0.03, -l * 0.25)   # (y set from the rings below)
 	b.femur = l * FEMUR
 	b.tib = l * float(d.legs[0])
 	b.tars = l * float(d.legs[1])
@@ -67,12 +68,13 @@ static func for_profile(p: BirdProfile, wing: WingShape) -> BodyShape:
 	b.neck_reach = l * float(d.neck[1])
 	b.neck_bone = b.neck_reach / 2.7   # never quite straight
 	b.neck_flight = d.neck_flight
-	b.head_yaw = d.head_yaw
+	b.head_yaw = Face.spec(p.id).head_yaw   # (Face holds the head's range of motion)
 	b.zygo = d.zygo
 	b.fluff_perched = d.fluff
 	b.skull = Vector3(d.skull[0], d.skull[1], d.skull[2])
 	b.brow = d.brow
 	b._build_rings(float(d.depth))
+	b.neck_base.y = b.ring_at(b.neck_base.z)[0]
 	return b
 
 
@@ -103,6 +105,20 @@ func _build_rings(depth: float) -> void:
 static func _se(c: float, s: float) -> float:
 	var nexp := N_TOP if s >= 0.0 else N_BOT
 	return signf(c) * pow(absf(c), 2.0 / nexp)
+
+
+## Position along the trunk, 0 front .. 1 back (colour zones use it).
+func u_at(z: float) -> float:
+	return clampf((z - front_z()) / (back_z() - front_z()), 0.0, 1.0)
+
+
+## A point of the cross-section at angle `t` (0 = +X, 90 deg = up) for half width `w`, height `top` above and
+## `bot` below centre, with the superellipse exponents `nt` / `nb` (2: an ellipse): [x, y].
+static func section(t: float, w: float, top: float, bot: float, nt := N_TOP, nb := N_BOT) -> Vector2:
+	var c := cos(t)
+	var s := sin(t)
+	var n := nt if s >= 0.0 else nb
+	return Vector2(w * signf(c) * pow(absf(c), 2.0 / n), (top if s >= 0.0 else bot) * signf(s) * pow(absf(s), 2.0 / n))
 
 
 func front_z() -> float:
@@ -190,11 +206,12 @@ func volume(steps := 200) -> float:
 
 ## The trunk shell as a mesh (built once; the trunk never bends). `color` (optional) colours each vertex from
 ## (u along the trunk 0 front .. 1 back, v up its side -1 keel .. 1 spine, side 0 midline .. 1 widest).
-func trunk_mesh(slices := 30, around := 20, color := Callable()) -> ArrayMesh:
+func trunk_mesh(slices := 30, around := 20, color := Callable(), z_from := -INF) -> ArrayMesh:
 	var pts: Array = []
 	var cols: Array = []
+	var z0 := maxf(z_from, front_z())   # (from `z_from` the front is left open: the neck carries on from it)
 	for i in slices + 1:
-		var z := lerpf(front_z(), back_z(), float(i) / slices)
+		var z := lerpf(z0, back_z(), float(i) / slices)
 		var r := ring_at(z)
 		var row: Array = []
 		var crow: Array = []
@@ -203,7 +220,7 @@ func trunk_mesh(slices := 30, around := 20, color := Callable()) -> ArrayMesh:
 			var h := r[2] if sin(t) >= 0.0 else r[3]
 			row.append(Vector3(r[1] * _se(cos(t), sin(t)), r[0] + h * _se(sin(t), sin(t)), z))
 			if color.is_valid():
-				crow.append(color.call(float(i) / slices, sin(t), absf(cos(t))))
+				crow.append(color.call(u_at(z), sin(t), absf(cos(t))))
 		pts.append(row)
 		cols.append(crow)
 	return tube_mesh(pts, null, cols if color.is_valid() else [])

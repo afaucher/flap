@@ -1,6 +1,6 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
-##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead]
+##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..5]
 ##       [--shot <png> --shot-after <s>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
@@ -95,6 +95,10 @@ func _ready() -> void:
 	cam.fov = 50.0
 	cam.current = true
 	_pose_all(0.0)
+	if view == "head" or view == "profile":   # close on the face: three-quarter front, or side on
+		var h := rigs[0].to_global(rigs[0]._head_pos)
+		var off := Vector3(0.45, 0.15, -1.0) if view == "head" else Vector3(1.0, 0.05, -0.05)
+		cam.look_at_from_position(h + off.normalized() * profiles[0].body_length * 0.75, h, Vector3.UP)
 	var shot := Boot.arg_value(args, "--shot")
 	if shot != "":
 		var after := Boot.arg_value(args, "--shot-after")

@@ -58,7 +58,7 @@ const DATA := {
 	},
 	"falcon": {
 		"body": {"back": "#5f6b78", "rump": "#7d8a98", "breast": "#f3ece2", "belly": "#bdb6ae", "vent": "#bdb6ae", "flanks": "#bdb6ae", "line": 0.05, "soft": 0.2},
-		"head": {"crown": "#2a2e35", "nape": "#2a2e35", "face": "#f4efe6", "throat": "#f4efe6", "cap": -0.05, "malar": "#2a2e35"},
+		"head": {"crown": "#2a2e35", "nape": "#2a2e35", "face": "#f4efe6", "throat": "#f4efe6", "cap": 0.08, "malar": "#2a2e35"},
 		"wing": {"lesser": "#66727f", "greater": "#66727f", "tertial": "#5a6672", "alula": "#5f6b78", "under": "#b9b2aa", "patagial": "#b9b2aa", "carpal": "#b9b2aa"},
 		"groups": {"primary": ["#2b2f36", "#cfc9c2"], "secondary": ["#4f5a66", "#cbc5be"], "tail": ["#5d6874", "#c9c4bd"]},
 		"fingers": [4, 0.25, 0.0],
