@@ -48,14 +48,19 @@ func _views() -> Array:
 	var oak: ArenaLayout.TreeData = layout.trees[0]
 	v.append(["The clearing's oak, from its edge at 9 m", Vector3(4.0, 9.0, 30.0), oak.top() * Vector3(1, 0, 1) + Vector3.UP * 8.0])
 	v.append(["Overview", Vector3(0.0, 75.0, 120.0), Vector3(0.0, 0.0, 10.0)])
+	# The pine outpost whose approach looks most into the sun (the concept's backlit view), with a falcon
+	# and its rider flaring onto the rail.
+	var toward_sun0 := -(Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
 	var on_pine: ArenaLayout.OutpostData = null
 	for o in layout.outposts:
-		if layout.trees[o.tree_id].kind == ArenaLayout.Kind.PINE:
+		if layout.trees[o.tree_id].kind == ArenaLayout.Kind.PINE and (on_pine == null or o.out.dot(-toward_sun0) > on_pine.out.dot(-toward_sun0)):
 			on_pine = o
-			break
+	var bird_at := _bird(on_pine)
 	# The concept's angle: above and behind a bird coming in to the outpost, looking across it into the light.
 	var toward_sun := -(Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
-	v.append(["The concept's angle: coming in to an outpost", on_pine.centre - toward_sun * 4.0 + on_pine.out * 1.2 + Vector3.UP * 2.4, on_pine.centre + toward_sun * 3.0])
+	var bside := on_pine.out.cross(Vector3.UP).normalized()
+	v.append(["The concept's angle: a falcon coming in to an outpost", bird_at + on_pine.out * 1.5 + bside * 0.45 + Vector3.UP * 0.75, on_pine.centre + Vector3.UP * 0.15])
+	v.append(["The falcon flaring onto the rail, from the side", bird_at - bside * 1.0 + Vector3.UP * 0.15 + on_pine.out * 0.35, bird_at])
 	v.append(["A pine's outpost, on approach", on_pine.centre + on_pine.out * 3.2 + Vector3.UP * 0.6 + on_pine.out.cross(Vector3.UP) * 1.2, on_pine.centre])
 	v.append(["A pine's outpost, the deck from 1 m", on_pine.centre + on_pine.out * 1.1 + on_pine.out.cross(Vector3.UP) * 0.5 + Vector3.UP * 0.9, on_pine.centre - on_pine.out * 0.1])
 	var o2: ArenaLayout.OutpostData = layout.outposts[0]
@@ -78,6 +83,20 @@ func _views() -> Array:
 	var oc := Vector3(oak.base.x, 0.0, oak.base.y)
 	v.append(["Oak bark from 2.5 m", oc + sun_side * (oak.radius + 2.5) + Vector3.UP * 3.0, oc + Vector3.UP * 3.2])
 	return v
+
+
+## A falcon with its rider and tack, flaring to land on outpost `o`'s rail, just short of it. Returns where.
+func _bird(o: ArenaLayout.OutpostData) -> Vector3:
+	var rig := BirdRig.new()
+	add_child(rig)
+	rig.build(BirdProfile.by_id("falcon"))
+	var at: Vector3 = o.centre + o.out * (o.depth * 0.5 + 0.7) + Vector3.UP * 0.32
+	rig.global_transform = Transform3D(Basis.looking_at(-o.out, Vector3.UP), at)
+	RigPoses.apply(rig, "flare", 0.0)
+	var tack := Tack.fit(rig)
+	tack.update(0.0)
+	var back := rig.global_transform * rig.body.shoulder   # (where the bird is, as posed: its back)
+	return back
 
 
 func _show(i: int) -> void:
