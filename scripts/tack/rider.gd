@@ -1,7 +1,7 @@
 class_name Rider
 extends Node3D
 ## The pilot: a man in a leather flying helmet and goggles, a leather coat with a sheepskin collar, a silk
-## scarf, a Sam Browne belt, khaki riding breeches, tall boots and gauntlets; `height` m tall (7.5 cm: 1:23).
+## scarf, a Sam Browne belt, khaki riding breeches, tall boots and gauntlets; `height` m tall (Tack.RIDER_HEIGHT: 8.5 cm, 1:20.6).
 ## Rig space, a child of the bird's rig beside the Saddle.
 ##
 ## Rigid segments (pelvis, torso, head, upper and lower arms, hands, thighs, shins, feet) placed each frame
@@ -36,6 +36,13 @@ var _scarf_mesh := ImmediateMesh.new()
 var _scarf_pts: Array[Vector3] = []
 var _t := 0.0
 const SCARF_N := 10
+const SOLE := 3.6                ## real cm from the ankle down to the boot's sole (the foot mesh)
+const ARCH := 6.0                ## real cm from the ankle forward to the arch: standing, the bar goes there
+## The coat's girth (torso frame, real cm): [y, half width, half depth, z offset], as built, the collar's
+## shearling over the top; the scarf keeps outside it.
+const COAT := [[0.0, 18.5, 12.5, 0.8], [8.0, 17.5, 12.0, 0.5], [16.0, 16.0, 11.5, 0.0], [26.0, 17.5, 12.5, -0.5], [36.0, 19.5, 12.8, 0.0], [44.0, 20.5, 12.4, 0.5], [47.0, 16.5, 12.4, 0.5], [51.0, 9.0, 8.0, 0.5], [53.0, 7.0, 7.0, 0.5]]
+var _pelvis := Vector3.ZERO
+var _pb := Basis.IDENTITY
 
 
 func build(s: Saddle, h := 0.075) -> void:
@@ -774,6 +781,8 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 	var back := -(facing - trunk * facing.dot(trunk)).normalized()
 	var pb := Basis(trunk.cross(back).normalized(), trunk, back)
 	_place("pelvis", pelvis, pb)
+	_pelvis = pelvis
+	_pb = pb
 	var chest := pelvis + trunk * _r("spine")
 	_place("torso", pelvis, pb)
 	# Head: on the neck, looking where asked (no further than the neck allows).
@@ -813,7 +822,11 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 		var s := -1.0 if i == 0 else 1.0
 		var hip := pelvis + pb.x * s * _r("hip_w") - trunk * 2.0 * k
 		var heel: Vector3 = saddle.heels[i] * sc
-		var ankle := heel.lerp(pegs[i] + u * _r("ankle") * 1.2, st)
+		# Standing, the boot's sole is on the bar with the bar under its arch: the ankle above and behind it.
+		var stand_dir := facing - u * facing.dot(u)
+		stand_dir = stand_dir.normalized() if stand_dir.length() > 0.05 else tang
+		var on_bar := pegs[i] + u * SOLE * k - stand_dir * ARCH * k
+		var ankle := heel.lerp(on_bar, st)
 		# (kneeling, the knees go forward and out round the seat's sides, not down into the bird)
 		var kneel_pole := ((saddle.knees[i] * sc - hip).normalized() + pb.x * s * 0.3).normalized()
 		var pole := kneel_pole.slerp((facing + pb.x * s * 0.2).normalized(), st).normalized()
@@ -821,7 +834,7 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 		_place_seg("thigh%d" % i, hip, kn, -facing)
 		_place_seg("shin%d" % i, kn, ankle, -facing)
 		# The foot: on its peg, toes forward and a little down (riding) or in toward the bird (standing).
-		var toe_dir := (tang - sn * 0.3).normalized().slerp((facing - u * facing.dot(u)).normalized(), st).normalized()
+		var toe_dir := (tang - sn * 0.3).normalized().slerp(stand_dir, st).normalized()
 		var top_dir := sn.slerp(u, st).normalized()
 		var fz := -toe_dir
 		var fy := (top_dir - fz * top_dir.dot(fz)).normalized()
@@ -860,6 +873,36 @@ func _place_seg(seg: String, a: Vector3, b: Vector3, back: Vector3) -> void:
 
 ## The scarf: a ribbon from the back of the neck, streaming down the airflow (and fluttering) at speed,
 ## hanging under gravity at rest.
+## `p` (rig space) moved out of the coat and the bird's body, if it's in either, to `margin` real cm outside.
+func _clear_of_body(p: Vector3, margin: float) -> Vector3:
+	# The coat: an elliptical section at each height up the torso.
+	var l := _pb.inverse() * (p - _pelvis) / k
+	if l.y > -4.0 and l.y < 53.0:
+		var j := 0
+		while j < COAT.size() - 2 and l.y > float(COAT[j + 1][0]):
+			j += 1
+		var a: Array = COAT[j]
+		var b: Array = COAT[j + 1]
+		var f := clampf((l.y - float(a[0])) / (float(b[0]) - float(a[0])), 0.0, 1.0)
+		var hw := lerpf(a[1], b[1], f) + margin
+		var hd := lerpf(a[2], b[2], f) + margin
+		var zo := lerpf(a[3], b[3], f)
+		var e := Vector2(l.x / hw, (l.z - zo) / hd)
+		if e.length() < 1.0:
+			e = e.normalized() if e.length() > 1e-4 else Vector2(0.0, 1.0)
+			l = Vector3(e.x * hw, l.y, e.y * hd + zo)
+			p = _pelvis + _pb * (l * k)
+	# The bird: out from the trunk's axis at that station.
+	var body := saddle.rig_body
+	var g := body.gap(p)
+	if g < margin * k:
+		var c := Vector3(0.0, body.ring_at(p.z)[0], p.z)
+		var out := Vector3(p.x, p.y - c.y, 0.0)
+		out = out.normalized() if out.length() > 1e-5 else Vector3.UP
+		p += out * (margin * k - g)
+	return p
+
+
 func _pose_scarf(dt: float, chest: Vector3, back: Vector3, trunk: Vector3, wind: Vector3, up: Vector3) -> void:
 	var anchor := chest + trunk * 1.0 * k + back * 7.0 * k
 	var seg := 8.0 * k
@@ -879,7 +922,9 @@ func _pose_scarf(dt: float, chest: Vector3, back: Vector3, trunk: Vector3, wind:
 		var d := (flow * stream * 1.4 - up * (1.0 - stream) + back * 0.25 * (1.0 - stream) + flutter + sway).normalized()
 		var want := _scarf_pts[i - 1] + d * seg
 		_scarf_pts[i] = want if dt <= 0.0 else _scarf_pts[i].lerp(want, 1.0 - exp(-(8.0 + 20.0 * stream) * dt))
-		_scarf_pts[i] = _scarf_pts[i - 1] + (_scarf_pts[i] - _scarf_pts[i - 1]).normalized() * seg
+		for it in 2:
+			_scarf_pts[i] = _scarf_pts[i - 1] + (_scarf_pts[i] - _scarf_pts[i - 1]).normalized() * seg
+			_scarf_pts[i] = _clear_of_body(_scarf_pts[i], 1.2)
 	_scarf_mesh.clear_surfaces()
 	_scarf_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in SCARF_N:

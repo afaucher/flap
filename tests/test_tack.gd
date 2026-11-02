@@ -5,7 +5,7 @@ extends TestCase
 ## saddle's space; the head misses the launcher and the rider, perched (neck retracted) and in flight; the
 ## rider rides the seat in a racer's tuck in flight (knees into the tank, feet on the side pegs) and stands upright on the footrest perched, knees hinging like knees
 ## (bent forward, within a human range) left and right, hands within reach of the grips; on a shallow perch
-## (the crow) the rider kneels up instead of standing; the owl and the sparrow carry none; the launcher points
+## (the crow) the rider kneels up instead of standing; every species carries one (narrower on a sparrow, further back behind an owl's head); the launcher points
 ## each side of the rider (outboard of their limbs, clear of the bird), their lines of fire over the bird's head;
 ## loadouts and tilt do what they say; the pods show the rounds left. The rider's head: the helmet sits snugly on the skull and leaves the
 ## face open; the face has a nose and eyes under a brow; the goggles sit on the face, or raised on the helmet.
@@ -29,6 +29,8 @@ func setup() -> void:
 			tack.update(0.0)
 			_rider(id, pose, rig, tack)
 			_head(id, pose, rig, tack)
+			_footing(id, pose, tack)
+			_scarf(id, pose, rig, tack)
 			_goggles(id, pose, tack)
 		_wings(id, rig, tack)
 		_launcher(id, rig, tack)
@@ -147,6 +149,49 @@ func _goggles(id: String, pose: String, tack: Tack) -> void:
 	eq(sunk, 0, "%s %s: the goggle strap lies on the helmet, not in it" % [id, pose])
 
 
+## Standing on the footrest, each boot as drawn rests on the bar: its sole within a centimetre of the bar's top
+## (world up), the bar under it between heel and toe, nearer the heel (the arch).
+func _footing(id: String, pose: String, tack: Tack) -> void:
+	if tack.rider.stand < 0.99:
+		return
+	var r := tack.rider
+	var u := tack.rig.world_up.normalized()
+	for i in 2:
+		var mi := r.get_node("foot%d" % i) as MeshInstance3D
+		var peg: Vector3 = tack.saddle.pegs[i] * tack.saddle.scale.x
+		var low := INF
+		var along := []
+		var toe := (mi.transform.basis * Vector3.FORWARD).normalized()
+		var m := mi.mesh as ArrayMesh
+		for sfc in m.get_surface_count():
+			for v in (m.surface_get_arrays(sfc)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+				var p := mi.transform * v
+				var rel := p - peg
+				along.append(rel.dot(toe))
+				if absf(rel.dot(toe)) < 3.0 * r.k:
+					low = minf(low, rel.dot(u))
+		along.sort()
+		var heel: float = along[0]
+		var tip: float = along[along.size() - 1]
+		var f := -heel / (tip - heel)
+		check(low > -0.8 * r.k and low < 1.0 * r.k, "%s %s: boot %d's sole rests on the bar (%.1f real cm above it)" % [id, pose, i, low / r.k])
+		check(f > 0.1 and f < 0.5, "%s %s: the bar is under boot %d's arch (%.0f%% from the heel)" % [id, pose, i, f * 100.0])
+
+
+## The scarf, flying or hanging, stays out of the rider's coat and the bird's body.
+func _scarf(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
+	for t in 30:
+		tack.update(1.0 / 30.0)
+	var r := tack.rider
+	var pts: Array[Vector3] = r._scarf_pts
+	var inside := 0
+	for i in range(1, pts.size()):
+		var p: Vector3 = pts[i]
+		if r._clear_of_body(p, 0.3).distance_to(p) > 0.05 * r.k or rig.body.gap(p) < 0.0:
+			inside += 1
+	eq(inside, 0, "%s %s: the scarf stays out of the coat and the bird" % [id, pose])
+
+
 ## Vertices of the saddle's mesh for material `id`, rig space.
 func _verts(tack: Tack, id: String) -> PackedVector3Array:
 	var mi := tack.saddle.get_node("Tack_" + id) as MeshInstance3D
@@ -174,7 +219,7 @@ func _fit(id: String, rig: BirdRig, tack: Tack) -> void:
 			low_elev = minf(low_elev, rad_to_deg(atan2(v.y - b.ring_at(v.z)[0], absf(v.x))))
 		gaps.sort()
 		check(lo > -0.0003, "%s: the %s is never inside the body (deepest %.2f mm)" % [id, part, lo * 1000.0])
-		check(float(gaps[gaps.size() / 20]) < 0.0012, "%s: the %s sits on it (5th percentile %.2f mm off)" % [id, part, float(gaps[gaps.size() / 20]) * 1000.0])
+		check(float(gaps[gaps.size() / 20]) < 0.0012 * tack.rider.height / Tack.RIDER_HEIGHT, "%s: the %s sits on it (5th percentile %.2f mm off)" % [id, part, float(gaps[gaps.size() / 20]) * 1000.0])
 		check(low_elev > Saddle.FREE_ELEVATION, "%s: the %s stays on the back (lowest at %.0f deg elevation)" % [id, part, low_elev])
 	var worst := 0.0
 	var inside := 0.0
@@ -224,7 +269,9 @@ func _rider(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
 	var standing := r.stand > 0.5
 	if pose == "folded":
 		check(rad_to_deg(torso.angle_to(up)) < 15.0, "%s perched: the rider is upright (%.0f deg off)" % [id, rad_to_deg(torso.angle_to(up))])
-		eq(standing, id != "crow", "%s perched: %s" % [id, "stands on the footrest (a steep back)" if id != "crow" else "kneels up (a shallow back)"])
+		var tilt := rad_to_deg(up.angle_to(tack.saddle.seat_normal))
+		if tilt >= Tack.STAND_PITCH.y or tilt <= Tack.STAND_PITCH.x:
+			eq(standing, tilt >= Tack.STAND_PITCH.y, "%s perched (back %.0f deg): %s" % [id, tilt, "stands on the footrest (a steep back)" if tilt >= Tack.STAND_PITCH.y else "kneels up (a shallow back)"])
 	else:
 		var lean := rad_to_deg(torso.angle_to(tack.saddle.seat_normal))
 		check(lean > 40.0 and lean < 70.0, "%s flying: the rider tucks down over the launcher (%.0f deg)" % [id, lean])
@@ -259,14 +306,17 @@ func _head(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
 	var hc: Vector3 = rig.neck_joints[3] + rig.head_offset
 	var hr := rig.body.head_r * 1.1
 	var hits := 0
+	var what := {}
 	for part in ["blued", "brass"]:
 		for v in _verts(tack, part):
 			if v.distance_to(hc) < hr:
 				hits += 1
+				what[part] = true
 	for key in tack.rider.joints:
 		if (tack.rider.joints[key] as Vector3).distance_to(hc) < hr + tack.rider.height * 0.06:
 			hits += 1
-	eq(hits, 0, "%s %s: the head clears the launcher and the rider" % [id, pose])
+			what[key] = true
+	eq(hits, 0, "%s %s: the head clears the launcher and the rider %s" % [id, pose, str(what.keys())])
 
 
 func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
@@ -282,8 +332,10 @@ func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
 		var piv := (m.pivot as Transform3D).origin * sc
 		var s := -1.0 if i == 0 else 1.0
 		check(piv.x * s > 0.0, "%s: mount %d on its side" % [id, i])
+		var under := sv.at(s * Saddle.MOUNT_X, 0.0, Saddle.MOUNT_Z) * sc
+		check((piv - under).y < tack.rider.height * 0.5, "%s: mount %d stands no taller than the rider's hip (%.0f real cm)" % [id, i, (piv - under).y / k / sc])
 		var half: float = (10.5 if m.kind == "rockets" else 8.5) * k * sc
-		var axis1: Vector3 = (m.muzzles as Array)[0] * sc
+		var axis1: Vector3 = ((m.pivot as Transform3D) * Vector3(0.0, 0.0, -60.0 * k)) * sc   # (the pod's axis)
 		for key in tack.rider.joints:
 			var j: Vector3 = tack.rider.joints[key]
 			var q := Geometry3D.get_closest_point_to_segment(j, piv, axis1)
@@ -298,7 +350,14 @@ func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
 	var hr: float = rig.body.head_r
 	for kind in Saddle.POD_KINDS:
 		for r in tack.capacity(kind):
-			var mz := sv.round_muzzle(kind, r) * sc
+			# Rounds leave from their muzzles; only a mount raised as high as it goes (an owl's) may start them
+			# further on, past the head.
+			var mr: Array = sv.round_order[kind][r]
+			if not sv.mounts[mr[0]].capped:
+				check(sv.round_launch(kind, r).distance_to(sv.round_muzzle(kind, r)) < 1e-6, "%s: %s round %d leaves from its muzzle" % [id, kind, r])
+			var ahead := (sv.round_launch(kind, r) - sv.round_muzzle(kind, r)).length() * sc
+			check(ahead < (hc - sv.round_muzzle(kind, r) * sc).length() + 1.5 * hr, "%s: %s round %d starts no further on than just past the head" % [id, kind, r])
+			var mz := sv.round_launch(kind, r) * sc
 			for down in [0.0, 4.0]:
 				var d := Basis(Vector3.RIGHT, -deg_to_rad(down)) * Vector3.FORWARD
 				var rel := hc - mz

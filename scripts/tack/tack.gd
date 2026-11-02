@@ -7,10 +7,11 @@ extends Node3D
 ##   tack.set_ammo(rockets, seekers)
 ##   tack.muzzle_world("rockets", i)   # where round i leaves from
 
-const RIDER_HEIGHT := 0.075   ## m: a 1.75 m man at 1:23
-## Species that can carry it. Not the owl: its big head sits right over its shoulders, where the launcher goes
-## (it needs a different mount); not the sparrow: a 7.5 cm rider outweighs it.
-const RIDDEN: Array[String] = ["crow", "falcon", "hawk"]
+const RIDER_HEIGHT := 0.085   ## m: a 1.75 m man at 1:20.6 -- the largest every species carries (probe_rider_scale)
+static var rider_height := RIDER_HEIGHT   ## m, the rider every Tack.fit builds (probes try others)
+## Species that carry it: all of them. The saddle narrows on a narrow back (a sparrow's) and sits further back
+## where the head rides over the shoulders (an owl's), so the firing box and mounts stay behind the head.
+const RIDDEN: Array[String] = ["crow", "owl", "hawk", "falcon", "sparrow"]
 const STAND_PITCH := Vector2(38.0, 52.0)   ## deg the back tilts from level, perched: kneel up .. stand
 
 var rig: BirdRig
@@ -28,11 +29,11 @@ static func fit(r: BirdRig, b: Bird = null, pods: Array = [], tilt := Saddle.DEF
 	t.bird = b
 	t.saddle = Saddle.new()
 	t.saddle.name = "Saddle"
-	t.saddle.build(r, RIDER_HEIGHT, pods, tilt)
+	t.saddle.build(r, rider_height, pods, tilt)
 	t.add_child(t.saddle)
 	t.rider = Rider.new()
 	t.rider.name = "Rider"
-	t.rider.build(t.saddle, RIDER_HEIGHT)
+	t.rider.build(t.saddle, rider_height)
 	t.add_child(t.rider)
 	r.add_child(t)
 	t.update(0.0)
@@ -48,9 +49,9 @@ func capacity(kind: String) -> int:
 	return saddle.capacity(kind)
 
 
-## Where round `i` of `kind` (in firing order) leaves from, world space.
+## Where round `i` of `kind` (in firing order) starts its flight, world space (Saddle.round_launch).
 func muzzle_world(kind: String, i: int) -> Vector3:
-	return saddle.global_transform * saddle.round_muzzle(kind, i)
+	return saddle.global_transform * saddle.round_launch(kind, i)
 
 
 func _process(dt: float) -> void:

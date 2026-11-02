@@ -651,8 +651,148 @@
   "edits": [
    {
     "file": "scripts/tack/saddle.gd",
-    "find": "\t\tpivot.y += 0.5 * k\n",
-    "replace": "\t\tpivot.y += 0.0\n"
+    "find": "\t\tpivot.y = minf(pivot.y + 0.5 * k, top)\n",
+    "replace": "\t\tpivot.y = minf(pivot.y, top)\n"
+   }
+  ]
+ },
+ {
+  "id": "rider-feet-above-bar",
+  "bug": "Standing on the footrest, the rider's boots floated 6 cm over the bar: the ankle was put an ankle's height above the peg, not the sole on it (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tvar on_bar := pegs[i] + u * SOLE * k - stand_dir * ARCH * k\n",
+    "replace": "\t\tvar on_bar := pegs[i] + u * _r(\"ankle\") * 1.2\n"
+   }
+  ]
+ },
+ {
+  "id": "scarf-through-coat",
+  "bug": "The scarf hung from the knot at the nape straight through the rider's back (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t\t_scarf_pts[i] = _clear_of_body(_scarf_pts[i], 1.2)\n",
+    "replace": "\t\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "mount-stilts",
+  "bug": "An owl's mounts rose on stilts as tall as the rider, to fire over its big head (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "const MOUNT_RAISE := 30.0 ",
+    "replace": "const MOUNT_RAISE := 300.0 "
+   }
+  ]
+ },
+ {
+  "id": "takeoff-attitude-snap",
+  "bug": "At a take-off the game's attitude snaps from standing to the flight attitude in a frame, and the drawn body jerked 38 deg with it (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const ATT_RATE := 400.0",
+    "replace": "const ATT_RATE := 100000.0"
+   }
+  ]
+ },
+ {
+  "id": "takeoff-head-up",
+  "bug": "In flight the head looked straight along the path, so a steep climb out of a take-off pointed the beak at the sky (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tvar pitch := clampf(asin(clampf(dir.y, -1.0, 1.0)) * 0.35, deg_to_rad(-25.0), deg_to_rad(25.0))",
+    "replace": "\t\tvar pitch := asin(clampf(dir.y, -1.0, 1.0))"
+   }
+  ]
+ },
+ {
+  "id": "vertical-body-flip",
+  "bug": "Climbing near vertical, the body flipped 180 deg whenever the path wobbled past straight up (the lift plane from world up changing side) (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\t_display_sign = -1.0 if absf(dir.y) > 0.85 and lift_dir.dot(_heading_dir) > 0.0 else 1.0",
+    "replace": "\t_display_sign = 1.0"
+   }
+  ]
+ },
+ {
+  "id": "look-target-flips-past-vertical",
+  "bug": "Straight up, the look target fell back on the body's nose flattened, which points backward once the nose passes vertical: the head turned to look behind (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tflat = flat.normalized() if flat.length() > 0.2 else model.heading_dir()   # (straight up: its heading)",
+    "replace": "\t\tflat = flat.normalized() if flat.length() > 0.2 else Vector3(-global_basis.z.x, 0.0, -global_basis.z.z).normalized()"
+   }
+  ]
+ },
+ {
+  "id": "membrane-crescent",
+  "bug": "The blink membrane was a flattened sphere hinged at the eye's rim: part-way across it stood out past the eye as a pale crescent (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tmem.mesh = cap.mesh\n",
+    "replace": "\t\tmem.mesh = SphereMesh.new()\n"
+   }
+  ]
+ },
+ {
+  "id": "head-yaw-past-vertical",
+  "bug": "A target past the body's straight down (the horizon, to a body pitched past vertical) swung the head's yaw round to look the other way (2026-11-02).",
+  "tests": [
+   "test_bird_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif fwd.z > 0.0 and absf(fwd.x) < absf(fwd.y):\n",
+    "replace": "\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "brow-bare-blob",
+  "bug": "The raptor's brow ridge was a smooth sphere in a flat colour, read as a cartoon eyebrow over the feathered head (2026-11-02).",
+  "tests": [
+   "test_feather_texture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tfor b in _brows:\n\t\tb.material_override = m\n",
+    "replace": ""
    }
   ]
  },

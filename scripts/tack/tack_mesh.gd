@@ -2,7 +2,7 @@ class_name TackMesh
 extends RefCounted
 ## Mesh building for the tack (saddle, harness, launcher, rider): grids, sweeps, lathes and tori into one
 ## SurfaceTool, with the attributes the tack shaders read (scripts/tack/*.gdshader):
-##   UV     (along, across) in "real" cm -- the rider's scale: a 7.5 cm pilot is a 1.75 m man at 1:23, so
+##   UV     (along, across) in "real" cm -- the rider's scale: an 8.5 cm pilot is a 1.75 m man at 1:20.6, so
 ##          leather grain, stitches and weave are sized as on real tack, then the shaders exaggerate them a
 ##          little, as a miniature painter does;
 ##   UV2    (distance to the piece's edge, position along that edge), real cm: stitch rows and burnished edges;

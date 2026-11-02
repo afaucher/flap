@@ -53,6 +53,11 @@ func setup() -> void:
 	check(unmirrored == 0, "cards mirrored left and right (%d unmatched)" % unmirrored)
 	for tract in ["scapular", "flank", "rump", "vent"]:
 		check(rig.card_tracts.has(tract), "a %s tract" % tract)
+	# The brow ridge is feathered: the head's feather material and chart over it, not a smooth blob of colour.
+	check(not rig._brows.is_empty(), "the hawk has brow ridges")
+	for b in rig._brows:
+		var arr := (b.mesh as ArrayMesh).surface_get_arrays(0)
+		check(b.material_override == rig.body_texture_material and arr[Mesh.ARRAY_COLOR] != null and (arr[Mesh.ARRAY_COLOR] as PackedColorArray)[0].a > 0.5, "the brow ridge wears the head's feathers")
 	# The outline frays on the body's own surface: nothing is drawn off it (no shells beside the bird).
 	check(float(rig.body_texture_material.get_shader_parameter("fray")) > 0.0, "the body's outline frays")
 	check(rig.body_texture_material.next_pass == null, "no shells drawn off the body")

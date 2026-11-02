@@ -6,7 +6,7 @@ extends Node3D
 ## than about 35 deg of elevation from its centre, so a strip along the back is always free; the saddle stays
 ## well inside it, and the neck and head stay ahead of the pommel even with the neck retracted on a perch.
 ##
-## Sizes are a man's, scaled with the rider (TackMesh: a 7.5 cm pilot is 1:23): the saddle, the footrest and
+## Sizes are a man's, scaled with the rider (TackMesh: an 8.5 cm pilot is 1:20.6): the saddle, the footrest and
 ## the launcher are designed in real cm in a frame laid on the back -- (x across, y off the surface, z aft, all
 ## real cm) from the seat's middle -- so everything follows the back's curve and sits snugly on it.
 ##
@@ -22,6 +22,7 @@ extends Node3D
 ## rounds in them show what's left (set_ammo).
 
 const FREE_ELEVATION := 50.0   ## deg: the saddle stays above this elevation round the trunk (wings: <= ~35)
+var wide := 1.0                ## the panels' width, 1 or less on a back too narrow for them (build sets it)
 
 var rig_body: BodyShape
 var surf: BackSurface
@@ -52,7 +53,26 @@ func build(rig: BirdRig, rider_h: float, pods: Array = [], tilt := DEFAULT_TILT)
 	rig_body = rig.body
 	surf = BackSurface.new(rig.body)
 	cm = 100.0 * TackMesh.REAL_H / rider_h
-	seat_z = rig.body.shoulder.z + 6.0 / cm
+	# The seat: just behind the shoulders, or further back on a bird whose head sits over them (an owl), so the
+	# firing box and the rider leaning over it stay behind the head.
+	var head_back := -INF
+	for hc in _heads():
+		head_back = maxf(head_back, (hc as Vector3).z + rig.body.head_r * 1.1)
+	seat_z = maxf(rig.body.shoulder.z + 6.0 / cm, head_back + 100.0 / cm)
+	# Narrow backs (a sparrow's): the panels narrow so they stay on the strip above the wings.
+	wide = 1.0
+	for i in 9:
+		var z := seat_z + lerpf(-42.5, 38.0, i / 8.0) / cm
+		var lo := 0.0
+		var hi := surf.half_girth(z)
+		for it in 24:
+			var mid := (lo + hi) * 0.5
+			if surf.elevation(z, mid) > FREE_ELEVATION + 6.0:
+				lo = mid
+			else:
+				hi = mid
+		wide = minf(wide, lo * cm / 43.5)
+	wide = clampf(wide, 0.5, 1.0)
 	_pad()
 	_skirt()
 	_seat()
@@ -170,7 +190,7 @@ static func _outline(f: float, w: float, n: float, mid := 0.5) -> float:
 func _pad() -> void:
 	var tm := _tm("fleece")
 	tm.seed = 0.3
-	_panel(tm, -42.5, 38.0, func(f): return _outline(f, 43.5, 2.8, 0.43), func(_f, _g): return 3.0, func(_f, _g): return 0.15, 3.0, func(_f, _g): return 0.0)
+	_panel(tm, -42.5, 38.0, func(f): return _outline(f, 43.5 * wide, 2.8, 0.43), func(_f, _g): return 3.0, func(_f, _g): return 0.15, 3.0, func(_f, _g): return 0.0)
 
 
 func _skirt() -> void:
@@ -178,7 +198,7 @@ func _skirt() -> void:
 	tm.seed = 0.55
 	# Wider over the knees (the flaps), narrow at the pommel; knee rolls padded up at the front of each flap.
 	var hw := func(f: float) -> float:
-		return _outline(f, 41.0, 2.6, 0.42)
+		return _outline(f, 41.0 * wide, 2.6, 0.42)
 	var top := func(f: float, g: float) -> float:
 		return 4.6
 	_panel(tm, -40.0, 36.0, hw, top, func(_f, _g): return 2.4, 1.6, func(f, g): return 0.35 * smoothstep(0.4, 0.9, absf(g)) * exp(-pow((f - 0.4) / 0.25, 2.0)), 30, 22, true)
@@ -191,7 +211,7 @@ func _seat() -> void:
 	var tm := _tm("seat")
 	tm.seed = 0.7
 	var hw := func(f: float) -> float:
-		return lerpf(19.0, 14.0, smoothstep(0.35, 0.6, f)) * sqrt(_outline(f, 1.0, 2.4, 0.45))
+		return lerpf(19.0, 14.0, smoothstep(0.35, 0.6, f)) * minf(1.0, wide * 1.15) * sqrt(_outline(f, 1.0, 2.4, 0.45))
 	var top := func(f: float, g: float) -> float:
 		var tank := 24.0 * smoothstep(0.0, 0.16, f) * (1.0 - smoothstep(0.38, 0.55, f))
 		var seat := 16.0 * smoothstep(0.3, 0.5, f) * (1.0 - smoothstep(0.86, 1.0, f))
@@ -206,7 +226,7 @@ func _seat() -> void:
 	var brass := _tm("brass")
 	var blued := _tm("blued")
 	for s in [-1.0, 1.0]:
-		knees[int(s > 0)] = at(s * 21.0, 18.0, -12.0)
+		knees[int(s > 0)] = at(s * 21.0 * minf(1.0, wide * 1.15), 18.0, -12.0)
 		# A footpeg: a blued bracket from the seat's base, a brass peg with a knurled rubber-less grip.
 		var root := at(s * 13.5, 6.5, 13.0)
 		var tip := at(s * 23.0, 7.5, 13.0)
@@ -401,9 +421,10 @@ const POD_KINDS := ["rockets", "seekers"]
 const POD_ROUNDS := {"rockets": 3, "seekers": 2}
 const DEFAULT_LOADOUT: Array[String] = ["rockets", "seekers"]   ## left, right
 const DEFAULT_TILT := 3.0       ## deg
-const MOUNT_X := 36.0           ## real cm out from the spine: clear of the rider's elbows and knees
-const MOUNT_Z := -30.0          ## real cm, the trunnion: beside the rider's shoulders in the tuck
+const MOUNT_X := 40.0           ## real cm out from the spine: clear of the rider's elbows and knees
+const MOUNT_Z := -38.0          ## real cm, the trunnion: beside the rider's shoulders in the tuck
 const CLEAR_AOA := 5.0          ## deg: the line of fire is checked along a path this far below the body's axis
+const MOUNT_RAISE := 30.0       ## real cm: the highest a mount stands over the firing box (no stilts)
 const CLEAR_HEAD := 0.35        ## of the head's radius, margin over the head (carried in flight or reaching)
 
 var loadout: Array[String] = DEFAULT_LOADOUT.duplicate()
@@ -419,6 +440,16 @@ func round_muzzle(kind: String, i: int) -> Vector3:
 		return muzzle
 	var mr: Array = o[clampi(i, 0, o.size() - 1)]
 	return (mounts[mr[0]].muzzles as Array)[mr[1]]
+
+
+## Where round `i` of `kind` starts its flight, saddle space: its muzzle, unless the bird's head is in the way
+## of a mount at its highest (an owl's), then just past the head along the line of fire.
+func round_launch(kind: String, i: int) -> Vector3:
+	var o: Array = round_order[kind]
+	if o.is_empty():
+		return muzzle
+	var mr: Array = o[clampi(i, 0, o.size() - 1)]
+	return (mounts[mr[0]].launch as Array)[mr[1]]
 
 
 func capacity(kind: String) -> int:
@@ -528,7 +559,8 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 	var hr := rig_body.head_r * (1.0 + CLEAR_HEAD)
 	var down := Basis(Vector3.RIGHT, -deg_to_rad(CLEAR_AOA)) * Vector3.FORWARD
 	var pivot := Vector3(foot.x, maxf(foot.y + 15.0 * k, y0 - 12.0 * k), foot.z)   # (no lower than the pod clears the skirt)
-	for it in 80:
+	var top := y0 + MOUNT_RAISE * k
+	for it in 240:
 		var xf := Transform3D(Basis(Vector3.RIGHT, tilt), pivot)
 		var ok := true
 		for m in muzzles_local:
@@ -537,9 +569,9 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 				var rel: Vector3 = hc - mp
 				if rel.dot(down) > 0.0 and (rel - down * rel.dot(down)).length() < hr:
 					ok = false
-		if ok:
+		if ok or pivot.y >= top:
 			break
-		pivot.y += 0.5 * k
+		pivot.y = minf(pivot.y + 0.5 * k, top)
 	var fork := Transform3D(Basis.IDENTITY, pivot)
 	var pod := Transform3D(Basis(Vector3.RIGHT, tilt), pivot)
 	var fx := func(x: float, y: float, z: float) -> Vector3:
@@ -599,9 +631,19 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 		cable.append(c0.lerp(c1, u) + Vector3.DOWN * 4.0 * k * sin(PI * u))
 	_tm("dark").sweep(cable, PackedVector3Array([Vector3.UP]), TackMesh.circle(0.55 * k, 6), true)
 	var mz := []
+	var launch := []
 	for m in muzzles_local:
-		mz.append(pod * (m * k))
-	return {"kind": kind, "side": s, "pivot": pod, "rounds": rounds, "muzzles": mz}
+		var mp: Vector3 = pod * ((m as Vector3) * k)
+		mz.append(mp)
+		# Where the round starts: its muzzle, or -- if the head is still in its way with the mount at its
+		# highest (an owl's) -- just past the head along the line of fire.
+		var lp := mp
+		for hc in heads:
+			var rel: Vector3 = hc - lp
+			if rel.dot(down) > 0.0 and (rel - down * rel.dot(down)).length() < hr:
+				lp = mp + down * (rel.dot(down) + hr)
+		launch.append(lp)
+	return {"kind": kind, "side": s, "pivot": pod, "rounds": rounds, "muzzles": mz, "launch": launch, "capped": pivot.y >= top - 1e-6}
 
 
 ## Each round's muzzle in its pod's frame (real cm, -Z forward): just ahead of its nose.
