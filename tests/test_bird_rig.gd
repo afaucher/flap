@@ -67,6 +67,20 @@ func setup() -> void:
 		rig.apply_pose()
 		var hf := -rig.head_basis.z
 		check(absf(atan2(hf.x, -hf.z)) <= deg_to_rad(110.5), p.id + " head yaw clamped")
+		# Solid surfaces: neighbouring tail feathers overlap even fully fanned, and neighbouring secondaries
+		# overlap in the spread wing, out to 85% of their length (only the slotted wingtip may gap).
+		for spread in [0.3, 1.0]:
+			rig.tail_spread = spread
+			_pose(rig, 0.0, 0.0, 0.0, 0.0)
+			var gap := _worst_gap(rig, 6)
+			check(gap <= 0.0, "%s tail fan solid at spread %.1f (worst gap %.1f mm)" % [p.id, spread, gap * 1000.0])
+		rig.tail_spread = 0.2
+		_pose(rig, 0.0, 0.0, 0.0, 0.0)
+		var sgap := _worst_gap(rig, WingShape.Kind.SECONDARY)
+		check(sgap <= 0.0, "%s secondaries overlap (worst gap %.1f mm)" % [p.id, sgap * 1000.0])
+		var tail_w: float = rig.feather_xforms[rig.feather_xforms.size() - 1].basis.x.length()
+		var tail_l: float = rig.feather_xforms[rig.feather_xforms.size() - 1].basis.z.length()
+		near(tail_w / tail_l, BirdRig.TAIL_WIDTH, 1e-4, p.id + " tail feathers are a fifth as wide as long")
 		# Every feather transform is finite.
 		var ok := true
 		for t in rig.feather_xforms:
@@ -114,6 +128,25 @@ func _pose(rig: BirdRig, flap: float, fold: float, sweep: float, hand_lift: floa
 	rig.twist = 0.0
 	rig.slot = 0.0
 	rig.apply_pose()
+
+
+## The widest gap between neighbouring feathers of `kind` (right wing / tail), measured between their edges at
+## 85% of their length; negative = they overlap.
+func _worst_gap(rig: BirdRig, kind: int) -> float:
+	var picks: Array[Transform3D] = []
+	for k in rig.feather_xforms.size():
+		if rig.feather_kinds[k] == kind:
+			picks.append(rig.feather_xforms[k])
+	var worst := -INF
+	for k in range(1, picks.size()):
+		var a: Transform3D = picks[k - 1]
+		var b: Transform3D = picks[k]
+		var pa := a.origin + a.basis.z * 0.85
+		var pb := b.origin + b.basis.z * 0.85
+		var half := 0.9 * 0.5   # the outline's width at 85% of the length, halved
+		var g := pa.distance_to(pb) - (a.basis.x.length() + b.basis.x.length()) * half
+		worst = maxf(worst, g)
+	return worst
 
 
 ## The furthest feather tip on one side (x * side), from the rig's feather transforms.

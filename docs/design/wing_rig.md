@@ -123,3 +123,21 @@ The model uses 1.5 spans with a 1.5 m minimum, a deliberate exaggeration so down
   - So the wing is thickest at the root and thins toward the hand. The flight feathers behind it form the thin trailing edge.
   - The patagium fairing shrinks away as the wing folds.
   - Flight feathers arch by 3% of their length, so they aren't flat cards.
+- **Feather widths and outlines.** Each feather type has a width/length ratio:
+
+  | Feather | Width / length |
+  |---|---|
+  | Primaries | 0.20 (inner) to 0.13 (outer) |
+  | Secondaries | 0.27 |
+  | Tertials | 0.30 |
+  | Greater coverts | 0.55 |
+  | Lesser coverts | 0.60 |
+  | Alula | 0.22 |
+  | Tail feathers | 0.20 |
+
+  - The outlines are broad nearly to a rounded tip.
+  - Emarginated primaries narrow sharply past their middle, so the only gaps on the wing are the slotted fingers.
+  - Tail feather bases spread across the tail stump (0.05 body lengths), and the central pair sits on top.
+  - The full tail spread is 100°: the widest fan that 12 feathers of that width still close.
+  - `test_bird_rig` checks that neighbouring tail feathers overlap at both spreads, and so do neighbouring secondaries.
+  - The earlier rig drew every feather at half its intended width: the outline's widest point was half the feather's width. A/B: `docs/images/tail_wing_width_before_after.png`.

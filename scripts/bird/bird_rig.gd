@@ -18,8 +18,13 @@ extends Node3D
 
 const SIDES := [-1.0, 1.0]   ## left, right
 const TAIL_FEATHERS := 12
-const PLAIN_PROFILE := [[0.0, 0.05], [0.04, 0.22], [0.35, 0.5], [0.7, 0.48], [0.9, 0.34], [1.0, 0.0]]
-const EMARG_PROFILE := [[0.0, 0.05], [0.04, 0.22], [0.35, 0.5], [0.55, 0.42], [0.66, 0.2], [0.9, 0.17], [1.0, 0.0]]
+## Feather outlines: [position along (0 base .. 1 tip), full width as a share of the feather's width]. Broad
+## nearly to a rounded tip, as real flight and tail feathers are (a pointed outline left saw-tooth gaps).
+## The emarginated (slotted) outer primaries narrow sharply past the middle: the gaps there are real.
+const PLAIN_PROFILE := [[0.0, 0.12], [0.05, 0.55], [0.2, 0.9], [0.5, 1.0], [0.8, 0.97], [0.9, 0.86], [0.96, 0.62], [1.0, 0.12]]
+const EMARG_PROFILE := [[0.0, 0.12], [0.05, 0.55], [0.2, 0.9], [0.45, 1.0], [0.55, 0.75], [0.62, 0.45], [0.9, 0.42], [0.97, 0.3], [1.0, 0.08]]
+const TAIL_WIDTH := 0.2   ## rectrix width / length (a hawk's ~22 cm tail feather is ~4.5 cm wide)
+const TAIL_FAN_MAX := 100.0   ## deg, full tail spread
 const CAMBER := 0.03   ## feather arch height, as a share of its length
 const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
 ## Per-species feather look (docs/research/feather_rendering.md): glossy iridescent crow, matte barred soft
@@ -61,7 +66,8 @@ var fold_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 ## try it (rig gallery: --feather-shader). docs/research/feather_rendering.md has its status.
 static var plain_feathers := true
 var feather_material: ShaderMaterial
-var feather_xforms: Array[Transform3D] = []   ## every feather this tick (the MultiMeshes' copy; tests, debug)
+var feather_xforms: Array[Transform3D] = []
+var feather_kinds: PackedInt32Array = []      ## WingShape.Kind per feather_xforms entry (6 = tail); tests   ## every feather this tick (the MultiMeshes' copy; tests, debug)
 
 var _L := 0.45
 var _sh_up := 0.0
@@ -470,6 +476,7 @@ func apply_pose() -> void:
 	var plain_i := 0
 	var emarg_i := 0
 	feather_xforms.clear()
+	feather_kinds.clear()
 	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
 	if _defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01:
 		_defs = shape.feathers(fold, slot)
@@ -523,6 +530,7 @@ func apply_pose() -> void:
 				base += n * _L * 0.02 * alula
 			var xf := _feather_xform(base, d, n, f.len, f.w)
 			feather_xforms.append(xf)
+			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
 			if f.emarg:
 				_emarg.set_instance_transform(emarg_i, xf)
 				_emarg.set_instance_color(emarg_i, _colors[WingShape.Kind.PRIMARY])
@@ -543,16 +551,20 @@ func apply_pose() -> void:
 		_pose_bone("hand." + ("L" if i == 0 else "R"), wrist, hand, hand_n)
 
 	# Tail: 12 rectrices fanned, pitched and twisted as a group.
-	var fan := deg_to_rad(lerpf(shape.tail_fan * 0.3, maxf(shape.tail_fan * 1.7, 110.0), tail_spread))
+	# Full spread tops out where 12 feathers a fifth as wide as long still overlap (~100 deg), as on a real tail.
+	var fan := deg_to_rad(lerpf(shape.tail_fan * 0.3, TAIL_FAN_MAX, tail_spread))
 	var tb := Basis(Vector3.RIGHT, tail_pitch) * Basis(Vector3.BACK, tail_twist)
 	var tn := tb * Vector3.UP
 	for k in TAIL_FEATHERS:
 		var u := (k - 5.5) / 5.5
 		var length := profile.tail_length * _tail_shape(u)
 		var d := tb * Vector3(sin(u * fan * 0.5), 0.0, cos(u * fan * 0.5))
-		var base := _tail_base + Vector3(u * _L * 0.04, 0.0, 0.0) + tn * (0.0005 * absf(u) * unit)
-		var txf := _feather_xform(base, d, tn, length, profile.tail_length * 0.14)
+		# Bases spread across the tail stump; the central pair sits on top and each outer feather tucks under
+		# its inner neighbour, so the fan overlaps like a spread deck of cards.
+		var base := _tail_base + Vector3(u * _L * 0.05, 0.0, 0.0) + tn * (0.0008 * (1.0 - absf(u)) * unit)
+		var txf := _feather_xform(base, d, tn, length, length * TAIL_WIDTH)
 		feather_xforms.append(txf)
+		feather_kinds.append(6)
 		_plain.set_instance_transform(plain_i, txf)
 		_plain.set_instance_color(plain_i, _colors["tail"])
 		_plain.set_instance_custom_data(plain_i, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0))

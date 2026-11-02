@@ -1,6 +1,6 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
-##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under]
+##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--shot <png> --shot-after <s>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots.
@@ -71,6 +71,8 @@ func _ready() -> void:
 			cam.look_at_from_position(mid + Vector3(0, 0.15, -3.2) * k, mid, Vector3.UP)
 		"three":
 			cam.look_at_from_position(mid + Vector3(0.6, 1.6, -2.4) * k, mid, Vector3.UP)
+		"side":
+			cam.look_at_from_position(mid + Vector3(2.6, 0.35, 0.0) * k, mid, Vector3.UP)
 		"under":
 			cam.look_at_from_position(mid + Vector3(0.3, -1.4, -1.6) * k, mid, Vector3.UP)
 		_:
