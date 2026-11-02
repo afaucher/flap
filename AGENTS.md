@@ -39,6 +39,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
+- `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
+  game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
+  ticks per frame, worst frames, the machine's load while it ran).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a

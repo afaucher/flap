@@ -30,7 +30,20 @@ const PAD_LON := 20
 const PAD_LAT := 11
 const PAD_FLAT := 0.5    ## the foot pad's height / width
 const LEG_FEATHER := 0.55 ## leg feather size, share of the body tile
-const REBUILD_TOL := 0.0005   ## a leg is rebuilt when an input moves more than this (LegRig._same)
+## GPU skinning: each leg's two meshes are built once, in the species' perched pose, every vertex weighted to the
+## bones below; each tick only the bones are posed (BONES transforms), and the GPU deforms the meshes. Bones per leg:
+const B_TRUNK := 0   ## the trunk (its breathing and fluff scale): the trousers' loop on it
+const B_TIB := 1     ## knee -> ankle
+const B_TARS := 2    ## ankle -> foot
+const B_PAD := 3     ## the foot pad, level in the world
+const B_ROOT := 4    ## + toe: the pad turned to the toe's heading (the owl's outer toe swings back): the toe's base loop
+const B_PHAL := [8, 10, 13, 17]   ## each toe's first phalanx (toe k has PHALANGES[k].size() of them, in order)
+const B_CLAW := 18   ## + toe
+const BONE_COUNT := 22
+## The trousers alone depend on where the leg leaves the body, which bones can't move: they are skinned too, but rebuilt
+## (re-rested at the pose) once that exit drifts this far (x L) from where they were built -- so they are never more
+## than this off the exact shape, and the rebuilds come every few ticks while legs swing, not every tick.
+const TROUSER_DRIFT := 0.004
 const ROOT_W := [0.0, 0.5]   ## connector rows' blend from a loop to the tube's first ring
 const FILLET_W := [0.0, 0.3, 0.6]   ## the trousers' loop and connector rows: a fillet from the trunk onto the leg
 const HANDOVER := [0.35, 0.7]   ## the trousers' first rings: how far their chart has turned from the trunk's to the leg's
@@ -93,8 +106,18 @@ var _skin_col: Color
 var _claw_col: Color
 var _unit_s := 0.003   ## a scale's size (m)
 var _unit_t := 0.002   ## a toe scale's size
-var _key_f: Array = [PackedFloat32Array(), PackedFloat32Array()]
-var _key_s: Array = [PackedFloat32Array(), PackedFloat32Array()]
+var skeletons: Array[Skeleton3D] = []   ## per leg (rig space)
+var _rest: Array = [{}, {}]      ## per leg: the rest pose's joints and frames (the meshes are built in it)
+var _bind: Array = [[], []]      ## per leg: each bone's rest transform, inverted
+var _rest_tip: Array = [[], []]  ## per leg: each toe's claw tip at rest
+var _turns: Array = [{}, {}]     ## per leg: each toe's curl, cached by branch radius and swing
+var _built := false
+var trouser_builds := 0         ## how many times the trousers have been built (tests: they mustn't be every tick)
+var _skin_f: Array = []          ## per leg: the trousers' skin (its binds: the pose they were last built in)
+var _tr: Array = [{}, {}]        ## per leg: where the trousers were last built ({e: the exit point, seg: its bone})
+var _wr: Array = [{}, {}]        ## per leg: the pose a mesh is being built in (_leg_w's ankle and its bisector)
+var _rest_hem: Array = [PackedVector3Array(), PackedVector3Array()]   ## per leg: the skin's top ring at rest
+var rest_swing := 0.0   ## the owl's outer toe's swing in the rest pose (perched: swung back)
 var _loop_key: Array = [PackedFloat32Array(), PackedFloat32Array()]
 var _loop: Array = [{}, {}]   ## per side: the cached edge loop on the (unscaled) trunk shell
 var _hem: Array = [PackedVector3Array(), PackedVector3Array()]   ## the feather tube's last ring = the skin's first
@@ -137,37 +160,228 @@ func _init(r: BirdRig) -> void:
 		skin_mi.append(k)
 
 
-## Draw leg `i` from the solved joints (rig space). `up_w` / `fwd_h`: world up and level forward (BirdRig._world_frame);
-## `grip` 0 open .. 1 curled; `swing` 0..1 the owl's outer toe swung back. Returns each toe's claw tip.
+## Pose leg `i` from the solved joints (rig space): its bones only -- the GPU deforms the meshes built at rest.
+## `up_w` / `fwd_h`: world up and level forward (BirdRig._world_frame); `grip` 0 open .. 1 curled; `swing` 0..1 the
+## owl's outer toe swung back. Returns each toe's claw tip.
 func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, grip: float, swing: float) -> Array:
-	var st := rig.fluff * (1.0 + 0.012 * rig.breath)   # (the trunk's scale this pose: BirdRig sets it after the legs)
-	var kf := PackedFloat32Array([knee.x, knee.y, knee.z, ankle.x, ankle.y, ankle.z, foot.x, foot.y, foot.z, st])
-	var ks := PackedFloat32Array([ankle.x, ankle.y, ankle.z, foot.x, foot.y, foot.z, up_w.x, up_w.y, up_w.z, fwd_h.x, fwd_h.y, fwd_h.z, grip, swing, rig.grip_radius])
-	if spec.feathered == "foot":   # (the owl's feather tube ends on the pad: it moves with the foot's frame too)
-		kf.append_array(ks)
+	if not _built:
+		_build_rest()
 	var fmat: Material = rig.body_texture_material if rig.body_texture_material != null else plain_mat
 	if feather_mi[i].material_override != fmat:
 		feather_mi[i].material_override = fmat
-	var redo_f := not _same(kf, _key_f[i])
-	var redo_s := not _same(ks, _key_s[i]) or redo_f   # (the skin starts at the feather tube's hem)
-	if redo_f:
-		_key_f[i] = kf
-		_build_feathers(i, knee, ankle, foot, up_w, fwd_h, st)
-	if redo_s:
-		_key_s[i] = ks
-		_build_skin(i, ankle, foot, up_w, fwd_h, grip, swing)
-	return toe_tips[i]
+	var st := rig.fluff * (1.0 + 0.012 * rig.breath)   # (the trunk's scale this pose: BirdRig sets it after the legs)
+	var xf := _bone_xforms(i, knee, ankle, foot, up_w, fwd_h, grip, swing, st)
+	var sk := skeletons[i]
+	for b in BONE_COUNT:
+		var t: Transform3D = xf[b]
+		sk.set_bone_pose_position(b, t.origin)
+		if b == B_TRUNK:
+			sk.set_bone_pose_scale(b, Vector3.ONE * st)
+		else:
+			sk.set_bone_pose_rotation(b, t.basis.get_rotation_quaternion())
+	pad_centre[i] = foot
+	var ex := _exit(knee, ankle, foot, 1.0)
+	var tr: Dictionary = _tr[i]
+	if String(ex[1]) != String(tr.get("seg", "?")) or (String(ex[1]) != "" and (ex[0] as Vector3).distance_to(tr.e) > L * TROUSER_DRIFT):
+		var p0 := Perf.t()
+		_rebuild_trousers(i, knee, ankle, foot, up_w, fwd_h, xf, ex)
+		Perf.add("  trousers_rebuild (in legs)", p0)
+	var tips: Array = []
+	for k in 4:
+		tips.append((xf[B_CLAW + k] as Transform3D) * ((_bind[i][B_CLAW + k] as Transform3D) * (_rest_tip[i][k] as Vector3)))
+	toe_tips[i] = tips
+	return tips
 
 
-## Whether a leg's inputs are unchanged enough to keep its meshes: every value within REBUILD_TOL (metres for the
-## joints, unit vectors and 0..1 values for the rest: half a millimetre, a few hundredths of a degree).
-static func _same(a: PackedFloat32Array, b: PackedFloat32Array) -> bool:
-	if a.size() != b.size():
-		return false
-	for k in a.size():
-		if absf(a[k] - b[k]) > REBUILD_TOL:
-			return false
-	return true
+## The rest pose, both legs: the species' perched posture (its pitch and stance, toes open; the owl's outer toe swung
+## back, as perched), the legs solved as BirdRig does. Build the meshes there with their weights, and the skeletons
+## whose bones pose them. (A toe's base loop turns with the toe's heading over the pad, but its scale coordinates are
+## the pad's where it was built: building the owl's swung toe swung keeps them matched where its feet are seen, on
+## the perch; in flight, toe forward and tucked up, they are a few scales out at that one toe's base.)
+func _build_rest() -> void:
+	_built = true
+	rest_swing = 1.0 if rig.body.zygo else 0.0
+	var sit: Dictionary = BirdRig.POSE.get(rig.profile.id, BirdRig.POSE["crow"])
+	var up_w := (Basis(Vector3.RIGHT, deg_to_rad(float(sit.perch_pitch))).inverse() * Vector3.UP).normalized()
+	var fwd_h := (Vector3.FORWARD - up_w * up_w.dot(Vector3.FORWARD)).normalized()
+	var reach := rig.body.femur + rig._tib + rig._tars
+	var hips: Vector3 = (rig._hip[0] + rig._hip[1]) * 0.5
+	for i in 2:
+		var hip: Vector3 = rig._hip[i]
+		var target := hips - up_w * reach * float(sit.stance)
+		target.x = BirdRig.SIDES[i] * L * 0.04
+		var fdir := (fwd_h * 0.9 - up_w * 0.3).normalized()
+		fdir = (fdir + (target - hip).normalized() * 0.2).normalized()
+		var knee := hip + fdir * rig.body.femur
+		var pole := knee - fwd_h * L * 0.3 - up_w * L * 0.05
+		target += up_w * sole_height()
+		var ankle := BirdRig.two_bone(knee, target, rig._tib, rig._tars, pole)
+		var foot := BirdRig.chain_end(ankle, target, rig._tars)
+		var t1 := (ankle - knee).normalized()
+		var t2 := (foot - ankle).normalized()
+		_rest[i] = {"knee": knee, "ankle": ankle, "foot": foot, "up": up_w, "fwd": fwd_h, "nb": (t1 + t2).normalized()}
+		_wr[i] = _rest[i]
+		var keep := rig.grip_radius
+		rig.grip_radius = 0.0
+		_build_feathers(i, knee, ankle, foot, up_w, fwd_h, 1.0)
+		_build_skin(i, ankle, foot, up_w, fwd_h, 0.0, rest_swing)
+		rig.grip_radius = keep
+		_rest_tip[i] = (toe_tips[i] as Array).duplicate()
+		_rest_hem[i] = (_hem[i] as PackedVector3Array).duplicate()
+		var ex0 := _exit(knee, ankle, foot, 1.0)
+		_tr[i] = {"e": ex0[0], "seg": ex0[1]}
+		var rest := _bone_xforms(i, knee, ankle, foot, up_w, fwd_h, 0.0, rest_swing, 1.0)
+		var sk := Skeleton3D.new()
+		sk.name = "LegSkeleton" + ("L" if i == 0 else "R")
+		rig.add_child(sk)
+		var skin := Skin.new()
+		var binds: Array = []
+		for b in BONE_COUNT:
+			sk.add_bone("b%d" % b)
+			var inv := (rest[b] as Transform3D).affine_inverse()
+			binds.append(inv)
+			skin.add_bind(b, inv)
+		_bind[i] = binds
+		skeletons.append(sk)
+		var skin_f := Skin.new()
+		for b in BONE_COUNT:
+			skin_f.add_bind(b, binds[b])
+		_skin_f.append(skin_f)
+		feather_mi[i].skin = skin_f
+		skin_mi[i].skin = skin
+		for mi in [feather_mi[i], skin_mi[i]]:
+			mi.skeleton = mi.get_path_to(sk)
+
+
+## Rebuild leg `i`'s trousers at this pose (bones `xf`, the leg leaving the body at `ex`) and make it their rest: their
+## binds this pose's bones. Their hem is the skin's top ring as drawn now, so the two still share it.
+func _rebuild_trousers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, xf: Array, ex: Array) -> void:
+	_wr[i] = {"ankle": ankle, "nb": ((ankle - knee).normalized() + (foot - ankle).normalized()).normalized()}
+	var hem := PackedVector3Array()
+	if spec.feathered != "foot":
+		var m := (xf[B_TARS] as Transform3D) * (_bind[i][B_TARS] as Transform3D)
+		for q in (_rest_hem[i] as PackedVector3Array):
+			hem.append(m * q)
+	_build_feathers(i, knee, ankle, foot, up_w, fwd_h, 1.0, hem)
+	trouser_builds += 1
+	var sf: Skin = _skin_f[i]
+	for b in BONE_COUNT:   # (built unscaled: the trunk's bind stays the identity, its pose scales the loop)
+		sf.set_bind_pose(b, Transform3D.IDENTITY if b == B_TRUNK else (xf[b] as Transform3D).affine_inverse())
+	_tr[i] = {"e": ex[0], "seg": ex[1]}
+
+
+## Every bone of leg `i` for these joints (rig space), each a frame on its bone: origin at the bone's start, -Z along
+## it, its side as the up hint (the same frames the meshes' rings are laid in, so rest and pose agree).
+func _bone_xforms(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, grip: float, swing: float, st: float) -> Array:
+	var s: float = BirdRig.SIDES[i]
+	var out: Array = []
+	out.resize(BONE_COUNT)
+	out[B_TRUNK] = Transform3D(Basis.from_scale(Vector3.ONE * st), Vector3.ZERO)
+	var t1 := (ankle - knee).normalized()
+	var t2 := (foot - ankle).normalized()
+	out[B_TIB] = Transform3D(Basis.looking_at(t1, _frame(t1, s)[0]), knee)
+	out[B_TARS] = Transform3D(Basis.looking_at(t2, _frame(t2, s)[0]), ankle)
+	out[B_PAD] = Transform3D(Basis.looking_at(fwd_h, up_w), foot)
+	var fr := _pad_frame(i, foot, up_w, fwd_h)
+	for k in 4:
+		var ch := _chain(i, k, fr, grip, swing)
+		out[B_ROOT + k] = Transform3D(Basis.looking_at(ch.base, up_w), foot)
+		var dirs: Array = ch.dirs
+		var joints: Array = ch.joints
+		for p in dirs.size():
+			out[B_PHAL[k] + p] = Transform3D(Basis.looking_at(dirs[p], ch.side), joints[p])
+		out[B_CLAW + k] = Transform3D(Basis.looking_at(ch.claw_dir, ch.side), joints[dirs.size()])
+		toe_heading[i][k] = dirs[0]
+	return out
+
+
+## Toe `k`'s chain on the pad frame `fr`: its heading (`base`), the axis it curls about (`side`), each phalanx's
+## direction and the joints from the pad's centre, the claw's base direction, the cumulative lengths `xs`.
+func _chain(i: int, k: int, fr: Array, grip: float, swing: float) -> Dictionary:
+	var s: float = BirdRig.SIDES[i]
+	var up: Vector3 = fr[2]
+	var fwd: Vector3 = fr[3]
+	var right := fwd.cross(up).normalized()
+	var yaw := deg_to_rad(float(YAW[k]))
+	if k == 2 and rig.body.zygo:
+		yaw = lerp_angle(yaw, deg_to_rad(OWL_SWING_YAW), swing)
+	var base := (fwd * cos(yaw) + right * s * sin(yaw)).normalized()
+	var side := (up.cross(base) * s).normalized()
+	var phal: Array = PHALANGES[k]
+	var length := float(spec.toe) * L * float(spec.toe_len[k])
+	var turns := _toe_turns(i, k, base, fr, swing)
+	var dirs: Array[Vector3] = []
+	var joints: Array[Vector3] = [fr[0]]
+	var xs := PackedFloat32Array([0.0])
+	var d := base
+	for p in phal.size():
+		d = d.rotated(side, s * turns[p] * grip)
+		dirs.append(d)
+		joints.append(joints[p] + d * length * float(phal[p]))
+		xs.append(xs[p] + length * float(phal[p]))
+	return {"base": base, "side": side, "dirs": dirs, "joints": joints, "xs": xs, "length": length,
+		"claw_dir": d.rotated(side, s * turns[phal.size()] * grip)}
+
+
+## Toe `k`'s curl at full grip (_curl on a branch, _curl_fixed without), cached: it changes only with the branch's
+## radius and the owl's toe swing.
+func _toe_turns(i: int, k: int, base: Vector3, fr: Array, swing: float) -> PackedFloat32Array:
+	var key := Vector2(rig.grip_radius, swing if k == 2 else 0.0)
+	var c: Array = _turns[i].get(k, [])
+	if not c.is_empty() and absf((c[0] as Vector2).x - key.x) < 1e-6 and absf((c[0] as Vector2).y - key.y) < 0.005:
+		return c[1]
+	var phal: Array = PHALANGES[k]
+	var length := float(spec.toe) * L * float(spec.toe_len[k])
+	var t := _curl(phal, length, float(spec.toe_r) * L, float(spec.claws[CLAW_OF[k]]) * L, deg_to_rad(float(spec.arc)), base, fr) if rig.grip_radius > 0.0 else _curl_fixed(phal.size())
+	_turns[i][k] = [key, t]
+	return t
+
+
+## The leg's weights at a rest point between the shank and the tarsus: across the ankle's bisecting plane, blended
+## over a little of the shank's radius either side (the trousers and the skin share it, so the hem ring they
+## both carry stays one ring).
+func _leg_w(i: int, p: Vector3) -> Array:
+	var r: Dictionary = _wr[i]
+	var bw := float(spec.shank) * L * 0.6   # (half the shank's radius: the skirt, past the ankle's arc, rides the tarsus)
+	var w := smoothstep(-bw, bw, (p - (r.ankle as Vector3)).dot(r.nb))
+	return [[B_TIB, 1.0 - w], [B_TARS, w]]
+
+
+## The leg's meshes as drawn this pose (the GPU's skinning, done here for tests): their arrays with the vertices
+## and normals deformed by the skeleton's bones.
+static func drawn_arrays(mi: MeshInstance3D) -> Array:
+	var m := mi.mesh as ArrayMesh
+	if m == null or m.get_surface_count() == 0:
+		return []
+	var arr := m.surface_get_arrays(0)
+	if mi.skin == null:
+		return arr
+	var sk := mi.get_node(mi.skeleton) as Skeleton3D
+	var mats: Array[Transform3D] = []
+	for b in sk.get_bone_count():
+		mats.append(sk.get_bone_global_pose(b) * mi.skin.get_bind_pose(b))
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var nrm: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+	var wts: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+	var pv := PackedVector3Array()
+	var pn := PackedVector3Array()
+	pv.resize(v.size())
+	pn.resize(v.size())
+	for k in v.size():
+		var q := Vector3.ZERO
+		var nq := Vector3.ZERO
+		for c in 4:
+			var w := wts[k * 4 + c]
+			if w > 0.0:
+				var t := mats[bones[k * 4 + c]]
+				q += (t * v[k]) * w
+				nq += (t.basis * nrm[k]) * w
+		pv[k] = q
+		pn[k] = nq.normalized()
+	arr[Mesh.ARRAY_VERTEX] = pv
+	arr[Mesh.ARRAY_NORMAL] = pn
+	return arr
 
 
 # --- Frames and rings ---------------------------------------------------------------------------------------
@@ -387,7 +601,7 @@ func _trouser_col(loop_cols: PackedColorArray) -> Color:
 	return c
 
 
-func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, st: float) -> void:
+func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, st: float, hem_given := PackedVector3Array()) -> void:
 	var s: float = BirdRig.SIDES[i]
 	var n := AROUND
 	var bld := MeshBuild.new()
@@ -502,16 +716,21 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 		for j in n:
 			var a := PI + TAU * j / n
 			var sa := sin(a)
-			var d_edge := d_row + flag * (1.0 - 0.35 * sa) + tr * 0.5
+			var ext := flag * (1.0 - 0.35 * sa) + tr * 0.5
+			# (a given hem -- the skin's ring, rebuilt on -- sets where each column's skirt hangs from)
+			var dr := d_row if hem_given.is_empty() else (hem_given[j] - ankle).dot(t2) - 0.72 * ext
+			var d_edge := dr + ext
 			var dir: Vector3 = f2[0] * cos(a) + f2[1] * sa
-			skirt.append(ankle + t2 * lerpf(d_row, d_edge, 0.5) + dir * shank * 0.97)
+			skirt.append(ankle + t2 * lerpf(dr, d_edge, 0.5) + dir * shank * 0.97)
 			edge.append(ankle + t2 * d_edge + dir * shank * 0.8)
-			var d_fin := lerpf(d_row, d_edge, 0.72)
+			var d_fin := lerpf(dr, d_edge, 0.72)
 			hem.append(ankle + t2 * d_fin + (f2[0] * (cos(a) * 0.92) + f2[1] * sa) * _tars_r(d_fin / tars) * tr)
 		var d0: float = total_d - d_row   # (distance down the leg at the tarsus's d = 0)
 		var dm := d_row + flag * 0.6
 		tail.append([skirt, ankle + t2 * lerpf(d_row, dm, 0.5), 1.0, d0 + lerpf(d_row, dm, 0.5), t2])
 		tail.append([edge, ankle + t2 * dm, 1.0, d0 + dm, t2])
+		if not hem_given.is_empty():   # (rebuilt on the skin as drawn: its top ring)
+			hem = hem_given
 		tail.append([hem, ankle + t2 * (dm * 0.85), 1.0, d0 + dm * 1.05, t2])
 		_hem[i] = hem
 	# No folds where the leg bends: down each column, every ring's point must lie further along its own ring's
@@ -625,7 +844,20 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 		else:
 			uvs.append(tail_uv[k])
 			uv2s.append(own2)
-	bld.tube("trouser", all_rows, centres, cols, uvs, uv2s)
+	var nfil := FILLET_W.size()
+	var nrows := all_rows.size()
+	bld.tube("trouser", all_rows, centres, cols, uvs, uv2s, func(ri: int, q: Vector3) -> Array:
+		if owl and ri == nrows - 1:   # (the owl's tube ends on the pad)
+			return [[B_PAD, 1.0]]
+		if owl and ri == nrows - 2:
+			return [[B_TARS, 0.5], [B_PAD, 0.5]]
+		if not owl and ri == nrows - 1:   # (the hem: the skin's top ring, on the tarsus)
+			return [[B_TARS, 1.0]]
+		var lw := _leg_w(i, q)
+		if ri < nfil:   # (the fillet: from the trunk onto the leg)
+			var ws := smoothstep(0.0, 1.0, float(FILLET_W[ri]))
+			return [[B_TRUNK, 1.0 - ws], [B_TIB, float(lw[0][1]) * ws], [B_TARS, float(lw[1][1]) * ws]]
+		return lw)
 	for j in n + 1:   # (the loop shades as the trunk does there: its normals are the trunk's)
 		bld.fixed[j] = lnrm[j % n]
 	bld.commit(feather_mi[i].mesh as ArrayMesh)
@@ -738,7 +970,7 @@ func _build_skin(i: int, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Ve
 		if top.is_empty():
 			var start := ankle
 			if exit_on[i] == "tarsus":
-				start = _exit(rig.leg_joints[i][1], ankle, foot, rig._trunk.scale.x)[0]
+				start = _exit(_rest[i].knee, ankle, foot, 1.0)[0]
 			top = _ring(start, f2[0], f2[1], tr, tr, tr, n)
 		for q in top:
 			d_top.append((q - ankle).dot(t2))
@@ -801,7 +1033,15 @@ func _build_skin(i: int, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Ve
 		var cols: Array = []
 		for k in rows.size():
 			cols.append(_fill_c(n, _skin_col))
-		bld.tube("tarsus", rows, centres, cols, uvs, uv2s)
+		var m := rows.size()
+		bld.tube("tarsus", rows, centres, cols, uvs, uv2s, func(ri: int, q: Vector3) -> Array:
+			if ri == m - 1:   # (the loop on the pad)
+				return [[B_PAD, 1.0]]
+			if ri == m - 2:
+				return [[B_TARS, 0.5], [B_PAD, 0.5]]
+			if ri == 0:   # (the hem the trousers tuck onto)
+				return [[B_TARS, 1.0]]
+			return _leg_w(i, q))
 	# The pad: an ellipsoid at the foot point, poles up and down, its longitude seam on the inner side.
 	var prow: Array = []
 	var pcen: Array = []
@@ -825,45 +1065,33 @@ func _build_skin(i: int, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Ve
 		puv.append(urow)
 		puv2.append(u2row)
 		pcol.append(_fill_c(PAD_LON, pad_col))
-	bld.tube("pad", prow, pcen, pcol, puv, puv2)
+	bld.tube("pad", prow, pcen, pcol, puv, puv2, func(_ri: int, _q: Vector3) -> Array: return [[B_PAD, 1.0]])
 	# Toes.
 	toe_heading[i] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
-	var right := fwd_h.cross(up_w).normalized()
 	var tips: Array = []
 	for k in 4:
-		var yaw := deg_to_rad(float(YAW[k]))
-		if k == 2 and rig.body.zygo:
-			yaw = lerp_angle(yaw, deg_to_rad(OWL_SWING_YAW), swing)
-		var base := (fwd_h * cos(yaw) + right * s * sin(yaw)).normalized()
-		tips.append(_toe(bld, i, k, base, fr, grip, pad_col))
+		tips.append(_toe(bld, i, k, fr, grip, swing, pad_col))
 	toe_tips[i] = tips
 	bld.commit(skin_mi[i].mesh as ArrayMesh)
 	parts_s[i] = bld.parts
 
 
 ## One toe, from a loop on the pad out along its phalanges into its claw. Returns the claw's tip.
-func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float, col: Color) -> Vector3:
+func _toe(bld: MeshBuild, i: int, k: int, fr: Array, grip: float, swing: float, col: Color) -> Vector3:
 	var s: float = BirdRig.SIDES[i]
 	var n := TOE_AROUND
-	var up: Vector3 = fr[2]
-	var side := (up.cross(base) * s).normalized()
 	var phal: Array = PHALANGES[k]
-	var length := float(spec.toe) * L * float(spec.toe_len[k])
 	var r0 := float(spec.toe_r) * L
 	var claw_len := float(spec.claws[CLAW_OF[k]]) * L
 	var arc := deg_to_rad(float(spec.arc))
-	var turns := _curl(phal, length, r0, claw_len, arc, base, fr) if rig.grip_radius > 0.0 else _curl_fixed(phal.size())
 	# The chain: joints from the pad's centre; each phalanx turned down by the curl at the joint before it.
-	var dirs: Array[Vector3] = []
-	var joints: Array[Vector3] = [fr[0]]
-	var xs := PackedFloat32Array([0.0])
-	var d := base
-	for p in phal.size():
-		d = d.rotated(side, s * turns[p] * grip)
-		dirs.append(d)
-		joints.append(joints[p] + d * length * float(phal[p]))
-		xs.append(xs[p] + length * float(phal[p]))
-	var claw_dir := d.rotated(side, s * turns[phal.size()] * grip)
+	var ch := _chain(i, k, fr, grip, swing)
+	var side: Vector3 = ch.side
+	var length: float = ch.length
+	var dirs: Array = ch.dirs
+	var joints: Array = ch.joints
+	var xs: PackedFloat32Array = ch.xs
+	var claw_dir: Vector3 = ch.claw_dir
 	toe_heading[i][k] = dirs[0]
 	var r_tip := r0 * 0.72
 	var bulge := float(spec.bulge)
@@ -878,7 +1106,9 @@ func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float,
 	# Stations: [x along, centre, direction] -- three per phalanx, the joints on the bisector of the two bones.
 	var e0 := 1.0 / maxf(_pad_local(fr[0] + dirs[0], fr).length(), 1e-4)   # (the pad's surface along the first bone)
 	var x0 := minf(e0 + r0 * 0.6, length * float(phal[0]) * 0.8)
-	var stations: Array = [[x0, joints[0] + dirs[0] * x0, dirs[0]]]
+	# (each station's weights: its phalanx's bone; a joint's ring shared by the bones either side of it)
+	var b0: int = B_PHAL[k]
+	var stations: Array = [[x0, joints[0] + dirs[0] * x0, dirs[0], [[b0, 1.0]]]]
 	for p in phal.size():
 		var seg := length * float(phal[p])
 		for f: float in [0.0, 0.25, 0.5, 0.75]:
@@ -886,8 +1116,8 @@ func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float,
 			if x <= x0 + seg * 0.15:
 				continue
 			var dd: Vector3 = dirs[p] if f > 0.0 else (dirs[p - 1] + dirs[p]).normalized()
-			stations.append([x, joints[p] + dirs[p] * seg * f, dd])
-	stations.append([xs[phal.size()], joints[phal.size()], (dirs[phal.size() - 1] + claw_dir).normalized()])
+			stations.append([x, joints[p] + dirs[p] * seg * f, dd, [[b0 + p, 1.0]] if f > 0.0 else [[b0 + p - 1, 0.5], [b0 + p, 0.5]]])
+	stations.append([xs[phal.size()], joints[phal.size()], (dirs[phal.size() - 1] + claw_dir).normalized(), [[b0 + phal.size() - 1, 0.5], [B_CLAW + k, 0.5]]])
 	var rows: Array = []
 	var centres: Array = []
 	var cols: Array = []
@@ -955,7 +1185,15 @@ func _toe(bld: MeshBuild, i: int, k: int, base: Vector3, fr: Array, grip: float,
 		mid_uv.append(luv[j].lerp(fuv[j], 0.5))
 		mid_uv2.append(luv2[j].lerp(Vector2(per, 1.0), 0.5))
 	var lc := col
-	bld.tube("toe%d" % k, [loop, mid] + rows, [fr[0], c0.lerp(fr[0], 0.5)] + centres, [_fill_c(n, lc), _fill_c(n, lc)] + cols, [luv, mid_uv] + uvs, [luv2, mid_uv2] + uv2s)
+	var ns := stations.size()
+	bld.tube("toe%d" % k, [loop, mid] + rows, [fr[0], c0.lerp(fr[0], 0.5)] + centres, [_fill_c(n, lc), _fill_c(n, lc)] + cols, [luv, mid_uv] + uvs, [luv2, mid_uv2] + uv2s, func(ri: int, _q: Vector3) -> Array:
+		if ri == 0:   # (the loop on the pad)
+			return [[B_ROOT + k, 1.0]]
+		if ri == 1:
+			return [[B_ROOT + k, 0.5], [b0, 0.5]]
+		if ri - 2 < ns:
+			return stations[ri - 2][3]
+		return [[B_CLAW + k, 1.0]])
 	return tip
 
 
@@ -1037,11 +1275,14 @@ class MeshBuild:
 	var idx := PackedInt32Array()
 	var parts := {}
 	var fixed := {}   ## vertex index -> normal, kept as given (a loop on another surface shades as that surface)
+	var bones := PackedInt32Array()     ## 4 per vertex (the skin's bones)
+	var weights := PackedFloat32Array() ## 4 per vertex
 
 	## A tube through `rows` of ring points (n each), with each row's centre (which way is out), colours (n per row)
 	## and coordinates (n + 1 per row: the ring's first point again, so a coordinate running round it needn't wrap
-	## on a shared vertex). Faces wound clockwise seen from outside (Godot's front face).
-	func tube(name: String, rows: Array, centres: Array, cols: Array, uvs: Array, uv2s: Array) -> void:
+	## on a shared vertex). Faces wound clockwise seen from outside (Godot's front face). `wfn(row, point)` gives each
+	## vertex's bones: [[bone, weight], ...] (up to 4, summing to 1).
+	func tube(name: String, rows: Array, centres: Array, cols: Array, uvs: Array, uv2s: Array, wfn: Callable) -> void:
 		var n: int = (rows[0] as PackedVector3Array).size()
 		var m := rows.size()
 		var w := n + 1
@@ -1056,6 +1297,10 @@ class MeshBuild:
 				c.append(crow[j % n])
 				uv.append(urow[j])
 				uv2.append(u2row[j])
+				var bw: Array = wfn.call(i, row[j % n])
+				for q in 4:
+					bones.append(int(bw[q][0]) if q < bw.size() else 0)
+					weights.append(float(bw[q][1]) if q < bw.size() else 0.0)
 		# Which way round faces out: test one quad in a row with some girth.
 		var ti := clampi(m / 2, 0, m - 2)
 		var a0 := first + ti * w
@@ -1111,5 +1356,7 @@ class MeshBuild:
 		arr[Mesh.ARRAY_COLOR] = c
 		arr[Mesh.ARRAY_TEX_UV] = uv
 		arr[Mesh.ARRAY_TEX_UV2] = uv2
+		arr[Mesh.ARRAY_BONES] = bones
+		arr[Mesh.ARRAY_WEIGHTS] = weights
 		arr[Mesh.ARRAY_INDEX] = idx
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
