@@ -47,6 +47,8 @@ func _ready() -> void:
 	demo = args.has("--demo")
 	start_seekers = args.has("--seekers")
 	evade = not args.has("--no-evade")
+	if args.has("--no-far-blur"):
+		ForestLight.far_blur = false
 	if Boot.arg_value(args, "--loadout") == "seekers":
 		start_seekers = true
 	if start_seekers:
@@ -198,6 +200,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
+		ForestLight.toggle_far_blur(self)
 	if e.is_action_pressed("respawn"):
 		restart()
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_T:

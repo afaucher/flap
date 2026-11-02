@@ -565,10 +565,26 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 		return o.centre + side * x + Vector3.UP * y + o.out * z
 	var wood := _timber("plank", {"grain_axis": 2, "length_m": o.depth})
 	var dark := _timber("bearer", {"grain_axis": 0, "nails": false, "wood": Color(0.42, 0.32, 0.22), "weather": 0.35})
+	# The planks: sawn by hand, no two quite alike (_plank_mesh), laid edge to edge with small uneven gaps.
+	var prng := RandomNumberGenerator.new()
+	prng.seed = 7919 * (o.id + 1) + layout.seed
 	var n := 9
+	var widths := []
+	var wsum := 0.0
 	for i in n:
-		var x := lerpf(-o.width * 0.5, o.width * 0.5, (i + 0.5) / n)
-		_box(body, at.call(x, -o.thickness * 0.3, 0.0), frame, Vector3(o.width / n - 0.012, o.thickness * 0.6, o.depth), wood, false)
+		widths.append(prng.randf_range(0.82, 1.18))
+		wsum += widths[i]
+	var x0 := -o.width * 0.5
+	for i in n:
+		var w: float = o.width * widths[i] / wsum
+		var gap := prng.randf_range(0.006, 0.016)
+		var mi := MeshInstance3D.new()
+		mi.name = "Outpost%d_Plank%d" % [o.id, i]
+		mi.mesh = _plank_mesh(w - gap, o.thickness * 0.6, o.depth, prng)
+		mi.material_override = wood
+		mi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -o.thickness * 0.3, 0.0))
+		add_child(mi)
+		x0 += w
 	for z in [-o.depth * 0.3, o.depth * 0.3]:
 		_box(body, at.call(0.0, -o.thickness * 0.8, z), frame, Vector3(o.width, o.thickness * 0.5, 0.07), dark, false)
 	var col := CollisionShape3D.new()
@@ -606,6 +622,115 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	var crate := _mat("pw_crate", Color(0.55, 0.44, 0.22))
 	for q in [[-0.05, 0.0, 0.0], [0.05, 0.0, 0.02], [0.0, 0.06, 0.01], [0.16, 0.0, -0.06]]:
 		_box(body, at.call(hx - 0.36 + q[0], 0.03 + q[1], hz + 0.05 + q[2]), frame, Vector3(0.09, 0.06, 0.06), crate, false)
+
+
+## A hand-sawn plank, centred like a BoxMesh of (w, t, length) -- x across, y up, z along -- but not quite square:
+## its edges waver a few mm along the length (low, smooth bends, a little taper), the sawn ends are a touch out of
+## square, the corners are knocked off, the upper arrises are worn round (a small bevel that catches the light),
+## and the top is very slightly cupped and uneven. Within PLANK_DEV of the box everywhere.
+const PLANK_DEV := 0.006   ## m: the most any edge strays from the plank's box
+const PLANK_STATIONS := 14
+static func _plank_mesh(w: float, t: float, length: float, rng: RandomNumberGenerator) -> ArrayMesh:
+	var ph := [rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU]
+	var taper := rng.randf_range(-0.004, 0.004)
+	var end_skew := [rng.randf_range(0.0015, 0.005) * signf(rng.randf() - 0.5), rng.randf_range(0.0015, 0.005) * signf(rng.randf() - 0.5)]   # (each end's run out of square)
+	var chip := [rng.randf_range(0.004, 0.012), rng.randf_range(0.004, 0.012), rng.randf_range(0.004, 0.012), rng.randf_range(0.004, 0.012)]
+	var bevel := minf(0.004, t * 0.25)
+	var cup := rng.randf_range(0.0005, 0.0015)
+	# Each edge's offset outward at u (0 .. 1 along): two smooth bends and the taper, kept inside PLANK_DEV.
+	var edge := func(side: int, u: float) -> float:
+		var a: float = ph[side * 2]
+		var b: float = ph[side * 2 + 1]
+		var d := 0.0018 * sin(u * PI * 1.3 + a) + 0.0011 * sin(u * PI * 3.7 + b) + taper * (u - 0.5) * (1 if side == 1 else -1)
+		return clampf(d, -PLANK_DEV * 0.6, PLANK_DEV * 0.5)
+	# The outline, as (x, z) pairs per station from end to end: left and right edge points.
+	var rows := []
+	for k in PLANK_STATIONS + 1:
+		var u := float(k) / PLANK_STATIONS
+		var z := lerpf(-length * 0.5, length * 0.5, u)
+		var xl: float = -w * 0.5 - edge.call(0, u)
+		var xr: float = w * 0.5 + edge.call(1, u)
+		rows.append([Vector2(xl, z), Vector2(xr, z)])
+	# The ends: out of square (the z of each corner moves), and the corners knocked off along the edge.
+	for e in 2:
+		var k := 0 if e == 0 else PLANK_STATIONS
+		var sgn := -1.0 if e == 0 else 1.0
+		var row: Array = rows[k]
+		for s in 2:
+			var p: Vector2 = row[s]
+			p.y += sgn * (end_skew[e] * (1.0 if s == 1 else -1.0) - 0.0015)
+			p.x += (chip[e * 2 + s] * 0.5) * (1.0 if s == 0 else -1.0)   # (the knocked-off corner pulls in)
+			row[s] = p
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(0xFFFFFFFF)   # (flat: each face its own normal, the worn arrises catching the light)
+	var top := t * 0.5
+	var bot := -t * 0.5
+	# Heights: the top's edges sit a little lower than its middle (cupped and worn), varying along the length.
+	var lift := func(u: float) -> float:
+		return 0.0006 * sin(u * PI * 2.0 + float(ph[0]))
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3, ua: Vector2, ub: Vector2, uc: Vector2, ud: Vector2) -> void:
+		for v in [[a, ua], [b, ub], [c, uc], [a, ua], [c, uc], [d, ud]]:
+			st.set_uv(v[1])
+			st.add_vertex(v[0])
+	for k in PLANK_STATIONS:
+		var u0 := float(k) / PLANK_STATIONS
+		var u1 := float(k + 1) / PLANK_STATIONS
+		var r0: Array = rows[k]
+		var r1: Array = rows[k + 1]
+		var l0: Vector2 = r0[0]
+		var rr0: Vector2 = r0[1]
+		var l1: Vector2 = r1[0]
+		var rr1: Vector2 = r1[1]
+		var h0: float = top + lift.call(u0)
+		var h1: float = top + lift.call(u1)
+		# The top: three strips across (worn edge, cupped middle, worn edge), wound to face up.
+		var il0 := Vector3(l0.x + bevel, h0 - cup, l0.y)
+		var ir0 := Vector3(rr0.x - bevel, h0 - cup, rr0.y)
+		var il1 := Vector3(l1.x + bevel, h1 - cup, l1.y)
+		var ir1 := Vector3(rr1.x - bevel, h1 - cup, rr1.y)
+		var m0 := Vector3((l0.x + rr0.x) * 0.5, h0, (l0.y + rr0.y) * 0.5)
+		var m1 := Vector3((l1.x + rr1.x) * 0.5, h1, (l1.y + rr1.y) * 0.5)
+		var uv := func(p: Vector3) -> Vector2:
+			return Vector2(p.x, p.z)
+		quad.call(il0, m0, m1, il1, uv.call(il0), uv.call(m0), uv.call(m1), uv.call(il1))
+		quad.call(m0, ir0, ir1, m1, uv.call(m0), uv.call(ir0), uv.call(ir1), uv.call(m1))
+		# The worn arrises: from the top's edge down to the side, `bevel` in and down.
+		var el0 := Vector3(l0.x, h0 - cup - bevel, l0.y)
+		var el1 := Vector3(l1.x, h1 - cup - bevel, l1.y)
+		var er0 := Vector3(rr0.x, h0 - cup - bevel, rr0.y)
+		var er1 := Vector3(rr1.x, h1 - cup - bevel, rr1.y)
+		quad.call(el0, il0, il1, el1, uv.call(el0), uv.call(il0), uv.call(il1), uv.call(el1))
+		quad.call(ir0, er0, er1, ir1, uv.call(ir0), uv.call(er0), uv.call(er1), uv.call(ir1))
+		# The sides, down to the bottom.
+		var bl0 := Vector3(l0.x, bot, l0.y)
+		var bl1 := Vector3(l1.x, bot, l1.y)
+		var br0 := Vector3(rr0.x, bot, rr0.y)
+		var br1 := Vector3(rr1.x, bot, rr1.y)
+		quad.call(bl0, el0, el1, bl1, Vector2(l0.y, bot), Vector2(l0.y, el0.y), Vector2(l1.y, el1.y), Vector2(l1.y, bot))
+		quad.call(er0, br0, br1, er1, Vector2(rr0.y, er0.y), Vector2(rr0.y, bot), Vector2(rr1.y, bot), Vector2(rr1.y, er1.y))
+		# The bottom (face down).
+		quad.call(bl0, bl1, br1, br0, uv.call(bl0), uv.call(bl1), uv.call(br1), uv.call(br0))
+	# The sawn ends: the end's section, from the bottom edge up over the worn arrises to the top's middle.
+	for e in 2:
+		var k := 0 if e == 0 else PLANK_STATIONS
+		var u := float(k) / PLANK_STATIONS
+		var r: Array = rows[k]
+		var l: Vector2 = r[0]
+		var rr: Vector2 = r[1]
+		var h: float = top + lift.call(u)
+		var ring := [Vector3(l.x, bot, l.y), Vector3(l.x, h - cup - bevel, l.y), Vector3(l.x + bevel, h - cup, l.y), Vector3((l.x + rr.x) * 0.5, h, (l.y + rr.y) * 0.5), Vector3(rr.x - bevel, h - cup, rr.y), Vector3(rr.x, h - cup - bevel, rr.y), Vector3(rr.x, bot, rr.y)]
+		var c := Vector3((l.x + rr.x) * 0.5, (bot + h) * 0.5, (l.y + rr.y) * 0.5)
+		for q in ring.size():
+			var a: Vector3 = ring[q]
+			var b: Vector3 = ring[(q + 1) % ring.size()]
+			var tri := [c, b, a] if e == 0 else [c, a, b]
+			for p in tri:
+				st.set_uv(Vector2((p as Vector3).x, (p as Vector3).y))
+				st.add_vertex(p)
+	st.generate_normals()
+	st.generate_tangents()
+	return st.commit()
 
 
 const PLANKS_SHADER := preload("res://scripts/world/planks.gdshader")

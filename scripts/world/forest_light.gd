@@ -9,10 +9,17 @@ extends RefCounted
 ##   haze     volumetric fog, scattering forward (shafts toward the sun), over exponential depth fog with
 ##            sun scatter for the distance
 ##   GI       SDFGI off by default: in this open wood it barely shows (A/B, Nov 2026); SSAO for contact darkening
+##   far blur a slight softening of the far wood only (depth of field, far side: from FAR_BLUR_FROM, nothing nearer,
+##            so the bird, its rider and the trees you fly among stay sharp); `far_blur` false (--no-far-blur) or
+##            F5 in the game and the range turns it off
 ## Returns the sun.
 
 const SUN_ELEVATION := 30.0
 const SUN_AZIMUTH := 205.0     ## deg, round +Y from -Z
+const FAR_BLUR_FROM := 45.0    ## m: nothing nearer is blurred
+const FAR_BLUR_OVER := 45.0    ## m over which it fades in (full by ~90 m: the arena's edge)
+const FAR_BLUR_AMOUNT := 0.035 ## Godot's dof amount (its default 0.1 is a strong photographic blur)
+static var far_blur := true
 
 
 static func setup(parent: Node, gi := false) -> DirectionalLight3D:
@@ -69,6 +76,12 @@ static func setup(parent: Node, gi := false) -> DirectionalLight3D:
 	env.fog_sky_affect = 0.15
 	var we := WorldEnvironment.new()
 	we.environment = env
+	var cam := CameraAttributesPractical.new()
+	cam.dof_blur_far_enabled = far_blur
+	cam.dof_blur_far_distance = FAR_BLUR_FROM
+	cam.dof_blur_far_transition = FAR_BLUR_OVER
+	cam.dof_blur_amount = FAR_BLUR_AMOUNT
+	we.camera_attributes = cam
 	parent.add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.name = "Sun"
@@ -89,3 +102,13 @@ static func setup(parent: Node, gi := false) -> DirectionalLight3D:
 	parent.add_child(sun)
 	RenderingServer.directional_shadow_atlas_set_size(8192, true)
 	return sun
+
+
+## The far blur on or off for the world `node` is in (F5). Returns whether it's on now.
+static func toggle_far_blur(node: Node) -> bool:
+	var a := node.get_viewport().world_3d.camera_attributes as CameraAttributesPractical
+	if a == null:
+		return false
+	a.dof_blur_far_enabled = not a.dof_blur_far_enabled
+	far_blur = a.dof_blur_far_enabled
+	return far_blur
