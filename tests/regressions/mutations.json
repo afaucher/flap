@@ -655,5 +655,33 @@
     "replace": "\t\tpivot.y += 0.0\n"
    }
   ]
+ },
+ {
+  "id": "rider-feet-above-bar",
+  "bug": "Standing on the footrest, the rider's boots floated 6 cm over the bar: the ankle was put an ankle's height above the peg, not the sole on it (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tvar on_bar := pegs[i] + u * SOLE * k - stand_dir * ARCH * k\n",
+    "replace": "\t\tvar on_bar := pegs[i] + u * _r(\"ankle\") * 1.2\n"
+   }
+  ]
+ },
+ {
+  "id": "scarf-through-coat",
+  "bug": "The scarf hung from the knot at the nape straight through the rider's back (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t\t_scarf_pts[i] = _clear_of_body(_scarf_pts[i], 1.2)\n",
+    "replace": "\t\t\tpass\n"
+   }
+  ]
  }
 ]

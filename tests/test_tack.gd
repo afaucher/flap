@@ -29,6 +29,8 @@ func setup() -> void:
 			tack.update(0.0)
 			_rider(id, pose, rig, tack)
 			_head(id, pose, rig, tack)
+			_footing(id, pose, tack)
+			_scarf(id, pose, rig, tack)
 			_goggles(id, pose, tack)
 		_wings(id, rig, tack)
 		_launcher(id, rig, tack)
@@ -145,6 +147,49 @@ func _goggles(id: String, pose: String, tack: Tack) -> void:
 		check(ends[0] > 0 and ends[1] > 0, "%s %s: the goggle strap reaches both cups" % [id, pose])
 	check(behind > 0, "%s %s: the goggle strap goes round the back" % [id, pose])
 	eq(sunk, 0, "%s %s: the goggle strap lies on the helmet, not in it" % [id, pose])
+
+
+## Standing on the footrest, each boot as drawn rests on the bar: its sole within a centimetre of the bar's top
+## (world up), the bar under it between heel and toe, nearer the heel (the arch).
+func _footing(id: String, pose: String, tack: Tack) -> void:
+	if tack.rider.stand < 0.99:
+		return
+	var r := tack.rider
+	var u := tack.rig.world_up.normalized()
+	for i in 2:
+		var mi := r.get_node("foot%d" % i) as MeshInstance3D
+		var peg: Vector3 = tack.saddle.pegs[i] * tack.saddle.scale.x
+		var low := INF
+		var along := []
+		var toe := (mi.transform.basis * Vector3.FORWARD).normalized()
+		var m := mi.mesh as ArrayMesh
+		for sfc in m.get_surface_count():
+			for v in (m.surface_get_arrays(sfc)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+				var p := mi.transform * v
+				var rel := p - peg
+				along.append(rel.dot(toe))
+				if absf(rel.dot(toe)) < 3.0 * r.k:
+					low = minf(low, rel.dot(u))
+		along.sort()
+		var heel: float = along[0]
+		var tip: float = along[along.size() - 1]
+		var f := -heel / (tip - heel)
+		check(low > -0.8 * r.k and low < 1.0 * r.k, "%s %s: boot %d's sole rests on the bar (%.1f real cm above it)" % [id, pose, i, low / r.k])
+		check(f > 0.1 and f < 0.5, "%s %s: the bar is under boot %d's arch (%.0f%% from the heel)" % [id, pose, i, f * 100.0])
+
+
+## The scarf, flying or hanging, stays out of the rider's coat and the bird's body.
+func _scarf(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
+	for t in 30:
+		tack.update(1.0 / 30.0)
+	var r := tack.rider
+	var pts: Array[Vector3] = r._scarf_pts
+	var inside := 0
+	for i in range(1, pts.size()):
+		var p: Vector3 = pts[i]
+		if r._clear_of_body(p, 0.3).distance_to(p) > 0.05 * r.k or rig.body.gap(p) < 0.0:
+			inside += 1
+	eq(inside, 0, "%s %s: the scarf stays out of the coat and the bird" % [id, pose])
 
 
 ## Vertices of the saddle's mesh for material `id`, rig space.
