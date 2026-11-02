@@ -30,6 +30,8 @@ const MOUNTS := [
 	["Mounts from behind, above", "glide", "seat", Vector3(0.25, 0.8, 1.0), 0.09],
 	["Perched, boots on the bar", "folded", "footrest", Vector3(1.0, 0.1, 0.35), 0.05],
 	["Perched, the scarf", "folded", "head", Vector3(0.8, -0.1, 0.9), 0.09],
+	["The controls", "rest", "launcher", Vector3(0.35, 0.9, 0.55), 0.035],
+	["Riding, the boots", "glide", "heel", Vector3(1.0, 0.25, 0.3), 0.03],
 ]
 const PLACEMENT := [
 	# (with --placement: the line of fire from the drawn muzzle in red, where the combat code fires from in yellow)
@@ -182,6 +184,8 @@ func _frame(s: Array) -> void:
 			anchor = tack.saddle.to_global(tack.saddle.seat_point)
 		"launcher":
 			anchor = tack.saddle.to_global(tack.saddle.launcher_xf.origin.lerp(tack.saddle.muzzle, 0.45))
+		"heel":
+			anchor = tack.rider.to_global(tack.rider.joints.ankle1)
 		"footrest":
 			anchor = tack.saddle.to_global((tack.saddle.pegs[0] + tack.saddle.pegs[1]) * 0.5)
 		"mount0", "mount1":

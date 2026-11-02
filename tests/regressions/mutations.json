@@ -866,5 +866,47 @@
     "replace": ":"
    }
   ]
+ },
+ {
+  "id": "riding-ankle-folded",
+  "bug": "Riding, the boot pointed along the back with the shin folded over it, the ankle bent far past a man's range and rolled (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tvar toe_dir := ride_toe.slerp(stand_dir, st).normalized()\n",
+    "replace": "\t\tvar toe_dir := (tang - sn * 0.3).normalized().slerp(stand_dir, st).normalized()\n"
+   }
+  ]
+ },
+ {
+  "id": "pod-bands-loose",
+  "bug": "The bands round the weapon pods were loose rounded boxes the pods floated inside (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "\t\tvar q := b + out * 0.05\n",
+    "replace": "\t\tvar q := b + out * 1.5\n"
+   }
+  ]
+ },
+ {
+  "id": "riding-boot-off-peg",
+  "bug": "Riding, the boots hung in the air short of their rear-set pegs (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "const PEG := Vector2(13.0, 27.0)",
+    "replace": "const PEG := Vector2(8.0, 27.0)"
+   }
+  ]
  }
 ]
