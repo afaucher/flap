@@ -692,7 +692,7 @@ func _body_color_at(u: float, v: float, side: float) -> Color:
 	return _body_tint if Plumage.level == 0 else Plumage.body(profile.id, u, v, side)
 
 
-const HEAD_AROUND := 40      ## 2 x TRUNK_AROUND: every other vertex of the neck's loop on the head is the neck's
+const HEAD_AROUND := 60      ## 3 x TRUNK_AROUND: every third vertex of the head's neck ring is the neck's (fine, for crisp colour zones)
 var _neck_entry := 1.1       ## rad: the neck meets the head this far round from its underside axis -- where the head is about as wide
                              ## as the collar it comes from (an owl's broad chest meets its big head near the head's widest)
 
@@ -741,8 +741,8 @@ func _head_color(th: float, ph: float) -> Color:
 ## The head's mesh (head space): rings round the neck axis from the underside pole to the crown.
 func _build_head_mesh() -> ArrayMesh:
 	var ths: Array = [0.0, _neck_entry * 0.35, _neck_entry * 0.7, _neck_entry]
-	for k in range(1, 17):
-		ths.append(lerpf(_neck_entry, PI, k / 16.0))
+	for k in range(1, 29):
+		ths.append(lerpf(_neck_entry, PI, k / 28.0))
 	var rows: Array = []
 	var cols: Array = []
 	for th in ths:
@@ -1335,7 +1335,7 @@ func _loft_neck() -> void:
 			# front -- then blend into the head's colours by the head end. Both ends still equal their loops exactly.
 			var a := TAU * j / TRUNK_AROUND
 			var c_body: Color = ca_cols[j] if u <= 0.0 else _body_color_at(u_neck * (1.0 - u), sin(a), absf(cos(a)))
-			crow.append(c_body.lerp(cb_cols[m[j]], smoothstep(0.4, 1.0, u)))
+			crow.append(c_body.lerp(cb_cols[m[j]], smoothstep(0.75, 1.0, u)))   # (a short hand-over: zones stay crisp)
 		rows.append(row)
 		cols.append(crow)
 	BodyShape.tube_mesh(rows, _neck_mesh, cols)
