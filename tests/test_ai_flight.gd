@@ -113,11 +113,7 @@ func _fly_arena(arena_seed: int, per_species: Dictionary, pinewood := false) -> 
 		per_species[b.profile.id] = per_species.get(b.profile.id, 0) + pl.perches_reached
 	print("%s flock: %d perches, %d bonks in %.0f s" % [nm, total, total_bonks, SIM_SECONDS])
 	check(total >= 18, "%s: the flock chains perches (%d)" % [nm, total])
-	# (The pine wood, three times as many trunks below the crowns, is allowed 1.3 bumps a perch for now: the AI
-	# clips trunks low down and its own tree's limbs coming in to land -- the greybox is at its limit too. To be
-	# brought back to 1.0 by better trunk avoidance; see docs/design/flight_model.md.)
-	var allowed := total * (1.3 if pinewood else 1.0)
-	check(total_bonks <= allowed, "%s: trees are rarely touched (%d bonks for %d perches)" % [nm, total_bonks, total])
+	check(total_bonks <= total, "%s: trees are rarely touched (%d bonks for %d perches)" % [nm, total_bonks, total])
 	check(max_r < layout.boundary + 10.0, "%s: stayed in the arena (%.1f m)" % [nm, max_r])
 	for b in birds:
 		b.queue_free()

@@ -13,10 +13,16 @@ const LATTICE := 6.0
 const LEVELS: Array[float] = [3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0]
 const CLIMB_COST := 4.0
 const MAX_EXPANSIONS := 8000
+## The tree a route leaves or lands on isn't ignored, just passed closer: this far, without the perch's own branch
+## and the first PUSH_OFF metres (the bird passes through its own tree as it lets go) or the last ones (the catch).
+const OWN_TREE_CLEARANCE := 0.4
+const PUSH_OFF := 1.0
 
 var layout: ArenaLayout
 var clearance := 0.9
 var _node_ok := {}      ## Vector3i -> bool
+var _a_perch := -1      ## the perch the route leaves (its branch is skipped), for the plan in progress
+var _b_perch := -1      ## the perch it lands on
 
 
 func _init(l: ArenaLayout, c := 0.9) -> void:
@@ -40,16 +46,23 @@ static func approach_length(profile: BirdProfile) -> float:
 
 
 ## Waypoints from `from` to perch `p` (ending at its approach anchor, on the outer part of the branch), or [] if no route was found.
-## `from_tree`: the tree the bird is leaving (ignored for the first leg, which starts right beside it).
-func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -1) -> Array[Vector3]:
+## `from_tree`: the tree the bird is leaving (passed closer on the first leg, which starts right beside it;
+## `from_perch` the perch it is on there). The perch's own tree is passed closer on the last legs.
+func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -1, from_perch := -1) -> Array[Vector3]:
 	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
 	var app := approach_point(p, profile)
 	app.y = maxf(app.y, clearance + 0.5)
 	var pre := pre_approach_point(p, profile)
 	pre.y = maxf(pre.y, clearance + 0.5)
+	var none: Array[Vector3] = []
+	_a_perch = from_perch
+	_b_perch = p.id
+	# The swoop from the approach point onto the branch: none if its own tree is in the way.
+	if not _leg_ok(app, p.approach_anchor(), -1, p.tree_id):
+		return none
 	# Line up through the pre-approach point when that leg is open; otherwise straight to the approach point.
-	var lined_up := layout.segment_clear(pre, app, clearance, p.tree_id)
-	var route := plan(start, pre if lined_up else app, from_tree, p.tree_id)
+	var lined_up := _leg_ok(pre, app, -1, p.tree_id)
+	var route := plan(start, pre if lined_up else app, from_tree, p.tree_id, from_perch, p.id)
 	if route.is_empty():
 		return route
 	if lined_up:
@@ -60,11 +73,14 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 
 ## Waypoints from `a` to `b` through free air (both included), or [] if none found. `a_tree` is ignored on
 ## legs leaving `a`, `b_tree` on legs arriving at `b` (a perch's own tree, a departure tree).
-func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1) -> Array[Vector3]:
-	if layout.segment_clear(a, b, clearance, a_tree) and layout.segment_clear(a, b, clearance, b_tree):
+## `a_perch` / `b_perch`: the perches there (their branches don't count).
+func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_perch := -1) -> Array[Vector3]:
+	_a_perch = a_perch
+	_b_perch = b_perch
+	if _leg_ok(a, b, a_tree, b_tree):
 		return [a, b]
-	var starts := _attach(a, a_tree)
-	var goals := _attach(b, b_tree)
+	var starts := _attach(a, a_tree, true)
+	var goals := _attach(b, b_tree, false)
 	if starts.is_empty() or goals.is_empty():
 		return []
 	var goal_set := {}
@@ -135,17 +151,28 @@ func smooth(pts: Array[Vector3], a_tree := -1, b_tree := -1) -> Array[Vector3]:
 	return out
 
 
-## Leg i -> j of a route: the start's tree only counts for legs leaving the start, the goal's only for legs
-## reaching the goal.
+## Leg i -> j of a route: the start's tree only gets the closer pass on legs leaving the start, the goal's only
+## on legs reaching the goal.
 func _leg_clear(pts: Array[Vector3], i: int, j: int, a_tree: int, b_tree: int) -> bool:
-	var last := pts.size() - 1
-	if i == 0 and j == last:
-		return layout.segment_clear(pts[i], pts[j], clearance, a_tree) and layout.segment_clear(pts[i], pts[j], clearance, b_tree)
-	if i == 0:
-		return layout.segment_clear(pts[i], pts[j], clearance, a_tree)
-	if j == last:
-		return layout.segment_clear(pts[i], pts[j], clearance, b_tree)
-	return layout.segment_clear(pts[i], pts[j], clearance)
+	return _leg_ok(pts[i], pts[j], a_tree if i == 0 else -1, b_tree if j == pts.size() - 1 else -1)
+
+
+## A leg from a to b: clear of the wood by `clearance`, except the tree it leaves (`a_tree`) and the one it lands
+## on (`b_tree`), which it may pass OWN_TREE_CLEARANCE from, leaving out the perches' branches and the push-off
+## and catch at the ends.
+func _leg_ok(a: Vector3, b: Vector3, a_tree: int, b_tree: int) -> bool:
+	if a_tree < 0 and b_tree < 0:
+		return layout.segment_clear(a, b, clearance)
+	if not layout.segment_clear_among(layout.trees_near_segment(a, b, clearance), a, b, clearance, a_tree, b_tree):
+		return false
+	var d := b - a
+	var end := minf(PUSH_OFF, d.length() * 0.5)
+	var dir := d.normalized()
+	if a_tree >= 0 and not layout.tree_clear(a_tree, a + dir * end, b, OWN_TREE_CLEARANCE, _a_perch):
+		return false
+	if b_tree >= 0 and not layout.tree_clear(b_tree, a, b - dir * end, OWN_TREE_CLEARANCE, _b_perch):
+		return false
+	return true
 
 
 func _cost(a: Vector3, b: Vector3) -> float:
@@ -179,8 +206,8 @@ func _neighbours(k: Vector3i) -> Array[Vector3i]:
 	return out
 
 
-## Lattice nodes near `p` that it can fly to directly.
-func _attach(p: Vector3, ignore_tree: int) -> Array[Vector3i]:
+## Lattice nodes near `p` that it can fly to directly (or from, `leaving`); `tree` is the tree at `p`.
+func _attach(p: Vector3, tree: int, leaving: bool) -> Array[Vector3i]:
 	var out: Array[Vector3i] = []
 	var cx := roundi(p.x / LATTICE)
 	var cz := roundi(p.z / LATTICE)
@@ -192,6 +219,6 @@ func _attach(p: Vector3, ignore_tree: int) -> Array[Vector3i]:
 		for dx in range(-2, 3):
 			for dz in range(-2, 3):
 				var k := Vector3i(cx + dx, ly, cz + dz)
-				if _usable(k) and layout.segment_clear(p, _pos(k), clearance, ignore_tree):
+				if _usable(k) and (_leg_ok(p, _pos(k), tree, -1) if leaving else _leg_ok(_pos(k), p, -1, tree)):
 					out.append(k)
 	return out
