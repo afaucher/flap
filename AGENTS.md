@@ -34,8 +34,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
   Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); the
-  range fires each round from its tube (`.
-ange.ps1 -Loadout rockets,seekers`).
+  range fires each round from its tube (`.\range.ps1 -Loadout rockets,seekers`).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked

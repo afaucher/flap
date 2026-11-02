@@ -3,7 +3,7 @@ extends TestCase
 ## but for short dead stubs, their limbs and needles up in the crown; the oaks -- one in the clearing -- carry
 ## long, nearly level limbs to perch on; every outpost is bolted to its trunk with a landing rail along its
 ## outer edge that is a perch, facing open air (wood and leaves clear for several metres out), left and right
-## of the rail alike; and the AI's clearance queries see the decks.
+## of the rail alike; the AI's clearance queries see the decks; and the crowns leave sightlines.
 
 
 func _init() -> void:
@@ -19,7 +19,18 @@ func setup() -> void:
 	_pines(a)
 	_oaks(a)
 	_outposts(a)
+	_sightlines(a)
 	finish()
+
+
+## The crowns leave sightlines: at every height from the floor to above the crowns, at least a third of
+## level looks reach 40 m (the seeker's lock range) past wood and leaves, and under the crowns most do.
+func _sightlines(a: ArenaLayout) -> void:
+	var hs := [5.0, 12.0, 18.0, 22.0, 26.0, 32.0]
+	var r := Pinewood.sightlines(a, hs, 120, 40.0, true)
+	for h in hs:
+		check(float(r[h][2]) >= 0.33, "at %.0f m, a third of looks reach 40 m (%.0f%%)" % [h, float(r[h][2]) * 100.0])
+	check(float(r[12.0][2]) >= 0.75, "under the crowns most looks reach 40 m (%.0f%%)" % (float(r[12.0][2]) * 100.0))
 
 
 func _pines(a: ArenaLayout) -> void:

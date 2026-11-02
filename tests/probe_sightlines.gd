@@ -17,5 +17,5 @@ func setup() -> void:
 		print("SIGHT crowns %.2f: wood and leaves" % dens)
 		for h in HEIGHTS:
 			print("SIGHT   %4.0f m: median %4.1f m, 25%% %4.1f m, %3.0f%% reach 40 m" % [h, r[h][0], r[h][1], r[h][2] * 100.0])
-	Pinewood.crown_density = 1.0
+	Pinewood.crown_density = 0.5
 	finish()

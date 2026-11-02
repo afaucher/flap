@@ -38,6 +38,8 @@ var _t := 0.0
 const SCARF_N := 10
 const HOLD_REACH := 0.72        ## standing: shoulders to the hand loops, of the arm's length (leaning back)
 const ANKLE_ANGLE := 118.0      ## deg between the shin and the foot, riding (heel raised on the peg)
+const PALM := 4.0               ## real cm from the wrist to the grip, through the palm
+const BALL := 15.0              ## real cm from the ankle forward to the ball of the foot
 const SOLE := 3.6                ## real cm from the ankle down to the boot's sole (the foot mesh)
 const ARCH := 6.0                ## real cm from the ankle forward to the arch: standing, the bar goes there
 ## The coat's girth (torso frame, real cm): [y, half width, half depth, z offset], as built, the collar's
@@ -825,12 +827,19 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 		var s := -1.0 if i == 0 else 1.0
 		var sh := chest - trunk * 4.0 * k + pb.x * s * _r("shoulder_w")
 		var hand: Vector3 = grips[i].lerp(saddle.holds[i] * sc, st)
+		# The fist closes round the grip: the hand's width along the grip's axis (thumb on the inner side), its
+		# length from the wrist across the grip, the grip through the palm PALM from the wrist.
+		var g_out: Vector3 = saddle.grip_dirs[i].slerp(saddle.hold_dirs[i], st).normalized()
+		var from := sh - hand
+		var hy := -(from - g_out * from.dot(g_out)).normalized()   # (wrist to fingers: away from the shoulder)
+		var wrist := hand - hy * PALM * k
 		var pole := (pb.x * s * 0.8 - trunk * 0.6 + back * 0.4).normalized()
-		var el := _ik(sh, hand, _r("upper_arm"), _r("forearm"), pole)
+		var el := _ik(sh, wrist, _r("upper_arm"), _r("forearm"), pole)
 		_place_seg("upper_arm%d" % i, sh, el, back)
-		_place_seg("forearm%d" % i, el, hand, back)
-		var hd := (hand - el).normalized()
-		_place_seg("hand%d" % i, hand - hd * 3.0 * k, hand + hd * 6.0 * k, -sn)
+		_place_seg("forearm%d" % i, el, wrist, back)
+		var fx := g_out * s
+		fx = (fx - hy * fx.dot(hy)).normalized()
+		_place("hand%d" % i, wrist - hy * 1.0 * k, Basis(fx, hy, fx.cross(hy).normalized()))
 		joints["shoulder%d" % i] = sh
 		joints["elbow%d" % i] = el
 		joints["hand%d" % i] = hand
@@ -863,6 +872,25 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 		var fz := -toe_dir
 		var up_f := shin_up.slerp(u, st)
 		var fy := (up_f - fz * up_f.dot(fz)).normalized()
+		if st < 1.0:
+			# Riding, the boot stands on its peg: the ankle moves so the sole under the ball sits on the peg's
+			# top, and the leg is solved again (a few times: the foot follows the shin), the last with the foot
+			# as it ends up.
+			for it in 5:
+				var on_peg: Vector3 = saddle.ride_pegs[i] * sc - (toe_dir * BALL - fy * SOLE) * k
+				ankle = on_peg.lerp(on_bar, st)
+				kn = _ik(hip, ankle, _r("thigh"), _r("shin"), pole)
+				shin_up = (kn - ankle).normalized()
+				ahead = (-sn - shin_up * (-sn).dot(shin_up)).normalized()
+				ride_toe = (shin_up * cos(flex) + ahead * sin(flex)).rotated(shin_up, -s * deg_to_rad(8.0)).normalized()
+				toe_dir = ride_toe.slerp(stand_dir, st).normalized()
+				fz = -toe_dir
+				up_f = shin_up.slerp(u, st)
+				fy = (up_f - fz * up_f.dot(fz)).normalized()
+			ankle = (saddle.ride_pegs[i] * sc - (toe_dir * BALL - fy * SOLE) * k).lerp(on_bar, st)
+			kn = _ik(hip, ankle, _r("thigh"), _r("shin"), pole)
+			_place_seg("thigh%d" % i, hip, kn, -facing)
+			_place_seg("shin%d" % i, kn, ankle, -facing)
 		_place("foot%d" % i, ankle, Basis(fy.cross(fz).normalized(), fy, fz))
 		joints["hip%d" % i] = hip
 		joints["knee%d" % i] = kn
