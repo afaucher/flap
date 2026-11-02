@@ -53,12 +53,24 @@ func setup() -> void:
 	check(unmirrored == 0, "cards mirrored left and right (%d unmatched)" % unmirrored)
 	for tract in ["scapular", "flank", "rump", "vent"]:
 		check(rig.card_tracts.has(tract), "a %s tract" % tract)
+	# Down at the outline: two shells, each further out, drawn as next passes of the body material.
+	var shells: Array = []
+	var pass_m: Material = rig.body_texture_material.next_pass
+	while pass_m != null:
+		shells.append(pass_m)
+		pass_m = pass_m.next_pass
+	check(shells.size() == 2 and (shells[0] as ShaderMaterial).shader == BirdRig.DOWN_SHADER, "two down shells on the body (%d)" % shells.size())
+	if shells.size() == 2:
+		check(float(shells[1].get_shader_parameter("layer")) > float(shells[0].get_shader_parameter("layer")), "the second shell further out")
 	BirdRig.silhouette_cards = false
+	BirdRig.outline_down = false
 	var bare := BirdRig.new()
 	add_child(bare)
 	bare.build(BirdProfile.by_id("hawk"))
 	BirdRig.silhouette_cards = true
+	BirdRig.outline_down = true
 	check(bare.card_xforms.is_empty() and bare.get_node_or_null("Trunk/SilhouetteCards") == null, "cards switch off")
+	check(bare.body_texture_material.next_pass == null, "down switches off")
 	bare.queue_free()
 	# Light: flight feathers smoother and more translucent than the coverts (per row of the material), and the
 	# crow's glossier than the owl's velvety ones.

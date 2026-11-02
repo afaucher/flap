@@ -2,7 +2,7 @@ extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
-##       [--zoom <x>] [--ortho] [--light studio|flat] [--no-cards] [--shot <png> --shot-after <s>] [--measure <frames>]
+##       [--zoom <x>] [--ortho] [--light studio|flat] [--no-cards] [--no-down] [--shot <png> --shot-after <s>] [--measure <frames>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots. --measure prints the mean GPU render time and pose time over that many
 ## frames (after a warm-up) and quits: the plumage levels' cost (docs/research/feather_texture_study.md).
@@ -29,6 +29,7 @@ func _ready() -> void:
 	BirdRig.plain_feathers = not args.has("--feather-shader")
 	BirdRig.flat_perch = args.has("--flat-perch")
 	BirdRig.silhouette_cards = not args.has("--no-cards")
+	BirdRig.outline_down = not args.has("--no-down")
 	if Boot.arg_value(args, "--plumage") != "":
 		Plumage.level = int(Boot.arg_value(args, "--plumage"))
 	var sun_arg := Boot.arg_value(args, "--sun")
