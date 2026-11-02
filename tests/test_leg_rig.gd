@@ -80,6 +80,22 @@ func setup() -> void:
 		check((toe_back > 0.0) == (id == "owl"), id + " outer toe back only on the owl")
 		b.queue_free()
 		await frames(1)
+	# Flying, the skinned legs only pose their bones: a flapping bird in cruise (its body pitching with every beat)
+	# doesn't rebuild its trousers every tick -- they did, before the legs were skinned and locked to the body.
+	for id in ["hawk", "owl"]:
+		var ctl := ScriptedInput.new()
+		var fb := Bird.new()
+		add_child(fb)
+		fb.setup(BirdProfile.by_id(id), layout, ctl)
+		fb.fly_from(Vector3(0, 30, 0), Vector3.FORWARD, 12.0)
+		ctl.flap = true
+		await frames(60)
+		var n0 := fb.rig.legs.trouser_builds
+		await frames(120)
+		var built := fb.rig.legs.trouser_builds - n0
+		check(built <= 4, "%s flapping in cruise: trousers rebuilt %d times in 120 ticks (skinned: the bones move, not the mesh)" % [id, built])
+		fb.queue_free()
+		await frames(1)
 	LegRig.enabled = was
 	finish()
 
@@ -113,9 +129,9 @@ func _grip_fit(rig: BirdRig, tag: String) -> void:
 		check(worst_in > r0 * 0.5, "%s leg %d: no toe sinks into the bark (closest centreline %.4f over it, toe radius %.4f)" % [tag, i, worst_in, r0])
 
 
+## A mesh as drawn: the legs' are skinned on the GPU, so their vertices are deformed here the same way.
 func _arrays(mi: MeshInstance3D) -> Array:
-	var m := mi.mesh as ArrayMesh
-	return m.surface_get_arrays(0) if m != null and m.get_surface_count() > 0 else []
+	return LegRig.drawn_arrays(mi)
 
 
 ## Rows of a tube part as drawn: [vertex indices per row (n + 1 each, the last the seam copy)].
@@ -229,7 +245,10 @@ func _joins(rig: BirdRig, i: int, pose: String, seen: Dictionary) -> void:
 	for k in 4:
 		var rows := _rows(ps["toe%d" % k])
 		var root: PackedInt32Array = rows[0]
-		_on_pad(root, sa, pad_tris, pr, "%s: toe %d's base" % [tag, k])
+		# (the owl's outer toe, swung away from how its base was built, keeps its loop on the pad but not the pad's
+		# scale coordinates there: LegRig._build_rest builds it swung, as perched)
+		var swung := rig.body.zygo and k == 2 and absf(rig.toe_grip - lr.rest_swing) > 0.01
+		_on_pad(root, sa, pad_tris, pr, "%s: toe %d's base" % [tag, k], not swung)
 		var lp := PackedVector3Array()
 		for j in root.size() - 1:
 			lp.append(sv[root[j]] - foot)
@@ -393,7 +412,7 @@ static func _uv_diff(a: Vector2, b: Vector2, b2: Vector2) -> float:
 
 
 ## A ring of the skin mesh lies on its drawn foot pad, with the pad's colour and scale coordinates there.
-func _on_pad(row: PackedInt32Array, sa: Array, pad_tris: PackedInt32Array, pr: float, tag: String) -> void:
+func _on_pad(row: PackedInt32Array, sa: Array, pad_tris: PackedInt32Array, pr: float, tag: String, coords := true) -> void:
 	var sv: PackedVector3Array = sa[Mesh.ARRAY_VERTEX]
 	var sc: PackedColorArray = sa[Mesh.ARRAY_COLOR]
 	var suv: PackedVector2Array = sa[Mesh.ARRAY_TEX_UV]
@@ -406,7 +425,8 @@ func _on_pad(row: PackedInt32Array, sa: Array, pad_tris: PackedInt32Array, pr: f
 		worst[2] = maxf(worst[2], _uv_diff(suv[row[j]], at[1], at[2]))
 	check(worst[0] < pr * 0.04, "%s on the drawn pad (worst %.2f mm)" % [tag, worst[0] * 1000.0])
 	check(worst[1] < 0.02, "%s with the pad's colour (worst %.3f)" % [tag, worst[1]])
-	check(worst[2] < 0.25, "%s with the pad's scale coordinates (worst %.3f scales)" % [tag, worst[2]])
+	if coords:
+		check(worst[2] < 0.25, "%s with the pad's scale coordinates (worst %.3f scales)" % [tag, worst[2]])
 
 
 ## Every vertex normal of these rows faces out of its ring.

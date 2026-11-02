@@ -77,6 +77,8 @@ var look_dir := Vector3.FORWARD ## rig space, where the head looks
 var world_up := Vector3.UP      ## rig space, for head stabilisation
 var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var toe_grip := 0.0             ## 0 open .. 1 curled round a branch
+var leg_world := 1.0            ## the legs' frame: 1 held level in the world (perched, landing, reaching for a grip) ..
+                                ## 0 locked to the body (tucked up in cruising flight, as birds carry them)
 var grip_radius := 0.0          ## the branch under the feet (m; 0: none, or the ground): the detailed toes wrap it
 var lean := 0.0                 ## sitting: 0 the species' posture .. 1 the body level and the tail raised (to keep the
                                 ## tail and wingtips off what the bird sits on: BirdRig._posture)
@@ -1415,6 +1417,8 @@ func animate(t: Dictionary, dt: float) -> void:
 		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
 		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
 	grip_radius = float(t.get("grip_radius", 0.0)) if t.has_grip else 0.0
+	var lw_t := 1.0 if sitting or landing or flare > 0.2 or t.has_grip else 0.0
+	leg_world = lerpf(leg_world, lw_t, 1.0 - exp(-6.0 * dt))
 	Perf.add("rig.animate_logic", p0)
 	apply_pose()
 
@@ -1720,8 +1724,9 @@ func apply_pose() -> void:
 	# Legs: hip -> knee (a short femur, near horizontal in the world, hidden in the belly) -> ankle (bends
 	# aft, the bird's "backward knee") -> foot.
 	var frame := _world_frame()
-	var up_w: Vector3 = frame[0]
-	var fwd_h: Vector3 = frame[1]
+	var up_w: Vector3 = Vector3.UP.slerp(frame[0], leg_world).normalized()   # (in cruising flight, the body's own)
+	var fwd_h: Vector3 = Vector3.FORWARD.slerp(frame[1], leg_world)
+	fwd_h = (fwd_h - up_w * up_w.dot(fwd_h)).normalized()
 	for i in 2:
 		var hip: Vector3 = _hip[i]
 		var target: Vector3 = foot_targets[i]
