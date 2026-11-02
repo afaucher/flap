@@ -52,6 +52,35 @@ func setup() -> void:
 				best = minf(best, q.distance_to(v * rig._trunk.scale.x))
 			worst = maxf(worst, best)
 		check(worst < 1e-4, "%s neck starts on the trunk's front ring (%.5f m)" % [p.id, worst])
+		# ... and ends ON the head: every vertex of its last loop is a vertex of the head's surface (the head turned
+		# away a little, so the loop has to follow it).
+		rig.look_dir = Vector3(0.4, -0.1, -1.0).normalized()
+		rig.apply_pose()
+		var hm := (rig._head.get_node("HeadSurface") as MeshInstance3D).mesh as ArrayMesh
+		var hv := hm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var nv := (rig._neck_mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var head_worst := 0.0
+		for j in BirdRig.TRUNK_AROUND:
+			var target: Vector3 = rig._head.transform * rig._head_point(rig._neck_entry, -TAU * j / BirdRig.TRUNK_AROUND)
+			var best_n := INF
+			for q in nv:
+				best_n = minf(best_n, q.distance_to(target))
+			var best_h := INF
+			for q in hv:
+				best_h = minf(best_h, (rig._head.transform * q).distance_to(target))
+			head_worst = maxf(head_worst, maxf(best_n, best_h))
+		check(head_worst < 1e-4, "%s neck ends on the head's own vertices (%.5f m)" % [p.id, head_worst])
+		# The wing's surface starts on the body: its first loop lies on the trunk's surface.
+		rig.look_dir = Vector3.FORWARD
+		rig.fold = 0.0
+		rig.apply_pose()
+		var am := (rig._fairings[1][0] as MeshInstance3D).mesh as ArrayMesh
+		var av := am.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		var on_body := 0
+		for q in av:
+			if absf(rig.body.gap(q / rig._trunk.scale.x)) < rig.body.L * 0.005:
+				on_body += 1
+		check(on_body >= BirdRig.ARM_AROUND, "%s the wing's surface starts on the body (%d vertices on it)" % [p.id, on_body])
 		# Fixations average the species' mean.
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 3

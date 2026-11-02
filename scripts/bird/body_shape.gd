@@ -34,7 +34,9 @@ var L := 0.45
 var shoulder := Vector3.ZERO     ## right shoulder joint
 var hip := Vector3.ZERO          ## right hip joint (acetabulum)
 var tail_base := Vector3.ZERO    ## pygostyle
-var neck_base := Vector3.ZERO    ## where the neck leaves the trunk
+var neck_base := Vector3.ZERO    ## where the neck's bones leave the trunk
+var collar_z := 0.0               ## where the body's surface hands over to the neck's: near the breast's widest,
+                                 ## where the trunk runs nearly straight, so the neck carries on smoothly
 var femur := 0.0
 var tib := 0.0
 var tars := 0.0
@@ -75,6 +77,7 @@ static func for_profile(p: BirdProfile, wing: WingShape) -> BodyShape:
 	b.brow = d.brow
 	b._build_rings(float(d.depth))
 	b.neck_base.y = b.ring_at(b.neck_base.z)[0]
+	b.collar_z = -l * 0.19
 	return b
 
 

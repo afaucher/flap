@@ -172,13 +172,29 @@ static func disc_mesh(r: float, face: Color, rim: Color, skull := Vector3.ONE) -
 
 
 ## The disc's surface depth at (x, y) for disc radius fraction `s` (head space; -Z forward): the head's front
-## surface, raised 0.03 r at the centre rising to a 0.12 r ruff at the rim, back onto the head past it.
+## surface, raised 0.03 r at the centre rising to a 0.12 r ruff at the rim, easing back onto the head by 1.12 s.
 static func disc_z(x: float, y: float, s: float, r: float, skull: Vector3) -> float:
 	var q := 1.0 - pow(x / (skull.x * r), 2.0) - pow(y / (skull.y * r), 2.0)
 	var surf := -skull.z * r * sqrt(maxf(q, 0.0))
-	if s > 1.0:
-		return surf + 0.01 * r
-	return surf - r * (0.03 + 0.06 * pow(s, 3.0) + 0.03 * exp(-pow((s - 0.93) / 0.06, 2.0)))
+	var lift := (0.03 + 0.06 * pow(minf(s, 1.0), 3.0) + 0.03 * exp(-pow((s - 0.93) / 0.06, 2.0))) * (1.0 - smoothstep(1.0, 1.12, s))
+	return surf - r * lift
+
+
+## Where (x, y) (head space) falls in the heart-shaped disc: 0 at its centre, 1 on its rim.
+static func disc_s(x: float, y: float, r: float) -> float:
+	var q := Vector2(x, y + 0.1 * r)
+	if q.length() < 1e-6:
+		return 0.0
+	var best := -2.0
+	var rim := 1.0
+	for k in 96:
+		var t := TAU * k / 96.0
+		var o := Vector2(0.95 * r * sin(t), r * (0.75 * cos(t) - 0.25 * cos(2.0 * t)))
+		var c := o.normalized().dot(q.normalized())
+		if c > best:
+			best = c
+			rim = o.length()
+	return q.length() / maxf(rim, 1e-6)
 
 ## A fixation time (s): log-normal round `mean`, as raptor inter-saccade intervals are (docs §3.4).
 static func fixation(rng: RandomNumberGenerator, mean: float) -> float:
