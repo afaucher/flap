@@ -11,6 +11,9 @@ extends RefCounted
 ##        sparrow's bib
 ##   5  + marks along each feather from a small generated colour strip: dark tips, the dark trailing edge,
 ##        tail bands, bars, the sparrow's white wing bar (the only step with a shader, and it only sets colour)
+##   6  + feather texture (EXPERIMENT, docs/research/feather_texture_study.md): the strip read through a baked
+##        feather atlas (FeatherAtlas: shaft, barbs, spots, fringes, layer shadows; `TEXTURE` below), and small
+##        overlapping contour feathers on the body. Only the hawk has its own look so far.
 ## Below level 5 each feather is one flat colour: its strip averaged (bars and fringes read as a mid-tone).
 
 static var level := 5
@@ -79,6 +82,34 @@ const DATA := {
 			"lesser_bar_top": ["tip", "#eeeae0", 0.62], "greater_top": ["fringe", "#a0663a", 0.4], "tertial_top": ["fringe", "#b07a46", 0.4],
 			"primary_top": ["fringe", "#9a7a58", 0.15], "secondary_top": ["fringe", "#9a7a58", 0.15], "tail_top": ["fringe", "#8e7a62", 0.2],
 		},
+	},
+}
+## Level 6: how each species colours the feather atlas's masks (FeatherAtlas), per "group_side" (as `marks`)
+## over "default": `spot` [colour, amount, size 0..1] (the atlas's dark spots), `fringe` [colour, width]
+## (a pale or dark edge; width 1 = half a vane in), `shaft` (the rachis as a multiple of the vane colour:
+## > 1 paler), `detail` (barbs, splits, layer shadows; 0 off), `cup` (how far the shading normal leans across
+## the vane). `body`: the contour-feather tile -- `tile` (its size, share of the body length; 8 rows of 4),
+## `spot` [colour multiple, amount on the back, on the belly, size], `fringe` [colour, amount, width].
+const TEXTURE := {
+	"default": {
+		"default": {"spot": ["#000000", 0.0, 0.5], "fringe": ["#000000", 0.0], "shaft": 1.0, "detail": 1.0, "cup": 0.3},
+		"body": {"tile": 0.24, "spot": ["#808080", 0.0, 0.0, 0.5], "fringe": ["#ffffff", 0.0, 0.3]},
+	},
+	"hawk": {
+		"default": {"spot": ["#2a1c14", 0.0, 0.5], "fringe": ["#b39066", 0.0], "shaft": 1.1, "detail": 1.0, "cup": 0.35},
+		"lesser_top": {"spot": ["#2a1c14", 0.75, 0.32], "fringe": ["#9c7a56", 0.18]},
+		"greater_top": {"spot": ["#2a1c14", 0.8, 0.38], "fringe": ["#a0805a", 0.15]},
+		"tertial_top": {"spot": ["#33241a", 0.6, 0.35], "fringe": ["#a0805a", 0.1]},
+		"alula_top": {"fringe": ["#8a6c50", 0.1]},
+		"secondary_top": {"spot": ["#3a2a1e", 0.4, 0.3], "fringe": ["#a08a6c", 0.05]},
+		"primary_top": {"spot": ["#2e2018", 0.3, 0.3], "fringe": ["#8a7058", 0.04]},
+		"tail_top": {"shaft": 1.1},
+		"under_covert_under": {"spot": ["#8a6a50", 0.3, 0.3], "shaft": 0.95, "detail": 0.6},
+		"greater_under": {"detail": 0.6},
+		"lesser_under": {"detail": 0.6},
+		"primary_under": {"shaft": 0.95},
+		"secondary_under": {"shaft": 0.95},
+		"body": {"tile": 0.18, "spot": ["#8c7361", 0.55, 0.3, 0.3], "fringe": ["#c0a07a", 0.25, 0.25]},
 	},
 }
 const STRIP := 64   ## texels along a feather in the mark strip
@@ -192,6 +223,23 @@ static func strip(id: String) -> ImageTexture:
 
 static func row_index(g: String, under: bool) -> int:
 	return GROUPS.find(g) * 2 + (1 if under else 0)
+
+
+## Level 6: one strip row's feather-texture look (TEXTURE), its entry over the species' and the global defaults.
+static func texture_look(id: String, g: String, under: bool) -> Dictionary:
+	var sp: Dictionary = TEXTURE.get(id, TEXTURE["default"])
+	var out: Dictionary = TEXTURE["default"]["default"].duplicate()
+	out.merge(sp.get("default", {}), true)
+	var key := "%s_%s" % [g, "under" if under else "top"]
+	if not sp.has(key) and g == "lesser_bar":
+		key = "lesser_%s" % ("under" if under else "top")
+	out.merge(sp.get(key, {}), true)
+	return out
+
+
+## Level 6: the species' contour-feather tile look (TEXTURE "body").
+static func body_texture(id: String) -> Dictionary:
+	return TEXTURE.get(id, TEXTURE["default"]).get("body", TEXTURE["default"]["body"])
 
 
 ## How much a primary darkens (the wingtip "fingers"), from level 3: [top, under] multipliers.
