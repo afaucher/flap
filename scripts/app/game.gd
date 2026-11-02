@@ -16,6 +16,7 @@ extends Node3D
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
 ##   --no-rider         no war tack on any bird (the menu's Flight)
 ##   --no-far-blur      no softening of the far wood (ForestLight.far_blur; F5 toggles in game)
+##   --hud <style>      dev (default) | classic | centre: the HUD's layout (FlightHud.style)
 
 var layout: ArenaLayout
 var arena: ArenaBuilder
@@ -44,6 +45,8 @@ func _ready() -> void:
 	rider = not args.has("--no-rider")
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
+	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
+		FlightHud.style = Boot.arg_value(args, "--hud")
 	if args.has("--rig-tick"):
 		Bird.rig_in_process = false
 	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; project.godot sets 3)
@@ -156,7 +159,8 @@ func _physics_process(_dt: float) -> void:
 	if bird == null:
 		return
 	var p0 := Perf.t()
-	arena.show_candidate(bird.candidate, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
+	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
+	arena.show_candidate(mark, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
 	Perf.add("game.candidate", p0)
 
 
