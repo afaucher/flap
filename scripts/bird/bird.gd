@@ -67,6 +67,8 @@ var _land_vel := Vector3.ZERO
 var _land_from_basis := Basis()
 var _grace := 0.0
 var _rig_dt := 0.0
+var _rig_due := 0.0   ## simulated time since the rig was last posed
+var _rig_frame := -1  ## the rendered frame the rig was last posed in
 var _rig_tick := 0
 var _pass_body: Node = null
 var _pass_left := 0.0
@@ -146,9 +148,18 @@ func _physics_process(dt: float) -> void:
 		_state_age += dt
 	_push_left = maxf(0.0, _push_left - dt)
 	Perf.add("bird.move", p0)
-	p0 = Perf.t()
-	_animate_rig(dt)
-	Perf.add("bird.rig", p0)
+	# The rig is posed at most once per rendered frame, on its first physics tick, for the time since it was last
+	# posed. A frame catching up runs several ticks but draws once: posing on each was wasted work, and under load it
+	# multiplied with the catch-up ticks, so one slow frame made the next slower. It stays in the physics tick, where
+	# the feathers' transforms are interpolated from tick to tick; a frame of one tick is posed as before.
+	_rig_due += dt
+	var frame := Engine.get_process_frames()
+	if frame != _rig_frame:
+		_rig_frame = frame
+		p0 = Perf.t()
+		_animate_rig(_rig_due)
+		_rig_due = 0.0
+		Perf.add("bird.rig", p0)
 
 
 # --- Flying ------------------------------------------------------------------------------------
@@ -502,8 +513,8 @@ func _grip_point() -> Variant:
 	return null
 
 
-## Pose the rig (about 150 us of feather maths per bird): every tick up close, every 2nd tick past 30 m,
-## every 4th past 60 m from the camera; not at all while it's hidden.
+## Pose the rig for `dt` of simulated time: every time up close, every 2nd time past 30 m, every 4th past 60 m from
+## the camera; not at all while it's hidden.
 func _animate_rig(dt: float) -> void:
 	if rig == null or not rig.visible:
 		return

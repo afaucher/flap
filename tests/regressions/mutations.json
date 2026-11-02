@@ -1032,6 +1032,76 @@
   ]
  },
  {
+  "id": "arm-loft-rebuilt-every-pose",
+  "bug": "The arm wing's surface was rebuilt through SurfaceTool every pose, with all its colours and coordinates looked up again: most of a flying bird's wing cost (2026-11-02).",
+  "tests": [
+   "test_loft_mesh"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tvar full: bool = built.is_empty() or bool(built.flip) != flip or not lm.fits(rows.size() + ROOT_ROWS, ARM_AROUND)",
+    "replace": "\tvar full: bool = true"
+   }
+  ]
+ },
+ {
+  "id": "neck-loft-rebuilt-every-pose",
+  "bug": "The neck's surface was rebuilt through SurfaceTool every pose, its colours looked up again (2026-11-02).",
+  "tests": [
+   "test_loft_mesh"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tvar full := key != _neck_key or not _neck_loft.fits(NECK_ROWS, TRUNK_AROUND)",
+    "replace": "\tvar full := true"
+   }
+  ]
+ },
+ {
+  "id": "loft-pole-unsmoothed",
+  "bug": "A loft built or moved in place left a ring collapsed to a point (a closed end) with each vertex's own normal, where SurfaceTool sums them as one vertex: a faceted tip (2026-11-02).",
+  "tests": [
+   "test_loft_mesh"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/loft_mesh.gd",
+    "find": "\t\tif (row[0] as Vector3).distance_squared_to(row[n / 2]) < 1e-14:",
+    "replace": "\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "feather-flex-not-reaching-shader",
+  "bug": "With the bend moved from each feather's instance data to one uniform (its share x the wing's flex), a wing whose flex didn't reach the material would stop bending its feathers (2026-11-02).",
+  "tests": [
+   "test_feather_texture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tmarks_material.set_shader_parameter(\"flex\", flex)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "rig-posed-every-tick",
+  "bug": "The rig was posed on every physics tick: a frame catching up ran it several times though it drew once, multiplying the rig's cost under load -- 20 birds spiralled to 8 ticks and 290 ms a frame (2026-11-02).",
+  "tests": [
+   "test_rig_pacing"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif frame != _rig_frame:\n",
+    "replace": "\tif true:\n"
+   }
+  ]
+ },
+ {
   "id": "foot-level-when-tucked",
   "bug": "The foot pad and toes were always laid out level (the world's frame, or the body's in cruising flight), never with the tarsus: tucked in flight the toes pointed forward off a tarsus pointing back, the feet on backwards (2026-11-02).",
   "tests": [

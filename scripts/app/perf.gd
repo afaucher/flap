@@ -94,7 +94,7 @@ func _write() -> void:
 	var frames := _col("frame_ms")
 	var med := _pct(frames, 0.5)
 	lines.append("Flap frame profile: %d frames over %.1f s (after %.0f s warm-up), %s" % [n, seconds, warmup, Engine.get_version_info().string])
-	lines.append("display %d Hz, physics %d Hz, vsync %s, max_fps %d" % [int(DisplayServer.screen_get_refresh_rate()), Engine.physics_ticks_per_second, DisplayServer.window_get_vsync_mode(), Engine.max_fps])
+	lines.append("display %d Hz, physics %d Hz (%s, at most %d ticks a frame), vsync %s, max_fps %d" % [int(DisplayServer.screen_get_refresh_rate()), Engine.physics_ticks_per_second, ProjectSettings.get_setting("physics/3d/physics_engine"), Engine.max_physics_steps_per_frame, DisplayServer.window_get_vsync_mode(), Engine.max_fps])
 	lines.append("")
 	lines.append("Frame pacing (wall time between frames, ms): mean %.2f  median %.2f  p95 %.2f  p99 %.2f  max %.2f" % [_mean(frames), med, _pct(frames, 0.95), _pct(frames, 0.99), _pct(frames, 1.0)])
 	var hitch := 0
