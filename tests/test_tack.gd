@@ -30,6 +30,7 @@ func setup() -> void:
 			_rider(id, pose, rig, tack)
 			_head(id, pose, rig, tack)
 			_footing(id, pose, tack)
+			_arms(id, pose, tack)
 			_scarf(id, pose, rig, tack)
 			_goggles(id, pose, tack)
 		_wings(id, rig, tack)
@@ -147,6 +148,30 @@ func _goggles(id: String, pose: String, tack: Tack) -> void:
 		check(ends[0] > 0 and ends[1] > 0, "%s %s: the goggle strap reaches both cups" % [id, pose])
 	check(behind > 0, "%s %s: the goggle strap goes round the back" % [id, pose])
 	eq(sunk, 0, "%s %s: the goggle strap lies on the helmet, not in it" % [id, pose])
+
+
+## The arms stay out of the body: along each upper arm (past the shoulder) and forearm, no point comes within
+## the torso's girth of its axis (pelvis to chest), and the hands stay in front of the chest.
+func _arms(id: String, pose: String, tack: Tack) -> void:
+	var r := tack.rider
+	var j := r.joints
+	var pel: Vector3 = j.pelvis
+	var che: Vector3 = j.chest
+	var girth := 11.0 * r.k   # (the coat's half depth, about; its half width is ~18 but arms hang beside it)
+	for i in 2:
+		var sh: Vector3 = j["shoulder%d" % i]
+		var el: Vector3 = j["elbow%d" % i]
+		var ha: Vector3 = j["hand%d" % i]
+		var worst := INF
+		for u in range(3, 11):
+			var p := sh.lerp(el, u / 10.0)
+			worst = minf(worst, p.distance_to(Geometry3D.get_closest_point_to_segment(p, pel, che)))
+		for u in 11:
+			var p := el.lerp(ha, u / 10.0)
+			worst = minf(worst, p.distance_to(Geometry3D.get_closest_point_to_segment(p, pel, che)))
+		check(worst > girth, "%s %s: arm %d stays out of the chest (%.1f real cm from the spine)" % [id, pose, i, worst / r.k])
+		var front := -(r.get_node("pelvis") as MeshInstance3D).transform.basis.z
+		check((ha - che).dot(front) > 0.0, "%s %s: hand %d in front of the chest" % [id, pose, i])
 
 
 ## Standing on the footrest, each boot as drawn rests on the bar: its sole within a centimetre of the bar's top
@@ -268,14 +293,19 @@ func _rider(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
 	var fwd := -(r.get_node("pelvis") as MeshInstance3D).transform.basis.z
 	var standing := r.stand > 0.5
 	if pose == "folded":
-		check(rad_to_deg(torso.angle_to(up)) < 15.0, "%s perched: the rider is upright (%.0f deg off)" % [id, rad_to_deg(torso.angle_to(up))])
+		var off := rad_to_deg(torso.angle_to(up))
+		if standing:
+			# (leaning back from the hand loops, away from the bird, no further than a lineman does)
+			check(off < 30.0 and torso.dot(tack.saddle.seat_normal) >= (up * torso.length()).dot(tack.saddle.seat_normal) - 1e-6, "%s perched: the rider stands, leaning back from the bird (%.0f deg off upright)" % [id, off])
+		else:
+			check(off < 15.0, "%s perched: the rider is upright (%.0f deg off)" % [id, off])
 		var tilt := rad_to_deg(up.angle_to(tack.saddle.seat_normal))
 		if tilt >= Tack.STAND_PITCH.y or tilt <= Tack.STAND_PITCH.x:
 			eq(standing, tilt >= Tack.STAND_PITCH.y, "%s perched (back %.0f deg): %s" % [id, tilt, "stands on the footrest (a steep back)" if tilt >= Tack.STAND_PITCH.y else "kneels up (a shallow back)"])
 	else:
 		var lean := rad_to_deg(torso.angle_to(tack.saddle.seat_normal))
 		check(lean > 40.0 and lean < 70.0, "%s flying: the rider tucks down over the launcher (%.0f deg)" % [id, lean])
-		check((j.pelvis as Vector3).distance_to(tack.saddle.seat_point) < r.height * 0.15, "%s flying: on the seat" % id)
+		check((j.pelvis as Vector3).distance_to(tack.saddle.seat_point * tack.saddle.scale.x) < r.height * 0.15, "%s flying: on the seat" % id)
 	for i in 2:
 		var side := "left" if i == 0 else "right"
 		var hip: Vector3 = j["hip%d" % i]
@@ -284,11 +314,12 @@ func _rider(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
 		var flex := 180.0 - rad_to_deg((hip - kn).angle_to(an - kn))
 		check(flex >= 0.0 and flex <= 165.0, "%s %s %s knee bends %.0f deg (0..165)" % [id, pose, side, flex])
 		check((kn - (hip + an) * 0.5).dot(fwd) > 0.0, "%s %s %s knee points forward (hinges like a knee)" % [id, pose, side])
-		var support: Vector3 = tack.saddle.pegs[i] if standing else tack.saddle.heels[i]
+		var sc := tack.saddle.scale.x   # (the saddle rides the plumage's fluff: compare with it as drawn)
+		var support: Vector3 = (tack.saddle.pegs[i] if standing else tack.saddle.heels[i]) * sc
 		check(an.distance_to(support) < r.height * 0.15, "%s %s %s foot on its support (%.1f mm)" % [id, pose, side, an.distance_to(support) * 1000.0])
 		var sh: Vector3 = j["shoulder%d" % i]
 		var reach := r._r("upper_arm") + r._r("forearm")
-		var hold: Vector3 = tack.saddle.holds[i] if standing else tack.saddle.grips[i]
+		var hold: Vector3 = (tack.saddle.holds[i] if standing else tack.saddle.grips[i]) * sc
 		check(sh.distance_to(hold) < reach * 1.02, "%s %s %s hand reaches its %s (%.1f of %.1f mm)" % [id, pose, side, "hand loop" if standing else "grip", sh.distance_to(hold) * 1000.0, reach * 1000.0])
 	# The rider's body clears the launcher (the torso, a capsule from the pelvis to the chest).
 	var pel: Vector3 = j.pelvis

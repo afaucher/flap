@@ -823,5 +823,34 @@
     "replace": "(ex[0] as Vector3).distance_to(tr.e) >= 0.0"
    }
   ]
+ },
+ {
+  "id": "rider-arms-in-chest",
+  "bug": "Standing perched on an owl, the rider stood so close to the hand loops that the forearms folded back through the chest (2026-11-02).",
+  "tests": [
+   "test_tack",
+   "test_rider_clearance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tfor q in 31:\n",
+    "replace": "\t\tfor q in 1:\n"
+   }
+  ]
+ },
+ {
+  "id": "mounts-into-rider",
+  "bug": "Weapon mounts close beside the seat ran through the rider's thighs and elbows (2026-11-02).",
+  "tests": [
+   "test_rider_clearance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "const MOUNT_X := 44.0 ",
+    "replace": "const MOUNT_X := 24.0 "
+   }
+  ]
  }
 ]

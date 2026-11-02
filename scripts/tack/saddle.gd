@@ -421,7 +421,7 @@ const POD_KINDS := ["rockets", "seekers"]
 const POD_ROUNDS := {"rockets": 3, "seekers": 2}
 const DEFAULT_LOADOUT: Array[String] = ["rockets", "seekers"]   ## left, right
 const DEFAULT_TILT := 3.0       ## deg
-const MOUNT_X := 40.0           ## real cm out from the spine: clear of the rider's elbows and knees
+const MOUNT_X := 44.0           ## real cm out from the spine: clear of the rider's elbows and knees
 const MOUNT_Z := -38.0          ## real cm, the trunnion: beside the rider's shoulders in the tuck
 const CLEAR_AOA := 5.0          ## deg: the line of fire is checked along a path this far below the body's axis
 const MOUNT_RAISE := 30.0       ## real cm: the highest a mount stands over the firing box (no stilts)
@@ -558,7 +558,7 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 	var heads := _heads()
 	var hr := rig_body.head_r * (1.0 + CLEAR_HEAD)
 	var down := Basis(Vector3.RIGHT, -deg_to_rad(CLEAR_AOA)) * Vector3.FORWARD
-	var pivot := Vector3(foot.x, maxf(foot.y + 15.0 * k, y0 - 12.0 * k), foot.z)   # (no lower than the pod clears the skirt)
+	var pivot := Vector3(foot.x, maxf(foot.y + 15.0 * k, y0), foot.z)   # (no lower than the firing box: above the rider's knees and elbows)
 	var top := y0 + MOUNT_RAISE * k
 	for it in 240:
 		var xf := Transform3D(Basis(Vector3.RIGHT, tilt), pivot)
