@@ -1,0 +1,551 @@
+<title>Flap Combat Concepts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the Flap design-sheet family (wing and body rig plans): a field plate drawn as an engineering sheet; here the figures are mock game frames. */
+:root {
+  --bg: #f2f4f1;
+  --panel: #e7ebe6;
+  --ink: #1d2827;
+  --muted: #5d6a67;
+  --rule: #c6cec9;
+  --accent: #b5482e;
+  --ok: #2f7d55;
+  --display: "Archivo Narrow", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131918; --panel: #1b2321; --ink: #e2e9e5; --muted: #98a6a1; --rule: #33403c; --accent: #ef7a5c; --ok: #5cc28c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131918; --panel: #1b2321; --ink: #e2e9e5; --muted: #98a6a1; --rule: #33403c; --accent: #ef7a5c; --ok: #5cc28c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 48px; }
+header { display: grid; gap: 8px; }
+.eyebrow { font: 600 12px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(32px, 5vw, 48px)/1.05 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 25px/1.15 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 600 17px/1.2 var(--display); margin: 0; letter-spacing: .02em; }
+p { margin: 0; max-width: 70ch; }
+ul, ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 74ch; }
+section { display: grid; gap: 16px; }
+.lede { font-size: 18px; color: var(--muted); max-width: 72ch; }
+.table-wrap { overflow-x: auto; border-top: 2px solid var(--ink); }
+table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); }
+th { font: 600 12px/1.3 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td code, p code, li code { font: 400 13px var(--mono); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px 32px; }
+.two > * { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; font: 500 13px var(--display); letter-spacing: .04em; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.seg button, .btn { font: 600 13px/1 var(--display); letter-spacing: .05em; padding: 9px 12px; background: transparent; color: var(--muted); border: 0; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.btn { border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.boards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr)); gap: 28px; }
+.board { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.board canvas { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border-radius: 3px; background: #10151a; }
+.board .tag { font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { width: 26px; height: 14px; border-radius: 2px; border: 1px solid var(--rule); }
+details { border-top: 1px solid var(--rule); padding-top: 8px; }
+summary { cursor: pointer; font: 600 13px var(--display); letter-spacing: .04em; color: var(--muted); }
+.prompt { font: 400 13px/1.5 var(--mono); background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 10px 12px; margin-top: 8px; white-space: pre-wrap; user-select: all; }
+.copy { margin-top: 8px; }
+.steps { list-style: none; padding: 0; counter-reset: s; gap: 12px; }
+.steps li { display: grid; grid-template-columns: 30px 1fr; gap: 2px 10px; }
+.steps li::before { counter-increment: s; content: counter(s); font: 700 21px/1 var(--display); color: var(--accent); grid-row: span 2; }
+.steps li p { color: var(--muted); font-size: 15px; }
+.note { font-size: 14px; color: var(--muted); }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Flap · design sheet · combat</div>
+    <h1>Combat concepts</h1>
+    <p class="lede">Two ways birds could fight in Flap, what each would ask of the game we already have, how to make small fast targets readable, and three art directions with mock frames of what a fight might look like in each.</p>
+  </header>
+
+  <section aria-labelledby="two">
+    <h2 id="two">Two ways to fight</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Physical: talons and bodies</th><th>Ranged: augmented birds</th></tr></thead>
+        <tbody>
+          <tr><td>The fight</td><td>Strikes, grapples, steals and snatches. You have to get within a body length of the target at nearly its speed.</td><td>Short-range weapons fitted to the bird: micro-rockets, flak, seeker darts, a pin laser. Ranges of 10–40 m keep it a dogfight.</td></tr>
+          <tr><td>How often contact lands</td><td>Rarely. Most passes miss, and a hit is an event.</td><td>Often. Many shots, few kills; the fight is about positioning.</td></tr>
+          <tr><td>Skill it rewards</td><td>Matching speed and line, approaching unseen, timing the reach.</td><td>Energy management, leading the target, cutting the corner, rationing ammo.</td></tr>
+          <tr><td>What we already have</td><td>The catch envelope, perch assist, the energy model, the AI's approach planner. A snatch is a landing on a moving perch.</td><td>The same flight model and AI, the lab for testing; nothing for projectiles, damage or ammo yet.</td></tr>
+          <tr><td>New systems</td><td>Prey and their escape, carrying weight, a grapple contest, a stun.</td><td>Projectiles and fuses, a lead indicator, damage, ammo and the nest, a weapons HUD.</td></tr>
+          <tr><td>Tone</td><td>Nature film. Fits the greybox and the realistic plumage.</td><td>Needs a fiction: nanobot crows or gene-edited bloodsport mounts.</td></tr>
+          <tr><td>Risk</td><td>Contact may feel too rare to be fun without assists.</td><td>A big pivot in scope and tone; fights may drift into an aircraft game with feathers.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="phys">
+    <h2 id="phys">Physical: borrow what birds really do</h2>
+    <p>Real raptors and corvids already have a combat vocabulary. Each behaviour becomes one mechanic, and most reuse code that exists.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Behaviour</th><th>In nature</th><th>Mechanic</th><th>Built from</th></tr></thead>
+        <tbody>
+          <tr><td>Ground snatch</td><td>A hawk drops on a vole; the vole bolts when the shadow crosses it.</td><td>Prey on the ground or a branch. You need to arrive inside the talon reach while moving under a snatch speed. Prey flee from a shadow or a visible approach, so come in low, from the sun, or from behind cover.</td><td>The catch envelope and perch assist, with a faster speed limit than landing.</td></tr>
+          <tr><td>Stoop strike</td><td>A peregrine hits prey with its feet at the bottom of a dive.</td><td>A high-energy pass. A hit knocks the target into a short stun and tumble (loss of control, height lost). Miss and you've spent your height.</td><td>The stall and stun states, the dive band.</td></tr>
+          <tr><td>Talon grapple</td><td>Eagles lock feet and cartwheel, letting go before the ground.</td><td>Both birds tumble together. A short contest of flaps and pulls decides who breaks free on top. Hold on too long and both hit the ground.</td><td>A new two-bird state; the energy model pays for it.</td></tr>
+          <tr><td>Stealing food</td><td>Eagles chase ospreys until they drop the fish; frigatebirds harass boobies.</td><td>A bird carrying prey is heavier, so its stall speed and flapping cost rise. Chase it, strike it, and it drops the prey to catch mid-air or on the ground. Carry food home to the nest to score.</td><td>Mass in the flight model already drives stall speed and power.</td></tr>
+          <tr><td>Mobbing</td><td>Crows dive at a hawk until it leaves.</td><td>Small birds harass a raptor. Each close pass drains its stamina and spoils its strikes. It's a way for a sparrow to fight a hawk.</td><td>The energy model's stamina.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>To keep contact hard and rare without making it random, a hit uses the same rule as a perch catch. The target must be inside the talon reach, measured relative to your flight line, while the closing speed is inside a window. The window is wide for a stoop strike, narrow for a snatch and narrowest for a grapple. Prey see you coming, and AI targets break when you close.</p>
+  </section>
+
+  <section aria-labelledby="ranged">
+    <h2 id="ranged">Ranged: short weapons that make you chase</h2>
+    <p>Keep every weapon short-ranged and slow enough to dodge, so the fight stays a pursuit: you follow, cut inside the turn, and fire when the shot is set up.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Weapon</th><th>Range</th><th>Flight</th><th>Beats it</th><th>Why it makes you chase</th></tr></thead>
+        <tbody>
+          <tr><td>Micro-rockets, proximity fuse</td><td class="num">8–30 m</td><td>40 m/s, unguided; bursts within 1.5 m</td><td>A hard turn as it arrives</td><td>You have to lead the target, so you have to be on its line.</td></tr>
+          <tr><td>Seeker darts</td><td class="num">10–40 m</td><td>30 m/s; locks after 1 s in a 15° cone; turns at 1.5× a hawk's rate</td><td>Out-turning it (sparrow, crow) or breaking into it</td><td>The lock needs you behind the target for a full second.</td></tr>
+          <tr><td>Flak</td><td class="num">set 15 or 25 m</td><td>Bursts at its set range into a cloud that lasts 1.5 s</td><td>Changing height</td><td>Area denial: you place it across their path, so you need to read where they're going.</td></tr>
+          <tr><td>Pin laser</td><td class="num">≤ 12 m</td><td>Instant; burns after 0.4 s on target; a heat budget</td><td>Keeping out of its cone</td><td>Only works from close on the tail. It rewards following above everything else.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="two">
+      <div>
+        <h3>The nest</h3>
+        <p>Ammo is a handful of rounds. You restock at your home nest, which is also where repairs happen and food is scored. That gives each fight a rhythm: sortie, engage, break off, return. Raiding someone else's nest becomes a goal in itself.</p>
+      </div>
+      <div>
+        <h3>Weight</h3>
+        <p>Weapons are payload. A full load adds 10–15% to the bird's mass, which raises stall speed and the cost of flapping. A fresh bird is sluggish; a bird with an empty rack flies like itself again.</p>
+      </div>
+      <div>
+        <h3>Damage you can see</h3>
+        <p>A hit knocks feathers out. The rig already lays out every feather, so a hit hides the struck ones. The flight model loses that wing area, and the bird rolls toward its damaged side. You can read the damage from behind and feel it in the stick. Feathers grow back at the nest.</p>
+      </div>
+      <div>
+        <h3>Energy fighting</h3>
+        <p>Height is stored speed. A falcon wins by diving through, firing, and climbing away. A sparrow wins by turning inside the dart. The species differences we already simulate become fighting styles.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="see">
+    <h2 id="see">Seeing the fight</h2>
+    <p>Targets are small and fast. At 20 m a crow is a few pixels wide, and you can't judge its turn from its body alone. These aids help in both modes.</p>
+    <div class="two">
+      <div>
+        <h3>Wingtip trails: yes</h3>
+        <ul>
+          <li>Two ribbons, one from each wingtip, showing the last second of flight. A turn shows as a curve before the bird's attitude reads.</li>
+          <li>They fade with age and narrow toward the tail. They thicken in a hard pull, since real wingtip vortices get stronger with lift.</li>
+          <li>Invisible within 4 m and fully shown by 15 m, so they help at range without cluttering a close fight.</li>
+          <li>On for other birds by default, coloured by side (rival, ally, prey); optional for your own bird.</li>
+          <li>Each theme draws them its own way: pale vapour in the field, glowing nanite streams, cloth streamers on bloodsport mounts.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Focus mode</h3>
+        <ul>
+          <li>Hold the right trigger or right mouse button: the field of view narrows from about 70° to 40°, and the camera swings to keep you and the nearest target in frame.</li>
+          <li>Steering eases a little while held. A bracket marks the target with its range and closing speed.</li>
+          <li>In ranged mode, a lead marker shows where to aim for each weapon. In physical mode, it shows the talon reach and the snatch window instead.</li>
+          <li>Off-screen arrows at the screen edge for anything tracked, and a rising whoosh as a threat closes from behind.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="art">
+    <h2 id="art">Art directions, in game</h2>
+    <p class="note">These frames are drawn live in the page as mock-ups of the chase camera, not painted art. Each has a prompt you can paste into an image generator for concept paintings. Use the controls to compare trail lengths and focus mode.</p>
+    <div class="controls" role="group" aria-label="Mock frame controls">
+      <span>Trails</span>
+      <span class="seg" id="trail-seg">
+        <button type="button" id="trail-0" data-len="0" aria-pressed="false">Off</button>
+        <button type="button" id="trail-05" data-len="0.5" aria-pressed="false">0.5 s</button>
+        <button type="button" id="trail-1" data-len="1" aria-pressed="true">1 s</button>
+        <button type="button" id="trail-2" data-len="2" aria-pressed="false">2 s</button>
+      </span>
+      <span>Focus</span>
+      <span class="seg" id="focus-seg">
+        <button type="button" id="focus-off" data-focus="0" aria-pressed="true">Off</button>
+        <button type="button" id="focus-on" data-focus="1" aria-pressed="false">On</button>
+      </span>
+      <button type="button" class="btn" id="play">Play</button>
+    </div>
+    <div class="boards">
+      <figure class="board" style="margin:0">
+        <div class="tag">Field · physical</div>
+        <canvas id="c-snatch" width="960" height="540" aria-label="Mock frame: a hawk stooping on a vole in a clearing, the talon reach marked on the ground"></canvas>
+        <h3>The snatch</h3>
+        <p class="note">Your hawk dives on a vole in the clearing. The ring on the ground is the talon reach at your current speed; the readout is your closing speed against the snatch window. A crow mobbing you leaves pale vapour trails.</p>
+        <div class="chips"><i class="chip" style="background:#cdd9e2"></i><i class="chip" style="background:#7e8f74"></i><i class="chip" style="background:#5a3e2b"></i><i class="chip" style="background:#f1e7d6"></i><i class="chip" style="background:#1c1c22"></i></div>
+        <details><summary>Image prompt</summary><div class="prompt" id="p1">Third-person chase view behind a red-tailed hawk diving at a vole in a forest clearing, late morning light, realistic plumage with a brick-red tail and pale underwings, wings half-folded in a stoop, a crow harassing from the left leaving faint white wingtip vapour trails, sparse tall trunks, soft haze, naturalistic colour, cinematic game screenshot, 16:9</div><button type="button" class="btn copy" data-for="p1">Copy prompt</button></details>
+      </figure>
+      <figure class="board" style="margin:0">
+        <div class="tag">Field · physical</div>
+        <canvas id="c-steal" width="960" height="540" aria-label="Mock frame: chasing an osprey carrying a fish through the trees"></canvas>
+        <h3>The steal</h3>
+        <p class="note">An osprey labours with a fish, heavier and slower to climb. You close from above and behind; focus mode brackets it with range and closing speed. A strike makes it drop the fish.</p>
+        <div class="chips"><i class="chip" style="background:#b9cfe0"></i><i class="chip" style="background:#6d7c68"></i><i class="chip" style="background:#4a3a2e"></i><i class="chip" style="background:#f6f4ef"></i><i class="chip" style="background:#9fb6c4"></i></div>
+        <details><summary>Image prompt</summary><div class="prompt" id="p2">Chase-camera game screenshot: an eagle pursuing an osprey that carries a silver fish in its talons between tall pine trunks, the osprey struggling with the weight, both birds leaving faint curved wingtip vapour trails, overcast soft light, realistic feathers, a minimal targeting bracket around the osprey with range readout, 16:9</div><button type="button" class="btn copy" data-for="p2">Copy prompt</button></details>
+      </figure>
+      <figure class="board" style="margin:0">
+        <div class="tag">Nanobot infestation · ranged</div>
+        <canvas id="c-nano" width="960" height="540" aria-label="Mock frame: augmented crows fighting at dusk with micro-rockets, flak and a laser"></canvas>
+        <h3>Nanite crows</h3>
+        <p class="note">Dusk over an infected wood. The crows' feather shafts glow where the nanites run, and their trails are nanite streams. A micro-rocket curves toward the lead marker, flak blooms across the target's path, and the rack shows rockets left and laser heat.</p>
+        <div class="chips"><i class="chip" style="background:#141a2b"></i><i class="chip" style="background:#3a2a3f"></i><i class="chip" style="background:#1c1c22"></i><i class="chip" style="background:#3ee6d4"></i><i class="chip" style="background:#ff8a3d"></i></div>
+        <details><summary>Image prompt</summary><div class="prompt" id="p3">Dusk game screenshot, chase camera behind a black crow augmented with nanotechnology, glowing cyan circuit lines along its feather shafts, chasing another nanite crow through dark trees with cyan glowing growths, tiny rocket with a smoke trail curving toward the target, orange flak bursts, cyan particle wingtip trails, minimal sci-fi HUD with ammo pips and a lead marker, moody purple and teal palette, 16:9</div><button type="button" class="btn copy" data-for="p3">Copy prompt</button></details>
+      </figure>
+      <figure class="board" style="margin:0">
+        <div class="tag">Bloodsport · physical, with riders</div>
+        <canvas id="c-blood" width="960" height="540" aria-label="Mock frame: giant ridden birds jousting through a canyon at sunset"></canvas>
+        <h3>The canyon joust</h3>
+        <p class="note">Gene-edited giants, ten metres across, ridden through a canyon course. Birds that big glide and soar more than they flap, so updrafts and height matter. Riders trail banners from the tail, a lance pass knocks a rider loose, and the course runs through ring gates.</p>
+        <div class="chips"><i class="chip" style="background:#f3b06a"></i><i class="chip" style="background:#7b4a6e"></i><i class="chip" style="background:#6b2f24"></i><i class="chip" style="background:#c8202a"></i><i class="chip" style="background:#e8c547"></i></div>
+        <details><summary>Image prompt</summary><div class="prompt" id="p4">Epic game screenshot at sunset: a giant gene-edited eagle with a ten-metre wingspan ridden by an armoured human holding a long lance, flying through a red sandstone canyon toward a rival rider on another giant bird, long red and gold banners streaming from the birds' tails, a ring gate with flags ahead, dust and warm backlight, crowd stands carved into the cliff, chase camera, 16:9</div><button type="button" class="btn copy" data-for="p4">Copy prompt</button></details>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="rec">
+    <h2 id="rec">Recommendation</h2>
+    <p>Start with physical combat in the realistic look. It fits the game we have, and everything it needs also serves a ranged mode later: tracking a target, judging closing speed, readable trails, a focus camera, hits that change how a bird flies. Prototype ranged weapons in the bird lab once those exist, before deciding on the pivot.</p>
+    <ol class="steps">
+      <li><h3>Wingtip trails and focus mode</h3><p>Cheap, and they help with the flying we already have: following AI birds and lining up landings.</p></li>
+      <li><h3>Ground prey and the snatch window</h3><p>Voles in the clearing that bolt from shadows; the catch envelope with a faster speed limit. The first moment of combat.</p></li>
+      <li><h3>Carrying and stealing</h3><p>Prey adds mass; a strike makes it drop. Food carried home to the nest scores. That makes a full loop.</p></li>
+      <li><h3>Strikes, stun and feather damage</h3><p>Stoop strikes and the visible feather-loss damage model, shared by both directions.</p></li>
+      <li><h3>A ranged test in the lab</h3><p>Micro-rockets against an AI crow, with ammo and the nest. Then decide between nanobot crows and the bloodsport.</p></li>
+    </ol>
+    <div class="two">
+      <div><h3>Open questions</h3>
+        <ul>
+          <li>Against AI only, or other players? That decides how much of this has to work over a network.</li>
+          <li>Is the goal territory (owning perches and nests), score (food home), or survival?</li>
+          <li>For bloodsport: can the rider act on their own (lance, net) or only through the bird?</li>
+        </ul>
+      </div>
+      <div><h3>Physics notes for the giants</h3>
+        <ul>
+          <li>Weight grows with the cube of size and wing area with the square, so a ten-metre bird has a high stall speed and can barely flap. The largest flying bird known, Argentavis (about 6–7 m), is thought to have mostly soared.</li>
+          <li>So the bloodsport plays as gliding and soaring: canyon updrafts, thermals, long jousting passes, few wingbeats.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var trailLen = 1.0, focus = false, playing = false, t0 = 0, last = 0;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // --- tiny 3D: camera at the origin looking +z, y up --------------------------------------------
+  function V(x, y, z) { return { x: x, y: y, z: z }; }
+  function add(a, b) { return V(a.x + b.x, a.y + b.y, a.z + b.z); }
+  function sub(a, b) { return V(a.x - b.x, a.y - b.y, a.z - b.z); }
+  function mul(a, k) { return V(a.x * k, a.y * k, a.z * k); }
+  function len(a) { return Math.hypot(a.x, a.y, a.z); }
+  function norm(a) { var l = len(a) || 1; return mul(a, 1 / l); }
+  function cross(a, b) { return V(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
+  function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+  function Cam(W, H, fovDeg) {
+    var f = (W / 2) / Math.tan(fovDeg * Math.PI / 360);
+    return { W: W, H: H, f: f, hy: H * 0.42,
+      p: function (q) { return q.z <= 0.2 ? null : { x: W / 2 + f * q.x / q.z, y: this.hy - f * q.y / q.z, s: f / q.z }; } };
+  }
+
+  // A flight path: position at time t (seconds), looping.
+  function pathFn(c) { return function (t) {
+    var w = c.w;
+    return V(c.cx + c.ax * Math.sin(w * t + c.ph), c.cy + c.ay * Math.sin(2 * w * t + c.ph), c.cz + c.az * Math.cos(w * t + c.ph));
+  }; }
+  // Wingtips at time t: the bird banks into its turn (lateral acceleration / g).
+  function tips(path, t, span) {
+    var e = 0.02, p = path(t), a = path(t - e), b = path(t + e);
+    var v = mul(sub(b, a), 1 / (2 * e)), acc = mul(add(sub(b, p), sub(a, p)), 1 / (e * e));
+    var fwd = norm(v), up = V(0, 1, 0), right = norm(cross(up, fwd)), upp = norm(cross(fwd, right));
+    var bank = Math.atan2(dot(acc, right), 9.81);
+    var rb = add(mul(right, Math.cos(bank)), mul(upp, -Math.sin(bank)));
+    return { p: p, l: add(p, mul(rb, -span / 2)), r: add(p, mul(rb, span / 2)), bank: bank, fwd: fwd, v: len(v) };
+  }
+
+  // --- drawing --------------------------------------------------------------------------------------
+  function sky(ctx, cam, top, horizon, ground, groundFar) {
+    var g = ctx.createLinearGradient(0, 0, 0, cam.hy);
+    g.addColorStop(0, top); g.addColorStop(1, horizon);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cam.W, cam.hy + 1);
+    var gg = ctx.createLinearGradient(0, cam.hy, 0, cam.H);
+    gg.addColorStop(0, groundFar); gg.addColorStop(1, ground);
+    ctx.fillStyle = gg; ctx.fillRect(0, cam.hy, cam.W, cam.H - cam.hy);
+  }
+  function trunk(ctx, cam, x, z, groundY, h, r, col, fogCol, fog) {
+    var b = cam.p(V(x, groundY, z)), tp = cam.p(V(x, groundY + h, z));
+    if (!b || !tp) return;
+    var w = Math.max(1, r * 2 * b.s);
+    ctx.fillStyle = mix(col, fogCol, Math.min(0.85, z * fog));
+    ctx.fillRect(b.x - w / 2, tp.y, w, b.y - tp.y);
+    return { b: b, tp: tp, w: w };
+  }
+  function mix(a, b, k) {
+    var pa = hex(a), pb = hex(b);
+    return "rgb(" + [0, 1, 2].map(function (i) { return Math.round(pa[i] + (pb[i] - pa[i]) * k); }).join(",") + ")";
+  }
+  function hex(h) { h = h.replace("#", ""); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+
+  // A bird seen roughly from behind: wings as a shallow M, body, fanned tail toward the camera.
+  function bird(ctx, x, y, s, bank, top, under, opt) {
+    opt = opt || {};
+    ctx.save(); ctx.translate(x, y); ctx.rotate(bank);
+    var dih = opt.dih == null ? 0.06 : opt.dih;
+    ctx.fillStyle = top;
+    for (var sd = -1; sd <= 1; sd += 2) {
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.03);
+      ctx.quadraticCurveTo(sd * s * 0.2, -s * (0.07 + dih), sd * s * 0.36, -s * (0.04 + dih * 0.6));
+      ctx.lineTo(sd * s * 0.5, -s * (0.02 + dih * 0.3));
+      ctx.lineTo(sd * s * 0.47, s * 0.0);
+      ctx.quadraticCurveTo(sd * s * 0.22, -s * 0.0, 0, s * 0.05);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = under; // the leading edge's underside shows as a thin pale line
+      ctx.fillRect(sd > 0 ? s * 0.05 : -s * 0.45, -s * 0.005, s * 0.4, Math.max(1, s * 0.008));
+      ctx.fillStyle = top;
+    }
+    if (opt.glow) { ctx.strokeStyle = opt.glow; ctx.lineWidth = Math.max(1, s * 0.006); ctx.shadowColor = opt.glow; ctx.shadowBlur = 8;
+      for (var g = -1; g <= 1; g += 2) { ctx.beginPath(); ctx.moveTo(g * s * 0.06, -s * 0.05); ctx.lineTo(g * s * 0.46, -s * (0.03 + dih * 0.3)); ctx.stroke(); }
+      ctx.shadowBlur = 0; }
+    ctx.fillStyle = opt.tail || top;
+    ctx.beginPath(); ctx.moveTo(-s * 0.02, s * 0.03); ctx.lineTo(-s * 0.08, s * 0.16); ctx.quadraticCurveTo(0, s * 0.19, s * 0.08, s * 0.16); ctx.lineTo(s * 0.02, s * 0.03); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = opt.body || top;
+    ctx.beginPath(); ctx.ellipse(0, s * 0.01, s * 0.045, s * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -s * 0.06, s * 0.032, 0, Math.PI * 2); ctx.fill();
+    if (opt.rider) { // a rider on the shoulders, lance forward
+      ctx.fillStyle = opt.rider;
+      ctx.fillRect(-s * 0.018, -s * 0.11, s * 0.036, s * 0.06);
+      ctx.beginPath(); ctx.arc(0, -s * 0.125, s * 0.018, 0, Math.PI * 2); ctx.fill();
+      if (opt.lance) { ctx.strokeStyle = opt.lance; ctx.lineWidth = Math.max(1.5, s * 0.008); ctx.beginPath(); ctx.moveTo(s * 0.02, -s * 0.09); ctx.lineTo(s * 0.22, -s * 0.42); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+
+  // A trail: world points, newest last, fading and narrowing with age.
+  function trail(ctx, cam, pts, col, width, mode) {
+    if (pts.length < 2) return;
+    ctx.save();
+    if (mode === "glow") { ctx.globalCompositeOperation = "lighter"; ctx.shadowColor = col; ctx.shadowBlur = 10; }
+    for (var i = 1; i < pts.length; i++) {
+      var a = cam.p(pts[i - 1]), b = cam.p(pts[i]);
+      if (!a || !b) continue;
+      var k = i / (pts.length - 1);
+      var near = Math.min(1, Math.max(0, (pts[i].z - 4) / 11));   // invisible within 4 m, full by 15 m
+      ctx.globalAlpha = k * k * 0.85 * (mode === "cloth" ? 1 : near);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = Math.max(0.6, width * b.s * (0.3 + 0.7 * k));
+      ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function tipTrails(ctx, cam, path, t, span, col, width, mode) {
+    if (trailLen <= 0) return;
+    var L = [], R = [], n = Math.max(6, Math.round(trailLen * 30));
+    for (var i = 0; i <= n; i++) { var w = tips(path, t - trailLen + trailLen * i / n, span); L.push(w.l); R.push(w.r); }
+    trail(ctx, cam, L, col, width, mode); trail(ctx, cam, R, col, width, mode);
+  }
+
+  // --- HUD bits -------------------------------------------------------------------------------------
+  function bracket(ctx, x, y, r, col, label) {
+    ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 2; var c = r * 0.45;
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (q) {
+      ctx.beginPath(); ctx.moveTo(x + q[0] * r, y + q[1] * (r - c)); ctx.lineTo(x + q[0] * r, y + q[1] * r); ctx.lineTo(x + q[0] * (r - c), y + q[1] * r); ctx.stroke(); });
+    if (label) { ctx.fillStyle = col; ctx.font = "600 15px 'IBM Plex Mono', monospace"; ctx.fillText(label, x + r + 8, y - r + 12); }
+    ctx.restore();
+  }
+  function reticle(ctx, cam, col) {
+    var x = cam.W / 2, y = cam.hy + 30;
+    ctx.save(); ctx.strokeStyle = col; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 22, y); ctx.lineTo(x - 14, y); ctx.moveTo(x + 14, y); ctx.lineTo(x + 22, y); ctx.stroke();
+    ctx.restore();
+  }
+  function text(ctx, s, x, y, col, size, align) {
+    ctx.save(); ctx.fillStyle = col; ctx.font = "600 " + (size || 15) + "px 'IBM Plex Mono', monospace"; ctx.textAlign = align || "left"; ctx.fillText(s, x, y); ctx.restore();
+  }
+  function vignette(ctx, cam) {
+    if (!focus) return;
+    var g = ctx.createRadialGradient(cam.W / 2, cam.H / 2, cam.H * 0.35, cam.W / 2, cam.H / 2, cam.W * 0.62);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.45)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cam.W, cam.H);
+    text(ctx, "FOCUS", 24, 34, "rgba(255,255,255,0.85)", 14);
+  }
+
+  // --- scenes ---------------------------------------------------------------------------------------
+  var scenes = {};
+
+  scenes["c-snatch"] = function (ctx, W, H, t) {
+    var cam = Cam(W, H, focus ? 42 : 68); cam.hy = H * 0.28;
+    sky(ctx, cam, "#a9c3d6", "#dfe7ea", "#6f8166", "#aab7a0");
+    var gy = -9;
+    var trees = [[-14, 30, 16], [-9, 46, 20], [6, 52, 18], [15, 34, 14], [-22, 60, 22], [24, 64, 20], [2, 80, 24], [-4, 26, 12], [11, 22, 11]];
+    trees.sort(function (a, b) { return b[1] - a[1]; }).forEach(function (q) { trunk(ctx, cam, q[0], q[1], gy, q[2], 0.35, "#5d5a52", "#cfd8d6", 0.008); });
+    // the vole and the reach ring on the ground ahead
+    var vz = 14 - (playing ? (t % 3) : 1.2) * 1.2, vole = V(1.8, gy, vz);
+    var ring = [];
+    for (var i = 0; i <= 40; i++) { var a = i / 40 * Math.PI * 2; ring.push(cam.p(V(vole.x + Math.cos(a) * 1.4, gy + 0.02, vole.z + Math.sin(a) * 0.9))); }
+    ctx.save(); ctx.strokeStyle = "#f4f1e8"; ctx.setLineDash([7, 6]); ctx.lineWidth = 2; ctx.beginPath();
+    ring.forEach(function (p, k) { if (p) { k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); } }); ctx.stroke(); ctx.restore();
+    var vp = cam.p(vole); ctx.fillStyle = "#6b5440"; ctx.beginPath(); ctx.ellipse(vp.x, vp.y - 3, 0.18 * vp.s, 0.1 * vp.s, 0, 0, Math.PI * 2); ctx.fill();
+    // your shadow, falling just short of it
+    ctx.fillStyle = "rgba(20,30,20,0.25)"; var sp = cam.p(V(-0.4, gy, vz - 2.2)); ctx.beginPath(); ctx.ellipse(sp.x, sp.y, 0.7 * sp.s, 0.12 * sp.s, 0, 0, Math.PI * 2); ctx.fill();
+    // a mobbing crow off to the left, with vapour trails
+    var crow = pathFn({ cx: -5, cy: -2, cz: 12, ax: 3, ay: 0.8, az: 3, w: 1.3, ph: 0.6 });
+    tipTrails(ctx, cam, crow, t, 0.9, "#ffffff", 0.05, "vapour");
+    var c = tips(crow, t, 0.9), cp = cam.p(c.p);
+    if (cp) bird(ctx, cp.x, cp.y, 0.9 * cp.s, c.bank, "#1c1c22", "#2c2c31");
+    // you: the hawk from behind, wings half-folded in the stoop
+    bird(ctx, W * 0.36, H * 0.86, W * 0.3, -0.12, "#5a3e2b", "#f0e6d6", { dih: 0.16, tail: "#b8532a", body: "#5e4230" });
+    reticle(ctx, cam, "#ffffff");
+    text(ctx, "STOOP  14.2 m/s", 24, H - 52, "#ffffff", 15);
+    text(ctx, "closing 6.1  ·  snatch window ≤ 7.5", 24, H - 28, "#ffe9a8", 15);
+    vignette(ctx, cam);
+  };
+
+  scenes["c-steal"] = function (ctx, W, H, t) {
+    var cam = Cam(W, H, focus ? 40 : 66);
+    sky(ctx, cam, "#9fb6c4", "#d9e2e4", "#5f6e5a", "#9aa891");
+    var gy = -12;
+    [[-10, 28, 30], [8, 36, 32], [-18, 50, 34], [16, 58, 30], [-3, 70, 36], [22, 24, 26], [-25, 40, 30]].sort(function (a, b) { return b[1] - a[1]; })
+      .forEach(function (q) { trunk(ctx, cam, q[0], q[1], gy, q[2], 0.5, "#4b4a43", "#c9d3d4", 0.01); });
+    var osp = pathFn({ cx: 1, cy: -0.5, cz: focus ? 13 : 17, ax: 3.2, ay: 0.6, az: 2.5, w: 0.9, ph: 1.4 });
+    tipTrails(ctx, cam, osp, t, 1.6, "#ffffff", 0.06, "vapour");
+    var o = tips(osp, t, 1.6), op = cam.p(o.p);
+    if (op) {
+      bird(ctx, op.x, op.y, 1.6 * op.s, o.bank, "#4a3a2e", "#f6f4ef", { body: "#f6f4ef", dih: 0.1 });
+      ctx.fillStyle = "#b9c4c9"; ctx.beginPath(); ctx.ellipse(op.x, op.y + 0.16 * op.s, 0.2 * op.s, 0.05 * op.s, o.bank, 0, Math.PI * 2); ctx.fill(); // the fish
+      if (focus) bracket(ctx, op.x, op.y, Math.max(28, 1.0 * op.s), "#ffe9a8", (len(o.p)).toFixed(0) + " m  +3.4 m/s");
+    }
+    bird(ctx, W * 0.46, H * 0.78, W * 0.5, 0.12, "#3a2a1f", "#33261d", { dih: 0.05, body: "#3a2a1f" });
+    reticle(ctx, cam, "#ffffff");
+    text(ctx, "CARRYING: 0.9 kg  ·  stall 7.8 m/s", W - 24, 34, "#ffffff", 14, "right");
+    vignette(ctx, cam);
+  };
+
+  scenes["c-nano"] = function (ctx, W, H, t) {
+    var cam = Cam(W, H, focus ? 40 : 68);
+    sky(ctx, cam, "#141a2b", "#4a3049", "#0d1014", "#241c2a");
+    var gy = -10;
+    [[-12, 24, 22], [9, 30, 26], [-20, 44, 30], [18, 52, 28], [2, 64, 34], [-6, 18, 16]].sort(function (a, b) { return b[1] - a[1]; }).forEach(function (q) {
+      var tr = trunk(ctx, cam, q[0], q[1], gy, q[2], 0.45, "#191a22", "#2e2236", 0.006);
+      if (tr) { ctx.save(); ctx.fillStyle = "#3ee6d4"; ctx.shadowColor = "#3ee6d4"; ctx.shadowBlur = 12;
+        for (var k = 1; k < 4; k++) { var yy = tr.tp.y + (tr.b.y - tr.tp.y) * (0.2 + 0.25 * k + 0.05 * Math.sin(q[0] + k)); ctx.beginPath(); ctx.arc(tr.b.x + tr.w * 0.5, yy, Math.max(1.5, tr.w * 0.25), 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore(); }
+    });
+    var foe = pathFn({ cx: 0, cy: 0.5, cz: focus ? 14 : 19, ax: 4, ay: 1.0, az: 2.2, w: 1.1, ph: 0.2 });
+    tipTrails(ctx, cam, foe, t, 1.0, "#3ee6d4", 0.06, "glow");
+    var f = tips(foe, t, 1.0), fp = cam.p(f.p);
+    // the lead marker: where the target will be when a 40 m/s rocket gets there
+    var lead = tips(foe, t + len(f.p) / 40, 1.0).p, lp = cam.p(lead);
+    // flak across its path, ahead
+    var fl = cam.p(add(lead, V(1.2, 0.4, 2)));
+    if (fl) { [[0, 0, 1], [0.9, -0.5, 0.7], [-0.7, 0.4, 0.8]].forEach(function (q) {
+      var x = fl.x + q[0] * fl.s, y = fl.y + q[1] * fl.s, r = q[2] * fl.s * 0.9;
+      var g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,170,90,0.95)"); g.addColorStop(0.35, "rgba(255,120,50,0.55)"); g.addColorStop(1, "rgba(40,30,40,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }); }
+    if (fp) bird(ctx, fp.x, fp.y, 1.0 * fp.s, f.bank, "#16161b", "#22222a", { glow: "#3ee6d4" });
+    // a rocket in flight from you toward the lead point, with its smoke and fuse ring
+    var k = playing ? ((t * 0.7) % 1) : 0.55, start = V(0.4, -1.2, 2.5), tip = add(start, mul(sub(lead, start), k));
+    var smoke = []; for (var i = 0; i <= 12; i++) { var kk = Math.max(0, k - 0.35 + 0.35 * i / 12); var q = add(start, mul(sub(lead, start), kk)); q.y += 0.6 * Math.sin(kk * Math.PI) ; smoke.push(q); }
+    trail(ctx, cam, smoke, "#c9c2cf", 0.12, "cloth");
+    var rp = cam.p(add(tip, V(0, 0.6 * Math.sin(k * Math.PI), 0)));
+    if (rp) { ctx.save(); ctx.fillStyle = "#ffe0b0"; ctx.shadowColor = "#ff8a3d"; ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(rp.x, rp.y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    if (lp) { ctx.save(); ctx.strokeStyle = "#ff8a3d"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lp.x, lp.y - 9); ctx.lineTo(lp.x + 9, lp.y); ctx.lineTo(lp.x, lp.y + 9); ctx.lineTo(lp.x - 9, lp.y); ctx.closePath(); ctx.stroke();
+      ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(lp.x, lp.y, 1.5 * lp.s, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+    if (fp && focus) bracket(ctx, fp.x, fp.y, Math.max(26, 0.8 * fp.s), "#3ee6d4", len(f.p).toFixed(0) + " m");
+    // you
+    bird(ctx, W * 0.5, H * 0.8, W * 0.44, -0.08, "#16161b", "#22222a", { glow: "#3ee6d4" });
+    reticle(ctx, cam, "#3ee6d4");
+    // the rack: rockets left, laser heat
+    for (var r = 0; r < 6; r++) { ctx.fillStyle = r < 4 ? "#ff8a3d" : "rgba(255,138,61,0.25)"; ctx.fillRect(24 + r * 16, H - 44, 10, 22); }
+    text(ctx, "ROCKETS 4/6", 24, H - 54, "#ffd7b8", 13);
+    ctx.fillStyle = "rgba(62,230,212,0.2)"; ctx.fillRect(W - 184, H - 34, 160, 10); ctx.fillStyle = "#3ee6d4"; ctx.fillRect(W - 184, H - 34, 62, 10);
+    text(ctx, "LASER HEAT", W - 24, H - 44, "#bff7f0", 13, "right");
+    vignette(ctx, cam);
+  };
+
+  scenes["c-blood"] = function (ctx, W, H, t) {
+    var cam = Cam(W, H, focus ? 44 : 72); cam.hy = H * 0.5;
+    sky(ctx, cam, "#7b4a6e", "#f3b06a", "#5a2a20", "#a5553a");
+    // canyon walls
+    function wall(sd, col, off) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(sd < 0 ? 0 : W, 0);
+      for (var i = 0; i <= 10; i++) { var z = 6 + i * 9; var p = cam.p(V(sd * (14 + off + 3 * Math.sin(i * 1.7)), 40, z)); var q = cam.p(V(sd * (14 + off + 3 * Math.sin(i * 1.7)), -30, z)); if (p && i === 0) ctx.lineTo(p.x, 0); if (q) ctx.lineTo(q.x, Math.min(H, q.y)); }
+      ctx.lineTo(sd < 0 ? 0 : W, H); ctx.closePath(); ctx.fill(); }
+    wall(-1, "#6b2f24", 0); wall(1, "#5c281f", 2);
+    // a ring gate ahead with pennants
+    var gc = cam.p(V(2, 2, 42)); if (gc) { ctx.save(); ctx.strokeStyle = "#e8c547"; ctx.lineWidth = Math.max(2, 0.35 * gc.s); ctx.beginPath(); ctx.arc(gc.x, gc.y, 5 * gc.s, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#c8202a"; [[-5, 0], [5, 0], [0, -5]].forEach(function (q) { var x = gc.x + q[0] * gc.s, y = gc.y + q[1] * gc.s; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 1.6 * gc.s, y + 0.4 * gc.s); ctx.lineTo(x, y + 0.8 * gc.s); ctx.closePath(); ctx.fill(); }); ctx.restore(); }
+    // the rival rider, banner streaming
+    var riv = pathFn({ cx: -1, cy: 1.5, cz: focus ? 24 : 30, ax: 5, ay: 1.2, az: 3, w: 0.55, ph: 2.0 });
+    if (trailLen > 0) { var ban = []; var n = 24; for (var i = 0; i <= n; i++) { var w0 = tips(riv, t - trailLen * 1.4 + trailLen * 1.4 * i / n, 10); ban.push(add(w0.p, V(0, -0.4, 0))); } trail(ctx, cam, ban, "#c8202a", 0.5, "cloth"); }
+    var rv = tips(riv, t, 10), rp = cam.p(rv.p);
+    if (rp) bird(ctx, rp.x, rp.y, 10 * rp.s, rv.bank, "#3b2418", "#d9b48a", { rider: "#1d1d22", lance: "#e8dcc0", tail: "#3b2418" });
+    if (rp && focus) bracket(ctx, rp.x, rp.y, Math.max(30, 4 * rp.s), "#ffe9a8", "PASS 2/3  " + len(rv.p).toFixed(0) + " m");
+    // you: a giant from behind, rider and lance
+    bird(ctx, W * 0.5, H * 0.86, W * 0.95, 0.06, "#2f1d14", "#c49a6a", { rider: "#14141a", lance: "#efe3c4", dih: 0.03 });
+    text(ctx, "UPDRAFT +2.1 m/s", W - 24, 34, "#ffe9c7", 14, "right");
+    vignette(ctx, cam);
+  };
+
+  // --- loop -----------------------------------------------------------------------------------------
+  var canvases = Object.keys(scenes).map(function (id) { return document.getElementById(id); });
+  function draw(t) {
+    canvases.forEach(function (c) { var ctx = c.getContext("2d"); ctx.clearRect(0, 0, c.width, c.height); scenes[c.id](ctx, c.width, c.height, t); });
+  }
+  function frame(now) {
+    if (!playing) return;
+    t0 += Math.min(0.05, (now - last) / 1000); last = now;
+    draw(t0); requestAnimationFrame(frame);
+  }
+  t0 = 2.3; draw(t0);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { draw(t0); });
+
+  function pick(segId, btn) { document.querySelectorAll("#" + segId + " button").forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); }); }
+  document.querySelectorAll("#trail-seg button").forEach(function (b) { b.addEventListener("click", function () { trailLen = parseFloat(b.dataset.len); pick("trail-seg", b); draw(t0); }); });
+  document.querySelectorAll("#focus-seg button").forEach(function (b) { b.addEventListener("click", function () { focus = b.dataset.focus === "1"; pick("focus-seg", b); draw(t0); }); });
+  var play = document.getElementById("play");
+  play.addEventListener("click", function () { playing = !playing; play.textContent = playing ? "Pause" : "Play"; if (playing) { last = performance.now(); requestAnimationFrame(frame); } });
+  if (reduced) play.title = "Animation is paused by default (reduced motion)";
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.for), txt = el.textContent;
+      function sel() { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected: press Ctrl+C"; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { b.textContent = "Copied"; }, sel); else sel();
+    });
+  });
+})();
+</script>
