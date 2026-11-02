@@ -21,6 +21,16 @@ const TAIL_FEATHERS := 12
 const PLAIN_PROFILE := [[0.0, 0.05], [0.04, 0.22], [0.35, 0.5], [0.7, 0.48], [0.9, 0.34], [1.0, 0.0]]
 const EMARG_PROFILE := [[0.0, 0.05], [0.04, 0.22], [0.35, 0.5], [0.55, 0.42], [0.66, 0.2], [0.9, 0.17], [1.0, 0.0]]
 const CAMBER := 0.03   ## feather arch height, as a share of its length
+const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
+## Per-species feather look (docs/research/feather_rendering.md): glossy iridescent crow, matte barred soft
+## owl, barred hawk with darker tips, falcon with buff margins, sparrow with pale edges and dark centres.
+const FEATHER_LOOK := {
+	"crow": {"sheen": 1.2, "iridescence": 0.75, "translucency": 0.15, "barring": 0.0, "pale_edge": 0.0, "dark_tip": 0.0, "centre_streak": 0.0, "softness": 0.08},
+	"owl": {"sheen": 0.12, "iridescence": 0.0, "translucency": 0.6, "barring": 0.6, "bar_freq": 9.0, "pale_edge": 0.25, "dark_tip": 0.0, "centre_streak": 0.0, "softness": 0.28},
+	"hawk": {"sheen": 0.4, "iridescence": 0.0, "translucency": 0.55, "barring": 0.55, "bar_freq": 6.0, "pale_edge": 0.15, "dark_tip": 0.45, "centre_streak": 0.0, "softness": 0.12},
+	"falcon": {"sheen": 0.55, "iridescence": 0.0, "translucency": 0.4, "barring": 0.45, "bar_freq": 8.0, "pale_edge": 0.35, "dark_tip": 0.35, "centre_streak": 0.0, "softness": 0.08},
+	"sparrow": {"sheen": 0.25, "iridescence": 0.0, "translucency": 0.5, "barring": 0.0, "pale_edge": 0.6, "dark_tip": 0.0, "centre_streak": 0.55, "softness": 0.16},
+}
 
 var profile: BirdProfile
 var shape: WingShape
@@ -47,6 +57,8 @@ var wing_joints: Array = [[], []]     ## per side: [shoulder, elbow, wrist, hand
 var leg_joints: Array = [[], []]      ## per side: [hip, ankle, foot]
 var head_basis := Basis()
 var fold_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+static var plain_feathers := false   ## flat-colour feathers, no shader (before/after comparisons)
+var feather_material: ShaderMaterial
 var feather_xforms: Array[Transform3D] = []   ## every feather this tick (the MultiMeshes' copy; tests, debug)
 
 var _L := 0.45
@@ -68,6 +80,7 @@ var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4]
 var _fairings: Array = [[], []]       ## per side: [patagium, humerus, forearm, hand] (the wing's thickness)
 var _built := false
 var _defs: Array = []
+var _clock := -1.0
 var _defs_fold := -1.0
 var _defs_slot := -1.0
 
@@ -125,6 +138,16 @@ func _material(c: Color) -> StandardMaterial3D:
 	return m
 
 
+## Body plumage: matte with a soft rim of light at grazing angles (the velvety look of contour feathers).
+func _plumage(c: Color) -> StandardMaterial3D:
+	var m := _material(c)
+	m.roughness = 0.95
+	m.rim_enabled = true
+	m.rim = 0.35
+	m.rim_tint = 0.6
+	return m
+
+
 # --- Construction ------------------------------------------------------------------------------------
 
 func _build_skeleton() -> void:
@@ -150,7 +173,7 @@ func _build_skeleton() -> void:
 
 
 func _build_body(tint: Color) -> void:
-	var body_mat := _material(tint.darkened(0.12))
+	var body_mat := _plumage(tint.darkened(0.12)) if not plain_feathers else _material(tint.darkened(0.12))
 	var leg_mat := _material(Color(0.72, 0.6, 0.32))
 	var body := MeshInstance3D.new()
 	var cap := CapsuleMesh.new()
@@ -209,7 +232,7 @@ func _build_body(tint: Color) -> void:
 ## at the leading edge, trailing back over the coverts, thinning from the root to the hand. The flight
 ## feathers carry on behind as the thin trailing edge.
 func _build_fairings(c: Color) -> void:
-	var mat := _material(c)
+	var mat := _plumage(c) if not plain_feathers else _material(c)
 	var sph := SphereMesh.new()
 	sph.radius = 0.5
 	sph.height = 1.0
@@ -257,10 +280,16 @@ func _feather_mesh(profile_pts: Array) -> ArrayMesh:
 		var ar := Vector3(a[1] * 0.5, 0.0, a[0])
 		var bl := Vector3(-b[1] * 0.5, 0.0, b[0])
 		var br := Vector3(b[1] * 0.5, 0.0, b[0])
-		for v in [al, ar, br, al, br, bl]:
+		var uvs := [Vector2(-1, a[0]), Vector2(1, a[0]), Vector2(1, b[0]), Vector2(-1, a[0]), Vector2(1, b[0]), Vector2(-1, b[0])]
+		var vs := [al, ar, br, al, br, bl]
+		for q in 6:
+			var v: Vector3 = vs[q]
 			# A gentle arch along the feather (3% of its length at the middle): cambered, not a flat card.
 			var arched := Vector3(v.x, CAMBER * sin(PI * v.z), v.z)
+			# UV.x: -1..1 edge to edge across the vane (0 = the shaft); UV.y: 0..1 base to tip. Tangent: across.
 			st.set_normal(Vector3.UP)
+			st.set_tangent(Plane(1.0, 0.0, 0.0, 1.0))
+			st.set_uv(uvs[q])
 			st.add_vertex(arched)
 	return st.commit()
 
@@ -274,11 +303,22 @@ func _build_feathers() -> void:
 			_emarg_count += 2
 		else:
 			_plain_count += 2
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.vertex_color_is_srgb = true
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.roughness = 0.9
+	var mat: Material
+	if plain_feathers:
+		# The flat-colour look from before the feather shader (before/after comparisons).
+		var sm := StandardMaterial3D.new()
+		sm.vertex_color_use_as_albedo = true
+		sm.vertex_color_is_srgb = true
+		sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		sm.roughness = 0.9
+		mat = sm
+	else:
+		feather_material = ShaderMaterial.new()
+		feather_material.shader = FEATHER_SHADER
+		var look: Dictionary = FEATHER_LOOK.get(profile.id, FEATHER_LOOK["crow"])
+		for k in look:
+			feather_material.set_shader_parameter(k, look[k])
+		mat = feather_material
 	_plain = _multimesh(_feather_mesh(PLAIN_PROFILE), _plain_count, mat, "Feathers")
 	_emarg = _multimesh(_feather_mesh(EMARG_PROFILE), maxi(_emarg_count, 1), mat, "SlottedPrimaries")
 	if _emarg_count == 0:
@@ -289,6 +329,7 @@ func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> Mul
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
+	mm.use_custom_data = true
 	mm.mesh = mesh
 	mm.instance_count = count
 	var mmi := MultiMeshInstance3D.new()
@@ -347,6 +388,10 @@ func animate(t: Dictionary, dt: float) -> void:
 	tail_spread = lerpf(tail_spread, 0.0 if sitting else clampf(spread_t, 0.0, 1.0), ks)
 	tail_pitch = lerpf(tail_pitch, 0.6 * flare if not sitting else 0.15, ks)
 	tail_twist = lerpf(tail_twist, -float(t.bank) * 0.25 if not sitting else 0.0, ks)
+	# Airflow on the feathers: a little always, more with speed, almost none perched.
+	var air := 0.04 if sitting else 0.15 + 0.6 * clampf((speed - float(t.v_best) * 0.5) / (float(t.v_best) * 1.5), 0.0, 1.0)
+	if feather_material != null:
+		feather_material.set_shader_parameter("flutter", air)
 
 	# Head: look at the target, level with the world.
 	var inv := global_transform.affine_inverse()
@@ -479,10 +524,12 @@ func apply_pose() -> void:
 			if f.emarg:
 				_emarg.set_instance_transform(emarg_i, xf)
 				_emarg.set_instance_color(emarg_i, _colors[WingShape.Kind.PRIMARY])
+				_emarg.set_instance_custom_data(emarg_i, Color(float(f.kind), _seed(i, f), 1.0, 0.0))
 				emarg_i += 1
 			else:
 				_plain.set_instance_transform(plain_i, xf)
 				_plain.set_instance_color(plain_i, _colors[int(f.kind)])
+				_plain.set_instance_custom_data(plain_i, Color(float(f.kind), _seed(i, f), 0.0, 0.0))
 				plain_i += 1
 		var fr: Array = _fairings[i]
 		_place_fairing(fr[0], sh, wrist, arm_n, s, 0, 1.0 - fold)   # the patagium folds away with the wing
@@ -506,6 +553,7 @@ func apply_pose() -> void:
 		feather_xforms.append(txf)
 		_plain.set_instance_transform(plain_i, txf)
 		_plain.set_instance_color(plain_i, _colors["tail"])
+		_plain.set_instance_custom_data(plain_i, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0))
 		plain_i += 1
 	_pose_bone("tail", _tail_base, _tail_base + tb * Vector3(0, 0, profile.tail_length), tn)
 
@@ -549,6 +597,18 @@ func _fk_feather_dir(i: int, f: Dictionary, fold_v: float) -> Vector3:
 	var bone_deg: float = [a.x, a.y, a.z][int(f.bone)]
 	var d2 := WingShape.dir2(bone_deg + float(f.rel) - (sweep if absf(sweep) > 1e-4 else 0.0))
 	return (_wing_plane(i) * Vector3(SIDES[i] * d2.x, 0.0, d2.y)).normalized()
+
+
+## Freeze or drive the feather clock (flutter), for repeatable screenshots. Negative: run on engine time.
+func set_clock(seconds: float) -> void:
+	_clock = seconds
+	if feather_material != null:
+		feather_material.set_shader_parameter("clock_override", seconds)
+
+
+## A stable per-feather random value (pattern phase, flutter timing).
+static func _seed(side: int, f: Dictionary) -> float:
+	return fmod(float(f.kind) * 0.37 + float(f.i) * 0.618 + side * 0.29, 1.0)
 
 
 func _tail_shape(u: float) -> float:

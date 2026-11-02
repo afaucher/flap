@@ -49,6 +49,30 @@ So one custom feather shader can do most of it without texture assets.
 
 **Order.** A procedural vane and soft edge first (biggest visual jump), then the anisotropic sheen and backlight, then flutter, then crow iridescence.
 
+## As built (scripts/bird/feather.gdshader)
+
+One spatial shader runs on both feather MultiMeshes:
+- `UV.x` runs -1..1 across the vane, and `UV.y` 0..1 base to tip.
+- Each instance carries its kind and a seed in `INSTANCE_CUSTOM`.
+- Species looks are uniforms set from `BirdRig.FEATHER_LOOK`.
+
+What it draws:
+- **Surface.**
+  - Shaft, barb ridges, and a soft ragged edge (alpha to coverage, raggedness by species).
+  - Bars and dark tips on flight and tail feathers, pale margins, and the sparrow's dark centre streak.
+  - Darkening toward each feather's base, where the row in front covers it.
+- **Light.**
+  - Wrapped diffuse.
+  - Transmission when backlit, strongest looking toward the light. The shaft and dark pigment block it.
+  - A Ward anisotropic highlight streaked by the barbs.
+  - Iridescence (the crow) tints that highlight from violet to green with viewing angle.
+  - The shading normal tilts across each barb ridge. Without that, a flat card mirrors the highlight across the whole wing, which was the first attempt's problem.
+- **Flutter.** Only the tip moves, along the feather's own normal and across it. It scales with airspeed through the `flutter` uniform, set by the rig each tick.
+
+Body and wing fairings get a soft rim sheen.
+
+Before/after: `docs/images/feathers_before_after.png`. To reproduce it, run `scenes/rig_gallery.tscn` with `--plain-feathers` (before) and without (after); `--time` freezes the flutter.
+
 ## Sources
 - [UE-FUR] Unreal forums, "Fur shader": https://forums.unrealengine.com/t/fur-shader/5738/20
 - [FALCON] Game Design Deep Dive: Falcon Age's feathered companion: https://gamedeveloper.com/design/game-design-deep-dive-creating-i-falcon-age-s-i-feathered-companion (mirror: https://www.jikguard.com/news/game-design-deep-dive-creating-falcon-ages-feathered-companion)

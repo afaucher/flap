@@ -1,13 +1,16 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
-##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three]
-##                                                   [--shot <png> --shot-after <s>]
+##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under]
+##       [--only <bird id>] [--sun front|back] [--time <s>] [--plain-feathers] [--shot <png> --shot-after <s>]
+## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
+## clock (feather flutter) for repeatable screenshots.
 ## glide (default) holds the wings spread; flap animates a wingbeat; folded is the perched pose with feet
 ## gripping; flare is the landing pose (wings forward, alula out, tail fanned down, feet reaching).
 
 var rigs: Array[BirdRig] = []
 var pose := "glide"
 var t := 0.0
+var frozen := false
 
 
 func _ready() -> void:
@@ -16,6 +19,13 @@ func _ready() -> void:
 	if p != "":
 		pose = p
 	var view := Boot.arg_value(args, "--view")
+	var only := Boot.arg_value(args, "--only")
+	BirdRig.plain_feathers = args.has("--plain-feathers")
+	var sun_arg := Boot.arg_value(args, "--sun")
+	var time_arg := Boot.arg_value(args, "--time")
+	if time_arg != "":
+		t = float(time_arg)
+		frozen = true
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.82, 0.85, 0.83)
@@ -26,11 +36,14 @@ func _ready() -> void:
 	we.environment = env
 	add_child(we)
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-60, -30, 0)
+	# Back: low sun behind the bird, shining toward the camera (feather translucency).
+	sun.rotation_degrees = Vector3(-60, -30, 0) if sun_arg != "back" else Vector3(-25, 10, 0)
 	sun.light_energy = 1.2
 	add_child(sun)
 	var x := 0.0
 	var profiles := BirdProfile.all()
+	if only != "":
+		profiles = [BirdProfile.by_id(only)]
 	for i in profiles.size():
 		var pr: BirdProfile = profiles[i]
 		var r := BirdRig.new()
@@ -47,17 +60,21 @@ func _ready() -> void:
 		label.position = Vector3(x - pr.span * 0.5, -0.05, 0.45)
 		label.rotation_degrees = Vector3(-90, 0, 0)
 		label.modulate = Color(0.15, 0.17, 0.17)
+		label.visible = only == ""
 		add_child(label)
 	var cam := Camera3D.new()
 	add_child(cam)
 	var mid := Vector3(x * 0.5, 0, 0)
+	var k := 1.0 if only == "" else profiles[0].span * 0.36   # close-up: frame one bird
 	match view:
 		"front":
-			cam.look_at_from_position(mid + Vector3(0, 0.15, -3.2), mid, Vector3.UP)
+			cam.look_at_from_position(mid + Vector3(0, 0.15, -3.2) * k, mid, Vector3.UP)
 		"three":
-			cam.look_at_from_position(mid + Vector3(0.6, 1.6, -2.4), mid, Vector3.UP)
+			cam.look_at_from_position(mid + Vector3(0.6, 1.6, -2.4) * k, mid, Vector3.UP)
+		"under":
+			cam.look_at_from_position(mid + Vector3(0.3, -1.4, -1.6) * k, mid, Vector3.UP)
 		_:
-			cam.look_at_from_position(mid + Vector3(0, 3.0, 0.05), mid, Vector3.FORWARD)
+			cam.look_at_from_position(mid + Vector3(0, 3.0, 0.05) * k, mid, Vector3.FORWARD)
 	cam.fov = 50.0
 	cam.current = true
 	_pose_all(0.0)
@@ -72,8 +89,11 @@ func _ready() -> void:
 
 
 func _process(dt: float) -> void:
-	t += dt
+	if not frozen:
+		t += dt
 	_pose_all(t)
+	for r in rigs:
+		r.set_clock(t)
 
 
 func _pose_all(time: float) -> void:

@@ -73,6 +73,10 @@ func setup() -> void:
 			ok = ok and t.origin.is_finite() and t.basis.x.is_finite() and t.basis.z.is_finite()
 		check(ok, p.id + " finite feathers")
 		eq(rig.feather_xforms.size(), rig._plain_count + rig._emarg_count, p.id + " every feather placed")
+		check(rig.feather_material != null and rig.feather_material.shader == BirdRig.FEATHER_SHADER, p.id + " feathers use the feather shader")
+		check(rig._plain.use_custom_data, p.id + " per-feather kind and seed reach the shader")
+		for key in BirdRig.FEATHER_LOOK[p.id]:
+			near(float(rig.feather_material.get_shader_parameter(key)), float(BirdRig.FEATHER_LOOK[p.id][key]), 1e-6, "%s look: %s" % [p.id, key])
 		rig.queue_free()
 
 	# A perched bird's feet are on its perch.
