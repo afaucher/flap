@@ -162,6 +162,23 @@ func _launcher() -> void:
 	await frames(int(Launcher.RESTOCK_TIME * 60) + 5)
 	eq(int(l2.ammo[Launcher.Weapon.ROCKETS]), int(Launcher.AMMO[Launcher.Weapon.ROCKETS]), "sitting on a perch rearms")
 	eq((pr2[0] as Bird).health(), 1.0, "and grows the lost feathers back")
+	# With a base, only the base: another perch neither rearms nor mends; the base does both.
+	var away: Perch = layout.perches[0]
+	var base: Perch = layout.perches[1]
+	l2.rearm_perch = base.id
+	for at_base in [false, true]:
+		(pr2[0] as Bird).fly_from(Vector3(0, 30, 0), Vector3(0, 0, 1), 9.0)
+		await frames(2)
+		l2.ammo[Launcher.Weapon.ROCKETS] = 0
+		(pr2[0] as Bird).lose_feathers((pr2[0] as Bird).global_position, 3)
+		pr2[0].perch_at(base if at_base else away)
+		await frames(int(Launcher.RESTOCK_TIME * 60) + 5)
+		var full := int(l2.ammo[Launcher.Weapon.ROCKETS]) > 0
+		var mended := (pr2[0] as Bird).health() == 1.0
+		if at_base:
+			check(full and mended, "sitting on its base rearms and mends")
+		else:
+			check(not full and not mended, "a perch that isn't its base neither rearms nor mends")
 	for b in [pr2[0], pr2[1]]:
 		b.queue_free()
 	world.queue_free()
@@ -329,6 +346,12 @@ func _range() -> void:
 	await frames(60 * 18)
 	var s: Dictionary = r.world.stats
 	check(int(s.shots) >= 3 and int(s.hits) >= 1, "the demo shooter fires and lands hits on an evading target (%s)" % s)
+	var home: Perch = r.home
+	check(home != null and r.world.player.rearm_perch == home.id, "the range gives you a base to rearm at")
+	var rails := []
+	for o in r.layout.outposts:
+		rails.append((o as ArenaLayout.OutpostData).rail_perch_id)
+	check(r.layout.outposts.is_empty() or rails.has(home.id), "your base is an outpost's rail (%d outposts)" % r.layout.outposts.size())
 	check(r.target_pilot.breaks >= 1, "the target breaks when threatened")
 	r.queue_free()
 	await frames(2)

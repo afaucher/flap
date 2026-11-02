@@ -1413,5 +1413,19 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "rearm-any-perch",
+  "bug": "Ammo restocks and feathers grow back only at your base (Launcher.rearm_perch); any perch must not do (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "if bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch)):",
+    "replace": "if bird.state == Bird.State.PERCHED:"
+   }
+  ]
  }
 ]

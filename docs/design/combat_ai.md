@@ -10,7 +10,10 @@ Read first: `docs/design/flight_model.md` (sections 2, 6 and 8), `docs/design/co
 **Decided with the user (2026-11-02):**
 - **Two teams, 3 v 3** for now (player + two AI wingmen against three AI; or 3 AI v 3 AI in tests).
 - A downed bird **respawns at its team's base** (an outpost, section 7).
-- **Ammo restocks only at your own base**; stamina recovers on any perch (section 4.7).
+- **Ammo restocks only at your own base**, and lost feathers grow back only there; stamina recovers on any
+  perch (section 4.7).
+- **One kind of round per bird**: six rockets or four seekers (no switching). **Damage is feathers**: a hit
+  knocks out 2-3 flight feathers, eight down the bird (section 1).
 - Default difficulty is **medium** (the `pilot` preset, section 6).
 - **Ambushing from a perch is a valid tactic** (section 4.7), not only resting.
 - The decision layer is a **Beehave behaviour tree** if a headless spike passes Flap's strict test runner
@@ -34,13 +37,19 @@ How the range uses them (`scripts/app/combat_range.gd`):
 
 What the combat systems give an AI to work with:
 - **Launcher** (`launcher.gd`): fixed forward along the flight path (aim by flying). Rockets: 0.25 s cadence
-  while held. Seekers: lock after 1.0 s inside a 15° cone (kept to 25°), 6-40 m. Rearm by sitting on any
-  perch for 2 s. `lead_point()` is the HUD's lead marker. With the war tack each pod holds rockets x3 or
-  seekers x2 (`Saddle.POD_ROUNDS`, default loadout rockets + seekers); untacked birds get 6 / 3.
+  while held. Seekers: lock after 1.0 s inside a 15° cone (kept to 25°), 6-40 m. Rearm (and mend) by
+  sitting 2 s on the base perch (`Launcher.rearm_perch`; unset, any perch). `lead_point()` is the HUD's lead
+  marker. Each pod holds rockets x3 or seekers x2 and a bird carries one kind: **six rockets or four seekers**
+  (`Saddle.DEFAULT_LOADOUT` is rockets; the range's `--seekers`); weapon switching is a no-op with one kind.
 - **Projectiles** (`projectile.gd`, pure and headless): rocket ~47 m/s peak, 1.0 s life (~40 m), unguided,
   drops under gravity. Seeker ~35 m/s, 2.2 s life, lead pursuit capped at 150°/s, loses the target outside a
   60° gimbal. Both arm after 3 m, proximity fuse 1.0 m, and **burst on trunks, branches and the ground**.
-- **Damage** (`combat_world.gd`): a burst within 1.3 m stuns 0.5 s and shoves; 3 hits down a bird (2.5 s stun).
+- **Damage** (`combat_world.gd`, `Bird.lose_feathers`): a burst within 1.3 m stuns 0.5 s, shoves, and knocks
+  out the flight feathers nearest it: 2 or 3 inside the fuse's reach (2.5 on average), 1 in the blast's outer
+  ring. The damaged wing loses that area (`FlightModel.wing_loss`): less lift, and it drops, so the bird rolls
+  toward it unless the stick holds it off (the AI's bank law has to trim for it; `telemetry().wing_loss`).
+  **Eight feathers down a bird** (2.5 s stun, `downed`); `Bird.health()` is 1 - lost / 8, shown as a bar on
+  the HUD (yours, and a small one under the target's bracket).
 - **Threat cue**: `CombatWorld.threat_to(bird)` returns the nearest round within 25 m heading at the bird, or
   a launcher with a lock above 50%. The player's HUD shows **neither** (no lock warning, no missile warning):
   today the target "knows" more than a player would.
@@ -183,15 +192,15 @@ From the `Picture`:
 - **Geometry** of each seen bird: range, closure, ATA, AA.
 - **Threats**: rounds with predicted miss distance < 3 m and time-to-go < 1.2 s; any bird with me inside its
   nose cone (ATA < 25°) within 40 m; a lock warning.
-- **Own reserves**: stamina, burst, ammo per weapon, hits taken (`CombatWorld.hits`, which the HUD should also
-  show the player).
+- **Own reserves**: stamina, burst, ammo, health (`Bird.health()`, on the player's HUD too) and which wing
+  the damage is on.
 
 ### 4.2 Target selection
 
 Score each visible (or recently seen) enemy, highest wins, re-chosen every `decide_every`:
 - closer is better (`-range / 20`), on my nose is better (`-ATA / 45°`), its tail toward me is better
   (`-AA / 90°`: a tail chase is the easy shot),
-- `+ΔE / 5 m` (I have the height on it), `+1` per hit it has taken (finish it), `+2` if it is attacking me,
+- `+ΔE / 5 m` (I have the height on it), `+2 x (1 - health)` (finish it: its feathers show), `+2` if it is attacking me,
 - `+2` if it is attacking a teammate (the Support branch), `-1.5` per teammate already on it unless it is
   attacking me (spread the targets, don't all chase one bird),
 - `-3` if there's no line of sight and no route shorter than 40 m,
@@ -210,7 +219,7 @@ style's preferred height, scanning).
 | **DEFEND** | a threat (4.1) | the defence for that threat (4.6); overrides everything for its duration |
 | **EXTEND** | outmatched (enemy behind me and `ΔE < 0`), or after a missed stoop | unload and run along the clearest line away, flapping, to rebuild speed and height, then re-engage |
 | **REARM** | out of ammo | disengage, fly home to the team's base (the only place ammo restocks), land, rearm, take off (4.7) |
-| **REST** | stamina < `skill.rest_at`, or 2 hits taken | disengage, pick a safe perch in reach (the base if it is), rest, take off (4.7) |
+| **REST** | stamina < `skill.rest_at`, or health ≤ 0.5 | tired: a safe perch in reach (the base if it is); hurt: the base, the only place feathers grow back (4.7) |
 
 These are the branches of the tree in 3.2 (ENGAGE is its Reposition leaf), plus Ambush and Support.
 Each mode has a minimum dwell (0.6 s) and exit hysteresis so the AI doesn't twitch between them. DEFEND has
@@ -241,11 +250,10 @@ to trade).
 
 ### 4.5 Weapons: choice and fire control
 
-**Weapon choice.** Switching drops a lock, so the AI switches only when its brain changes intent:
-- seekers when it can expect to hold the target in the cone for a second: the target is ahead, AA < 60°,
-  range 12-30 m, and the target is not much more agile than the seeker (see 5),
-- rockets otherwise: close range, nimble targets, a target crossing in front,
-- the other weapon when one is empty; REARM when both are.
+**Weapon choice** is made before the fight: a bird carries six rockets or four seekers, never both (decided
+2026-11-02). The loadout is a style choice (5): seekers for birds that can hold a target in the cone for a
+second (ahead, AA < 60°, 12-30 m, not much more agile than the seeker), rockets for close, nimble fights.
+REARM when empty.
 
 **Fire control** asks "would this round hit?" by flying the real projectile code forward, not a hand-tuned
 cone. `AICombat._solution(launcher, target)` launches a scratch `Projectile` (`Projectile.launch` + `step`,
@@ -296,9 +304,11 @@ Ammo is restocked **only at your own team's base** (decided 2026-11-02); stamina
 there are two reasons to leave the fight, with different destinations:
 - **REARM** (ammo): both weapons empty, or one empty and the other down to its last round with no good shot
   coming. Destination: the team's base rail perch.
-- **REST** (stamina): stamina < `skill.rest_at` (default 0.3), or 2 hits taken (one more downs it), with
-  ammo left. Destination: the safest perch in reach, or the base if it is in reach anyway (rest and top up
-  in one stop).
+- **REST** (stamina): stamina < `skill.rest_at` (default 0.3), with ammo left. Destination: the safest
+  perch in reach, or the base if it is in reach anyway (rest and top up in one stop).
+- **MEND** (feathers): health ≤ 0.5 (four or more feathers gone; the next two or three hits down it).
+  Destination: the base, the only place feathers grow back; a hurt bird also flies worse (less lift, a wing
+  that drops), so it extends early and plans a gentler route.
 
 Both run the same way:
 - **Leave**: EXTEND first, away from every enemy's nose, until no enemy has ATA < 45° on it within 30 m.
@@ -394,9 +404,10 @@ Every knob degrades a perfect pilot; 0 / the "off" value is the honest maximum. 
    per team: an outpost (`ArenaLayout.outposts`, which the pine wood places on pines and oaks) chosen at the
    start as far apart as the layout allows. `downed` → the scene respawns the bird on its base's rail perch
    after the down stun. The HUD's tally becomes a team score.
-   **Base-only rearming**: `Launcher` restocks only while perched on its team's base perch (a
-   `rearm_perch` id set by the scene; unset keeps today's any-perch rule, so the old range and its tests
-   are unchanged). The player gets the same rule, and the HUD shows the way home when ammo is out.
+   **Base-only rearming: done (2026-11-02).** `Launcher` restocks and mends only while perched on
+   `rearm_perch` (unset keeps the any-perch rule, which the unit tests use). The range gives the player the
+   rail of the outpost nearest the clearing, and `CombatHud.home` shows the way home when out of rounds or
+   hurt. Teams still to do: the range's single base becomes one per team.
 4. **A team match in the range**: `--match` mode in `combat_range.gd`
    (`.\range.ps1 -Match -Skill pilot [-Team crow,hawk,sparrow -Enemy falcon,owl,crow]`): you and two AI
    wingmen against three AI, in place of the racetrack target. `--duel` (1 v 1) stays for tuning.

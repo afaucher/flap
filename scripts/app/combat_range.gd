@@ -2,8 +2,10 @@ extends Node3D
 ## The combat range (proof of concept for ranged combat, docs/design/combat_concepts.html): the forest arena,
 ## your bird with a saddle launcher, and a target bird flying a figure-eight through the clearing. Fly onto
 ## it and fire: rockets (lead it) or seekers (hold it in the cone for a second to lock). Each hit knocks out
-## flight feathers (2.5 on average); eight lost down it, and it comes back a moment later, mended. The target flies a racetrack above the clearing: straights long enough to lock,
-## turns that break it. Sit on any perch for two seconds to rearm.
+## flight feathers (2.5 on average); eight lost down it, and it comes back a moment later, mended. The target
+## flies a racetrack above the clearing: straights long enough to lock, turns that break it. Your base is the
+## outpost nearest the clearing (with no outposts, the start perch): sit on its rail for two seconds to rearm
+## and grow lost feathers back; the HUD points home when you need it.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
 ## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
 ## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
@@ -33,6 +35,7 @@ var start_seekers := false
 var evade := true            ## the target breaks when locked or shot at (T toggles)
 var loadout: Array = []      ## the pods, left and right: both of one kind (empty: Saddle.DEFAULT_LOADOUT)
 var tacks := {}              ## Bird -> Tack
+var home: Perch              ## your base's perch: where you rearm and mend
 
 
 func _ready() -> void:
@@ -117,6 +120,9 @@ func restart() -> void:
 	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
 	world.player = world.add_bird(bird, weapons)
 	_arm(bird, world.player)
+	home = _home()
+	world.player.rearm_perch = home.id
+	combat_hud.home = home.position
 	if start_seekers:
 		world.player.weapon = Launcher.Weapon.SEEKERS
 	camera.bird = bird
@@ -134,6 +140,19 @@ func _arm(b: Bird, l: Launcher) -> void:
 	tacks[b] = t
 	var kinds := {Launcher.Weapon.ROCKETS: "rockets", Launcher.Weapon.SEEKERS: "seekers"}
 	l.set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(kinds[w], i))
+
+
+## Your base: the rail of the outpost nearest the clearing (the start perch where the layout has none).
+func _home() -> Perch:
+	var best: Perch = layout.start_perch()
+	var best_d := INF
+	for o in layout.outposts:
+		var od := o as ArenaLayout.OutpostData
+		var d := Vector2(od.centre.x - CIRCUIT_CENTRE.x, od.centre.z - CIRCUIT_CENTRE.z).length()
+		if od.rail_perch_id >= 0 and d < best_d:
+			best_d = d
+			best = layout.perches[od.rail_perch_id]
+	return best
 
 
 func _spawn(id: String, ctl: Object, n: String) -> Bird:

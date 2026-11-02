@@ -36,7 +36,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); a bird
   carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
-  that area and drops (`FlightModel.wing_loss`); eight down the bird; a perch mends. The HUD shows a health bar.
+  that area and drops (`FlightModel.wing_loss`); eight down the bird; your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
   rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
