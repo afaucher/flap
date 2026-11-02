@@ -316,11 +316,11 @@ svg .mut { fill: var(--muted); }
   <section aria-labelledby="build">
     <h2 id="build">6 · Build order</h2>
     <ol class="steps">
-      <li><h3>Add neck and femur bones</h3><p>Three neck bones and a femur per leg in the Skeleton3D. Leg IK becomes a three-bone chain with the femur held near a rest angle. No visual change yet. Tests check bone lengths are kept and the knee stays inside the old capsule.</p></li>
-      <li><h3>Loft the trunk shell from landmarks</h3><p>Replace the capsule with the ring loft. Tests check that the shoulders, hips and folded-wing joints are on the shell, and that the shell's volume is within 10% of the capsule's so the silhouette doesn't jump.</p></li>
-      <li><h3>Neck behaviour</h3><p>Extension parameter, S-curve solve, head translation and stabilisation. The neck shell is re-lofted per frame. Shown in the bird lab with a neck slider.</p></li>
-      <li><h3>Leg poses</h3><p>Crouch before take-off, reach and absorb on landing, per-species proportions and toe layout (owl 2 + 2).</p></li>
-      <li><h3>Fluff and small motion</h3><p>Fluff scale per state, breathing, tail pumping on the perch, crow head-bob while walking.</p></li>
+      <li><h3>Add neck and femur bones <span class="tag moves">done</span></h3><p>Three neck bones and a femur per leg in the Skeleton3D. The femur is held near level in the world and swings a little toward the foot. Tests check every bone length in every pose and that the knee stays inside the shell, perched or not.</p></li>
+      <li><h3>Loft the trunk shell from landmarks <span class="tag moves">done</span></h3><p>The capsule is replaced by the ring loft. Tests check the shoulders and tail base are on the shell, the hips inside, the folded-wing joints and feathers on it, and the volume within 12% of the old capsule's.</p></li>
+      <li><h3>Neck behaviour <span class="tag moves">done</span></h3><p>Extension per state and species, the S solve, head stabilisation in world space. The neck's feather tube runs straight from inside the trunk to the head, since the feathers smooth over the S.</p></li>
+      <li><h3>Leg poses <span class="tag moves">mostly done</span></h3><p>Done: the leap (the feet keep pushing on the perch for 0.15 s after take-off), the touchdown dip on flexing legs, per-species leg lengths, the owl's 2 + 2 grip. Not done: a crouch before take-off, which needs a short delay before the bird leaves.</p></li>
+      <li><h3>Fluff and small motion <span class="tag moves">mostly done</span></h3><p>Done: fluff per state, breathing, tail pumps after landing. Not done: the crow's walking head-bob, which waits on ground walking.</p></li>
       <li><h3>Plumage zones</h3><p>Vertex colours on the shell rings (breast, belly band, rump, crown, cheek stripe) per the plumage research. The rings make these zones easy to address.</p></li>
     </ol>
   </section>
