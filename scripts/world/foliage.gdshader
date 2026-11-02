@@ -11,6 +11,7 @@ uniform sampler2D tex : source_color, filter_linear_mipmap_anisotropic, repeat_d
 uniform float tex_size = 512.0;
 uniform float scissor = 0.45;
 uniform float boost = 0.22;          // alpha gained per mip level down (coverage kept at a distance)
+uniform float boost_from = 0.0;      // from this mip level on (close sprays stay sharp)
 uniform vec3 tint : source_color = vec3(1.0);
 uniform float backlight = 0.55;     // (kept for the ferns' look; the sun's own light-through is in light())
 uniform float translucency = 0.55;  // the sun through a leaf seen against it: a yellow-green glow
@@ -46,7 +47,7 @@ void fragment() {
 	// Keep coverage down the mips: mipped alpha averages toward 0 at the thin needles' edges.
 	vec2 px = UV * tex_size;
 	float lod = max(0.0, log2(max(length(dFdx(px)), length(dFdy(px)))));
-	float a = t.a * (1.0 + lod * boost);
+	float a = t.a * (1.0 + max(lod - boost_from, 0.0) * boost);
 	ALBEDO = t.rgb * tint * COLOR.rgb;
 	ALPHA = a;
 	ALPHA_SCISSOR_THRESHOLD = scissor;
