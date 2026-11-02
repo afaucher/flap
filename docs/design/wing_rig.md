@@ -111,19 +111,18 @@ The model uses 1.5 spans with a 1.5 m minimum, a deliberate exaggeration so down
   .\run.ps1 --scene res://scenes/rig_gallery.tscn --pose glide|flap|upstroke|folded|flare --view top|front|three
   ```
 - **Tests:** `test_wing_shape` (calibration) and `test_bird_rig`. The rig test covers bone lengths in every pose, span, the fold-anchor IK, mirror symmetry, flap direction, leg IK, head clamp, the skeleton matching the solve, and a perched bird's feet on its perch.
-- **Wing thickness.** The leading edge is the limb, plus the patagium (the skin web from shoulder to wrist) and covert padding. The rig models it as four "fairings" per wing: patagium, humerus, forearm and hand.
-  - Each fairing is an ellipsoid along its bone, with the bone at its front edge. It's rounded at the leading edge and trails back over the coverts.
-  - Width and thickness, as fractions of the root chord:
+- **Wing thickness: muscle, tendon and skin.** The arm isn't a cylinder. Four pieces per wing, each lofted once as a unit mesh with an airfoil section (round and thick at the front where the bone or tendon runs, thin behind, slightly cambered) and laid along its bones every tick:
 
-    | Piece | Width | Thickness |
-    |---|---|---|
-    | Patagium | 0.55 | 0.13 |
-    | Humerus | 0.36 | 0.12 |
-    | Forearm | 0.30 | 0.09 |
-    | Hand | 0.20 | 0.055 |
+  | Piece | Anatomy | Thickness, root → tip (× root chord) | Chord |
+  |---|---|---|---|
+  | Propatagium | Skin fold shoulder → wrist, held taut by the tensor propatagialis tendon: a straight leading edge in front of the elbow | 0.06 → 0.035 | Deepest mid-span, reaching back over the elbow; set per pose |
+  | Humerus | Biceps, triceps, deltoid | 0.12 → 0.08, belly at 35% | 0.40 → 0.32 |
+  | Forearm | Muscle bellies by the elbow, tendons to the wrist | 0.11 → 0.045, belly at 15% | 0.34 → 0.24 |
+  | Hand | Bone and tendon | 0.05 → 0.022 | 0.22 → 0.10 |
 
-  - So the wing is thickest at the root and thins toward the hand. The flight feathers behind it form the thin trailing edge.
-  - The patagium fairing shrinks away as the wing folds.
+  - The flight feathers behind form the thin trailing edge. The breast muscles that power the wingbeat are part of the body shell (its deep breast ring).
+  - The propatagium slackens away as the wing folds. `test_bird_rig` checks its straight edge, that it covers the elbow, that it's gone folded, and that every piece thins outward.
+  - Gallery close-ups: `--view wing` (the arm wing from ahead and above) and `--view lead` (head-on). A/B in `docs/images/wing_limbs_before_after.png`.
   - Flight feathers arch by 3% of their length, so they aren't flat cards.
 - **Feather widths and outlines.** Each feather type has a width/length ratio:
 

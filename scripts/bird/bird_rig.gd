@@ -283,34 +283,88 @@ func _build_body(tint: Color) -> void:
 		_leg_meshes[i] = parts
 
 
-## The wing's thickness: the limb itself, the patagium (the skin web from shoulder to wrist) and the covert
-## padding over them. Each is an ellipsoid along its bone with the bone at its front edge: thick and rounded
-## at the leading edge, trailing back over the coverts, thinning from the root to the hand. The flight
-## feathers carry on behind as the thin trailing edge.
+## The wing's thickness, from the anatomy (the arm is not a cylinder):
+## - The PROPATAGIUM is a skin fold from shoulder to wrist, held taut by the tensor propatagialis tendon. It
+##   makes the arm wing's leading edge a straight line in front of the elbow, rounded by the tendon along
+##   its rim, and slackens away as the wing folds.
+## - The HUMERUS carries the arm's muscle (biceps, triceps, deltoid): thickest near the shoulder.
+## - The FOREARM's muscle bellies sit by the elbow and run out into tendons toward the wrist.
+## - The HAND is bone and tendon: thin.
+## Each piece is lofted once as a unit mesh with an airfoil section (round and thick at the front where the
+## bone or tendon is, thin behind, a little cambered), the covert padding over the limb; the flight feathers
+## carry on behind as the thin trailing edge. Per piece: [thickness at the root end, at the far end] and
+## [chord at the root end, at the far end] as fractions of the root chord, and where a muscle belly bulges
+## (u along the bone; -1 none). The propatagium's chord is a hump set per pose (the elbow's depth behind the
+## leading edge).
+const LIMB := [
+	{"t": [0.06, 0.035], "c": [1.0, 1.0], "belly": -1.0},   # propatagium (chord scaled per pose)
+	{"t": [0.12, 0.08], "c": [0.4, 0.32], "belly": 0.35},    # humerus
+	{"t": [0.11, 0.045], "c": [0.34, 0.24], "belly": 0.15},  # forearm
+	{"t": [0.05, 0.022], "c": [0.22, 0.1], "belly": -1.0},   # hand
+]
+static var _limb_meshes: Array = []
+
+
+## (chord, thickness) of limb piece `piece` at `u` (0 root end .. 1 far end), in the units of LIMB.
+static func limb_section(piece: int, u: float) -> Vector2:
+	var d: Dictionary = LIMB[piece]
+	var uc := clampf(u, 0.0, 1.0)
+	var t := lerpf(d.t[0], d.t[1], uc)
+	if float(d.belly) >= 0.0:
+		t *= 1.0 + 0.3 * exp(-pow((uc - float(d.belly)) / 0.22, 2.0))
+	var c := lerpf(d.c[0], d.c[1], uc)
+	if piece == 0:
+		c = 0.15 + 0.85 * pow(sin(PI * uc), 0.6)   # the web is deepest mid-span, narrow at shoulder and wrist
+	return Vector2(c, t)
+
+
+## Half-thickness of a NACA 4-digit section of unit thickness at chord fraction x (max 0.5 near x = 0.3).
+static func _naca(x: float) -> float:
+	return 5.0 * (0.2969 * sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x)
+
+
+## Unit limb mesh: z 0..1 along the bone (with rounded caps just past each end), x aft (chord units), y the
+## wing normal (root-chord units). The bone runs just behind the nose.
+static func _limb_mesh(piece: int) -> ArrayMesh:
+	var rows: Array = []
+	var around := 16
+	var steps := 14
+	for k in steps + 1:
+		var u := lerpf(-0.06, 1.06, float(k) / steps)
+		var cap := sqrt(clampf(minf(u + 0.06, 1.06 - u) / 0.12, 0.0, 1.0))
+		var sec := limb_section(piece, u)
+		var c := sec.x * cap
+		var t := sec.y * cap
+		var nose := 0.0 if piece == 0 else 0.06   # the propatagium's leading edge IS the line
+		var row: Array = []
+		for j in around:
+			var a := TAU * j / around
+			var x := 0.5 * (1.0 - cos(a))          # 0 at the leading edge, 1 at the trailing edge
+			var half := _naca(x) * t
+			var y := 0.02 * c * sin(PI * x) + (-half if sin(a) >= 0.0 else half)   # (lower first: outward winding)
+			row.append(Vector3((x - nose) * c, y, u))
+		rows.append(row)
+	return BodyShape.tube_mesh(rows)
+
+
 func _build_fairings(c: Color) -> void:
 	var mat := _plumage(c) if not plain_feathers else _material(c)
-	var sph := SphereMesh.new()
-	sph.radius = 0.5
-	sph.height = 1.0
-	sph.radial_segments = 16
-	sph.rings = 8
+	if _limb_meshes.is_empty():
+		for k in 4:
+			_limb_meshes.append(_limb_mesh(k))
 	for i in 2:
 		var parts: Array = []
 		for k in 4:
 			var mi := MeshInstance3D.new()
-			mi.mesh = sph
+			mi.mesh = _limb_meshes[k]
 			mi.material_override = mat
 			add_child(mi)
 			parts.append(mi)
 		_fairings[i] = parts
 
 
-## Fairing size per piece as fractions of the root chord: [chordwise width, thickness].
-const FAIRING := [[0.55, 0.13], [0.36, 0.12], [0.3, 0.09], [0.2, 0.055]]
-
-
-func _place_fairing(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, piece: int, fade: float) -> void:
-	var rc := shape.root_chord()
+## Lay a unit limb mesh from `a` to `b`, its chord aft and its thickness along `n`; `chord` scales x (m).
+func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, chord: float, fade: float) -> void:
 	var d := b - a
 	var length := d.length()
 	if length < 1e-5 or fade <= 0.01:
@@ -320,9 +374,7 @@ func _place_fairing(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side
 	var u := d / length
 	var nn := (n - u * u.dot(n)).normalized()
 	var aft := (u.cross(nn) * side).normalized()
-	var w: float = FAIRING[piece][0] * rc * fade
-	var t: float = FAIRING[piece][1] * rc * fade
-	mi.transform = Transform3D(Basis(aft * w, nn * t, u * length * 1.15), (a + b) * 0.5 + aft * w * 0.32)
+	mi.transform = Transform3D(Basis(aft * chord * fade, nn * shape.root_chord() * fade, d), a)
 
 
 func _feather_mesh(profile_pts: Array) -> ArrayMesh:
@@ -644,10 +696,17 @@ func apply_pose() -> void:
 				_plain.set_instance_custom_data(plain_i, Color(float(f.kind), _seed(i, f), 0.0, 0.0))
 				plain_i += 1
 		var fr: Array = _fairings[i]
-		_place_fairing(fr[0], sh, wrist, arm_n, s, 0, 1.0 - fold)   # the patagium folds away with the wing
-		_place_fairing(fr[1], sh, elbow, arm_n, s, 1, 1.0)
-		_place_fairing(fr[2], elbow, wrist, arm_n, s, 2, 1.0)
-		_place_fairing(fr[3], wrist, hand, hand_n, s, 3, 1.0)
+		var rc := shape.root_chord()
+		# The propatagium: a straight leading edge shoulder -> wrist, deep enough to reach back over the elbow;
+		# it slackens away as the wing folds.
+		var le := (wrist - sh).normalized() if wrist.distance_to(sh) > 1e-5 else Vector3.RIGHT * s
+		var le_n := (arm_n - le * le.dot(arm_n)).normalized()
+		var le_aft := (le.cross(le_n) * s).normalized()
+		var web := maxf((elbow - sh).dot(le_aft), 0.0) + rc * 0.18
+		_place_limb(fr[0], sh, wrist, arm_n, s, web, 1.0 - fold)
+		_place_limb(fr[1], sh, elbow, arm_n, s, rc, 1.0)
+		_place_limb(fr[2], elbow, wrist, arm_n, s, rc, 1.0)
+		_place_limb(fr[3], wrist, hand, hand_n, s, rc, 1.0)
 		_pose_bone("humerus." + ("L" if i == 0 else "R"), sh, elbow, arm_n)
 		_pose_bone("forearm." + ("L" if i == 0 else "R"), elbow, wrist, arm_n)
 		_pose_bone("hand." + ("L" if i == 0 else "R"), wrist, hand, hand_n)

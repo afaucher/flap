@@ -31,6 +31,26 @@ func setup() -> void:
 				near(j[0].distance_to(j[1]), l[0], 1e-4, "%s humerus length %s" % [p.id, pose])
 				near(j[1].distance_to(j[2]), l[1], 1e-4, "%s forearm length %s" % [p.id, pose])
 				near(j[2].distance_to(j[3]), l[2], 1e-4, "%s hand length %s" % [p.id, pose])
+		# Wing thickness: the propatagium's leading edge runs straight from shoulder to wrist and reaches back
+		# past the elbow; it slackens away folded. Each limb piece thins from root to tip (muscle near the
+		# body, tendon and bone outward), and the arm is thicker than the hand.
+		_pose(rig, 0.0, 0.0, 0.0, 0.0)
+		var web: MeshInstance3D = rig._fairings[1][0]
+		var wj: Array = rig.wing_joints[1]
+		check(web.visible, p.id + " propatagium spread")
+		check(web.transform.origin.distance_to(wj[0]) < 1e-4, p.id + " propatagium from the shoulder")
+		check((web.transform.origin + web.transform.basis.z).distance_to(wj[2]) < 1e-4, p.id + " propatagium to the wrist")
+		var w0: Vector3 = wj[0]
+		var le: Vector3 = ((wj[2] as Vector3) - w0).normalized()
+		var behind: Vector3 = ((wj[1] as Vector3) - w0) - le * le.dot((wj[1] as Vector3) - w0)
+		check(web.transform.basis.x.length() > behind.length(), p.id + " propatagium reaches back over the elbow")
+		check(web.transform.basis.x.normalized().dot(behind.normalized()) > 0.9, p.id + " propatagium lies on the elbow's side of the edge")
+		_pose(rig, 0.0, 1.0, 0.0, 0.0)
+		check(not (rig._fairings[1][0] as MeshInstance3D).visible, p.id + " propatagium slack when folded")
+		for k in range(1, 4):
+			check(BirdRig.limb_section(k, 0.0).y > BirdRig.limb_section(k, 1.0).y, "limb %d thins outward" % k)
+		check(BirdRig.limb_section(1, 0.35).y > BirdRig.limb_section(3, 0.0).y * 2.0, "the arm is far thicker than the hand")
+		check(BirdRig.limb_section(2, 0.15).y > BirdRig.limb_section(2, 0.9).y * 1.8, "forearm muscle by the elbow, tendon to the wrist")
 		# Flap up: tips above the shoulder; down: below.
 		_pose(rig, deg_to_rad(50.0), 0.0, 0.0, 0.0)
 		check(rig.wing_joints[1][3].y > rig.wing_joints[1][0].y + half * 0.3, p.id + " flap up raises the hand")
