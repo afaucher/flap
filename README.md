@@ -20,8 +20,10 @@ perches to rest. This is the flight-model prototype; combat comes next.
 .\build.ps1                    # tests, then export build\windows\Flap.exe + zip
 ```
 
-Godot 4.7 is found via `$env:FLAP_GODOT`, `..\Hero-Reader\third_party\godot`, or `..\cast\build\deps`.
-Export templates are copied from `..\cast\build\deps\godot-data` on the first build.
+Godot 4.7 is found via `$env:FLAP_GODOT`, Flap's own `build\deps` (gitignored), `..\cast\build\deps`, or
+`..\Hero-Reader\third_party\godot`. Export templates are copied from `..\cast\build\deps\godot-data` on the first
+build. Every build is stamped `yyyy-MM-dd.HHmmss` (`build.ps1`), shown in a corner of the game's HUD and the bird
+lab (`scripts/ui/build_version.gd`; a source run says `dev (...)`).
 
 ## Controls
 
