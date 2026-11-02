@@ -26,8 +26,9 @@ func build(l: ArenaLayout) -> void:
 		var tier_colors := [Color(0.34, 0.32, 0.30), Color(0.43, 0.41, 0.38), Color(0.52, 0.50, 0.47)]
 		for t in layout.trees:
 			_tree(t, tier_colors[t.tier])
-	for p in layout.perches:
-		_perch_marker(p)
+	if layout.style != "pinewood":   # (in the pine wood perches are just wood; the catch ring shows on approach)
+		for p in layout.perches:
+			_perch_marker(p)
 	_highlight()
 
 
@@ -256,24 +257,10 @@ func show_candidate(p: Perch, status: int, grab_radius: float, grip := Vector3.Z
 ## tree's trunk and limbs solid; foliage and ferns are drawn only (birds fly through needles and leaves);
 ## the outposts' decks, rails and hangars solid.
 func _pinewood() -> void:
-	var trunk_cyl := _cyl(1.0, 0.4, 24)
-	var oak_cyl := _cyl(1.0, 0.65, 28)
-	var limb_cyl := _cyl(1.0, 0.6, 10)
-	var blob := SphereMesh.new()
-	blob.radius = 1.0
-	blob.height = 2.0
-	blob.radial_segments = 10
-	blob.rings = 6
-	var batches := {
-		"pine_trunk": [trunk_cyl, Color(0.42, 0.33, 0.27), []],
-		"oak_trunk": [oak_cyl, Color(0.36, 0.33, 0.29), []],
-		"limb": [limb_cyl, Color(0.45, 0.36, 0.29), []],
-		"stub": [limb_cyl, Color(0.55, 0.52, 0.48), []],
-		"oak_limb": [limb_cyl, Color(0.36, 0.33, 0.29), []],
-	}
-	var custom := {}
-	for k in batches:
-		custom[k] = []
+	# Trunks and limbs as built meshes (smooth, tapered, curved; a collar where a limb leaves its trunk, a flare
+	# at a trunk's foot, a little wobble round and up it), grouped by material in 32 m cells so cells off
+	# screen and outside a shadow cascade are skipped; collision as before (trunk cylinders, limb capsules).
+	var cells := {}
 	for t in layout.trees:
 		var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 		var body := StaticBody3D.new()
@@ -288,33 +275,45 @@ func _pinewood() -> void:
 		cs.position.y = t.height * 0.5
 		body.add_child(cs)
 		var oak: bool = t.kind == ArenaLayout.Kind.BROADLEAF
-		var key := "oak_trunk" if oak else "pine_trunk"
 		var seed := fmod(t.id * 0.6180339, 1.0)
-		batches[key][2].append(Transform3D(Basis.from_scale(Vector3(t.radius, t.height, t.radius)), c + Vector3.UP * t.height * 0.5))
-		custom[key].append(Color(t.radius, t.height, seed, 0.65 if oak else 0.4))
+		var cell := Vector2i(floori(t.base.x / 32.0), floori(t.base.y / 32.0))
+		_trunk(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
+		for lb in t.limbs:
+			_tube(_cell(cells, cell, lb[2]), lb[0], lb[1], 9 if float(lb[1][0]) > 0.05 else 6, _TILE[lb[2]], fmod(seed + (lb[0] as PackedVector3Array)[0].y * 0.37, 1.0))
 		for br in t.branches:
-			var dir: Vector3 = br.tip - br.root
-			var length := dir.length()
-			var b := _basis_along(dir / length)
-			var lk := "stub" if br.dead else ("oak_limb" if oak else "limb")
-			batches[lk][2].append(Transform3D(b * Basis.from_scale(Vector3(br.radius, length, br.radius)), (br.root + br.tip) * 0.5))
-			custom[lk].append(Color(br.radius, length, fmod(seed + br.root.y * 0.37, 1.0), 0.6))
 			if not br.solid:
 				continue
+			var dir: Vector3 = br.tip - br.root
+			var length := dir.length()
 			var bcs := CollisionShape3D.new()
 			var cap := CapsuleShape3D.new()
 			cap.radius = br.radius
 			cap.height = length + br.radius * 2.0
 			bcs.shape = cap
 			bcs.position = (br.root + br.tip) * 0.5 - c
-			bcs.basis = b
+			bcs.basis = _basis_along(dir / length)
 			body.add_child(bcs)
 		add_child(body)
 		tree_bodies.append(body)
-	for key in batches:
-		var mi := _batch(key, batches[key][0], batches[key][1], batches[key][2], [], custom[key])
-		if _BARK.has(key):
-			mi.material_override = _bark(key)
+	for k in cells:
+		var arr: Array = cells[k]
+		if (arr[0] as PackedVector3Array).is_empty():
+			continue
+		var surf := []
+		surf.resize(Mesh.ARRAY_MAX)
+		surf[Mesh.ARRAY_VERTEX] = arr[0]
+		surf[Mesh.ARRAY_NORMAL] = arr[1]
+		surf[Mesh.ARRAY_TANGENT] = arr[2]
+		surf[Mesh.ARRAY_TEX_UV] = arr[3]
+		surf[Mesh.ARRAY_TEX_UV2] = arr[4]
+		surf[Mesh.ARRAY_INDEX] = arr[5]
+		var m := ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surf)
+		var mi := MeshInstance3D.new()
+		mi.name = "Wood_%s" % k
+		mi.mesh = m
+		mi.material_override = _bark(String(k).get_slice("@", 0))
+		add_child(mi)
 	_crowns()
 	_floor()
 	for o in layout.outposts:
@@ -328,8 +327,79 @@ const _BARK := {
 	"stub": ["knotted_pine_bark", "knotted_pine_bark", {"tile_b": 0.5, "tint_b": Color(0.95, 0.92, 0.9), "b_only": true, "detail_scale": 0.012}],
 	"oak_trunk": ["jolcham_oak_bark_01", "jolcham_oak_bark_01", {"tile_b": 1.0, "aspect_b": 2.0, "b_only": true}],
 	"oak_limb": ["jolcham_oak_bark_01", "jolcham_oak_bark_01", {"tile_b": 0.5, "aspect_b": 2.0, "b_only": true, "detail_scale": 0.015}],
+	"twig": ["knotted_pine_bark", "knotted_pine_bark", {"tile_b": 0.3, "tint_b": Color(0.78, 0.62, 0.5), "b_only": true, "detail_scale": 0.008}],
 }
 const BARK_SHADER := preload("res://scripts/world/bark.gdshader")
+## m each bark photo spans round a built mesh (bark.gdshader's tile for that material)
+const _TILE := {"pine_trunk": 2.0, "oak_trunk": 1.0, "limb": 0.6, "stub": 0.5, "oak_limb": 0.5, "twig": 0.3}
+
+
+## The arrays for material `key` in `cell`: [verts, normals, tangents, uv, uv2, indices].
+func _cell(cells: Dictionary, cell: Vector2i, key: String) -> Array:
+	var k := "%s@%d_%d" % [key, cell.x, cell.y]
+	if not cells.has(k):
+		cells[k] = [PackedVector3Array(), PackedVector3Array(), PackedFloat32Array(), PackedVector2Array(), PackedVector2Array(), PackedInt32Array()]
+	return cells[k]
+
+
+## A tube through `pts` with `radii` (per point), `segs` round, appended to `arr`. UV in metres -- round the tube
+## a whole number of `tile`s at its base radius (no seam), along it its length -- UV2 (share of its length, seed).
+## Normals radial; frames carried along the curve without twisting.
+func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs: int, tile: float, seed: float, rings := []) -> void:
+	var n := pts.size()
+	var base: int = (arr[0] as PackedVector3Array).size()
+	var around: float = maxf(1.0, roundf(TAU * radii[0] / tile)) * tile
+	var total := 0.0
+	for i in range(1, n):
+		total += pts[i].distance_to(pts[i - 1])
+	var t0 := (pts[1] - pts[0]).normalized()
+	var nrm := t0.cross(Vector3.UP if absf(t0.y) < 0.95 else Vector3.RIGHT).normalized()
+	var run := 0.0
+	for i in n:
+		var tg := (pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]).normalized()
+		nrm = (nrm - tg * nrm.dot(tg)).normalized()
+		var bn := tg.cross(nrm)
+		if i > 0:
+			run += pts[i].distance_to(pts[i - 1])
+		for j in segs + 1:
+			var ang := TAU * j / segs
+			var radial := nrm * cos(ang) + bn * sin(ang)
+			var r: float = radii[i] * (float(rings[i][j % segs]) if not rings.is_empty() else 1.0)
+			arr[0].append(pts[i] + radial * r)
+			arr[1].append(radial)
+			var tan := -nrm * sin(ang) + bn * cos(ang)
+			arr[2].append_array(PackedFloat32Array([tan.x, tan.y, tan.z, 1.0]))
+			arr[3].append(Vector2(around * j / segs, run))
+			arr[4].append(Vector2(run / maxf(total, 1e-4), seed))
+	for i in n - 1:
+		for j in segs:
+			var v := base + i * (segs + 1) + j
+			var w := v + segs + 1
+			arr[5].append_array(PackedInt32Array([v, w, v + 1, v + 1, w, w + 1]))
+
+
+## A trunk: tapering, flared at its foot, a little out of round and wobbling up its height; capped at the top.
+func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
+	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
+	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
+	var top_share := 0.65 if oak else (0.4 if t.kind == ArenaLayout.Kind.PINE else 0.25)
+	var flare := 0.55 if oak else (0.3 if t.kind == ArenaLayout.Kind.PINE else 0.1)
+	var segs := 22 if oak else (18 if t.kind == ArenaLayout.Kind.PINE else 7)
+	var n := 26 if t.kind != ArenaLayout.Kind.SAPLING else 5
+	var pts := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	var rings := []
+	for i in n:
+		var u := pow(float(i) / (n - 1), 1.6)   # (rings closer near the foot, where the flare turns)
+		var y := t.height * u - 0.15
+		pts.append(c + Vector3.UP * y)
+		radii.append(t.radius * lerpf(1.0, top_share, clampf(y / t.height, 0.0, 1.0)) * (1.0 + flare * exp(-maxf(y, 0.0) / (0.9 if oak else 0.6))))
+		var ring := []
+		for j in segs:
+			var a := TAU * j / segs
+			ring.append(1.0 + 0.03 * sin(3.0 * a + seed * 9.0 + y * 0.35) + 0.02 * sin(5.0 * a + seed * 4.0 - y * 0.8) + (0.06 * flare * sin(4.0 * a + seed * 7.0) * exp(-maxf(y, 0.0) / 0.7)))
+		rings.append(ring)
+	_tube(arr, pts, radii, segs, _TILE["oak_trunk" if oak else "pine_trunk"], seed, rings)
 
 
 func _bark(key: String) -> ShaderMaterial:
@@ -345,6 +415,7 @@ func _bark(key: String) -> ShaderMaterial:
 			m.set_shader_parameter("disp_a", load(dir + "_disp_2k.jpg"))
 	for k in (spec[2] as Dictionary):
 		m.set_shader_parameter(k, spec[2][k])
+	m.set_shader_parameter("built", true)
 	return m
 
 
@@ -414,7 +485,7 @@ func _crowns() -> void:
 				var normal := (d + Vector3.UP * 0.7 + Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * 0.6).normalized()
 				var outward := Vector3(d.x, 0.0, d.z)
 				outward = outward.normalized() if outward.length() > 0.05 else Vector3.RIGHT
-				outward = outward.rotated(normal, rng.randf_range(-1.2, 1.2))   # (no two sprays point quite the same way)
+				outward = outward.rotated(normal, rng.randf_range(-1.2, 1.2) * (1.8 if k != "leaves" else 1.0))   # (no two sprays point quite the same way; pine shoots any way round the tuft)
 				var x := (outward - normal * outward.dot(normal)).normalized()
 				var y := normal.cross(x)
 				var size := rng.randf_range(spec.size.x, spec.size.y)

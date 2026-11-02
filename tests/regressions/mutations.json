@@ -862,7 +862,7 @@
   "edits": [
    {
     "file": "scripts/world/pinewood.gd",
-    "find": " and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6):",
+    "find": " and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6) and _leaf_free(a, from + across + d * (run + 1.5), 0.4) and _leaf_free(a, from - across + d * (run + 1.5), 0.4):",
     "replace": ":"
    }
   ]
@@ -1278,6 +1278,7 @@
   "id": "sapling-twigs-solid",
   "bug": "Young pines' twigs were solid and in the planner's way: AI birds bumped them eleven times in 90 s, low over the floor (2026-11-02).",
   "tests": [
+   "test_pinewood",
    "test_ai_flight"
   ],
   "edits": [
@@ -1285,6 +1286,20 @@
     "file": "scripts/world/pinewood.gd",
     "find": "\t\t\tbr.solid = false   # (twigs: a bird brushes through them, so does its planner)\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "outpost-rail-end-in-leaves",
+  "bug": "An outpost chose its facing from the leaves along the middle of its approach only, so one end of its rail ran into a crown's needles (2026-11-02).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": " and _leaf_free(a, from + across + d * (run + 1.5), 0.4) and _leaf_free(a, from - across + d * (run + 1.5), 0.4):",
+    "replace": ":"
    }
   ]
  }
