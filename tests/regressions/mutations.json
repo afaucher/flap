@@ -1613,5 +1613,47 @@
     "replace": "\t\t\t\t\t_reach = maxf(_reach, br.root.distance_to(br.tip) + br.radius)"
    }
   ]
+ },
+ {
+  "id": "planner-no-way-out-of-crown",
+  "bug": "Passing its own tree closer on the way out left a bird deep in a pine crown (another of its limbs near every way out) with no route at all: it sat on the perch (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tif starts.is_empty() and a_tree >= 0:\n\t\t# Deep in a crown",
+    "replace": "\tif false:\n\t\t# Deep in a crown"
+   }
+  ]
+ },
+ {
+  "id": "planner-wedged-start",
+  "bug": "A wide-turning bird perched closer to another tree than its planning berth found no first leg out and never left (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\tstarts = _attach(a, a_tree, true, minf(clearance, START_CLEARANCE))",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "ai-no-route-picked-again",
+  "bug": "A perch the planner found no route to was picked again every second (the bird waited on its perch, or replanned every tick in flight) (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)\n",
+    "replace": ""
+   }
+  ]
  }
 ]

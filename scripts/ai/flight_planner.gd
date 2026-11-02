@@ -17,12 +17,14 @@ const MAX_EXPANSIONS := 8000
 ## and the first PUSH_OFF metres (the bird passes through its own tree as it lets go) or the last ones (the catch).
 const OWN_TREE_CLEARANCE := 0.4
 const PUSH_OFF := 1.0
+const START_CLEARANCE := 0.6   ## m: the closest a first leg out of a tight spot may pass the wood (the whiskers')
 
 var layout: ArenaLayout
 var clearance := 0.9
 var _node_ok := {}      ## Vector3i -> bool
 var _a_perch := -1      ## the perch the route leaves (its branch is skipped), for the plan in progress
 var _b_perch := -1      ## the perch it lands on
+var _a_through := false ## leaving through its own tree (no way out past it)
 
 
 func _init(l: ArenaLayout, c := 0.9) -> void:
@@ -77,9 +79,18 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_perch := -1) -> Array[Vector3]:
 	_a_perch = a_perch
 	_b_perch = b_perch
+	_a_through = false
 	if _leg_ok(a, b, a_tree, b_tree):
 		return [a, b]
 	var starts := _attach(a, a_tree, true)
+	if starts.is_empty() and a_tree >= 0:
+		# Deep in a crown, every way out passes close to another of its own limbs: leave through them (it passes
+		# through its own tree as it lets go, and the avoidance steers it clear of the tree it left).
+		_a_through = true
+		starts = _attach(a, a_tree, true)
+	if starts.is_empty():
+		# Wedged in (its berth from the wood overlaps a neighbour's crown): the first leg out may pass closer.
+		starts = _attach(a, a_tree, true, minf(clearance, START_CLEARANCE))
 	var goals := _attach(b, b_tree, false)
 	if starts.is_empty() or goals.is_empty():
 		return []
@@ -157,18 +168,20 @@ func _leg_clear(pts: Array[Vector3], i: int, j: int, a_tree: int, b_tree: int) -
 	return _leg_ok(pts[i], pts[j], a_tree if i == 0 else -1, b_tree if j == pts.size() - 1 else -1)
 
 
-## A leg from a to b: clear of the wood by `clearance`, except the tree it leaves (`a_tree`) and the one it lands
+## A leg from a to b: clear of the wood by `clearance` (or `c`), except the tree it leaves (`a_tree`) and the one it lands
 ## on (`b_tree`), which it may pass OWN_TREE_CLEARANCE from, leaving out the perches' branches and the push-off
 ## and catch at the ends.
-func _leg_ok(a: Vector3, b: Vector3, a_tree: int, b_tree: int) -> bool:
+func _leg_ok(a: Vector3, b: Vector3, a_tree: int, b_tree: int, c := -1.0) -> bool:
+	if c < 0.0:
+		c = clearance
 	if a_tree < 0 and b_tree < 0:
-		return layout.segment_clear(a, b, clearance)
-	if not layout.segment_clear_among(layout.trees_near_segment(a, b, clearance), a, b, clearance, a_tree, b_tree):
+		return layout.segment_clear(a, b, c)
+	if not layout.segment_clear_among(layout.trees_near_segment(a, b, c), a, b, c, a_tree, b_tree):
 		return false
 	var d := b - a
 	var end := minf(PUSH_OFF, d.length() * 0.5)
 	var dir := d.normalized()
-	if a_tree >= 0 and not layout.tree_clear(a_tree, a + dir * end, b, OWN_TREE_CLEARANCE, _a_perch):
+	if a_tree >= 0 and not _a_through and not layout.tree_clear(a_tree, a + dir * end, b, OWN_TREE_CLEARANCE, _a_perch):
 		return false
 	if b_tree >= 0 and not layout.tree_clear(b_tree, a, b - dir * end, OWN_TREE_CLEARANCE, _b_perch):
 		return false
@@ -207,7 +220,7 @@ func _neighbours(k: Vector3i) -> Array[Vector3i]:
 
 
 ## Lattice nodes near `p` that it can fly to directly (or from, `leaving`); `tree` is the tree at `p`.
-func _attach(p: Vector3, tree: int, leaving: bool) -> Array[Vector3i]:
+func _attach(p: Vector3, tree: int, leaving: bool, c := -1.0) -> Array[Vector3i]:
 	var out: Array[Vector3i] = []
 	var cx := roundi(p.x / LATTICE)
 	var cz := roundi(p.z / LATTICE)
@@ -219,6 +232,6 @@ func _attach(p: Vector3, tree: int, leaving: bool) -> Array[Vector3i]:
 		for dx in range(-2, 3):
 			for dz in range(-2, 3):
 				var k := Vector3i(cx + dx, ly, cz + dz)
-				if _usable(k) and (_leg_ok(p, _pos(k), tree, -1) if leaving else _leg_ok(_pos(k), p, -1, tree)):
+				if _usable(k) and (_leg_ok(p, _pos(k), tree, -1, c) if leaving else _leg_ok(_pos(k), p, -1, tree, c)):
 					out.append(k)
 	return out

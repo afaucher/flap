@@ -328,9 +328,13 @@ func _tree_clear(t: TreeData, a: Vector3, b: Vector3, clearance: float, skip_per
 		return false
 	if d >= t.reach() + clearance:
 		return true   # (every branch leaves the trunk's axis, so none comes nearer than this)
+	var y0 := minf(a.y, b.y) - clearance
+	var y1 := maxf(a.y, b.y) + clearance
 	for br in t.branches:
 		if not br.solid or (skip_perch >= 0 and br.perch_id == skip_perch):
 			continue
+		if br.root.y - br.radius > y1 and br.tip.y - br.radius > y1 or br.root.y + br.radius < y0 and br.tip.y + br.radius < y0:
+			continue   # (wholly above or below the segment)
 		var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
 		if bp[0].distance_to(bp[1]) < br.radius + clearance:
 			return false

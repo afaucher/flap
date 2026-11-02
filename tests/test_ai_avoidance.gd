@@ -29,9 +29,11 @@ func setup() -> void:
 	await _final_not_through_own_trunk()
 	await _takeoff_own_tree()
 	_routes_round_own_trees()
+	_routes_out_of_tight_spots()
 	await _hemmed_in_keeps_route()
 	await _no_goal_still_avoids()
 	await _gives_up_unreachable_perch()
+	await _sets_aside_perch_without_route()
 	finish()
 
 
@@ -286,6 +288,33 @@ func _routes_round_own_trees() -> void:
 	check(planner.plan_to_perch(sat.position, goal, crow, t.id, sat.id).is_empty(), "another limb of its tree across the swoop in: no route")
 
 
+## Routes out of tight spots: deep in its own crown (every way out passes close to another of its limbs) it leaves
+## through them rather than not at all; wedged near another tree (closer than its planning berth) the first leg
+## may pass closer.
+func _routes_out_of_tight_spots() -> void:
+	var layout := ArenaLayout.new()
+	var t := _tree(layout, 0.0, 0.0, 16.0, 0.4)
+	var sat := _limb(layout, t, 8.0, Vector3(1.0, 0.0, 0.0), 3.0)
+	for i in 14:   # (a cage of limbs 4-13 m up, every 15 degrees)
+		for k in 24:
+			if i == 6 and k == 0:
+				continue
+			_limb(layout, t, 4.0 + i * 0.7, Vector3(1.0, 0.0, 0.0).rotated(Vector3.UP, deg_to_rad(15.0 * k)), 5.0, 0.0, false)
+	var far := _tree(layout, 40.0, 0.0, 20.0, 0.3)
+	var goal := _limb(layout, far, 9.0, Vector3(0.0, 0.0, 1.0), 3.0)
+	var crow := BirdProfile.crow()
+	check(not FlightPlanner.new(layout).plan_to_perch(sat.position, goal, crow, t.id, sat.id).is_empty(), "deep in its own crown: still a route out")
+	var hawk := BirdProfile.by_id("hawk")
+	var l2 := ArenaLayout.new()
+	var t2 := _tree(l2, 0.0, 0.0, 16.0, 0.3)
+	var sat2 := _limb(l2, t2, 9.0, Vector3(1.0, 0.0, 0.0), 3.0)
+	_tree(l2, sat2.position.x, 1.5, 20.0, 0.3)   # (a neighbour's trunk 1.5 m from where it sits)
+	var far2 := _tree(l2, 40.0, -10.0, 20.0, 0.3)
+	var goal2 := _limb(l2, far2, 9.0, Vector3(0.0, 0.0, 1.0), 3.0)
+	var wide := FlightPlanner.new(l2, 1.95)   # (a hawk's berth)
+	check(not wide.plan_to_perch(sat2.position, goal2, hawk, t2.id, sat2.id).is_empty(), "wedged within its berth of another trunk: still a route out")
+
+
 ## Inside the clearance of a trunk already (every way out blocked from the first metre): it keeps to the route
 ## it was given rather than whatever came first in the fan.
 func _hemmed_in_keeps_route() -> void:
@@ -320,6 +349,25 @@ func _no_goal_still_avoids() -> void:
 		check(pilot.target == null, "no perch: no target")
 		check(pilot.avoiding > 0.0 and absf(inp.stick.x) > 0.2, "no goal, a trunk ahead %s: steers clear (stick x %.2f)" % ["right" if side > 0 else "left", inp.stick.x])
 		await _free_all([b])
+
+
+## A perch it can't plan a route to (another limb of its tree across the swoop in) is set aside, not picked
+## again every second.
+func _sets_aside_perch_without_route() -> void:
+	var layout := ArenaLayout.new()
+	var t := _tree(layout, 0.0, -30.0, 20.0, 0.3)
+	var goal := _limb(layout, t, 9.0, Vector3(0.0, 0.0, 1.0), 3.0)   # (faces +x)
+	var crow := BirdProfile.crow()
+	var mid := FlightPlanner.approach_point(goal, crow).lerp(goal.approach_anchor(), 0.5)
+	_limb(layout, t, mid.y, Vector3(mid.x - t.base.x, 0.0, mid.z - t.base.y), Vector2(mid.x - t.base.x, mid.z - t.base.y).length() + 1.0, 0.0, false)
+	var pilot := AIPilot.new(layout, 3)
+	var b := _bird("crow", layout, pilot)
+	b.fly_from(Vector3(0.0, 10.0, 0.0), Vector3.FORWARD, 8.0)
+	pilot.sample(b, 1.0 / 60.0)
+	check(pilot.target == null, "no route in: no target")
+	check(pilot._given_up.has(goal.id), "a perch with no route in is set aside")
+	check(pilot._best_perch(b, 50.0, 0.0) == null, "and not picked again straight away")
+	await _free_all([b])
 
 
 ## A perch it hasn't reached in ATTEMPT_TIME is given up and left alone (not picked again) for GIVE_UP_TIME;

@@ -171,6 +171,7 @@ func _replan(bird: Bird) -> void:
 	_progress_clock = clock
 	if route.is_empty():
 		debug_reason = "no route"
+		_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)
 		target = null
 
 
