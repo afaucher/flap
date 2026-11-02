@@ -17,7 +17,7 @@ extends Node3D
 ##
 ## Layers: a sheepskin pad, the leather skirt (stitched, with knee rolls), the quilted seat with its pommel and
 ## cantle, brass fittings (D-rings, buckles, keepers, the breast ring), a canvas kit roll, the footrest (blued
-## struts, a brass bar), the firing box on the pommel (spade grips, ring sight), and a weapon mount each side of
+## struts, a brass bar), the controls on the pommel (a handlebar with firing buttons, a dash), and a mount each side of
 ## the rider: a pod of three rockets or a rail of two seekers, raised on pylons and tilted in a trunnion. The
 ## rounds in them show what's left (set_ammo).
 
@@ -35,6 +35,10 @@ var grips: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var holds: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## standing: leather hand loops on the back of the rack
 var pegs: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var knees: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## kneeling: where the knees rest (on the flaps)
+var ride_pegs: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## riding: the side pegs' tops, under the boots' balls
+## Riding, the side pegs and the ankle above and behind them: (y off the back, z aft) real cm.
+const PEG := Vector2(13.0, 27.0)
+const RIDE_ANKLE := Vector2(24.0, 19.0)
 var heels: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## kneeling: where the ankles rest (shins folded back)
 var muzzle := Vector3.ZERO
 var launcher_xf := Transform3D()
@@ -54,7 +58,7 @@ func build(rig: BirdRig, rider_h: float, pods: Array = [], tilt := DEFAULT_TILT)
 	surf = BackSurface.new(rig.body)
 	cm = 100.0 * TackMesh.REAL_H / rider_h
 	# The seat: just behind the shoulders, or further back on a bird whose head sits over them (an owl), so the
-	# firing box and the rider leaning over it stay behind the head.
+	# controls and the rider leaning over them stay behind the head.
 	var head_back := -INF
 	for hc in _heads():
 		head_back = maxf(head_back, (hc as Vector3).z + rig.body.head_r * 1.1)
@@ -207,7 +211,7 @@ func _skirt() -> void:
 func _seat() -> void:
 	# Laid out like a motorcycle's: a high "tank" in front that the rider hugs, knees pressed into its sides on
 	# knee pads; a narrower, lower seat behind it, quilted; a low cantle. The launcher is mounted ahead of the
-	# tank like a fairing, its spade grips the handlebars; brass footpegs stand out from the seat's sides.
+	# tank like a fairing, a handlebar ahead of the tank; brass footpegs stand out from the seat's sides.
 	var tm := _tm("seat")
 	tm.seed = 0.7
 	var hw := func(f: float) -> float:
@@ -227,12 +231,14 @@ func _seat() -> void:
 	var blued := _tm("blued")
 	for s in [-1.0, 1.0]:
 		knees[int(s > 0)] = at(s * 21.0 * minf(1.0, wide * 1.15), 18.0, -12.0)
-		# A footpeg: a blued bracket from the seat's base, a brass peg with a knurled rubber-less grip.
-		var root := at(s * 13.5, 6.5, 13.0)
-		var tip := at(s * 23.0, 7.5, 13.0)
-		blued.sweep(PackedVector3Array([at(s * 12.0, 4.0, 9.0), root, at(s * 12.0, 4.0, 17.0)]), PackedVector3Array([normal_at(s * 12.0, 13.0)]), TackMesh.circle(1.3 / cm, 8), true)
-		brass.sweep(PackedVector3Array([root, root.lerp(tip, 0.5), tip]), PackedVector3Array([normal_at(s * 18.0, 13.0)]), TackMesh.circle(1.5 / cm, 10), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.8]))
-		heels[int(s > 0)] = at(s * 20.0, 10.5, 15.0)
+		# A rear-set footpeg, as a racer's: a blued hanger from the seat's side, back and up, a brass peg under
+		# the ball of the boot; the ankle rides up behind it, heel raised (RIDE_ANKLE).
+		var root := at(s * 14.0, PEG.x, PEG.y)
+		var tip := at(s * 23.0, PEG.x + 0.5, PEG.y)
+		blued.sweep(PackedVector3Array([at(s * 12.5, 4.0, PEG.y - 9.0), root, at(s * 12.5, 4.0, PEG.y + 5.0)]), PackedVector3Array([normal_at(s * 12.0, PEG.y)]), TackMesh.circle(1.3 / cm, 8), true)
+		brass.sweep(PackedVector3Array([root, root.lerp(tip, 0.5), tip]), PackedVector3Array([normal_at(s * 18.0, PEG.y)]), TackMesh.circle(1.5 / cm, 10), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.8]))
+		ride_pegs[int(s > 0)] = at(s * 19.0, PEG.x + 1.5, PEG.y)
+		heels[int(s > 0)] = at(s * 19.5, RIDE_ANKLE.x, RIDE_ANKLE.y)
 	# Brass pommel plate and cantle binding: a rod along the top edge of each rise.
 	for ends in [[-35.0, -32.0, 15.0, 11.0], [26.5, 27.5, 11.0, 9.0]]:
 		var path := PackedVector3Array()
@@ -415,8 +421,8 @@ static func _basis_y(n: Vector3) -> Basis:
 ## The weapons ride on two mounts, one each side of the rider, raised on pylons so the line of fire passes over
 ## the bird's head; each mount carries a pod -- "rockets" (three tubes) or "seekers" (two on a rail) -- in a
 ## trunnion that tilts it (mount_tilt, deg nose up; a brass quadrant and locking pin show the setting). Ahead of
-## the rider, on the pommel: the firing box with the spade grips (the rider's handlebars), the ring sight and its
-## bead, the hand loops for standing. Each round knows where it leaves from (round_muzzle).
+## the rider, on the pommel: the controls -- a handlebar, a firing button on each grip, a dash of gauges -- and
+## the hand loops for standing. Each round knows where it leaves from (round_muzzle).
 const POD_KINDS := ["rockets", "seekers"]
 const POD_ROUNDS := {"rockets": 3, "seekers": 2}
 const DEFAULT_LOADOUT: Array[String] = ["rockets", "seekers"]   ## left, right
@@ -424,12 +430,13 @@ const DEFAULT_TILT := 3.0       ## deg
 const MOUNT_X := 44.0           ## real cm out from the spine: clear of the rider's elbows and knees
 const MOUNT_Z := -38.0          ## real cm, the trunnion: beside the rider's shoulders in the tuck
 const CLEAR_AOA := 5.0          ## deg: the line of fire is checked along a path this far below the body's axis
-const MOUNT_RAISE := 30.0       ## real cm: the highest a mount stands over the firing box (no stilts)
+const MOUNT_RAISE := 30.0       ## real cm: the highest a mount stands over the controls (no stilts)
 const CLEAR_HEAD := 0.35        ## of the head's radius, margin over the head (carried in flight or reaching)
 
 var loadout: Array[String] = DEFAULT_LOADOUT.duplicate()
 var mount_tilt := DEFAULT_TILT
 var mounts: Array = []          ## per side (0 left, 1 right): {kind, side, pivot: Transform3D (tilted), rounds, muzzles}
+var clamp_loops: Array = []    ## each pod band's centre line (saddle space) with [.., pod frame, kind, z], for tests
 var round_order := {"rockets": [], "seekers": []}   ## [mount index, round index] in firing order
 
 
@@ -474,30 +481,49 @@ func _launcher() -> void:
 	var brass := _tm("brass")
 	var lx := func(x: float, y: float, z: float) -> Vector3:
 		return launcher_xf * Vector3(x * k, y * k, z * k)
-	# The firing box: a rounded blued block with a roundel each side, a brass selector on top.
-	_rbox(blued, lx.call(0.0, 0.0, -18.0), Vector3(16.0, 11.0, 28.0) * k, 2.5 * k, Basis.IDENTITY)
+	# The controls, on a blued column from the pommel's front: a handlebar swept back to a leather grip each
+	# side, a thumb button on each (red where that side's pod holds rockets, nickel for seekers); a small dash
+	# between them -- each side's rounds on a gauge, a compass in the middle; a roundel badge on the column.
+	var foot := at(0.0, 21.0, -33.0)
+	var head: Vector3 = lx.call(0.0, -1.0, -15.0)
+	blued.sweep(PackedVector3Array([foot, foot.lerp(head, 0.5), head]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(1.9 * k, 10), true, PackedFloat32Array(), PackedFloat32Array([0.2]), PackedFloat32Array([0.3]))
+	brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(3.4 * k, 0.0), Vector2(3.4 * k, 0.8 * k), Vector2(2.2 * k, 1.4 * k), Vector2(0.0, 1.5 * k)]), 14, Transform3D(_basis_y(normal_at(0.0, -33.0)), foot - normal_at(0.0, -33.0) * 0.4 * k))
+	brass.lathe(PackedVector2Array([Vector2(2.4 * k, -1.2 * k), Vector2(2.6 * k, -0.6 * k), Vector2(2.6 * k, 0.6 * k), Vector2(2.4 * k, 1.2 * k)]), 14, Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), head))
+	_disc(_tm("roundel"), lx.call(0.0, -6.0, -17.2), Vector3(0.0, 0.25, -1.0).normalized(), 3.2 * k, 0.3 * k)
 	for s in [-1.0, 1.0]:
-		_disc(_tm("roundel"), lx.call(s * 8.2, 0.0, -18.0), Vector3(s, 0.0, 0.0), 4.2 * k, 0.4 * k)
-	brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(3.0 * k, 0.0), Vector2(3.0 * k, 0.8 * k), Vector2(2.4 * k, 1.2 * k), Vector2(0.0, 1.3 * k)]), 16, Transform3D(Basis.IDENTITY, lx.call(0.0, 5.5, -24.0)))
-	brass.sweep(PackedVector3Array([lx.call(0.0, 6.6, -24.0), lx.call(1.5, 9.5, -21.0)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.5 * k, 6), true)
-	brass.lathe(_ball(1.1 * k), 10, Transform3D(Basis.IDENTITY, lx.call(1.5, 9.5, -21.0)))
-	# The yoke: a pair of blued struts each side from the pommel up to the box, a brass foot plate under each.
+		var i := int(s > 0)
+		var bar := PackedVector3Array([head, lx.call(s * 3.5, -0.6, -13.5), lx.call(s * 6.5, -1.2, -9.0), lx.call(s * 8.0, -1.8, -4.0)])
+		brass.sweep(bar, PackedVector3Array([Vector3.UP]), TackMesh.circle(1.0 * k, 10), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.5]))
+		var g0: Vector3 = lx.call(s * 8.0, -1.8, -4.0)
+		var g1: Vector3 = lx.call(s * 13.5, -2.5, -1.5)
+		var grip := PackedVector3Array()
+		for q in 5:
+			grip.append(g0.lerp(g1, q / 4.0))
+		_tm("strap").sweep(grip, PackedVector3Array([Vector3.UP]), PackedVector2Array(_grip_section(1.7 * k)), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.9]))
+		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.9 * k, 0.0), Vector2(1.9 * k, 0.6 * k), Vector2(0.0, 0.7 * k)]), 12, Transform3D(Basis(Vector3.BACK, -s * PI * 0.5), g1))
+		grips[i] = g0.lerp(g1, 0.55)
+		# The thumb button, on a brass bezel at the grip's inner end.
+		var bp: Vector3 = lx.call(s * 8.6, 0.2, -3.6)
+		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.2 * k, 0.0), Vector2(1.2 * k, 0.5 * k), Vector2(0.0, 0.5 * k)]), 12, Transform3D(Basis.IDENTITY, bp))
+		var kind: String = loadout[i] if i < loadout.size() else DEFAULT_LOADOUT[i]
+		_tm("red" if kind == "rockets" else "nickel").lathe(_ball(0.8 * k), 10, Transform3D(Basis(Vector3.UP, 0.0).scaled(Vector3(1.0, 0.6, 1.0)), bp + Vector3.UP * 0.4 * k))
+	# The dash: a blued plate on the column's head, tilted to the rider, three brass-rimmed dials.
+	var dash := Basis(Vector3.RIGHT, deg_to_rad(-35.0))
+	var dc: Vector3 = lx.call(0.0, 2.2, -14.0)
+	_rbox(blued, dc, Vector3(15.0, 1.2, 6.0) * k, 0.5 * k, dash)
+	for d in [[-4.6, 2.0, "gauge"], [0.0, 2.4, "compass"], [4.6, 2.0, "gauge"]]:
+		var c: Vector3 = dc + dash * (Vector3(float(d[0]), 0.6, 0.0) * k)
+		var r: float = float(d[1]) * k
+		var xf := Transform3D(dash, c)
+		brass.lathe(PackedVector2Array([Vector2(r * 0.8, 0.0), Vector2(r, 0.0), Vector2(r * 1.05, 0.4 * k), Vector2(r, 0.7 * k), Vector2(r * 0.85, 0.6 * k)]), 16, xf)
+		_tm("nickel").lathe(PackedVector2Array([Vector2(0.0, 0.3 * k), Vector2(r * 0.85, 0.3 * k)]), 16, xf)
+		_tm("glass").lathe(PackedVector2Array([Vector2(r * 0.85, 0.55 * k), Vector2(r * 0.5, 0.7 * k), Vector2(0.0, 0.75 * k)]), 16, xf)
+		# (a needle on each gauge; the compass a card with a lubber line)
+		var needle := dash * Vector3(0.6 if d[2] == "gauge" else 0.0, 0.0, -1.0).normalized()
+		_tm("dark").sweep(PackedVector3Array([c + dash * Vector3(0, 0.38, 0) * k, c + dash * Vector3(0, 0.38, 0) * k + needle * r * 0.7]), PackedVector3Array([dash * Vector3.UP]), PackedVector2Array([Vector2(0.12, 0.0) * k, Vector2(-0.12, 0.0) * k, Vector2(-0.12, 0.08) * k, Vector2(0.12, 0.08) * k]), true)
+	# A brass rail behind the dash on two posts: the standing rider's hand loops hang from it.
 	for s in [-1.0, 1.0]:
-		for z in [-12.0, -26.0]:
-			var f := at(s * 7.0, 15.0, -36.0 + z * 0.3)
-			blued.sweep(PackedVector3Array([f, lx.call(s * 6.5, -5.0, z)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(1.2 * k, 8), true)
-			brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(2.2 * k, 0.0), Vector2(2.2 * k, 0.6 * k), Vector2(0.0, 0.9 * k)]), 10, Transform3D(_basis_y(normal_at(s * 7.0, -36.0 + z * 0.3)), f))
-	# Spade grips behind the box, with a thumb trigger bar between them.
-	for s in [-1.0, 1.0]:
-		var g0: Vector3 = lx.call(s * 9.0, -2.0, 1.0)
-		var g1: Vector3 = lx.call(s * 9.0, -5.0, 9.0)
-		blued.sweep(PackedVector3Array([lx.call(s * 9.0, 2.0, -3.0), g0]), PackedVector3Array([Vector3.UP]), TackMesh.circle(1.4 * k, 8), true)
-		_tm("glove").sweep(PackedVector3Array([g0, g0.lerp(g1, 0.5), g1]), PackedVector3Array([Vector3.UP]), TackMesh.circle(2.2 * k, 10), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.9]))
-		grips[int(s > 0)] = g0.lerp(g1, 0.5)
-	brass.sweep(PackedVector3Array([lx.call(-8.0, -1.0, 2.0), lx.call(8.0, -1.0, 2.0)]), PackedVector3Array([Vector3.UP]), TackMesh.circle(0.8 * k, 8), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.9]))
-	# A brass rail across the back of the box on two posts; the hand loops hang from it.
-	for s in [-1.0, 1.0]:
-		brass.sweep(PackedVector3Array([lx.call(s * 7.0, 5.0, -6.0), lx.call(s * 7.0, 11.0, -6.0)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.7 * k, 6), true)
+		brass.sweep(PackedVector3Array([lx.call(s * 7.0, 1.0, -10.0), lx.call(s * 7.0, 11.0, -6.0)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.7 * k, 6), true)
 	brass.sweep(PackedVector3Array([lx.call(-10.0, 11.0, -6.0), lx.call(10.0, 11.0, -6.0)]), PackedVector3Array([Vector3.UP]), TackMesh.circle(0.9 * k, 8), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.7]))
 	for s in [-1.0, 1.0]:
 		var loop := PackedVector3Array()
@@ -509,15 +535,10 @@ func _launcher() -> void:
 		var lsec: Array = _tm("strap").strap_section(2.2 * k, 0.5 * k)
 		_tm("strap").sweep(loop, ups, lsec[0], true, lsec[1], lsec[2], PackedFloat32Array([0.6]))
 		holds[int(s > 0)] = lx.call(s * 6.0, 18.0, -3.0)
-	# The sight: a ring on a post over the box's back, a bead on a bar forward of it.
-	brass.sweep(PackedVector3Array([lx.call(0.0, 5.5, -8.0), lx.call(0.0, 17.0, -8.0)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.6 * k, 6), true)
-	brass.torus(4.5 * k, 0.45 * k, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), lx.call(0.0, 21.5, -8.0)), 20, 6, 0.6)
-	blued.sweep(PackedVector3Array([lx.call(0.0, 2.0, -31.0), lx.call(0.0, 2.0, -64.0)]), PackedVector3Array([Vector3.UP]), PackedVector2Array([Vector2(1.6, -1.0) * k, Vector2(-1.6, -1.0) * k, Vector2(-1.6, 1.0) * k, Vector2(1.6, 1.0) * k]), true)
-	brass.sweep(PackedVector3Array([lx.call(0.0, 3.0, -62.0), lx.call(0.0, 16.5, -62.0)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.6 * k, 6), true)
-	brass.lathe(_ball(1.0 * k), 10, Transform3D(Basis.IDENTITY, lx.call(0.0, 17.0, -62.0)))
-	muzzle = lx.call(0.0, 0.0, -70.0)
+	muzzle = lx.call(0.0, 0.0, -40.0)
 	# The mounts, left and right.
 	mounts.clear()
+	clamp_loops.clear()
 	round_order = {"rockets": [], "seekers": []}
 	for i in 2:
 		var kind: String = loadout[i] if i < loadout.size() and POD_KINDS.has(loadout[i]) else DEFAULT_LOADOUT[i]
@@ -534,6 +555,15 @@ func _launcher() -> void:
 		rockets.append(mounts[mr[0]].rounds[mr[1]])
 	for mr in round_order.seekers:
 		seekers.append(mounts[mr[0]].rounds[mr[1]])
+
+
+## A grip's section: round, with eight shallow flutes for the fingers.
+func _grip_section(r: float) -> Array:
+	var out := []
+	for j in 16:
+		var a := TAU * j / 16.0
+		out.append(Vector2(cos(a), sin(a)) * r * (1.0 - 0.06 * float(j % 2)))
+	return out
 
 
 func _ball(r: float) -> PackedVector2Array:
@@ -558,7 +588,7 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 	var heads := _heads()
 	var hr := rig_body.head_r * (1.0 + CLEAR_HEAD)
 	var down := Basis(Vector3.RIGHT, -deg_to_rad(CLEAR_AOA)) * Vector3.FORWARD
-	var pivot := Vector3(foot.x, maxf(foot.y + 15.0 * k, y0), foot.z)   # (no lower than the firing box: above the rider's knees and elbows)
+	var pivot := Vector3(foot.x, maxf(foot.y + 15.0 * k, y0), foot.z)   # (no lower than the controls: above the rider's knees and elbows)
 	var top := y0 + MOUNT_RAISE * k
 	for it in 240:
 		var xf := Transform3D(Basis(Vector3.RIGHT, tilt), pivot)
@@ -576,7 +606,7 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 	var pod := Transform3D(Basis(Vector3.RIGHT, tilt), pivot)
 	var fx := func(x: float, y: float, z: float) -> Vector3:
 		return fork * (Vector3(x, y, z) * k)
-	var half: float = 10.5 if kind == "rockets" else 8.5   # the pod's half width at the clamp
+	var half := _pod_half(kind) + 0.9   # the pod's half width at the clamp, the band on it
 	# Pylons: front and rear legs from riveted plates on the skirt to the fork's base, and a brace in to the tank.
 	var fb: Vector3 = fx.call(0.0, -9.0, 0.0)
 	for z in [MOUNT_Z - 16.0, MOUNT_Z + 14.0]:
@@ -620,10 +650,10 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 		rounds = _rocket_pod(pod)
 	else:
 		rounds = _seeker_pod(pod)
-	_clamp(pod, half, 0.0)
-	_clamp(pod, half, -30.0 if kind == "rockets" else -22.0)
+	_clamp(pod, kind, 0.0)
+	_clamp(pod, kind, -30.0 if kind == "rockets" else -22.0)
 	# The firing cable from the box's side, drooping, to the pod's breech.
-	var c0: Vector3 = lx.call(s * 8.2, -3.0, -10.0)
+	var c0: Vector3 = lx.call(s * 1.5, -2.0, -15.0)
 	var c1: Vector3 = pod * (Vector3(-s * 3.0, -3.0, 14.0) * k)
 	var cable := PackedVector3Array()
 	for j in 9:
@@ -662,22 +692,75 @@ func _rocket_tubes() -> Array:
 	return [Vector2(-4.7, -2.8), Vector2(4.7, -2.8), Vector2(0.0, 5.3)]
 
 
-## A band round the pod at `z` (pod frame, real cm): blued, with a clamp bolt on top.
-func _clamp(pod: Transform3D, half: float, z: float) -> void:
+## The pod's cross-section (pod frame, real cm), as points round its parts: the tubes (rockets), or the
+## seekers and the rail over them.
+func _pod_outline(kind: String) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var circ := func(c: Vector2, r: float) -> void:
+		for j in 16:
+			pts.append(c + Vector2(cos(TAU * j / 16.0), sin(TAU * j / 16.0)) * r)
+	if kind == "rockets":
+		for c in _rocket_tubes():
+			circ.call(c, 4.2)
+	else:
+		for x in [-3.6, 3.6]:
+			circ.call(Vector2(x, -3.0), 2.6)
+		for q in [Vector2(-7.0, 2.4), Vector2(7.0, 2.4), Vector2(-7.0, 4.8), Vector2(7.0, 4.8), Vector2(-4.0, 6.2), Vector2(4.0, 6.2)]:
+			pts.append(q)
+	return pts
+
+
+## Convex hull of 2D points, counter-clockwise (monotone chain).
+static func _hull(pts: PackedVector2Array) -> PackedVector2Array:
+	var p := Array(pts)
+	p.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x or (a.x == b.x and a.y < b.y))
+	var cross := func(o: Vector2, a: Vector2, b: Vector2) -> float: return (a - o).cross(b - o)
+	var lower: Array = []
+	for q in p:
+		while lower.size() >= 2 and float(cross.call(lower[-2], lower[-1], q)) <= 0.0:
+			lower.pop_back()
+		lower.append(q)
+	var upper: Array = []
+	for i in range(p.size() - 1, -1, -1):
+		var q: Vector2 = p[i]
+		while upper.size() >= 2 and float(cross.call(upper[-2], upper[-1], q)) <= 0.0:
+			upper.pop_back()
+		upper.append(q)
+	lower.pop_back()
+	upper.pop_back()
+	return PackedVector2Array(lower + upper)
+
+
+## The pod's widest half width (real cm), from its outline.
+func _pod_half(kind: String) -> float:
+	var h := 0.0
+	for q in _pod_outline(kind):
+		h = maxf(h, absf(q.x))
+	return h
+
+
+## A band round the pod at `z` (pod frame, real cm), drawn tight round its outline: blued, with a clamp bolt on
+## top.
+func _clamp(pod: Transform3D, kind: String, z: float) -> void:
 	var k := 1.0 / cm
+	var hull := _hull(_pod_outline(kind))
+	var n := hull.size()
 	var loop := PackedVector3Array()
 	var ups := PackedVector3Array()
-	var hy := half - 0.5
-	for j in 33:
-		var a := TAU * j / 32.0
-		var c := cos(a)
-		var sn := sin(a)
-		var q := Vector2((half + 0.6) * signf(c) * pow(absf(c), 0.4), (hy + 0.6) * signf(sn) * pow(absf(sn), 0.4) + 0.6)
+	var top := -INF
+	for i in n + 1:
+		var a: Vector2 = hull[(i - 1 + n) % n]
+		var b: Vector2 = hull[i % n]
+		var c: Vector2 = hull[(i + 1) % n]
+		var out := ((b - a).orthogonal().normalized() + (c - b).orthogonal().normalized()).normalized()   # (outward: the hull runs counter-clockwise)
+		var q := b + out * 0.05
+		top = maxf(top, q.y)
 		loop.append(pod * (Vector3(q.x, q.y, z) * k))
-		ups.append(pod.basis * Vector3(signf(c) * pow(absf(c), 0.4), signf(sn) * pow(absf(sn), 0.4), 0.0).normalized())
+		ups.append(pod.basis * Vector3(out.x, out.y, 0.0))
 	var sec: Array = _tm("blued").strap_section(3.0 * k, 0.8 * k)
 	_tm("blued").sweep(loop, ups, sec[0], true, sec[1], sec[2], PackedFloat32Array([0.4]), false)
-	var bolt := pod * (Vector3(0.0, hy + 2.0, z) * k)
+	clamp_loops.append([loop, pod, kind, z])
+	var bolt := pod * (Vector3(0.0, top + 1.3, z) * k)
 	_tm("brass").sweep(PackedVector3Array([bolt + pod.basis.x * 2.2 * k, bolt - pod.basis.x * 2.2 * k]), PackedVector3Array([pod.basis.y]), TackMesh.circle(0.6 * k, 6), true)
 	_tm("brass").lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.1 * k, 0.0), Vector2(1.1 * k, 0.9 * k), Vector2(0.0, 0.9 * k)]), 6, Transform3D(Basis(Vector3.BACK, PI * 0.5) * pod.basis, bolt + pod.basis.x * 2.2 * k))
 
