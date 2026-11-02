@@ -1,0 +1,23 @@
+# Asset licences
+
+Every asset in `assets/` and where it came from. Add a row when you add an asset; anything downloaded keeps its
+source URL, author and licence here.
+
+## Made in this project
+
+| Path | What | How |
+|---|---|---|
+| `assets/feathers/` | Feather textures | Baked by `tools/bake_feathers.gd` from the project's own procedural feather shader |
+| `assets/legs/` | Leg scale tiles | Baked by `ScaleTile` (`scripts/bird/scale_tile.gd`) |
+
+## Downloaded
+
+All Poly Haven assets are CC0 1.0 (public domain dedication; no attribution required, credited here anyway):
+<https://polyhaven.com/license>. Downloaded 2026-11-02 as 2K JPEGs (diffuse, OpenGL normal, AO/rough/metal
+packed as `arm`, displacement).
+
+| Path | Asset | Author | Real size | Source | Licence |
+|---|---|---|---|---|---|
+| `assets/textures/bark/pine_bark/` | Pine Bark | Dimitrios Savva | 2.0 x 2.0 m | <https://polyhaven.com/a/pine_bark> | CC0 1.0 |
+| `assets/textures/bark/knotted_pine_bark/` | Knotted Pine Bark | Dimitrios Savva | 1.7 x 1.7 m | <https://polyhaven.com/a/knotted_pine_bark> | CC0 1.0 |
+| `assets/textures/bark/jolcham_oak_bark_01/` | Jolcham Oak Bark 01 | Charlotte Baglioni | 1.0 x 2.0 m | <https://polyhaven.com/a/jolcham_oak_bark_01> | CC0 1.0 |

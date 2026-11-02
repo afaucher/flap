@@ -56,7 +56,7 @@ func _ground() -> void:
 	plane.size = Vector2(2000.0, 2000.0)
 	mi.mesh = plane
 	var sm := ShaderMaterial.new()
-	sm.shader = load("res://scripts/world/ground_grid.gdshader")
+	sm.shader = load("res://scripts/world/forest_floor.gdshader" if layout.style == "pinewood" else "res://scripts/world/ground_grid.gdshader")
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
@@ -249,9 +249,9 @@ func show_candidate(p: Perch, status: int, grab_radius: float, grip := Vector3.Z
 ## tree's trunk and limbs solid; foliage and ferns are drawn only (birds fly through needles and leaves);
 ## the outposts' decks, rails and hangars solid.
 func _pinewood() -> void:
-	var trunk_cyl := _cyl(1.0, 0.4, 12)
-	var oak_cyl := _cyl(1.0, 0.65, 14)
-	var limb_cyl := _cyl(1.0, 0.6, 7)
+	var trunk_cyl := _cyl(1.0, 0.4, 24)
+	var oak_cyl := _cyl(1.0, 0.65, 28)
+	var limb_cyl := _cyl(1.0, 0.6, 10)
 	var blob := SphereMesh.new()
 	blob.radius = 1.0
 	blob.height = 2.0
@@ -262,10 +262,11 @@ func _pinewood() -> void:
 		"oak_trunk": [oak_cyl, Color(0.36, 0.33, 0.29), []],
 		"limb": [limb_cyl, Color(0.45, 0.36, 0.29), []],
 		"stub": [limb_cyl, Color(0.55, 0.52, 0.48), []],
-		"needles": [blob, Color(0.2, 0.33, 0.17), []],
-		"leaves": [blob, Color(0.3, 0.42, 0.18), []],
-		"sapling": [blob, Color(0.24, 0.4, 0.2), []],
+		"oak_limb": [limb_cyl, Color(0.36, 0.33, 0.29), []],
 	}
+	var custom := {}
+	for k in batches:
+		custom[k] = []
 	for t in layout.trees:
 		var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 		var body := StaticBody3D.new()
@@ -279,13 +280,18 @@ func _pinewood() -> void:
 		cs.shape = shape
 		cs.position.y = t.height * 0.5
 		body.add_child(cs)
-		var key := "oak_trunk" if t.kind == ArenaLayout.Kind.BROADLEAF else "pine_trunk"
+		var oak: bool = t.kind == ArenaLayout.Kind.BROADLEAF
+		var key := "oak_trunk" if oak else "pine_trunk"
+		var seed := fmod(t.id * 0.6180339, 1.0)
 		batches[key][2].append(Transform3D(Basis.from_scale(Vector3(t.radius, t.height, t.radius)), c + Vector3.UP * t.height * 0.5))
+		custom[key].append(Color(t.radius, t.height, seed, 0.65 if oak else 0.4))
 		for br in t.branches:
 			var dir: Vector3 = br.tip - br.root
 			var length := dir.length()
 			var b := _basis_along(dir / length)
-			batches["stub" if br.dead else "limb"][2].append(Transform3D(b * Basis.from_scale(Vector3(br.radius, length, br.radius)), (br.root + br.tip) * 0.5))
+			var lk := "stub" if br.dead else ("oak_limb" if oak else "limb")
+			batches[lk][2].append(Transform3D(b * Basis.from_scale(Vector3(br.radius, length, br.radius)), (br.root + br.tip) * 0.5))
+			custom[lk].append(Color(br.radius, length, fmod(seed + br.root.y * 0.37, 1.0), 0.6))
 			var bcs := CollisionShape3D.new()
 			var cap := CapsuleShape3D.new()
 			cap.radius = br.radius
@@ -294,16 +300,43 @@ func _pinewood() -> void:
 			bcs.position = (br.root + br.tip) * 0.5 - c
 			bcs.basis = b
 			body.add_child(bcs)
-		var fk := "leaves" if t.kind == ArenaLayout.Kind.BROADLEAF else ("sapling" if t.kind == ArenaLayout.Kind.SAPLING else "needles")
-		for f in t.foliage:
-			batches[fk][2].append(Transform3D(Basis.from_scale(f[1]), f[0]))
 		add_child(body)
 		tree_bodies.append(body)
 	for key in batches:
-		_batch(key, batches[key][0], batches[key][1], batches[key][2])
+		var mi := _batch(key, batches[key][0], batches[key][1], batches[key][2], [], custom[key])
+		if _BARK.has(key):
+			mi.material_override = _bark(key)
+	_crowns()
 	_floor()
 	for o in layout.outposts:
 		_outpost(o)
+
+
+## The bark materials (bark.gdshader; textures in assets/textures/bark, assets/LICENSES.md): [A, B, settings].
+const _BARK := {
+	"pine_trunk": ["pine_bark", "knotted_pine_bark", {"tile_a": 2.0, "tile_b": 1.7, "tint_a": Color(0.82, 0.78, 0.76), "tint_b": Color(1.25, 0.82, 0.6), "blend_lo": 0.48, "blend_hi": 0.78}],
+	"limb": ["knotted_pine_bark", "knotted_pine_bark", {"tile_b": 0.6, "tint_b": Color(1.2, 0.8, 0.58), "b_only": true, "detail_scale": 0.015}],
+	"stub": ["knotted_pine_bark", "knotted_pine_bark", {"tile_b": 0.5, "tint_b": Color(0.95, 0.92, 0.9), "b_only": true, "detail_scale": 0.012}],
+	"oak_trunk": ["jolcham_oak_bark_01", "jolcham_oak_bark_01", {"tile_b": 1.0, "aspect_b": 2.0, "b_only": true}],
+	"oak_limb": ["jolcham_oak_bark_01", "jolcham_oak_bark_01", {"tile_b": 0.5, "aspect_b": 2.0, "b_only": true, "detail_scale": 0.015}],
+}
+const BARK_SHADER := preload("res://scripts/world/bark.gdshader")
+
+
+func _bark(key: String) -> ShaderMaterial:
+	var spec: Array = _BARK[key]
+	var m := ShaderMaterial.new()
+	m.shader = BARK_SHADER
+	for slot in [["_a", spec[0]], ["_b", spec[1]]]:
+		var dir := "res://assets/textures/bark/%s/%s" % [slot[1], slot[1]]
+		m.set_shader_parameter("albedo" + slot[0], load(dir + "_diff_2k.jpg"))
+		m.set_shader_parameter("normal" + slot[0], load(dir + "_nor_gl_2k.jpg"))
+		m.set_shader_parameter("arm" + slot[0], load(dir + "_arm_2k.jpg"))
+		if slot[0] == "_a":
+			m.set_shader_parameter("disp_a", load(dir + "_disp_2k.jpg"))
+	for k in (spec[2] as Dictionary):
+		m.set_shader_parameter(k, spec[2][k])
+	return m
 
 
 func _cyl(bottom: float, top: float, segs: int) -> CylinderMesh:
@@ -316,16 +349,19 @@ func _cyl(bottom: float, top: float, segs: int) -> CylinderMesh:
 	return m
 
 
-func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := []) -> MultiMeshInstance3D:
+func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], customs := []) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = not colors.is_empty()
+	mm.use_custom_data = not customs.is_empty()
 	mm.mesh = mesh
 	mm.instance_count = xfs.size()
 	for i in xfs.size():
 		mm.set_instance_transform(i, xfs[i])
 		if mm.use_colors:
 			mm.set_instance_color(i, colors[i])
+		if mm.use_custom_data:
+			mm.set_instance_custom_data(i, customs[i])
 	var mi := MultiMeshInstance3D.new()
 	mi.name = "Batch_" + key
 	mi.multimesh = mm
@@ -336,26 +372,103 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := []) -> 
 	return mi
 
 
-## The forest floor: ferns and bilberry, low flattened clumps scattered over it; drawn only.
+## The crowns: each foliage clump (TreeData.foliage, an ellipsoid) filled with alpha-tested cards
+## (foliage.gdshader, FoliageTex) -- sprays of needles on the pines and saplings, leaf clusters on the oaks --
+## set mostly round the clump's shell, facing out and up, their sprays pointing outward; drawn only.
+const _CARDS := {
+	"needles": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.35, 0.6), "per_m3": 70.0, "n": Vector2i(40, 120), "tint": Color(0.86, 0.98, 0.98), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.1},
+	"sapling": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.25, 0.42), "per_m3": 60.0, "n": Vector2i(14, 40), "tint": Color(0.9, 1.0, 0.95), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.1},
+	"leaves": {"tex": "oak", "size": Vector2(0.6, 0.95), "per_m3": 6.0, "n": Vector2i(16, 80), "tint": Color(1.0, 1.0, 1.0)},
+}
+const FOLIAGE_SHADER := preload("res://scripts/world/foliage.gdshader")
+
+
+func _crowns() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = layout.seed * 7 + 3
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	var sets := {}
+	for k in _CARDS:
+		sets[k] = [[], [], []]
+	for t in layout.trees:
+		var k := "leaves" if t.kind == ArenaLayout.Kind.BROADLEAF else ("sapling" if t.kind == ArenaLayout.Kind.SAPLING else "needles")
+		var spec: Dictionary = _CARDS[k]
+		for f in t.foliage:
+			var c: Vector3 = f[0]
+			var r: Vector3 = f[1]
+			var n := clampi(int(r.x * r.y * r.z * 4.19 * float(spec.per_m3)), spec.n.x, spec.n.y)
+			var phase := rng.randf()
+			for i in n:
+				var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.6, 1), rng.randf_range(-1, 1)).normalized()
+				var p := c + d * r * pow(rng.randf(), 0.35) * 0.85
+				var normal := (d + Vector3.UP * 0.7 + Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)) * 0.6).normalized()
+				var outward := Vector3(d.x, 0.0, d.z)
+				outward = outward.normalized() if outward.length() > 0.05 else Vector3.RIGHT
+				outward = outward.rotated(normal, rng.randf_range(-1.2, 1.2))   # (no two sprays point quite the same way)
+				var x := (outward - normal * outward.dot(normal)).normalized()
+				var y := normal.cross(x)
+				var size := rng.randf_range(spec.size.x, spec.size.y)
+				var aspect: float = spec.get("aspect", 1.0)
+				var b := Basis(x * size, y * size * aspect, normal * size)
+				sets[k][0].append(Transform3D(b, p + x * size * 0.3))
+				sets[k][1].append(Color(1, 1, 1).lerp(Color(0.85, 0.95, 0.8), rng.randf()) * rng.randf_range(0.85, 1.1))
+				sets[k][2].append(Color(c.x, c.y, c.z, phase))
+	for k in _CARDS:
+		var mi := _batch("cards_" + k, quad, Color.WHITE, sets[k][0], sets[k][1], sets[k][2])
+		mi.material_override = _foliage_mat(k, _CARDS[k])
+
+
+func _foliage_mat(key: String, spec: Dictionary, extra := {}) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = FOLIAGE_SHADER
+	m.set_shader_parameter("tex", FoliageTex.get_tex(spec.tex))
+	m.set_shader_parameter("tint", spec.tint)
+	for p in ["tex_size", "scissor", "boost"]:
+		if spec.has(p):
+			m.set_shader_parameter(p, spec[p])
+	for e in extra:
+		m.set_shader_parameter(e, extra[e])
+	return m
+
+
+## The forest floor: bracken, clumps of arching fronds (cards bent in the shader), thick away from the trunks'
+## feet; drawn only.
 func _floor() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = layout.seed * 13 + 5
-	var fern := SphereMesh.new()
-	fern.radius = 1.0
-	fern.height = 1.0
-	fern.is_hemisphere = true
-	fern.radial_segments = 8
-	fern.rings = 3
+	var frond := QuadMesh.new()
+	frond.size = Vector2.ONE
+	frond.subdivide_depth = 8
+	frond.center_offset = Vector3(0.0, 0.5, 0.0)   # (the base at the origin, the frond up +Y)
 	var xfs := []
 	var cols := []
-	for i in 2600:
+	var cus := []
+	for i in 5200:
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary
 		if p.length() > layout.boundary:
 			continue
-		var r := rng.randf_range(0.25, 0.7)
-		xfs.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(r * rng.randf_range(0.8, 1.3), r * rng.randf_range(0.5, 0.9), r)), Vector3(p.x, ArenaLayout.GROUND_Y, p.y)))
-		cols.append(Color(0.26, 0.42, 0.18).lerp(Color(0.42, 0.45, 0.2), rng.randf()))
-	_batch("ferns", fern, Color.WHITE, xfs, cols)
+		var base := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
+		var size := rng.randf_range(0.6, 1.4)
+		var phase := rng.randf()
+		var tint := Color(1, 1, 1).lerp(Color(1.1, 1.0, 0.75), rng.randf()) * rng.randf_range(0.85, 1.05)
+		var fronds := rng.randi_range(4, 7)
+		var a0 := rng.randf() * TAU
+		for j in fronds:
+			var az := a0 + TAU * j / fronds + rng.randf_range(-0.3, 0.3)
+			var out := Vector3(sin(az), 0.0, cos(az))
+			var up := (Vector3.UP * rng.randf_range(0.9, 1.6) + out).normalized()   # the frond's line, out and up
+			var side := out.cross(Vector3.UP).normalized()
+			var nrm := side.cross(up).normalized()   # (faces up and out; the shader droops the tip toward its back)
+			if nrm.y < 0.0:
+				nrm = -nrm
+				side = -side
+			var b := Basis(side * size * 0.6, up * size, nrm * size)
+			xfs.append(Transform3D(b, base))
+			cols.append(tint)
+			cus.append(Color(base.x, base.y + size * 0.4, base.z, phase))
+	var mi := _batch("ferns", frond, Color.WHITE, xfs, cols, cus)
+	mi.material_override = _foliage_mat("ferns", {"tex": "fern", "tint": Color(1, 1, 1)}, {"bend": 0.35, "clump_normal": 0.45, "sway": 0.015, "flutter": 0.01, "backlight": 0.7})
 
 
 ## An outpost: a deck of planks on two bearers and a pair of braces to the trunk; the rounded landing rail
@@ -370,8 +483,8 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	var frame := Basis(side, Vector3.UP, -o.out)   # (x along the rail, y up, z back toward the trunk)
 	var at := func(x: float, y: float, z: float) -> Vector3:   # deck frame, m: z out from the deck's middle
 		return o.centre + side * x + Vector3.UP * y + o.out * z
-	var wood := _mat("pw_plank", Color(0.6, 0.48, 0.34))
-	var dark := _mat("pw_bearer", Color(0.42, 0.33, 0.25))
+	var wood := _timber("plank", {"grain_axis": 2, "length_m": o.depth})
+	var dark := _timber("bearer", {"grain_axis": 0, "nails": false, "wood": Color(0.42, 0.32, 0.22), "weather": 0.35})
 	var n := 9
 	for i in n:
 		var x := lerpf(-o.width * 0.5, o.width * 0.5, (i + 0.5) / n)
@@ -390,7 +503,7 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	# The landing rail: a peeled log along the outer edge, rope-wrapped in the middle.
 	var r0: Vector3 = at.call(-o.width * 0.5, o.rail_radius - o.thickness * 0.2, o.depth * 0.5 - o.rail_radius)
 	var r1: Vector3 = at.call(o.width * 0.5, o.rail_radius - o.thickness * 0.2, o.depth * 0.5 - o.rail_radius)
-	_rod(r0, r1, o.rail_radius, _mat("pw_rail", Color(0.66, 0.54, 0.4)))
+	_rod(r0, r1, o.rail_radius, _timber("rail", {"grain_axis": 1, "nails": false, "wood": Color(0.62, 0.5, 0.36), "weather": 0.25}))
 	_rod(r0.lerp(r1, 0.3), r0.lerp(r1, 0.7), o.rail_radius + 0.006, _mat("pw_rope", Color(0.72, 0.64, 0.46)))
 	var rc := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -402,7 +515,7 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	# The hangar: a nest box by the trunk to one side, its door toward the rail, a roundel on its outer side.
 	var hx := o.width * 0.5 - 0.27
 	var hz := -o.depth * 0.5 + 0.3
-	var hangar := _box(body, at.call(hx, 0.25, hz), frame, Vector3(0.42, 0.5, 0.44), _mat("pw_hangar", Color(0.52, 0.4, 0.3)), true)
+	var hangar := _box(body, at.call(hx, 0.25, hz), frame, Vector3(0.42, 0.5, 0.44), _timber("hangar", {"grain_axis": 1, "nails": false, "weather": 0.7}), true)
 	hangar.name = "Hangar"
 	_box(body, at.call(hx, 0.52, hz), frame * Basis(Vector3.RIGHT, deg_to_rad(-12.0)), Vector3(0.5, 0.03, 0.54), dark, false)
 	_disc(at.call(hx, 0.22, hz + 0.222), o.out, 0.09, _mat("pw_door", Color(0.05, 0.04, 0.03)))
@@ -413,6 +526,23 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	var crate := _mat("pw_crate", Color(0.55, 0.44, 0.22))
 	for q in [[-0.05, 0.0, 0.0], [0.05, 0.0, 0.02], [0.0, 0.06, 0.01], [0.16, 0.0, -0.06]]:
 		_box(body, at.call(hx - 0.36 + q[0], 0.03 + q[1], hz + 0.05 + q[2]), frame, Vector3(0.09, 0.06, 0.06), crate, false)
+
+
+const PLANKS_SHADER := preload("res://scripts/world/planks.gdshader")
+
+
+## Weathered timber (planks.gdshader), one material per use.
+func _timber(key: String, params: Dictionary) -> Material:
+	if layout.style != "pinewood":
+		return _mat("pw_" + key, params.get("wood", Color(0.55, 0.44, 0.32)))
+	var k := "timber_" + key + str(params.get("length_m", ""))
+	if not _mats.has(k):
+		var m := ShaderMaterial.new()
+		m.shader = PLANKS_SHADER
+		for p in params:
+			m.set_shader_parameter(p, params[p])
+		_mats[k] = m
+	return _mats[k]
 
 
 func _box(body: Node3D, c: Vector3, b: Basis, size: Vector3, m: Material, solid: bool) -> MeshInstance3D:

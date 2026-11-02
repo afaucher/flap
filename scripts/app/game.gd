@@ -37,8 +37,12 @@ func _ready() -> void:
 	if Boot.arg_value(args, "--legs") != "":
 		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"
 
-	_environment()
-	layout = Pinewood.generate(arena_seed) if Boot.arg_value(args, "--forest") == "pinewood" else ArenaLayout.generate(arena_seed)   # (--forest pinewood: the pine wood greybox)
+	var pinewood := Boot.arg_value(args, "--forest") == "pinewood"   # (--forest pinewood: the pine wood, in its own light)
+	if pinewood:
+		ForestLight.setup(self)
+	else:
+		_environment()
+	layout = Pinewood.generate(arena_seed) if pinewood else ArenaLayout.generate(arena_seed)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)
