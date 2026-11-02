@@ -29,6 +29,7 @@ static func apply(r: BirdRig, pose: String, time: float, neck := -1.0, fluff := 
 		r.rotation_degrees.x = 0.0
 	for i in 2:
 		r.foot_targets[i] = r._tucked_foot(i)
+		r.leg_reach[i] = 1.0 if pose == "folded" or pose == "flare" else 0.0   # (in flight the legs ride tucked)
 	match pose:
 		"flap", "upstroke":
 			var ph := fmod(time * 2.0, 1.0) if pose == "flap" else 0.75

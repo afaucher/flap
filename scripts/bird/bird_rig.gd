@@ -1927,7 +1927,7 @@ func apply_pose() -> void:
 		var foot := chain_end(ankle, target, _tars)
 		leg_joints[i] = [hip, knee, ankle, foot]
 		if legs != null:   # (the detailed legs: lofted, joined, segmented toes, claws)
-			toe_tips[i] = legs.pose(i, knee, ankle, foot, up_w, fwd_h, toe_grip, toe_grip if body.zygo else 0.0)
+			toe_tips[i] = legs.pose(i, knee, ankle, foot, up_w, fwd_h, toe_grip, toe_grip if body.zygo else 0.0, leg_reach[i])
 		else:
 			_place_capsule_legs(i, knee, ankle, foot)
 		var side := "L" if i == 0 else "R"

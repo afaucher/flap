@@ -85,6 +85,8 @@ const CLAW_OF := [1, 2, 3, 0]
 const YAW := [-36.0, 6.0, 50.0, 190.0]
 const OWL_SWING_YAW := 125.0   ## the owl's outer toe when it swings back (2 + 2)
 const CURL_MAX := 1.8   ## a toe fitted to a branch curls at most this x the species' curl (deg, SPEC.curl)
+const TUCK_FLEX := 85.0   ## deg: tucked, the foot turned off square to the tarsus toward its line, toes trailing back
+const TUCK_GRIP := 0.6    ## tucked, the toes close this far (0 open .. 1 the full curl), claws in under the tail
 
 var rig: BirdRig
 var spec: Dictionary
@@ -117,6 +119,8 @@ var _skin_f: Array = []          ## per leg: the trousers' skin (its binds: the 
 var _tr: Array = [{}, {}]        ## per leg: where the trousers were last built ({e: the exit point, seg: its bone})
 var _wr: Array = [{}, {}]        ## per leg: the pose a mesh is being built in (_leg_w's ankle and its bisector)
 var _rest_hem: Array = [PackedVector3Array(), PackedVector3Array()]   ## per leg: the skin's top ring at rest
+var _front: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]       ## per leg: foot_frame's tarsus front last tick
+var _turn: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]        ## per leg: foot_frame's turn off level last tick (axis x angle)
 var rest_swing := 0.0   ## the owl's outer toe's swing in the rest pose (perched: swung back)
 var _loop_key: Array = [PackedFloat32Array(), PackedFloat32Array()]
 var _loop: Array = [{}, {}]   ## per side: the cached edge loop on the (unscaled) trunk shell
@@ -162,14 +166,19 @@ func _init(r: BirdRig) -> void:
 
 ## Pose leg `i` from the solved joints (rig space): its bones only -- the GPU deforms the meshes built at rest.
 ## `up_w` / `fwd_h`: world up and level forward (BirdRig._world_frame); `grip` 0 open .. 1 curled; `swing` 0..1 the
-## owl's outer toe swung back. Returns each toe's claw tip.
-func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, grip: float, swing: float) -> Array:
+## owl's outer toe swung back; `reach` (BirdRig.leg_reach) 0 tucked .. 1 reaching or standing: the foot's frame
+## (foot_frame). Returns each toe's claw tip.
+func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, grip: float, swing: float, reach := 1.0) -> Array:
 	if not _built:
 		_build_rest()
+	var ff := foot_frame(i, ankle, foot, up_w, fwd_h, reach)
+	up_w = ff[0]   # (below here up_w / fwd_h are the foot's: the pad, the toes' layout, the owl's feathered hem)
+	fwd_h = ff[1]
 	var fmat: Material = rig.body_texture_material if rig.body_texture_material != null else plain_mat
 	if feather_mi[i].material_override != fmat:
 		feather_mi[i].material_override = fmat
 	var st := rig.fluff * (1.0 + 0.012 * rig.breath)   # (the trunk's scale this pose: BirdRig sets it after the legs)
+	grip = maxf(grip, TUCK_GRIP * (1.0 - smoothstep(0.0, 1.0, reach)))   # (tucked, a loose fist; open as it reaches)
 	var xf := _bone_xforms(i, knee, ankle, foot, up_w, fwd_h, grip, swing, st)
 	var sk := skeletons[i]
 	for b in BONE_COUNT:
@@ -281,7 +290,7 @@ func _bone_xforms(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Ve
 	var t2 := (foot - ankle).normalized()
 	out[B_TIB] = Transform3D(Basis.looking_at(t1, _frame(t1, s)[0]), knee)
 	out[B_TARS] = Transform3D(Basis.looking_at(t2, _frame(t2, s)[0]), ankle)
-	out[B_PAD] = Transform3D(Basis.looking_at(fwd_h, up_w), foot)
+	out[B_PAD] = Transform3D(Basis.looking_at(fwd_h, up_w), foot)   # (up_w / fwd_h: the foot's frame)
 	var fr := _pad_frame(i, foot, up_w, fwd_h)
 	for k in 4:
 		var ch := _chain(i, k, fr, grip, swing)
@@ -909,6 +918,50 @@ static func _tars_r(x: float) -> float:
 
 
 # --- The foot pad -----------------------------------------------------------------------------------------------
+
+## The foot's frame [up, forward] for leg `i` (rig space). Reaching for a grip or standing (`reach` 1) it is the
+## level frame BirdRig gives (`up_w`, `fwd_h`), so the toes lie level on a perch or the ground. Tucked (0) it turns
+## with the tarsus: square to it (as on a standing leg: the toes along the tarsus's front, the tarsus up through the
+## pad), then flexed TUCK_FLEX about the foot's side toward the tarsus's line, so the toes trail back along it, soles
+## to the tail, as a raptor carries its feet. Between, as the foot reaches, the level frame turns toward the square
+## one while the flex eases out: the toes swing down and forward, never jump. Called once a tick (it carries state):
+## - the tarsus's front is carried over from the last tick (kept square to the tarsus), drawn back toward the body's
+##   side x the tarsus where that is well defined: no front taken from the tarsus alone is smooth everywhere, and
+##   one from the body's side spun as a landing leg swung out past it (the crow's, the owl's);
+## - the turn off level keeps its way round from tick to tick: past a half turn, a shortest-way slerp flipped over.
+func foot_frame(i: int, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, reach: float) -> Array:
+	if reach >= 0.999:
+		_front[i] = Vector3.ZERO
+		_turn[i] = Vector3.ZERO
+		return [up_w, fwd_h]
+	var t2 := (foot - ankle).normalized()
+	var side_front := Vector3.RIGHT.cross(t2)   # (forward on a standing leg, down the back of a tucked one)
+	var front: Vector3 = _front[i] if _front[i] != Vector3.ZERO else side_front
+	front -= t2 * front.dot(t2)
+	if front.length() < 1e-3:
+		front = side_front
+	front = front.normalized()
+	if side_front.length() > 1e-3:   # (a lerp: Vector3.slerp's axis, from the cross of two near-parallel vectors, isn't unit)
+		var pulled := front.lerp(side_front.normalized(), 0.2 * side_front.length_squared())
+		front = pulled.normalized() if pulled.length() > 1e-3 else front
+	_front[i] = front
+	var u := 1.0 - smoothstep(0.0, 1.0, reach)
+	var square := Basis.looking_at(front, -t2).get_rotation_quaternion()
+	var lvl := Basis.looking_at(fwd_h, up_w).get_rotation_quaternion()
+	var d := (lvl.inverse() * square).normalized()
+	var ang := d.get_angle()
+	var axis := d.get_axis().normalized() if ang > 1e-4 else Vector3.RIGHT
+	# (the same turn either way round: axis x ang, or the reverse axis x the rest of the circle; take the one nearer
+	# last tick's -- the shortest as the blend starts)
+	var other := -axis * (TAU - ang)
+	var last: Vector3 = _turn[i]
+	if other.distance_to(last) < (axis * ang).distance_to(last):
+		axis = -axis
+		ang = TAU - ang
+	_turn[i] = axis * ang
+	var b := Basis(lvl * Quaternion(axis, ang * u)) * Basis(Vector3.RIGHT, -deg_to_rad(TUCK_FLEX) * u)   # (-: forward turns to -up)
+	return [b.y, -b.z]
+
 
 ## The foot pad's frame: [centre, out (away from the body), up, forward, half-width, half-height].
 func _pad_frame(i: int, foot: Vector3, up_w: Vector3, fwd_h: Vector3) -> Array:
