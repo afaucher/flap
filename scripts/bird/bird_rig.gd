@@ -46,8 +46,7 @@ const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
 const MARKS_SHADER := preload("res://scripts/bird/feather_marks.gdshader")
 const TEXTURE_SHADER := preload("res://scripts/bird/feather_texture.gdshader")   ## plumage level 6
 const BODY_TEXTURE_SHADER := preload("res://scripts/bird/body_feathers.gdshader")
-const DOWN_SHADER := preload("res://scripts/bird/body_down.gdshader")
-static var outline_down := true   ## plumage level 6: down at the outline (body_down.gdshader; gallery --no-down)
+static var outline_down := true   ## plumage level 6: the outline frays (body_feathers.gdshader `fray`; gallery --no-down)
 ## Per-species feather look (docs/research/feather_rendering.md): glossy iridescent crow, matte barred soft
 ## owl, barred hawk with darker tips, falcon with buff margins, sparrow with pale edges and dark centres.
 const FEATHER_LOOK := {
@@ -148,7 +147,7 @@ var _clock_t := 0.0
 var _stance := 0.0
 var flex := 0.0                 ## feather bend along the length: + tips up (downstroke load), - tips back/down (upstroke)
 var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4] (the capsule legs)
-var legs: LegRig                      ## the detailed legs and feet (LegRig.enabled; docs/design/legs_and_feet.md)
+var legs: LegRig                      ## the detailed legs and feet (LegRig.enabled, on by default)
 var toe_tips: Array = [[], []]        ## per side, each toe's tip as drawn [inner, middle, outer, hallux] (tests)
 var _fairings: Array = [[], []]       ## per side: [patagium, humerus, forearm, hand] (the wing's thickness)
 var _built := false
@@ -728,18 +727,8 @@ func _texture_body() -> void:
 	m.set_shader_parameter("fringe_amt", float(look.fringe[1]))
 	m.set_shader_parameter("fringe_w", float(look.fringe[2]))
 	body_texture_material = m
-	# Down and loose barb tips at the outline: two shells a few millimetres out, strands only where the surface is
-	# seen edge-on (body_down.gdshader), drawn as next passes of the same meshes.
-	if outline_down:
-		var prev: Material = m
-		for layer in [1.0, 2.0]:
-			var d := ShaderMaterial.new()
-			d.shader = DOWN_SHADER
-			d.set_shader_parameter("height", 0.006 * _L / 0.45)
-			d.set_shader_parameter("layer", layer)
-			d.set_shader_parameter("layers", 2.0)
-			prev.next_pass = d
-			prev = d
+	# Feather tips and loose barbs at the outline: the body's own edge frays where it is seen edge-on.
+	m.set_shader_parameter("fray", 1.0 if outline_down else 0.0)
 	_trunk.material_override = m
 	_neck_mi.material_override = m
 	(_head.get_node("HeadSurface") as MeshInstance3D).material_override = m

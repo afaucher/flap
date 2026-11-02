@@ -9,6 +9,9 @@
 // u is periodic: at its seam (u = +-period / 2: under the belly and the chin) the two sides cross-fade, so there
 // is neither a seam nor a mirror line. Repeats are broken up by reading the tile at a slowly wandering offset
 // (two reads, changing over along the feathers' own outlines), a slow mottle, and each feather's own colour.
+// The outline frays (`fray`): where the surface is seen edge-on the body's own pixels give way along the feathers'
+// tips and a fine grain of barbs, so the silhouette breaks into feather tips and loose barbs without anything drawn
+// off the surface (the first try, shells a few mm out, read as dashed lines floating beside the bird up close).
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
@@ -27,6 +30,8 @@ uniform float variety = 1.0;         // the offset's wander and each feather's v
 uniform float row_spacing = 1.45;   // rows this much further apart than the tile's own (more of each feather shows)
 uniform float seam_band = 0.12;      // tiles: the cross-fade's width at u's seam
 uniform bool show_chart = false;     // debug: the feather chart as a grid (red: u, green: v, blue: by the seam)
+uniform float fray = 0.0;            // the outline's fraying (0 off .. 1)
+uniform float fray_grazing = 0.3;    // frays where |N.V| is below this: the outermost few millimetres
 
 varying vec2 period_up;
 
@@ -67,6 +72,7 @@ void read_tile(vec2 st, vec2 dx, vec2 dy, out vec4 t, out vec4 n) {
 }
 
 void fragment() {
+	float facing = abs(dot(normalize(NORMAL), normalize(VIEW)));
 	vec2 uv = UV * vec2(1.0, 1.0 / row_spacing);
 	vec2 dx = dFdx(uv);
 	vec2 dy = dFdy(uv);
@@ -87,6 +93,15 @@ void fragment() {
 		n = mix(n, n2, seam);
 	}
 	float k = strength * COLOR.a;
+	// Fray the outline: give way where a feather's edge is near (its tip and sides) and between fine barbs, more
+	// toward the very edge.
+	if (fray > 0.0) {
+		float rim = 1.0 - smoothstep(0.0, fray_grazing, facing);
+		float barbs = value_noise(vec2(uw * 28.0, uv.y * 9.0));
+		if (fray * rim * k > t.a * 0.85 + barbs * 0.3 + 0.08) {
+			discard;
+		}
+	}
 	float vary = variety * k;
 	// Each feather a touch lighter or darker, warmer or cooler; a slow mottle over the tracts.
 	float mottle = (value_noise(uv * 1.3 + 4.0) - 0.5) * 0.08 * vary;

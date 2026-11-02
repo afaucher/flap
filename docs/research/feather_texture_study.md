@@ -208,17 +208,17 @@ Still to do, from that ranking:
 - anisotropic sheen;
 - wear and moult gaps.
 
-**Down at the outline** (`scripts/bird/body_down.gdshader`, `docs/images/outline_down_ab.png`). On a real bird,
-loose barb tips and down soften the outline. The body meshes are drawn twice more, as next passes of the body
-material: two shells 3 and 6 mm out on a 45 cm bird.
-- **Strands.** Each shell shows scattered strands along the feather flow (the chart's v). Fewer and thinner
-  ones survive further out.
-- **Where.** Only where the surface is seen edge-on. Face-on, they would blur the texture.
-- **Light.** The strands glow with the sun behind them.
-- **Cost.** Cards and down together add about 0.05 ms of GPU per bird.
+**A frayed outline** (`body_feathers.gdshader`'s `fray`, `docs/images/outline_fray_ab.png`). On a real bird,
+loose barb tips and down soften the outline.
+- **First try: shells.** The body meshes were drawn twice more, 3 and 6 mm out, showing strands only where the
+  surface is seen edge-on (`docs/images/outline_down_ab.png`). Up close, as in the bird lab, each shell showed
+  edge-on as a dashed line parallel to the outline, with a gap to the body: floating noise. Two layers can't read
+  as fuzz attached to the bird, and many more would cost a draw each.
+- **Now: the body's own edge frays.** Where the surface is seen edge-on (|N.V| under 0.3: the outermost few
+  millimetres), its pixels give way along the feathers' tips and sides (the tile's edge distance) and a fine grain
+  of barbs. The silhouette notches at feather tips, and nothing is drawn off the surface.
+- **Cost.** No extra draws: a test and a noise read in the body shader.
 - **Switch.** `BirdRig.outline_down`; gallery `--no-down`.
-- **Open.** The strands are hard-cut (alpha scissor), so the fringe is a little speckled. Alpha-to-coverage or
-  a dithered fade would soften it.
 
 ## What was built
 

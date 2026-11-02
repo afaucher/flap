@@ -599,5 +599,19 @@
     "replace": "\t\tvar o := c + ax * 3.7\n"
    }
   ]
+ },
+ {
+  "id": "outline-shells-float",
+  "bug": "Down at the outline was drawn as two shells a few millimetres off the body; up close (the bird lab) each showed edge-on as a dashed line floating beside the bird (2026-11-02).",
+  "tests": [
+   "test_feather_texture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tm.set_shader_parameter(\"fray\", 1.0 if outline_down else 0.0)\n",
+    "replace": "\tm.next_pass = ShaderMaterial.new()\n"
+   }
+  ]
  }
 ]
