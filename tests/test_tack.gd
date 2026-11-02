@@ -31,6 +31,7 @@ func setup() -> void:
 			_head(id, pose, rig, tack)
 			_footing(id, pose, tack)
 			_arms(id, pose, tack)
+			_hands(id, pose, tack)
 			_scarf(id, pose, rig, tack)
 			_goggles(id, pose, tack)
 		_wings(id, rig, tack)
@@ -150,6 +151,45 @@ func _goggles(id: String, pose: String, tack: Tack) -> void:
 	eq(sunk, 0, "%s %s: the goggle strap lies on the helmet, not in it" % [id, pose])
 
 
+## Each fist closes round its grip, as drawn: the grip's centre inside the hand (hand frame: across the palm,
+## within its width and depth), the grip's axis across the hand (along its width, within 25 deg), the grip
+## showing out of the fist each side; flying, the firing button on top of the bar over the fist, within the
+## thumb's reach (its tip, 5 real cm).
+func _hands(id: String, pose: String, tack: Tack) -> void:
+	var r := tack.rider
+	var sv := tack.saddle
+	var sc := sv.scale.x
+	var st := r.stand
+	for i in 2:
+		var s := -1.0 if i == 0 else 1.0
+		var mi := r.get_node("hand%d" % i) as MeshInstance3D
+		var xf := mi.transform
+		var target: Vector3 = sv.grips[i].lerp(sv.holds[i], st) * sc
+		var axis: Vector3 = sv.grip_dirs[i].slerp(sv.hold_dirs[i], st).normalized()
+		var l := xf.affine_inverse() * target / r.k
+		check(l.y > 2.0 and l.y < 8.5 and absf(l.x) < 4.2 and absf(l.z) < 3.5, "%s %s: hand %d closes round its grip (grip at %.1f, %.1f, %.1f in the hand)" % [id, pose, i, l.x, l.y, l.z])
+		var across := rad_to_deg(acos(clampf(absf((xf.basis.x.normalized()).dot(axis)), 0.0, 1.0)))
+		if st < 0.01:
+			# (the grip shows past the fist both sides: a glove is ~8.4 real cm across)
+			var ends := [(sv.grips[i] - sv.grip_dirs[i] * 100.0), (sv.grips[i] + sv.grip_dirs[i] * 100.0)]
+			var g_in: float = -INF
+			var g_outr: float = -INF
+			for v in (sv.grip_ends[i] as Array):
+				var d := ((v as Vector3) - sv.grips[i]).dot(sv.grip_dirs[i]) / sc * sc / r.k
+				if d < 0.0:
+					g_in = maxf(g_in, -d)
+				else:
+					g_outr = maxf(g_outr, d)
+			check(g_in > 6.5 and g_outr > 6.5, "%s %s: grip %d shows past the fist both sides (%.1f / %.1f real cm from its middle)" % [id, pose, i, g_in, g_outr])
+		check(across < 25.0, "%s %s: grip %d runs across the palm (%.0f deg off)" % [id, pose, i, across])
+		if pose != "folded":   # (flying: where the buttons are pressed)
+			var top := (Vector3.UP - axis * Vector3.UP.dot(axis)).normalized()
+			check((sv.buttons[i] - sv.grips[i]).dot(top) > 0.0 and absf((sv.buttons[i] - sv.grips[i]).dot(axis)) / sc / r.k * sc < 4.2, "%s %s: button %d on top of the bar, over the fist" % [id, pose, i])
+			var thumb := xf * (Vector3(s * -3.4, 5.5, -2.6) * r.k)
+			var btn: Vector3 = sv.buttons[i] * sc
+			check(thumb.distance_to(btn) < 5.0 * r.k, "%s %s: button %d within the thumb's reach (%.1f real cm)" % [id, pose, i, thumb.distance_to(btn) / r.k])
+
+
 ## The arms stay out of the body: along each upper arm (past the shoulder) and forearm, no point comes within
 ## the torso's girth of its axis (pelvis to chest), and the hands stay in front of the chest.
 func _arms(id: String, pose: String, tack: Tack) -> void:
@@ -178,16 +218,22 @@ func _arms(id: String, pose: String, tack: Tack) -> void:
 ## (world up), the bar under it between heel and toe, nearer the heel (the arch).
 func _footing(id: String, pose: String, tack: Tack) -> void:
 	if tack.rider.stand < 0.01 and tack.rider.upright < 0.01:
-		# Riding: each boot comes down onto its rear-set peg (some part of the drawn boot within 2.5 real cm).
+		# Riding: each boot stands on its rear-set peg (the drawn boot within 1.2 real cm of the peg's top).
 		for i in 2:
 			var mi := tack.rider.get_node("foot%d" % i) as MeshInstance3D
 			var peg: Vector3 = tack.saddle.ride_pegs[i] * tack.saddle.scale.x
-			var near := INF
+			# (along the sole's centre line, as drawn: its lowest vertices down the boot's middle, joined up)
+			var sole := []
 			var m := mi.mesh as ArrayMesh
-			for sfc in m.get_surface_count():
-				for v in (m.surface_get_arrays(sfc)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-					near = minf(near, (mi.transform * v).distance_to(peg))
-			check(near < 2.5 * tack.rider.k, "%s %s: boot %d rests on its peg (%.1f real cm off)" % [id, pose, i, near / tack.rider.k])
+			for v in (m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+				if absf(v.x) < 0.3 * tack.rider.k and v.y < -3.3 * tack.rider.k:
+					sole.append(v)
+			sole.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.z < b.z)
+			var near := INF
+			for q in range(1, sole.size()):
+				var p := Geometry3D.get_closest_point_to_segment(peg, mi.transform * (sole[q - 1] as Vector3), mi.transform * (sole[q] as Vector3))
+				near = minf(near, p.distance_to(peg))
+			check(near < 1.2 * tack.rider.k, "%s %s: boot %d stands on its peg (%.1f real cm off)" % [id, pose, i, near / tack.rider.k])
 		return
 	if tack.rider.stand < 0.99:
 		return
