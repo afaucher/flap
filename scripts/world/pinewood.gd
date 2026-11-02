@@ -17,6 +17,9 @@ const PINE := {"count": 260, "h": Vector2(24.0, 32.0), "r": Vector2(0.22, 0.34),
 const OAK := {"count": 4, "h": Vector2(17.0, 22.0), "r": Vector2(0.65, 0.9), "limb": Vector2(6.0, 9.5), "glade": 11.0}
 const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08), "spacing": 3.2}
 const OUTPOSTS := 9
+## How full the crowns are, 0..1: 1 a dense pine crown (whorls of pads at each limb's end and middle), lower
+## airier (fewer whorls, pads only at the tips, smaller, some limbs bare) -- the crown layer's sightlines.
+static var crown_density := 1.0
 const GRIP_TRUNK_GAP := ArenaLayout.GRIP_TRUNK_GAP
 const GRIP_TIP_GAP := ArenaLayout.GRIP_TIP_GAP
 
@@ -137,7 +140,8 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 		var tip := root + d * (r + rng.randf_range(0.25, 0.7)) + Vector3.UP * rng.randf_range(-0.08, 0.12)
 		_branch(a, t, root, tip, rng.randf_range(0.025, 0.045), true, true)
 	# The crown: whorls of 3-5 limbs, longest low, upswept, a pad of needles at each limb's end and middle.
-	var whorls := rng.randi_range(4, 6)
+	var dens := clampf(crown_density, 0.0, 1.0)
+	var whorls := rng.randi_range(4, 6) if dens >= 0.75 else rng.randi_range(3, 4)
 	var ang0 := rng.randf() * TAU
 	for w in whorls:
 		var f := (w + rng.randf_range(0.0, 0.5)) / float(whorls)
@@ -150,9 +154,11 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 			var root := c + Vector3.UP * y
 			var tip := root + d * (_r_at(t, y) + reach) + Vector3.UP * reach * rng.randf_range(0.15, 0.45)
 			var br := _branch(a, t, root, tip, lerpf(0.07, 0.035, f), true)
-			var pad := Vector3(reach * 0.45 + 0.4, 0.35 + 0.15 * reach, reach * 0.45 + 0.4)
-			t.foliage.append([br.tip + Vector3.UP * 0.15, pad])
-			t.foliage.append([br.root.lerp(br.tip, 0.6) + Vector3.UP * 0.25, pad * 0.8])
+			var pad := Vector3(reach * 0.45 + 0.4, 0.35 + 0.15 * reach, reach * 0.45 + 0.4) * lerpf(0.6, 1.0, dens)
+			if rng.randf() < lerpf(0.6, 1.0, dens):
+				t.foliage.append([br.tip + Vector3.UP * 0.15, pad])
+			if dens >= 0.75:
+				t.foliage.append([br.root.lerp(br.tip, 0.6) + Vector3.UP * 0.25, pad * 0.8])
 	# The leader's tuft and a treetop perch on the broken-off top.
 	t.foliage.append([c + Vector3.UP * (t.height - 0.4), Vector3(1.0, 1.2, 1.0)])
 	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.05, _r_at(t, t.height) - 0.02), -c, t.id))
@@ -288,3 +294,40 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 	o.rail_perch_id = p.id
 	a._add_perch(p)
 	a.outposts.append(o)
+
+
+## How far one can see from `from` along `dir` (unit) before wood -- or, with `leaves`, foliage -- blocks the
+## view, up to `max_d` m, stepping `step` m (for sightline measures: Pinewood.sightlines).
+static func sight_distance(a: ArenaLayout, from: Vector3, dir: Vector3, max_d: float, leaves: bool, step := 0.75) -> float:
+	var d := 0.0
+	while d < max_d:
+		var p := from + dir * d
+		if p.y < ArenaLayout.GROUND_Y or a.obstacle_distance(p, 3.0) < 0.0:
+			return d
+		if leaves and not _leaf_free(a, p, 0.0):
+			return d
+		d += step
+	return max_d
+
+
+## Sightlines by height: for each height, `n` points scattered over the wood looking level in random
+## directions; returns {height: [median, 25th percentile, share reaching `far` m]}.
+static func sightlines(a: ArenaLayout, heights: Array, n: int, far: float, leaves: bool, s := 1) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = s
+	var out := {}
+	for h in heights:
+		var ds: Array[float] = []
+		var reach := 0
+		while ds.size() < n:
+			var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * (a.boundary - 15.0)
+			var o := Vector3(p.x, float(h), p.y)
+			if a.obstacle_distance(o, 3.0) < 0.3 or (leaves and not _leaf_free(a, o, 0.2)):
+				continue
+			var ang := rng.randf() * TAU
+			var dd := sight_distance(a, o, Vector3(sin(ang), 0.0, cos(ang)), far, leaves)
+			ds.append(dd)
+			reach += int(dd >= far)
+		ds.sort()
+		out[h] = [ds[n / 2], ds[n / 4], float(reach) / n]
+	return out

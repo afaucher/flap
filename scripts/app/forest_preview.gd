@@ -14,6 +14,8 @@ var _label: Label
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var seed_arg := Boot.arg_value(args, "--seed")
+	if Boot.arg_value(args, "--crowns") != "":
+		Pinewood.crown_density = float(Boot.arg_value(args, "--crowns"))
 	layout = Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
 	Game.add_environment(self)
 	var arena := ArenaBuilder.new()
