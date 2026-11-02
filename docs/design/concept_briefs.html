@@ -1,0 +1,311 @@
+<title>Flap Concept Briefs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the Flap design-sheet family; each concept is a brief with a wireframe of the game frame it should produce. */
+:root {
+  --bg: #f2f4f1;
+  --panel: #e7ebe6;
+  --ink: #1d2827;
+  --muted: #5d6a67;
+  --rule: #c6cec9;
+  --accent: #b5482e;
+  --hud: #1d2827;
+  --display: "Archivo Narrow", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131918; --panel: #1b2321; --ink: #e2e9e5; --muted: #98a6a1; --rule: #33403c; --accent: #ef7a5c; --hud: #0e1312;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131918; --panel: #1b2321; --ink: #e2e9e5; --muted: #98a6a1; --rule: #33403c; --accent: #ef7a5c; --hud: #0e1312;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+header { display: grid; gap: 8px; }
+.eyebrow { font: 600 12px/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(32px, 5vw, 48px)/1.05 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 700 27px/1.15 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 600 17px/1.2 var(--display); margin: 0; letter-spacing: .02em; }
+p { margin: 0; max-width: 72ch; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 5px; max-width: 74ch; }
+section { display: grid; gap: 18px; }
+.lede { font-size: 18px; color: var(--muted); max-width: 74ch; }
+a { color: var(--accent); }
+.table-wrap { overflow-x: auto; border-top: 2px solid var(--ink); }
+table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); }
+th { font: 600 12px/1.3 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.concept { display: grid; gap: 18px; border-top: 2px solid var(--ink); padding-top: 18px; }
+.concept .tag { font: 600 12px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px 32px; }
+.two > * { min-width: 0; display: grid; gap: 8px; align-content: start; }
+.frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 3px; overflow: hidden; container-type: inline-size; }
+.zone { position: absolute; border: 1.5px dashed rgba(255,255,255,.85); border-radius: 2px; color: #fff; font: 500 clamp(9px, 1.45cqi, 12px)/1.2 var(--mono); padding: 3px 5px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.zone.subject { border-style: solid; border-color: rgba(255,255,255,.95); background: rgba(10,20,20,.22); }
+.zone.hud { border-color: #ffe9a8; color: #ffe9a8; background: rgba(10,10,10,.42); }
+.zone.fx { border-color: #9fe9ff; color: #c9f4ff; background: rgba(10,20,40,.3); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 400 12.5px var(--mono); color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border: 1.5px dashed; margin-right: 6px; vertical-align: -2px; }
+.prompt { font: 400 13px/1.5 var(--mono); background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 10px 12px; white-space: pre-wrap; user-select: all; }
+.prompt-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn { font: 600 13px/1 var(--display); letter-spacing: .05em; padding: 8px 12px; background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { font-size: 14px; color: var(--muted); }
+.swatches { display: flex; gap: 5px; }
+.swatches i { width: 24px; height: 14px; border-radius: 2px; border: 1px solid var(--rule); }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Flap · design sheet · combat · round 2</div>
+    <h1>Concept briefs</h1>
+    <p class="lede">Before generating more art, each idea worked through on paper: its premise, the settings it could use, the moment worth showing, how the frame and HUD should be laid out, and what each HUD element tells the player. The prompts at the end of each brief carry that layout. Follows the <a href="https://claude.ai/artifact/Pzvr9jCgGk1sioDge7Bu9z">combat concepts board</a>.</p>
+  </header>
+
+  <section aria-labelledby="lessons">
+    <h2 id="lessons">What the first round taught us</h2>
+    <ul>
+      <li><strong>Say where the camera is, twice.</strong> "Chase camera" alone got a bird facing the camera. Ask for "seen from directly behind, we see its back and tail", and place it in the frame ("lower third").</li>
+      <li><strong>Count things in words and numbers.</strong> "Five birds" became six. "Exactly five (5) birds, each different" holds better.</li>
+      <li><strong>Keep HUD text to numbers and icons.</strong> Generators misspell words. Short numeric labels ("24 m", "3/6") survive; words don't.</li>
+      <li><strong>Ask for the light.</strong> The nanite frame was right in spirit and far too dark. Name the time of day and say "bright, high-key daylight" when it matters.</li>
+      <li><strong>Give our scale.</strong> Our weapons work at 10–40 m. A HUD reading "310 m" teaches the wrong game.</li>
+      <li><strong>One moment per image.</strong> A frame that shows a single readable action (the pass, the snatch, the shot) beats a busy montage.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="hud">
+    <h2 id="hud">The HUD vocabulary</h2>
+    <p>One set of elements, styled differently per concept. Each earns its place by answering a question the player has mid-fight.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Element</th><th>Answers</th><th>Where</th><th>Concepts</th></tr></thead>
+        <tbody>
+          <tr><td>Speed band and glide arc</td><td>Am I fast enough to climb, slow enough to catch? (STALL, CATCH, SLOW, GLIDE, FAST, DIVE, already in the game)</td><td>Bottom left</td><td>All</td></tr>
+          <tr><td>Energy</td><td>Can I afford to flap? Burst pips over a stamina bar.</td><td>Bottom left, under speed</td><td>All</td></tr>
+          <tr><td>Target bracket</td><td>Who am I chasing, how far, how fast am I closing? Range and closing speed beside it.</td><td>On the target</td><td>All</td></tr>
+          <tr><td>Reach or lead marker</td><td>Physical: will my talons reach (a ring, green in reach, amber too fast)? Ranged: where to aim so the shot meets them.</td><td>Ahead of the target</td><td>All</td></tr>
+          <tr><td>Wingtip trails</td><td>Which way is it turning? The last second of each wingtip.</td><td>On other birds</td><td>All</td></tr>
+          <tr><td>Weapon rack</td><td>What's loaded, how much is left, is it overheating?</td><td>Bottom right</td><td>Ranged concepts</td></tr>
+          <tr><td>Wing chart</td><td>How damaged am I? A top-down wing silhouette with lost feathers greyed out.</td><td>Bottom right, beside the rack</td><td>Ranged concepts</td></tr>
+          <tr><td>Compass ribbon</td><td>Where's home? The nest and any objective as marks on a strip.</td><td>Top centre</td><td>All</td></tr>
+          <tr><td>Tail warning</td><td>Is something behind me? Chevrons at the bottom edge, and a rising sound.</td><td>Bottom centre</td><td>All</td></tr>
+          <tr><td>Objective</td><td>What am I carrying, what's the score?</td><td>Top right</td><td>All</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="legend"><span><i style="border-color:#888;border-style:solid"></i>subject</span><span><i style="border-color:#c9a64a"></i>HUD</span><span><i style="border-color:#5db3cc"></i>effects</span></div>
+  </section>
+
+  <!-- 1 ------------------------------------------------------------------------------------------ -->
+  <article class="concept" aria-labelledby="c1">
+    <div class="tag">Concept A · physical · realistic</div>
+    <h2 id="c1">The hunting ground</h2>
+    <p>Real birds, real behaviour. Fights are hunts and thefts: snatch prey, steal it in the air, carry it home. The HUD stays light and close to the bird.</p>
+    <div class="two">
+      <div>
+        <h3>Settings</h3>
+        <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Setting</th><th>Light</th><th>Why it plays</th></tr></thead><tbody>
+          <tr><td>Harvest field</td><td>Late summer, midday, gold</td><td>Raptors really follow harvesters for flushed voles: moving prey, open sky.</td></tr>
+          <tr><td>Coastal cliffs</td><td>Bright, windy, blue</td><td>Gulls and falcons, updrafts on the cliff face, egg and fish theft.</td></tr>
+          <tr><td>Backyard suburbs</td><td>Spring morning</td><td>Crows mobbing a hawk over fences and washing lines.</td></tr>
+          <tr><td>River valley</td><td>Overcast, soft</td><td>Fish snatched from the surface; spray as the effect.</td></tr>
+        </tbody></table></div>
+      </div>
+      <div>
+        <h3>The moment</h3>
+        <p>A red-tailed hawk, seen from behind and above, drops toward a vole flushed by a combine harvester. A second hawk cuts in from the right to steal it.</p>
+        <h3>HUD</h3>
+        <ul>
+          <li>The reach ring on the ground around the vole: green, because you're in reach and under snatch speed.</li>
+          <li>A thin bracket on the rival hawk: "18 m · +2.1".</li>
+          <li>Bottom left: speed band reading CATCH, with two burst pips left.</li>
+          <li>Top centre: a compass ribbon with the nest 140 m behind.</li>
+          <li>Pale vapour trails on the rival only.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="frame" data-frame="field"></div>
+    <div class="prompt-head"><h3>Prompt · harvest field</h3><button type="button" class="btn copy" data-for="pa1">Copy</button></div>
+    <div class="prompt" id="pa1">Video game screenshot, 16:9, bright high-key late-summer midday. Third-person chase camera: a red-tailed hawk seen from directly behind and slightly above, we see its back, spread brick-red tail and half-folded wings, placed in the lower centre of the frame, diving toward a small brown vole running across a golden wheat field. A green combine harvester in the mid-distance kicks up dust. A second red-tailed hawk enters from the right, banking toward the vole, leaving two faint thin white wingtip vapour trails. Minimal clean HUD: a thin green ring on the ground around the vole, a small white corner bracket around the second hawk with the label "18 m", a simple speed arc in the bottom left with three small pips, a thin compass strip at the top centre with one small nest icon. HUD text only short numbers. Realistic feathers, naturalistic colour, clear blue sky.</div>
+    <div class="prompt-head"><h3>Prompt · coastal cliffs</h3><button type="button" class="btn copy" data-for="pa2">Copy</button></div>
+    <div class="prompt" id="pa2">Video game screenshot, 16:9, bright sunny windy day on sea cliffs. Third-person chase camera: a peregrine falcon seen from directly behind, we see its slate-grey back and barred tail, in the lower centre of the frame, chasing a herring gull that carries a fish in its beak along a white chalk cliff face with surf below. Faint thin white wingtip vapour trails behind the gull. Minimal clean HUD: a small white corner bracket around the gull with the label "22 m", a small fish icon in the top right, a simple speed arc in the bottom left, a thin compass strip at the top centre. HUD text only short numbers. Realistic, crisp, saturated blue sea.</div>
+  </article>
+
+  <!-- 2 ------------------------------------------------------------------------------------------ -->
+  <article class="concept" aria-labelledby="c2">
+    <div class="tag">Concept B · ranged · riders</div>
+    <h2 id="c2">Hedgerow Aces</h2>
+    <p>Thumb-sized pilots fly real birds as war mounts. Each bird wears a leather-and-brass saddle with a launcher bolted in front of the rider over the bird's shoulders: a rocket rack, a repeating dart gun, a little flak mortar. The world is ordinary countryside at our scale, which for them is enormous: hedgerows are fortress walls, a birdhouse is an airfield, a washing line is a tripwire. It looks like a First World War air war: rivets, goggles, canvas, smoke.</p>
+    <div class="two">
+      <div>
+        <h3>Why it fits</h3>
+        <ul>
+          <li>Our birds stay real birds; the war gear sits on top, so the flight model and plumage still matter.</li>
+          <li>Ranged combat gets a fiction that's warm, not grim, and a reason for short ranges: tiny weapons.</li>
+          <li>Ammo and repairs at the birdhouse airfield are the nest loop.</li>
+          <li>A rider knocked off can drift down on a dandelion-seed parachute. That's a second way to win a fight: unseat the pilot, not the bird.</li>
+        </ul>
+        <h3>Settings</h3>
+        <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Setting</th><th>Light</th></tr></thead><tbody>
+          <tr><td>Summer hedgerows, poppies, a farmhouse</td><td>Midday, bright, green and red</td></tr>
+          <tr><td>Kitchen garden, greenhouse, bean poles</td><td>Morning, dew, soft gold</td></tr>
+          <tr><td>Autumn orchard, apples, wasps</td><td>Afternoon, amber</td></tr>
+          <tr><td>Farmyard: barns, tractor, rain barrels</td><td>Overcast after rain, puddles</td></tr>
+        </tbody></table></div>
+      </div>
+      <div>
+        <h3>The moment</h3>
+        <p>Over the rider's shoulder: we see the back of the pilot's leather helmet and goggles, the brass launcher in front of them pointing ahead past the bird's head, and the bird's spread wings framing the shot. Ahead, an enemy crow with its own rider banks along a hedgerow, smoking from a hit.</p>
+        <h3>HUD, built into the saddle</h3>
+        <ul>
+          <li>The launcher's ring-and-bead gunsight is the reticle. A faint second bead is the lead marker.</li>
+          <li>Brass dials on the saddle front: airspeed and altitude. A small ammo drum counter: "4".</li>
+          <li>A heartbeat gauge for the bird's stamina.</li>
+          <li>A paper wing chart clipped to the saddle, with two lost feathers inked out.</li>
+          <li>A squadron pennant score along the top edge, and small brass chevrons pointing to birds off-screen.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="frame" data-frame="aces"></div>
+    <div class="prompt-head"><h3>Prompt · summer hedgerows</h3><button type="button" class="btn copy" data-for="pb1">Copy</button></div>
+    <div class="prompt" id="pb1">Video game screenshot, 16:9, bright sunny summer midday in the English countryside. Over-the-shoulder chase camera behind a tiny thumb-sized pilot riding a common kestrel: we see the back of the pilot's brown leather flying helmet and brass goggles strap in the lower centre of the frame, a leather-and-brass saddle with rivets, and in front of the pilot a small brass six-tube rocket launcher bolted to the saddle, pointing forward past the bird's head. The kestrel's spread wings fill the lower width of the frame. Ahead, a black crow with its own tiny rider banks along a tall green hedgerow full of red poppies, a thin trail of grey smoke from its wing. A farmhouse and fields in the distance. HUD built into the saddle: two small round brass gauges and a small ammo counter showing the number 4, a simple ring-and-bead gunsight on the launcher. Warm, detailed, First World War aviation style, tactile materials, no long text.</div>
+    <div class="prompt-head"><h3>Prompt · kitchen garden</h3><button type="button" class="btn copy" data-for="pb2">Copy</button></div>
+    <div class="prompt" id="pb2">Video game screenshot, 16:9, early morning with dew and soft golden light in a kitchen garden with bean poles, a greenhouse and a rain barrel, seen at the scale of a tiny pilot. Chase camera directly behind a robin ridden by a thumb-sized pilot in a leather saddle with a brass repeating dart gun mounted in front; we see the pilot's back and the gun barrel in the lower centre. Ahead, a house sparrow with an enemy rider dodges between bean poles; a small orange flak burst blooms beside it. Two thin pale wingtip trails behind the sparrow. Minimal HUD: a brass ring gunsight, a small round gauge, a counter showing "3". Whimsical but mechanical, rivets and canvas, crisp detail, no long text.</div>
+  </article>
+
+  <!-- 3 ------------------------------------------------------------------------------------------ -->
+  <article class="concept" aria-labelledby="c3">
+    <div class="tag">Concept C · ranged · nanite</div>
+    <h2 id="c3">Nanite crows, in daylight</h2>
+    <p>Crows picked up a nanotech swarm from a crashed delivery drone. They look like ordinary crows until they act: then seams of light run along their feather shafts, and they throw shards, swarm clouds and arcs at each other over territory. The human world goes on around them, which is the joke and the charm. Setting it in daylight keeps it readable and less like every other neon game; the glow is reserved for the moment of attack.</p>
+    <div class="two">
+      <div>
+        <h3>Settings</h3>
+        <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Setting</th><th>Light</th><th>The infected thing</th></tr></thead><tbody>
+          <tr><td>Suburban rooftops and power lines</td><td>Bright midday, blue sky</td><td>A transformer box with crystal growth: the hive</td></tr>
+          <tr><td>Autumn farmland</td><td>Golden hour</td><td>The crashed drone in a field, sprouting teal crystal</td></tr>
+          <tr><td>Snowy park</td><td>Overcast, white, high-key</td><td>A frozen fountain glittering with nanites</td></tr>
+          <tr><td>City square in spring</td><td>Morning, pastel</td><td>A statue's head crowned with crystal</td></tr>
+        </tbody></table></div>
+      </div>
+      <div>
+        <h3>The moment</h3>
+        <p>Midday over rooftops. Our crow, seen from behind, fires a shard volley at a rival crossing a street; a swarm cloud bursts in the rival's path. People below don't notice.</p>
+        <h3>HUD: crow vision</h3>
+        <ul>
+          <li>Enemies drawn with a thin teal outline, as the swarm sees them.</li>
+          <li>A charge ring around the reticle in place of ammo. It refills over time, faster at the hive.</li>
+          <li>A territory strip at the top: rooftops held, tinted by gang.</li>
+          <li>The lead marker as a small hexagon, plus speed and energy bottom left.</li>
+          <li>Trails as faint teal shimmer, not neon.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="frame" data-frame="nanite"></div>
+    <div class="prompt-head"><h3>Prompt · suburban rooftops, midday</h3><button type="button" class="btn copy" data-for="pc1">Copy</button></div>
+    <div class="prompt" id="pc1">Video game screenshot, 16:9, bright high-key sunny midday over suburban rooftops and power lines, clear blue sky. Third-person chase camera: an American crow seen from directly behind, we see its glossy black back and tail in the lower centre of the frame, with thin glowing teal lines along its feather shafts. It fires a volley of three small glowing teal crystal shards toward a rival crow crossing above a quiet street about 20 metres ahead; a small burst of teal particles blooms in the rival's path. Faint teal shimmer trails behind the rival's wingtips. On a rooftop, a grey transformer box overgrown with teal crystal. People and cars below, unaware. Minimal HUD: a thin teal outline around the rival crow with the label "20 m", a thin circular charge ring around a small reticle in the centre, a thin bar of five rooftop icons at the top. Crisp, sunny, realistic, saturated, no long text.</div>
+    <div class="prompt-head"><h3>Prompt · autumn farmland, golden hour</h3><button type="button" class="btn copy" data-for="pc2">Copy</button></div>
+    <div class="prompt" id="pc2">Video game screenshot, 16:9, warm golden-hour light over autumn farmland with hay bales and orange trees. A crashed white delivery drone lies in a stubble field, sprouting teal crystal growths. Third-person chase camera: a crow seen from directly behind in the lower centre, faint teal lines glowing along its feathers, chasing two rival crows low over the field; a small teal swarm cloud bursts between them. Faint teal shimmer wingtip trails behind the rivals. Minimal HUD: thin teal outlines around the rivals with "14 m" and "26 m", a small hexagon lead marker, a circular charge ring at the centre. Bright, warm, readable, no long text.</div>
+  </article>
+
+  <!-- 4 ------------------------------------------------------------------------------------------ -->
+  <article class="concept" aria-labelledby="c4">
+    <div class="tag">Concept D · physical · riders</div>
+    <h2 id="c4">Bloodsport</h2>
+    <p>Gene-edited giants, eight to ten metres across, raced and jousted by human riders for prizes and crowds. Birds that size glide and soar more than they flap, so the course is built around updrafts. The fight is a series of passes: line up, brace the lance, strike or swerve, climb back on a thermal.</p>
+    <div class="two">
+      <div>
+        <h3>Settings</h3>
+        <div class="table-wrap"><table style="min-width:0"><thead><tr><th>Setting</th><th>Light</th></tr></thead><tbody>
+          <tr><td>Sea stacks and surf, a stadium on the cliffs</td><td>Bright noon, spray</td></tr>
+          <tr><td>Desert canyon arena</td><td>Sunset (round one)</td></tr>
+          <tr><td>A mountain fortress course</td><td>Clear winter morning, snow</td></tr>
+          <tr><td>A colossal dam with stands on the wall</td><td>Hazy afternoon</td></tr>
+        </tbody></table></div>
+      </div>
+      <div>
+        <h3>The moment</h3>
+        <p>From directly behind our rider, mid-pass: the rival rider is coming head-on through a ring gate with the lance lowered, about 30 m out.</p>
+        <h3>HUD</h3>
+        <ul>
+          <li>A joust timing ring around the rival that shrinks to the moment to brace.</li>
+          <li>Seat meters for both riders: how close each is to being unhorsed.</li>
+          <li>Pass counter "2/3" and a crowd meter along the top.</li>
+          <li>An updraft arrow on the course ahead.</li>
+          <li>Speed and glide at the bottom left; no flapping energy, since giants soar.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="frame" data-frame="blood"></div>
+    <div class="prompt-head"><h3>Prompt · sea stacks at noon</h3><button type="button" class="btn copy" data-for="pd1">Copy</button></div>
+    <div class="prompt" id="pd1">Video game screenshot, 16:9, bright noon over sea stacks and white surf, stadium stands built along the cliff tops with colourful flags. Third-person chase camera directly behind an armoured human rider on a giant golden eagle with an eight-metre wingspan; we see the rider's back, shoulder armour and a long lance held forward, in the lower centre, the eagle's huge wings spread across the frame. Head-on, about 30 metres ahead, a rival rider on a giant white-tailed eagle comes through a large stone ring gate, lance lowered, long red banners streaming from its tail. Minimal HUD: a shrinking golden ring around the rival, two thin bars at the top left, the text "2/3" at the top centre. Crisp, sunny, epic but clear, no long text.</div>
+  </article>
+
+  <section aria-labelledby="more">
+    <h2 id="more">Other directions worth a sketch</h2>
+    <ul>
+      <li><strong>Mouse cavalry.</strong> Hedgerow Aces with mice instead of tiny people: softer, storybook, the same saddle-and-launcher idea.</li>
+      <li><strong>Ornithopter drones.</strong> No living birds: military bird-shaped drones flown remotely in a real landscape. Clean daylight, wire-frame HUD. It loses the plumage work.</li>
+      <li><strong>Falconry duels.</strong> Human falconers on the ground direct their birds against each other: a two-layer game of commands and flying.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+(function () {
+  // Frame wireframes: [x, y, w, h] in percent, a label, and a kind (subject, hud, fx).
+  var FRAMES = {
+    field: { bg: "linear-gradient(#9fc3e2 0%, #dbe8ef 44%, #c9a95a 44%, #a8873f 100%)", zones: [
+      [36, 62, 30, 34, "Your hawk, from behind, diving", "subject"], [45, 52, 6, 6, "Vole", "subject"], [41, 49, 16, 14, "Reach ring (green)", "hud"],
+      [66, 30, 16, 16, "Rival hawk", "subject"], [64, 27, 21, 22, "Bracket 18 m · +2.1", "hud"], [52, 33, 13, 6, "Vapour trails", "fx"],
+      [8, 33, 22, 10, "Harvester and dust", "subject"], [3, 74, 18, 21, "Speed band, burst pips", "hud"], [35, 3, 30, 6, "Compass, nest mark", "hud"], [80, 3, 17, 8, "Carried: none", "hud"] ] },
+    aces: { bg: "linear-gradient(#a6cdee 0%, #e4eef2 46%, #6e9a4e 46%, #4f7a38 100%)", zones: [
+      [30, 56, 40, 42, "Pilot's back and helmet, saddle", "subject"], [43, 44, 14, 16, "Launcher, ring-and-bead sight", "hud"],
+      [3, 70, 30, 26, "Bird's left wing", "subject"], [67, 70, 30, 26, "Bird's right wing", "subject"],
+      [58, 24, 14, 13, "Enemy crow and rider", "subject"], [72, 18, 16, 10, "Smoke trail", "fx"], [55, 30, 6, 6, "Lead bead", "hud"],
+      [6, 30, 40, 18, "Hedgerow, poppies", "subject"], [33, 80, 34, 16, "Brass gauges · ammo 4 · heartbeat", "hud"], [70, 52, 13, 14, "Wing chart", "hud"], [30, 3, 40, 6, "Squadron pennants", "hud"] ] },
+    nanite: { bg: "linear-gradient(#8fc0ea 0%, #d9e9f3 50%, #8d8c86 50%, #6c6f72 100%)", zones: [
+      [36, 60, 28, 36, "Your crow, teal seams lit", "subject"], [47, 47, 6, 6, "Reticle, charge ring", "hud"],
+      [60, 24, 12, 11, "Rival crow", "subject"], [58, 21, 17, 17, "Teal outline · 20 m", "hud"], [50, 32, 12, 10, "Shard volley", "fx"],
+      [64, 34, 10, 10, "Swarm burst", "fx"], [6, 42, 24, 16, "Hive: transformer box", "subject"], [3, 74, 18, 21, "Speed, energy", "hud"], [30, 3, 40, 6, "Territory: rooftops held", "hud"] ] },
+    blood: { bg: "linear-gradient(#8ec7f0 0%, #e6f3fa 50%, #3b7fa6 50%, #2a5f7d 100%)", zones: [
+      [10, 58, 80, 40, "Giant eagle's wings, your rider, lance", "subject"], [42, 20, 18, 26, "Ring gate", "subject"],
+      [46, 26, 10, 12, "Rival, head-on", "subject"], [43, 23, 16, 18, "Timing ring", "hud"], [56, 30, 14, 6, "Banners", "fx"],
+      [3, 3, 22, 10, "Seat meters", "hud"], [42, 3, 16, 6, "Pass 2/3", "hud"], [70, 3, 27, 6, "Crowd", "hud"], [72, 42, 14, 10, "Updraft", "fx"], [3, 74, 18, 21, "Speed, glide", "hud"] ] }
+  };
+  document.querySelectorAll(".frame").forEach(function (el) {
+    var f = FRAMES[el.dataset.frame]; if (!f) return;
+    el.style.background = f.bg;
+    el.setAttribute("role", "img");
+    el.setAttribute("aria-label", "Frame layout: " + f.zones.map(function (z) { return z[4]; }).join(", "));
+    f.zones.forEach(function (z) {
+      var d = document.createElement("div");
+      d.className = "zone " + z[5];
+      d.style.left = z[0] + "%"; d.style.top = z[1] + "%"; d.style.width = z[2] + "%"; d.style.height = z[3] + "%";
+      d.textContent = z[4];
+      el.appendChild(d);
+    });
+  });
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.for), txt = el.textContent;
+      function sel() { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected: press Ctrl+C"; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { b.textContent = "Copied"; }, sel); else sel();
+    });
+  });
+})();
+</script>
