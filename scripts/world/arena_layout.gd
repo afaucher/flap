@@ -18,6 +18,8 @@ const GRIP_TRUNK_GAP := 0.12   ## m, the grip line starts this far out from the 
 const GRIP_TIP_GAP := 0.08     ## m, and stops this far short of the tip
 
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
+## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest).
+enum Kind { GENERIC, PINE, BROADLEAF, SAPLING }
 
 const TIERS := [
 	{"tier": Tier.UNDERSTORY, "count": 90, "h": Vector2(4.0, 9.0), "r": Vector2(0.12, 0.22), "spacing": 5.5, "branch_len": Vector2(0.9, 1.8)},
@@ -33,6 +35,9 @@ class TreeData:
 	var height := 0.0
 	var radius := 0.0
 	var branches: Array = []        ## of BranchData
+	var kind := 0                   ## Kind
+	var crown_base := 0.0           ## m above the ground where the crown (foliage) starts
+	var foliage: Array = []         ## visual only (birds fly through it): [centre: Vector3, radii: Vector3]
 
 	func top() -> Vector3:
 		return Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)
@@ -44,6 +49,21 @@ class BranchData:
 	var tip := Vector3.ZERO
 	var radius := 0.06
 	var perch_id := -1
+	var dead := false               ## a dead stub (bare, greyer)
+
+
+## An outpost: a timber deck bolted to a trunk, its outer edge a rounded landing rail (a branch perch), a
+## nest-box hangar and crates on the deck, braces under it.
+class OutpostData:
+	var id := 0
+	var tree_id := 0
+	var centre := Vector3.ZERO      ## the deck's top, middle
+	var out := Vector3.FORWARD      ## horizontal, from the trunk out to the rail (the approach side)
+	var width := 1.6                ## m along the rail
+	var depth := 1.1                ## m from the trunk to the rail
+	var thickness := 0.07
+	var rail_radius := 0.045
+	var rail_perch_id := -1
 
 
 var seed := 0
@@ -55,9 +75,12 @@ var avenues: Array = []             ## of [Vector2 a, Vector2 b, float half_widt
 var ring_radius := 56.0
 var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData
+var outposts: Array = []            ## of OutpostData
+var style := "greybox"              ## "greybox" (generate) or "pinewood" (Pinewood.generate)
 var perches: Array[Perch] = []
 var _perch_hash := {}               ## Vector2i -> Array[int] perch ids
 var max_perch_reach := 0.0          ## m, the longest half grip line (for hashed lookups)
+var max_tree_reach := 0.0           ## m, beyond 4 m: how far a limb reaches from its trunk (hashed lookups)
 var _tree_hash := {}                ## Vector2i -> Array[int] tree ids
 
 
@@ -173,6 +196,7 @@ func _grow(t: TreeData, rng: RandomNumberGenerator) -> void:
 	_add_perch(top)
 
 
+## (Pinewood builds through these too.)
 func _add_perch(p: Perch) -> void:
 	perches.append(p)
 	max_perch_reach = maxf(max_perch_reach, p.reach())
@@ -217,8 +241,8 @@ func perches_near(pos: Vector3, radius: float) -> Array[Perch]:
 ## Trees whose trunk could be within `radius` (horizontally) of the box spanned by a and b.
 func trees_near_segment(a: Vector3, b: Vector3, radius: float) -> Array:
 	var out := []
-	var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * (radius + 4.0)
-	var hi := Vector2(maxf(a.x, b.x), maxf(a.z, b.z)) + Vector2.ONE * (radius + 4.0)
+	var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * (radius + 4.0 + max_tree_reach)
+	var hi := Vector2(maxf(a.x, b.x), maxf(a.z, b.z)) + Vector2.ONE * (radius + 4.0 + max_tree_reach)
 	var c0 := _cell(lo)
 	var c1 := _cell(hi)
 	for cx in range(c0.x, c1.x + 1):
@@ -245,7 +269,25 @@ func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) 
 			var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
 			if bp[0].distance_to(bp[1]) < br.radius + clearance:
 				return false
+	for o in outposts:
+		if o.tree_id == ignore_tree:
+			continue
+		for seg in deck_lines(o):
+			var dp := Geometry3D.get_closest_points_between_segments(a, b, seg[0], seg[1])
+			if dp[0].distance_to(dp[1]) < float(seg[2]) + clearance:
+				return false
 	return true
+
+
+## An outpost's deck as capsules for clearance queries: [a, b, radius] lines across it, near edge to rail.
+func deck_lines(o: OutpostData) -> Array:
+	var side := o.out.cross(Vector3.UP).normalized()
+	var out := []
+	var r := o.depth * 0.25
+	for f in [0.25, 0.75]:
+		var c: Vector3 = o.centre + o.out * (f - 0.5) * o.depth - Vector3.UP * o.thickness * 0.5
+		out.append([c - side * (o.width * 0.5 - r), c + side * (o.width * 0.5 - r), r])
+	return out
 
 
 ## Distance from `pos` to the nearest trunk or branch surface (inf if none nearby).
@@ -257,6 +299,11 @@ func obstacle_distance(pos: Vector3, search := 12.0) -> float:
 		for br in t.branches:
 			var q := Geometry3D.get_closest_point_to_segment(pos, br.root, br.tip)
 			best = minf(best, pos.distance_to(q) - br.radius)
+	for o in outposts:
+		if Vector2(o.centre.x - pos.x, o.centre.z - pos.z).length() < search:
+			for seg in deck_lines(o):
+				var q := Geometry3D.get_closest_point_to_segment(pos, seg[0], seg[1])
+				best = minf(best, pos.distance_to(q) - float(seg[2]))
 	return best
 
 

@@ -34,7 +34,7 @@ func _ready() -> void:
 	use_autopilot = args.has("--autopilot")
 
 	_environment()
-	layout = ArenaLayout.generate(arena_seed)
+	layout = Pinewood.generate(arena_seed) if Boot.arg_value(args, "--forest") == "pinewood" else ArenaLayout.generate(arena_seed)   # (--forest pinewood: the pine wood greybox)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)

@@ -824,5 +824,19 @@
     "replace": "const MOUNT_X := 24.0 "
    }
   ]
+ },
+ {
+  "id": "outpost-in-leaves",
+  "bug": "Outposts on the oaks faced the clearest run of wood only, so their decks sat inside the canopy's leaves (2026-11-02).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": " and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6):",
+    "replace": ":"
+   }
+  ]
  }
 ]
