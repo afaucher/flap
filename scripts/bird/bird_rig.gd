@@ -80,6 +80,7 @@ var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var toe_grip := 0.0             ## 0 open .. 1 curled round a branch
 var leg_world := 1.0            ## the legs' frame: 1 held level in the world (perched, landing, reaching for a grip) ..
                                 ## 0 locked to the body (tucked up in cruising flight, as birds carry them)
+var poses := 0                  ## how many times the rig has been animated (tests: once per rendered frame)
 var grip_radius := 0.0          ## the branch under the feet (m; 0: none, or the ground): the detailed toes wrap it
 var lean := 0.0                 ## sitting: 0 the species' posture .. 1 the body level and the tail raised (to keep the
                                 ## tail and wingtips off what the bird sits on: BirdRig._posture)
@@ -1376,6 +1377,7 @@ func set_ghost(amount: float) -> void:
 func animate(t: Dictionary, dt: float) -> void:
 	if not _built:
 		return
+	poses += 1
 	var p0 := Perf.t()
 	var state: int = t.state
 	var sitting := state == Bird.State.PERCHED or state == Bird.State.GROUNDED

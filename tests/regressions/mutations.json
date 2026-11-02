@@ -964,5 +964,19 @@
     "replace": "\t\tpass"
    }
   ]
+ },
+ {
+  "id": "rig-posed-every-tick",
+  "bug": "The rig was posed on every physics tick: a frame catching up ran it several times though it drew once, multiplying the rig's cost under load -- 20 birds spiralled to 8 ticks and 290 ms a frame (2026-11-02).",
+  "tests": [
+   "test_rig_pacing"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif frame != _rig_frame:\n",
+    "replace": "\tif true:\n"
+   }
+  ]
  }
 ]
