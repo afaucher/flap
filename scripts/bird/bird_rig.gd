@@ -1331,7 +1331,11 @@ func _loft_neck() -> void:
 			var oa: Vector3 = la[j] - ca
 			var ob: Vector3 = lb[m[j]] - cb
 			row.append(c + oa.lerp(ob, s))
-			crow.append((ca_cols[j] as Color).lerp(cb_cols[m[j]], s))
+			# The body's own zones carry on up the neck (the sparrow's bib, the breast) -- as if the trunk ran on to its
+			# front -- then blend into the head's colours by the head end. Both ends still equal their loops exactly.
+			var a := TAU * j / TRUNK_AROUND
+			var c_body: Color = ca_cols[j] if u <= 0.0 else _body_color_at(u_neck * (1.0 - u), sin(a), absf(cos(a)))
+			crow.append(c_body.lerp(cb_cols[m[j]], smoothstep(0.4, 1.0, u)))
 		rows.append(row)
 		cols.append(crow)
 	BodyShape.tube_mesh(rows, _neck_mesh, cols)
