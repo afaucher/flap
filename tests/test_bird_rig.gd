@@ -51,6 +51,16 @@ func setup() -> void:
 			check(BirdRig.limb_section(k, 0.0).y > BirdRig.limb_section(k, 1.0).y, "limb %d thins outward" % k)
 		check(BirdRig.limb_section(1, 0.35).y > BirdRig.limb_section(3, 0.0).y * 2.0, "the arm is far thicker than the hand")
 		check(BirdRig.limb_section(2, 0.15).y > BirdRig.limb_section(2, 0.9).y * 1.8, "forearm muscle by the elbow, tendon to the wrist")
+		# The alula is rooted on the thumb: its base on the hand's leading edge, deployed or not.
+		for al in [0.0, 1.0]:
+			rig.alula = al
+			_pose(rig, 0.0, 0.0, 0.0, 0.0)
+			for k in rig.feather_xforms.size():
+				if rig.feather_kinds[k] == WingShape.Kind.ALULA:
+					var o: Vector3 = (rig.feather_xforms[k] as Transform3D).origin
+					var bone_d := o.distance_to(Geometry3D.get_closest_point_to_segment(o, rig.wing_joints[1][2], rig.wing_joints[1][3]))
+					check(bone_d <= w.root_chord() * BirdRig.LIMB[3].t[0] * 0.5, "%s alula touches the hand (alula %.0f, %.1f mm)" % [p.id, al, bone_d * 1000.0])
+		rig.alula = 0.0
 		# Flap up: tips above the shoulder; down: below.
 		_pose(rig, deg_to_rad(50.0), 0.0, 0.0, 0.0)
 		check(rig.wing_joints[1][3].y > rig.wing_joints[1][0].y + half * 0.3, p.id + " flap up raises the hand")
@@ -161,9 +171,19 @@ func setup() -> void:
 		check(ok, p.id + " finite feathers")
 		eq(rig.feather_xforms.size(), rig._plain_count + rig._emarg_count, p.id + " every feather placed")
 		check(rig.feather_material == null, p.id + " plain feathers by default (the shader is parked)")
-		# Instance colours are authored in sRGB: read as linear they wash out pale.
-		var feather_mat := (rig.get_node("Feathers") as MultiMeshInstance3D).material_override as StandardMaterial3D
-		check(feather_mat != null and feather_mat.vertex_color_use_as_albedo and feather_mat.vertex_color_is_srgb, p.id + " feather colours are sRGB")
+		# Plumage (default level 5): both faces drawn, each culling its back, coloured by the mark strip.
+		check(rig.marks_material != null and rig._plain_u != null, p.id + " two-sided feathers with marks")
+		check((rig.get_node("FeathersUnder") as MultiMeshInstance3D).multimesh.instance_count == rig._plain_count, p.id + " an underside for every feather")
+		check(rig.feather_kinds.has(WingShape.Kind.UNDER_COVERT), p.id + " underwing coverts")
+		# Below level 5 the colours are flat per feather, authored in sRGB (read as linear they wash out pale).
+		Plumage.level = 3
+		var flat := BirdRig.new()
+		add_child(flat)
+		flat.build(p)
+		Plumage.level = 5
+		var feather_mat := (flat.get_node("Feathers") as MultiMeshInstance3D).material_override as StandardMaterial3D
+		check(feather_mat != null and feather_mat.vertex_color_use_as_albedo and feather_mat.vertex_color_is_srgb and feather_mat.cull_mode == BaseMaterial3D.CULL_BACK, p.id + " feather colours are sRGB, one face per copy")
+		flat.queue_free()
 		# The parked shader still builds and gets its species look.
 		BirdRig.plain_feathers = false
 		var shaded := BirdRig.new()

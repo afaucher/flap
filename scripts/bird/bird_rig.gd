@@ -41,6 +41,7 @@ const POSE := {
 }
 const CAMBER := 0.03   ## feather arch height, as a share of its length
 const FEATHER_SHADER := preload("res://scripts/bird/feather.gdshader")
+const MARKS_SHADER := preload("res://scripts/bird/feather_marks.gdshader")
 ## Per-species feather look (docs/research/feather_rendering.md): glossy iridescent crow, matte barred soft
 ## owl, barred hawk with darker tips, falcon with buff margins, sparrow with pale edges and dark centres.
 const FEATHER_LOOK := {
@@ -104,12 +105,20 @@ var _plain: MultiMesh
 var _emarg: MultiMesh
 var _plain_count := 0
 var _emarg_count := 0
+var _plain_u: MultiMesh          ## the feathers' undersides (plumage level 1+)
+var _emarg_u: MultiMesh
+var _two_sided := false
+var _under_row := false
+var _paint_dirty := true
+var marks_material: ShaderMaterial   ## plumage level 5
 var _colors := {}
 var _head: Node3D
 var _trunk: MeshInstance3D
 var _neck_mi: MeshInstance3D
 var _neck_mesh: ArrayMesh
 var _head_world := Vector3.INF
+var _body_tint := Color.WHITE
+var _neck_colors: Array = []
 var _last_carrier := Vector3.ZERO
 var _clock_t := 0.0
 var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4]
@@ -225,12 +234,17 @@ func _build_skeleton() -> void:
 
 
 func _build_body(tint: Color) -> void:
-	var body_mat := _plumage(tint.darkened(0.12)) if not plain_feathers else _material(tint.darkened(0.12))
+	_body_tint = tint.darkened(0.12)
+	# Body plumage colours ride on the vertices (Plumage: countershading, zones, head marks).
+	var body_mat := _plumage(Color.WHITE) if not plain_feathers else _material(Color.WHITE)
+	body_mat.vertex_color_use_as_albedo = true
+	body_mat.vertex_color_is_srgb = true
 	var leg_mat := _material(Color(0.72, 0.6, 0.32))
 	# The trunk shell, lofted once round the landmarks; the neck tube is re-lofted each pose.
 	_trunk = MeshInstance3D.new()
 	_trunk.name = "Trunk"
-	_trunk.mesh = body.trunk_mesh()
+	_trunk.mesh = body.trunk_mesh(30, 20, _body_color_at)
+	_neck_colors = _neck_color_rows()
 	_trunk.material_override = body_mat
 	add_child(_trunk)
 	_neck_mesh = ArrayMesh.new()
@@ -247,7 +261,7 @@ func _build_body(tint: Color) -> void:
 	var hr := body.head_r
 	sph.radius = hr
 	sph.height = hr * 2.0
-	head.mesh = sph
+	head.mesh = _head_mesh(sph)
 	head.material_override = body_mat
 	_head.add_child(head)
 	var beak := MeshInstance3D.new()
@@ -277,7 +291,7 @@ func _build_body(tint: Color) -> void:
 			c.radius = _L * (0.03 if k == 0 else (0.018 if k == 1 else 0.01))
 			c.height = 1.0   # rescaled per frame
 			mi.mesh = c
-			mi.material_override = body_mat if k == 0 else leg_mat
+			mi.material_override = _material(_body_color_at(0.6, -0.6, 0.8)) if k == 0 else leg_mat   # (the feathered drumstick)
 			add_child(mi)
 			parts.append(mi)
 		_leg_meshes[i] = parts
@@ -302,7 +316,6 @@ const LIMB := [
 	{"t": [0.11, 0.045], "c": [0.34, 0.24], "belly": 0.15},  # forearm
 	{"t": [0.05, 0.022], "c": [0.22, 0.1], "belly": -1.0},   # hand
 ]
-static var _limb_meshes: Array = []
 
 
 ## (chord, thickness) of limb piece `piece` at `u` (0 root end .. 1 far end), in the units of LIMB.
@@ -325,8 +338,9 @@ static func _naca(x: float) -> float:
 
 ## Unit limb mesh: z 0..1 along the bone (with rounded caps just past each end), x aft (chord units), y the
 ## wing normal (root-chord units). The bone runs just behind the nose.
-static func _limb_mesh(piece: int) -> ArrayMesh:
+static func _limb_mesh(piece: int, color := Callable()) -> ArrayMesh:
 	var rows: Array = []
+	var cols: Array = []
 	var around := 16
 	var steps := 14
 	for k in steps + 1:
@@ -337,26 +351,36 @@ static func _limb_mesh(piece: int) -> ArrayMesh:
 		var t := sec.y * cap
 		var nose := 0.0 if piece == 0 else 0.06   # the propatagium's leading edge IS the line
 		var row: Array = []
+		var crow: Array = []
 		for j in around:
 			var a := TAU * j / around
 			var x := 0.5 * (1.0 - cos(a))          # 0 at the leading edge, 1 at the trailing edge
 			var half := _naca(x) * t
 			var y := 0.02 * c * sin(PI * x) + (-half if sin(a) >= 0.0 else half)   # (lower first: outward winding)
 			row.append(Vector3((x - nose) * c, y, u))
+			if color.is_valid():
+				crow.append(color.call(piece, x, clampf(u, 0.0, 1.0), sin(a) >= 0.0))
 		rows.append(row)
-	return BodyShape.tube_mesh(rows)
+		cols.append(crow)
+	return BodyShape.tube_mesh(rows, null, cols if color.is_valid() else [])
 
 
 func _build_fairings(c: Color) -> void:
-	var mat := _plumage(c) if not plain_feathers else _material(c)
-	if _limb_meshes.is_empty():
-		for k in 4:
-			_limb_meshes.append(_limb_mesh(k))
+	var mat := _plumage(Color.WHITE) if not plain_feathers else _material(Color.WHITE)
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	# Coloured per species: upperwing coverts on top; from plumage level 2 the under-coverts below, with the
+	# patagial bar along the front underside and the dark wrist comma.
+	var col := func(piece: int, x: float, u: float, under: bool) -> Color:
+		return c if Plumage.level == 0 else Plumage.limb(profile.id, piece, x, u, under)
+	var meshes: Array = []
+	for k in 4:
+		meshes.append(_limb_mesh(k, col))
 	for i in 2:
 		var parts: Array = []
 		for k in 4:
 			var mi := MeshInstance3D.new()
-			mi.mesh = _limb_meshes[k]
+			mi.mesh = meshes[k]
 			mi.material_override = mat
 			add_child(mi)
 			parts.append(mi)
@@ -377,7 +401,9 @@ func _place_limb(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: f
 	mi.transform = Transform3D(Basis(aft * chord * fade, nn * shape.root_chord() * fade, d), a)
 
 
-func _feather_mesh(profile_pts: Array) -> ArrayMesh:
+## `flip`: the underside copy -- the same surface, wound the other way with its normal down, so each copy
+## (culling its back) draws one face in that face's colour.
+func _feather_mesh(profile_pts: Array, flip := false) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_normal(Vector3.UP)
@@ -390,12 +416,15 @@ func _feather_mesh(profile_pts: Array) -> ArrayMesh:
 		var br := Vector3(b[1] * 0.5, 0.0, b[0])
 		var uvs := [Vector2(-1, a[0]), Vector2(1, a[0]), Vector2(1, b[0]), Vector2(-1, a[0]), Vector2(1, b[0]), Vector2(-1, b[0])]
 		var vs := [al, ar, br, al, br, bl]
+		if flip:
+			uvs = [uvs[0], uvs[2], uvs[1], uvs[3], uvs[5], uvs[4]]
+			vs = [al, br, ar, al, bl, br]
 		for q in 6:
 			var v: Vector3 = vs[q]
 			# A gentle arch along the feather (3% of its length at the middle): cambered, not a flat card.
 			var arched := Vector3(v.x, CAMBER * sin(PI * v.z), v.z)
 			# UV.x: -1..1 edge to edge across the vane (0 = the shaft); UV.y: 0..1 base to tip. Tangent: across.
-			st.set_normal(Vector3.UP)
+			st.set_normal(Vector3.DOWN if flip else Vector3.UP)
 			st.set_tangent(Plane(1.0, 0.0, 0.0, 1.0))
 			st.set_uv(uvs[q])
 			st.add_vertex(arched)
@@ -403,7 +432,9 @@ func _feather_mesh(profile_pts: Array) -> ArrayMesh:
 
 
 func _build_feathers() -> void:
-	var defs := shape.feathers(0.0)
+	_under_row = Plumage.level >= 2 and plain_feathers
+	_two_sided = Plumage.level >= 1 and plain_feathers
+	var defs := shape.feathers(0.0, 0.0, _under_row)
 	_plain_count = TAIL_FEATHERS
 	_emarg_count = 0
 	for f in defs:
@@ -412,12 +443,18 @@ func _build_feathers() -> void:
 		else:
 			_plain_count += 2
 	var mat: Material
-	if plain_feathers:
-		# The flat-colour look from before the feather shader (before/after comparisons).
+	if plain_feathers and Plumage.level >= 5:
+		marks_material = ShaderMaterial.new()
+		marks_material.shader = MARKS_SHADER
+		marks_material.set_shader_parameter("strip", Plumage.strip(profile.id))
+		marks_material.set_shader_parameter("rows", float(Plumage.GROUPS.size() * 2))
+		mat = marks_material
+	elif plain_feathers:
+		# Flat colour per feather; from plumage level 1 each face its own copy (culling its back).
 		var sm := StandardMaterial3D.new()
 		sm.vertex_color_use_as_albedo = true
 		sm.vertex_color_is_srgb = true
-		sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		sm.cull_mode = BaseMaterial3D.CULL_BACK if _two_sided else BaseMaterial3D.CULL_DISABLED
 		sm.roughness = 0.9
 		mat = sm
 	else:
@@ -429,8 +466,14 @@ func _build_feathers() -> void:
 		mat = feather_material
 	_plain = _multimesh(_feather_mesh(PLAIN_PROFILE), _plain_count, mat, "Feathers")
 	_emarg = _multimesh(_feather_mesh(EMARG_PROFILE), maxi(_emarg_count, 1), mat, "SlottedPrimaries")
+	if _two_sided:
+		_plain_u = _multimesh(_feather_mesh(PLAIN_PROFILE, true), _plain_count, mat, "FeathersUnder")
+		_emarg_u = _multimesh(_feather_mesh(EMARG_PROFILE, true), maxi(_emarg_count, 1), mat, "SlottedPrimariesUnder")
 	if _emarg_count == 0:
 		_emarg.visible_instance_count = 0
+		if _emarg_u != null:
+			_emarg_u.visible_instance_count = 0
+	_paint_dirty = true
 
 
 func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> MultiMesh:
@@ -446,6 +489,86 @@ func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> Mul
 	mmi.material_override = mat
 	add_child(mmi)
 	return mm
+
+
+## The body's colour at (u along the trunk, v up its side, side round to the flank); the old flat tint at
+## plumage level 0.
+func _body_color_at(u: float, v: float, side: float) -> Color:
+	return _body_tint if Plumage.level == 0 else Plumage.body(profile.id, u, v, side)
+
+
+## The head sphere with its plumage on the vertices (crown, nape, face, throat, and from level 4 the marks).
+func _head_mesh(sph: SphereMesh) -> ArrayMesh:
+	var arrays := sph.get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var cols := PackedColorArray()
+	var eye := Vector3(0.75, 0.25, -0.55).normalized() if profile.id != "owl" else Vector3(0.45, 0.25, -0.8).normalized()
+	for v in verts:
+		cols.append(_body_tint if Plumage.level == 0 else Plumage.head(profile.id, v.normalized(), eye))
+	arrays[Mesh.ARRAY_COLOR] = cols
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
+
+
+## The neck tube's colours (rows x 10, as _loft_neck lays it out): the body's at the base, blending to the
+## head's throat in front and nape behind.
+func _neck_color_rows() -> Array:
+	var rows: Array = [[]]
+	for j in 10:
+		rows[0].append(_body_color_at(0.02, 0.0, 0.0))
+	var eye := Vector3(0.75, 0.25, -0.55).normalized()
+	for k in 6:
+		var u := k / 5.0
+		var row: Array = []
+		for j in 10:
+			var a := TAU * j / 10.0
+			var base := _body_color_at(0.02, -sin(a), absf(cos(a)))
+			var top := _body_tint
+			if Plumage.level > 0:
+				var front := Plumage.head(profile.id, Vector3(0.0, -0.6, -0.8).normalized(), eye)
+				var back := Plumage.head(profile.id, Vector3(0.0, 0.1, 1.0).normalized(), eye)
+				var flank := Plumage.head(profile.id, Vector3(1.0, -0.1, 0.1).normalized(), eye)
+				top = back.lerp(front, sin(a) * 0.5 + 0.5).lerp(flank, absf(cos(a)) * 0.5)
+			row.append(base.lerp(top, smoothstep(0.2, 0.9, u)))
+		rows.append(row)
+	return rows
+
+
+## Lay one feather (top copy, and its underside copy when two-sided); its colours only when they change (at
+## build), since they don't move.
+func _place(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int, fi: int, bone: int, custom: Color) -> void:
+	mm.set_instance_transform(idx, xf)
+	if mmu != null:
+		mmu.set_instance_transform(idx, xf)
+	if not _paint_dirty:
+		return
+	var id := profile.id
+	var g := Plumage.group(kind, fi, bone)
+	var fm: Array = Plumage.finger(id, fi) if kind == WingShape.Kind.PRIMARY else [1.0, 1.0]
+	if marks_material != null:   # level 5: colour from the strip, the instance colour darkens
+		mm.set_instance_color(idx, Color(fm[0], fm[0], fm[0]))
+		mm.set_instance_custom_data(idx, Color(Plumage.row_index(g, false), 0, 0, 0))
+		if mmu != null:
+			mmu.set_instance_color(idx, Color(fm[1], fm[1], fm[1]))
+			mmu.set_instance_custom_data(idx, Color(Plumage.row_index(g, true), 0, 0, 0))
+		return
+	var top: Color = _colors.get(kind, _colors["tail"])
+	var under := top
+	if _two_sided:
+		top = _scaled(Plumage.flat(id, g, false), fm[0])
+		under = _scaled(Plumage.flat(id, g, true), fm[1])
+		if Plumage.level < 2 and g in ["greater", "lesser", "lesser_bar", "alula"]:
+			under = top   # (the underwing's own colours come in at level 2)
+	mm.set_instance_color(idx, top)
+	mm.set_instance_custom_data(idx, custom)
+	if mmu != null:
+		mmu.set_instance_color(idx, under)
+		mmu.set_instance_custom_data(idx, custom)
+
+
+static func _scaled(c: Color, k: float) -> Color:
+	return Color(c.r * k, c.g * k, c.b * k, c.a)
 
 
 # --- Telemetry -> control values -------------------------------------------------------------------------
@@ -637,7 +760,7 @@ func apply_pose() -> void:
 	feather_kinds.clear()
 	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
 	if _defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01:
-		_defs = shape.feathers(fold, slot)
+		_defs = shape.feathers(fold, slot, _under_row)
 		_defs_fold = fold
 		_defs_slot = slot
 	var defs := _defs
@@ -696,19 +819,18 @@ func apply_pose() -> void:
 				d = d.slerp(folded_dir, ik_w * ik_w).normalized()
 			var base: Vector3 = a.lerp(b, f.t) + n * (float(f.layer) * unit)
 			if f.kind == WingShape.Kind.ALULA:
-				base += n * _L * 0.02 * alula
+				# Rooted on the thumb: the base sits on the hand's leading edge (the top of its limb piece) and
+				# stays there; deployed, the feather swings forward and its tip lifts, opening the slot.
+				base = a.lerp(b, f.t) + n * (shape.root_chord() * float(LIMB[3].t[0]) * 0.45)
+				d = (d + n * 0.35 * alula).normalized()
 			var xf := _feather_xform(base, d, n, f.len, f.w)
 			feather_xforms.append(xf)
 			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
 			if f.emarg:
-				_emarg.set_instance_transform(emarg_i, xf)
-				_emarg.set_instance_color(emarg_i, _colors[WingShape.Kind.PRIMARY])
-				_emarg.set_instance_custom_data(emarg_i, Color(float(f.kind), _seed(i, f), 1.0, 0.0))
+				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0))
 				emarg_i += 1
 			else:
-				_plain.set_instance_transform(plain_i, xf)
-				_plain.set_instance_color(plain_i, _colors[int(f.kind)])
-				_plain.set_instance_custom_data(plain_i, Color(float(f.kind), _seed(i, f), 0.0, 0.0))
+				_place(_plain, _plain_u, plain_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0))
 				plain_i += 1
 		var fr: Array = _fairings[i]
 		var rc := shape.root_chord()
@@ -741,10 +863,9 @@ func apply_pose() -> void:
 		var txf := _feather_xform(base, d, tn, length, length * TAIL_WIDTH)
 		feather_xforms.append(txf)
 		feather_kinds.append(6)
-		_plain.set_instance_transform(plain_i, txf)
-		_plain.set_instance_color(plain_i, _colors["tail"])
-		_plain.set_instance_custom_data(plain_i, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0))
+		_place(_plain, _plain_u, plain_i, txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0))
 		plain_i += 1
+	_paint_dirty = false
 	_pose_bone("tail", _tail_base, _tail_base + tb * Vector3(0, 0, profile.tail_length), tn)
 
 	# Legs: hip -> knee (a short femur, near horizontal in the world, hidden in the belly) -> ankle (bends
@@ -865,7 +986,7 @@ func _loft_neck() -> void:
 			var t := TAU * j / 10.0
 			row.append(pos + x * (cos(t) * rad) + y * (sin(t) * rad * 1.1))
 		rows.append(row)
-	BodyShape.tube_mesh(rows, _neck_mesh)
+	BodyShape.tube_mesh(rows, _neck_mesh, _neck_colors)
 
 
 ## A feather's direction in the FK pose (its bone at the FK angle in the wing plane), in rig space.

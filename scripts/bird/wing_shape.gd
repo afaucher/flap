@@ -15,7 +15,7 @@ extends RefCounted
 ## between them) equals wing_area.
 
 enum Bone { HUMERUS, FOREARM, HAND }
-enum Kind { PRIMARY, SECONDARY, TERTIAL, ALULA, GREATER_COVERT, LESSER_COVERT }
+enum Kind { PRIMARY, SECONDARY, TERTIAL, ALULA, GREATER_COVERT, LESSER_COVERT, UNDER_COVERT = 7 }   # (6: tail, in BirdRig)
 
 ## Feather width / length by type (full vane width at its widest). Broad enough that neighbours overlap into
 ## a continuous surface, as on a real wing: only the emarginated wingtip "fingers" leave gaps.
@@ -114,7 +114,9 @@ func joints(fold: float) -> PackedVector2Array:
 
 ## The feathers of one wing at a fold: Array of Dictionary {kind, i, bone, t, rel (deg, relative to the
 ## bone's direction, + = aft), len, w, emarg, layer}. `slot` (0..1) splays the emarginated primaries apart.
-func feathers(fold: float, slot := 0.0) -> Array:
+## `under` adds the underwing coverts: a row under the flight feathers (layer < 0) over the hand, forearm and
+## humerus, seen only from below (docs/research/plumage_coloring.md).
+func feathers(fold: float, slot := 0.0, under := false) -> Array:
 	var a := bone_angles(fold)
 	var s := half_span() * scale
 	var pm := pmax * s
@@ -132,12 +134,19 @@ func feathers(fold: float, slot := 0.0) -> Array:
 		out.append({"kind": Kind.PRIMARY, "i": i, "bone": Bone.HAND, "t": t, "rel": rel, "len": length, "w": length * lerpf(W_PRIMARY_INNER, W_PRIMARY_OUTER, t), "emarg": emarg, "layer": 0.0 + 0.0004 * (10 - i)})
 		if i <= 7:
 			out.append({"kind": Kind.GREATER_COVERT, "i": i, "bone": Bone.HAND, "t": t, "rel": rel, "len": length * 0.32, "w": length * 0.32 * W_COVERT, "emarg": false, "layer": 0.006})
+			if under:
+				out.append({"kind": Kind.UNDER_COVERT, "i": i, "bone": Bone.HAND, "t": t, "rel": rel, "len": length * 0.38, "w": length * 0.38 * W_COVERT * 0.6, "emarg": false, "layer": -0.006})
 	for j in nsec:
 		var tp := float(j) / float(maxi(1, nsec - 1))   # 0 at the wrist .. 1 at the elbow
 		var ang := lerpf(lerpf(74.0, 90.0, tp), 94.0, fold)
 		var length := sec * lerpf(1.0, 0.93, tp)
 		out.append({"kind": Kind.SECONDARY, "i": j + 1, "bone": Bone.FOREARM, "t": 1.0 - tp, "rel": ang - a.y, "len": length, "w": length * W_SECONDARY, "emarg": false, "layer": 0.003 + 0.0002 * j})
 		out.append({"kind": Kind.GREATER_COVERT, "i": j + 1, "bone": Bone.FOREARM, "t": 1.0 - tp, "rel": ang - a.y, "len": length * 0.45, "w": length * 0.45 * W_COVERT, "emarg": false, "layer": 0.006})
+		if under:
+			out.append({"kind": Kind.UNDER_COVERT, "i": 10 + j + 1, "bone": Bone.FOREARM, "t": 1.0 - tp, "rel": ang - a.y, "len": length * 0.5, "w": length * 0.5 * W_COVERT, "emarg": false, "layer": -0.006})
+	if under:   # the axillaries: the underwing coverts' row carried on along the humerus to the body
+		for k in 3:
+			out.append({"kind": Kind.UNDER_COVERT, "i": 30 + k, "bone": Bone.HUMERUS, "t": 0.2 + 0.3 * k, "rel": lerpf(100.0, 96.0, fold) - a.x, "len": sec * 0.5, "w": sec * 0.5 * W_COVERT, "emarg": false, "layer": -0.006})
 	for k in 3:
 		out.append({"kind": Kind.TERTIAL, "i": k + 1, "bone": Bone.HUMERUS, "t": 1.0 - (0.12 + 0.22 * k), "rel": lerpf(100.0, 96.0, fold) - a.x, "len": sec * (0.88 - 0.08 * k), "w": sec * (0.88 - 0.08 * k) * W_TERTIAL, "emarg": false, "layer": 0.004})
 	# Lesser coverts: a row just behind the leading edge (humerus, forearm, hand), pointing aft.
@@ -149,7 +158,9 @@ func feathers(fold: float, slot := 0.0) -> Array:
 		out.append({"kind": Kind.LESSER_COVERT, "i": 8 + k, "bone": Bone.HAND, "t": 0.15 + 0.4 * k, "rel": 85.0, "len": pm * 0.22, "w": pm * 0.22 * W_LESSER, "emarg": false, "layer": 0.008})
 	var lm := bone_lengths()[2]
 	for k in 3:
-		out.append({"kind": Kind.ALULA, "i": k + 1, "bone": Bone.FOREARM, "t": 1.0, "rel": lerpf(-12.0, 18.0, k / 2.0), "len": lm * (0.45 - 0.08 * k), "w": lm * (0.45 - 0.08 * k) * W_ALULA, "emarg": false, "layer": 0.009})
+		# The alula rides on the alular digit (the thumb) at the base of the hand: folded flat along the hand's
+		# leading edge, pointing outboard; the rig lifts it forward as a slat at high angles of attack.
+		out.append({"kind": Kind.ALULA, "i": k + 1, "bone": Bone.HAND, "t": 0.04, "rel": lerpf(2.0, 9.0, k / 2.0), "len": lm * (0.45 - 0.08 * k), "w": lm * (0.45 - 0.08 * k) * W_ALULA, "emarg": false, "layer": 0.009})
 	return out
 
 

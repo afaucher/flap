@@ -171,33 +171,39 @@ func volume(steps := 200) -> float:
 	return v
 
 
-## The trunk shell as a mesh (built once; the trunk never bends).
-func trunk_mesh(slices := 30, around := 20) -> ArrayMesh:
+## The trunk shell as a mesh (built once; the trunk never bends). `color` (optional) colours each vertex from
+## (u along the trunk 0 front .. 1 back, v up its side -1 keel .. 1 spine, side 0 midline .. 1 widest).
+func trunk_mesh(slices := 30, around := 20, color := Callable()) -> ArrayMesh:
 	var pts: Array = []
+	var cols: Array = []
 	for i in slices + 1:
 		var z := lerpf(front_z(), back_z(), float(i) / slices)
 		var r := ring_at(z)
 		var row: Array = []
+		var crow: Array = []
 		for j in around:
 			var t := TAU * j / around
 			var h := r[2] if sin(t) >= 0.0 else r[3]
 			row.append(Vector3(r[1] * cos(t), r[0] + h * sin(t), z))
+			if color.is_valid():
+				crow.append(color.call(float(i) / slices, sin(t), absf(cos(t))))
 		pts.append(row)
-	return tube_mesh(pts)
+		cols.append(crow)
+	return tube_mesh(pts, null, cols if color.is_valid() else [])
 
 
 ## A closed tube through rows of points (each row one ring, rows in order): quads between rows, the end rows
-## pinched to their centre. Clockwise front faces seen from outside (Godot's convention).
-static func tube_mesh(rows: Array, mesh: ArrayMesh = null) -> ArrayMesh:
+## pinched to their centre. Clockwise front faces seen from outside (Godot's convention). `colors`, if given,
+## is one colour per point, in the same rows.
+static func tube_mesh(rows: Array, mesh: ArrayMesh = null, colors: Array = []) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var n: int = rows[0].size()
-	var verts := PackedVector3Array()
-	for row in rows:
-		for p in row:
-			verts.append(p)
-	for v in verts:
-		st.add_vertex(v)
+	for i in rows.size():
+		for j in n:
+			if not colors.is_empty():
+				st.set_color(colors[i][j])
+			st.add_vertex(rows[i][j])
 	var m := rows.size()
 	for i in m - 1:
 		for j in n:

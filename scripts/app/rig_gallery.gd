@@ -1,7 +1,8 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead]
-##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--shot <png> --shot-after <s>]
+##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..5]
+##       [--shot <png> --shot-after <s>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots.
 ## glide (default) holds the wings spread; flap animates a wingbeat; folded is the perched pose with feet
@@ -22,6 +23,8 @@ func _ready() -> void:
 	var only := Boot.arg_value(args, "--only")
 	BirdRig.plain_feathers = not args.has("--feather-shader")
 	BirdRig.flat_perch = args.has("--flat-perch")
+	if Boot.arg_value(args, "--plumage") != "":
+		Plumage.level = int(Boot.arg_value(args, "--plumage"))
 	var sun_arg := Boot.arg_value(args, "--sun")
 	var time_arg := Boot.arg_value(args, "--time")
 	if time_arg != "":
@@ -41,6 +44,11 @@ func _ready() -> void:
 	sun.rotation_degrees = Vector3(-60, -30, 0) if sun_arg != "back" else Vector3(-25, 10, 0)
 	sun.light_energy = 1.2
 	add_child(sun)
+	var bounce := DirectionalLight3D.new()   # light off the ground, so undersides read
+	bounce.rotation_degrees = Vector3(70, 20, 0)
+	bounce.light_energy = 0.35
+	bounce.light_color = Color(0.95, 0.92, 0.85)
+	add_child(bounce)
 	var x := 0.0
 	var profiles := BirdProfile.all()
 	if only != "":
