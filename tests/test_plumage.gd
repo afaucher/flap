@@ -16,8 +16,13 @@ func setup() -> void:
 	check(Plumage.limb("hawk", 3, 0.1, 0.5, true).get_luminance() < 0.25, "hawk dark wrist comma")
 	check(Plumage.finger("hawk", 10)[0] < 0.8 and Plumage.finger("hawk", 5)[0] == 1.0, "outer primaries darker, inner ones not")
 	var eye := Vector3(0.75, 0.25, -0.55).normalized()
-	check(Plumage.head("falcon", Vector3(0, 1, 0), eye).get_luminance() < 0.2 and Plumage.head("falcon", Vector3(0, -0.8, -0.6).normalized(), eye).get_luminance() > 0.7, "falcon: dark hood, white throat")
-	check(Plumage.head("falcon", Vector3(eye.x * 0.9, eye.y - 0.35, eye.z).normalized(), eye).get_luminance() < 0.25, "falcon moustache below the eye")
+	# The falcon is a male common kestrel (as the concept render): a blue-grey head, a pale throat, a thin dark
+	# moustache, a rufous back and wings.
+	var crown := Plumage.head("falcon", Vector3(0, 1, 0), eye)
+	check(crown.b > crown.r and crown.get_luminance() > 0.3 and crown.get_luminance() < 0.65 and Plumage.head("falcon", Vector3(0, -0.8, -0.6).normalized(), eye).get_luminance() > 0.7, "kestrel: blue-grey head, pale throat")
+	check(Plumage.head("falcon", Vector3(eye.x * 0.9, eye.y - 0.35, eye.z).normalized(), eye).get_luminance() < 0.3, "kestrel moustache below the eye")
+	var back := Plumage.body("falcon", 0.4, 1.0, 0.0)
+	check(back.r > back.b * 1.6, "kestrel: rufous back")
 	check(Plumage.head("sparrow", Vector3(0, -0.8, -0.6).normalized(), eye).get_luminance() < 0.15, "sparrow black bib")
 	check(Plumage.hex(Plumage.spec("owl").head.disc[0]).get_luminance() > 0.8, "owl pale facial disc")
 	var prim: PackedColorArray = Plumage.row("hawk", "primary", true)

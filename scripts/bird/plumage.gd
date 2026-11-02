@@ -7,7 +7,7 @@ extends RefCounted
 ##   2  + an underwing-covert row, and the wing's leading edge coloured underneath: the patagial bar and the
 ##        dark wrist comma
 ##   3  + darker outer primaries (the wingtip "fingers") by feather position
-##   4  + head markings: crown, nape, face, throat; the falcon's hood and moustache, the owl's facial disc, the
+##   4  + head markings: crown, nape, face, throat; the falcon's (a kestrel's) grey crown and moustache, the owl's facial disc, the
 ##        sparrow's bib
 ##   5  + marks along each feather from a small generated colour strip: dark tips, the dark trailing edge,
 ##        tail bands, bars, the sparrow's white wing bar (the only step with a shader, and it only sets colour)
@@ -60,10 +60,10 @@ const DATA := {
 		},
 	},
 	"falcon": {
-		"body": {"back": "#5f6b78", "rump": "#7d8a98", "breast": "#f3ece2", "belly": "#bdb6ae", "vent": "#bdb6ae", "flanks": "#bdb6ae", "line": 0.05, "soft": 0.2},
-		"head": {"crown": "#2a2e35", "nape": "#2a2e35", "face": "#f4efe6", "throat": "#f4efe6", "cap": 0.08, "malar": "#2a2e35"},
-		"wing": {"lesser": "#66727f", "greater": "#66727f", "tertial": "#5a6672", "alula": "#5f6b78", "under": "#b9b2aa", "patagial": "#b9b2aa", "carpal": "#b9b2aa"},
-		"groups": {"primary": ["#2b2f36", "#cfc9c2"], "secondary": ["#4f5a66", "#cbc5be"], "tail": ["#5d6874", "#c9c4bd"]},
+		"body": {"back": "#b0623a", "rump": "#8a94a0", "breast": "#ecd3aa", "belly": "#e6cda4", "vent": "#f0e4cc", "flanks": "#dcbc90", "line": 0.05, "soft": 0.2},
+		"head": {"crown": "#7f8995", "nape": "#7f8995", "face": "#f0e4d0", "throat": "#f4ebdc", "cap": 0.08, "malar": "#3a3430"},
+		"wing": {"lesser": "#b5683a", "greater": "#b06a3c", "tertial": "#a8643a", "alula": "#9a5a34", "under": "#efe5d4", "patagial": "#efe5d4", "carpal": "#e8d8bf"},
+		"groups": {"primary": ["#2a221d", "#ddd3c6"], "secondary": ["#3a2c22", "#d9cfc1"], "tail": ["#8a95a2", "#e6ddd0"]},
 		"fingers": [4, 0.25, 0.0],
 		"marks": {
 			"primary_under": ["bars_tip", "#8a8580", 7, 0.3, "#5a5550", 0.85], "secondary_under": ["bars", "#8a8580", 7, 0.3],
@@ -99,8 +99,12 @@ const TEXTURE := {
 		"body": {"tile": 0.24, "spot": ["#808080", 0.0, 0.0, 0.5], "fringe": ["#ffffff", 0.0, 0.3]},
 	},
 	"falcon": {
-		"primary_top": {"vane": ["#1d2026", 0.55, "#3a4048", 0.2]},
-		"secondary_top": {"vane": ["#3d4652", 0.3, "#000000", 0.0]},
+		"lesser_top": {"spot": ["#1e1612", 0.7, 0.3]},
+		"greater_top": {"spot": ["#1e1612", 0.75, 0.34]},
+		"tertial_top": {"spot": ["#1e1612", 0.6, 0.32]},
+		"primary_top": {"vane": ["#1d1814", 0.55, "#3a3028", 0.2]},
+		"secondary_top": {"vane": ["#2e231c", 0.3, "#000000", 0.0]},
+		"body": {"tile": 0.2, "spot": ["#2a1c14", 0.5, 0.3, 0.3], "fringe": ["#c98a58", 0.2, 0.25]},
 	},
 	"owl": {
 		"primary_top": {"vane": ["#a08460", 0.3, "#e3d6bf", 0.4]},
