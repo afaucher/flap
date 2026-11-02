@@ -134,9 +134,9 @@ func setup() -> void:
 		b.apply_pose()
 		var sc := b._trunk.scale.x
 		var tm := (b._trunk.mesh as ArrayMesh).surface_get_arrays(0)
-		var nm := (b._neck_mi.mesh as ArrayMesh).surface_get_arrays(0)
+		var nm := b.drawn_arrays(b._neck_mi)
 		var hm := ((b._head.get_node("HeadSurface") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)
-		var am := ((b._fairings[1][0] as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)
+		var am := b.drawn_arrays(b._fairings[1][0])
 		var trunk_pts: Array = []
 		for k in (tm[Mesh.ARRAY_VERTEX] as PackedVector3Array).size():
 			trunk_pts.append([(tm[Mesh.ARRAY_VERTEX][k] as Vector3) * sc, tm[Mesh.ARRAY_TEX_UV][k], tm[Mesh.ARRAY_TEX_UV2][k]])
