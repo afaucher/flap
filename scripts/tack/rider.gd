@@ -237,19 +237,25 @@ func _build_head() -> void:
 	var mi := _mi("head_mesh", {"skin": face, "helmet": helm, "strap": strap, "boot": stache})
 	remove_child(mi)
 	_head.add_child(mi)
-	# Goggles: a strap round the helmet, two brass-rimmed cups with glass.
+	# Goggles: two brass-rimmed cups with glass and a strap from each cup's outer rim round the back of the
+	# helmet (nothing crosses the face).
 	_goggles = Node3D.new()
 	_goggles.name = "goggles"
 	_head.add_child(_goggles)
 	var gband := _tmk()
 	var gp := PackedVector3Array()
 	var gups := PackedVector3Array()
-	for j in 25:
-		var a := TAU * j / 24.0
+	var a0 := -0.8   # rad: just behind the right cup's outer rim (the front is -PI/2)
+	gp.append(Vector3(6.4, 1.5, -10.6) * k)
+	gups.append(Vector3(0.85, 0.0, -0.53))
+	for j in 21:
+		var a := lerpf(a0, PI - a0, j / 20.0)
 		gp.append(Vector3((R + 0.3) * cos(a), 1.5, (R + 0.3) * sin(a)) * k)
 		gups.append(Vector3(cos(a), 0.0, sin(a)))
+	gp.append(Vector3(-6.4, 1.5, -10.6) * k)
+	gups.append(Vector3(-0.85, 0.0, -0.53))
 	var gsec: Array = gband.strap_section(2.4 * k, 0.5 * k)
-	gband.sweep(gp, gups, gsec[0], true, gsec[1], gsec[2], PackedFloat32Array([0.4]), false)
+	gband.sweep(gp, gups, gsec[0], true, gsec[1], gsec[2], PackedFloat32Array([0.4]), true)
 	var rim := _tmk()
 	var glass := _tmk()
 	for side in [-1.0, 1.0]:

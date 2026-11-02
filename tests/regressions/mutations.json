@@ -445,5 +445,19 @@
     "replace": "const STAND_PITCH := Vector2(0.0, 1.0)"
    }
   ]
+ },
+ {
+  "id": "tack-goggle-strap-across-face",
+  "bug": "The goggle strap was a full ring at eye height, so a band of leather crossed the face in front of the eyes, between and through the cups (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tvar a := lerpf(a0, PI - a0, j / 20.0)",
+    "replace": "\t\tvar a := lerpf(a0, a0 + TAU, j / 20.0)"
+   }
+  ]
  }
 ]

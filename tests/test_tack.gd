@@ -29,9 +29,33 @@ func setup() -> void:
 			_head(id, pose, rig, tack)
 		_wings(id, rig, tack)
 		_launcher(id, tack)
+		_goggles(id, tack)
 		rig.queue_free()
 		await frames(1)
 	finish()
+
+
+## The goggle strap runs from each cup's outer rim round the back of the helmet: nothing of it lies across
+## the face between the cups, and it reaches both cups (goggles' own frame, real cm; the face is within 9.2
+## of the head's centre, the cups at x = +-3.6).
+func _goggles(id: String, tack: Tack) -> void:
+	var mi := tack.rider.get_node("head/goggles").get_child(0) as MeshInstance3D
+	var k := tack.rider.k
+	var across := 0
+	var cups := [0, 0]
+	var behind := 0
+	for v in ((mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		var p := v / k
+		if p.z < -8.0:
+			if absf(p.x) < 5.5:
+				across += 1
+			else:
+				cups[0 if p.x < 0.0 else 1] += 1
+		elif p.z > 8.0:
+			behind += 1
+	eq(across, 0, "%s: no goggle strap across the face" % id)
+	check(cups[0] > 0 and cups[1] > 0, "%s: the goggle strap reaches both cups" % id)
+	check(behind > 0, "%s: the goggle strap goes round the back" % id)
 
 
 ## Vertices of the saddle's mesh for material `id`, rig space.
