@@ -15,6 +15,19 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
+// In the sun (the concept's backlit kestrel; docs/research/feather_texture_study.md, "In the sun"): the light
+// follows each feather, from its own texture. A vane is a thin sheet of barbs: a sun behind it shines through
+// (most where it is thin and pale, none through the shaft); its free edge and tip -- the barbs' ends -- catch the
+// light and glow, most when looking toward the sun; and the barbs streak the sheen along themselves (anisotropic,
+// tight across them). Wrapped diffuse: soft barbs don't fall off hard at the terminator.
+uniform float through_boost = 1.0;   // light through the vanes (0: none)
+uniform float edge_glow = 1.0;       // the free edges' and tips' glow (0: none)
+uniform float barb_sheen = 1.0;      // the sheen streaked along the barbs (0: none)
+varying float v_through;
+varying float v_edge;
+varying vec3 v_barb;
+varying vec2 v_spec;                 // (specular level, its width across the barbs)
+
 uniform sampler2D scales : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D scales_n : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 spot_tint = vec3(0.5);  // the spot's colour as a multiple of the body colour
@@ -131,4 +144,31 @@ void fragment() {
 	float invmax = inversesqrt(max(max(dot(tu, tu), dot(tv, tv)), 1e-20));
 	vec2 nn = (n.rg * 2.0 - 1.0) * relief * k;
 	NORMAL = normalize(nrm * sqrt(max(1.0 - dot(nn, nn), 0.0)) + (tu * nn.x + tv * nn.y) * invmax);
+	// For the light: each contour feather's barbs run back along the flow; its free edge (the tile's edge distance)
+	// catches the light; the body is thick, so only the feathers' thin edges pass any.
+	v_barb = tv * invmax;   // (left unnormalised: light() makes it a unit tangent)
+	float pale = clamp(dot(ALBEDO, vec3(0.3, 0.59, 0.11)) * 3.0, 0.0, 1.0);
+	float fedge = (1.0 - smoothstep(0.0, 0.3, t.a)) * k;
+	v_through = 0.12 * fedge * pale;
+	v_edge = fedge * (0.4 + 0.6 * pale) * 0.7;
+	v_spec = vec2(0.12, 0.3);
 }
+
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	vec3 lc = LIGHT_COLOR * ATTENUATION / PI;
+	DIFFUSE_LIGHT += lc * max(0.0, (ndl + 0.2) / 1.2);
+	float toward = pow(max(0.0, dot(-VIEW, LIGHT)), 2.0);   // (looking toward the light)
+	DIFFUSE_LIGHT += lc * v_through * through_boost * (max(0.0, -ndl) * 1.2 + toward * 2.0);
+	DIFFUSE_LIGHT += lc * v_edge * edge_glow * (0.15 + toward) * (1.0 - 0.5 * max(0.0, dot(NORMAL, VIEW)));
+	vec3 h = normalize(VIEW + LIGHT);
+	vec3 t = v_barb - NORMAL * dot(v_barb, NORMAL);
+	t = dot(t, t) > 1e-8 ? normalize(t) : normalize(cross(NORMAL, abs(NORMAL.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+	vec3 b = cross(NORMAL, t);
+	float hn = max(dot(h, NORMAL), 1e-3);
+	float ht = dot(h, t) / max(v_spec.y, 0.02);
+	float hb = dot(h, b) / max(v_spec.y * 3.0, 0.06);
+	float s = exp(-(ht * ht + hb * hb) / (hn * hn)) * max(0.0, ndl);
+	SPECULAR_LIGHT += lc * s * v_spec.x * barb_sheen * mix(vec3(1.0), ALBEDO * 4.0, METALLIC);
+}
+
