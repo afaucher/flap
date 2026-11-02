@@ -4,8 +4,8 @@ A higher detail level for everything below the body shell: the trousers, the bar
 their claws. The research behind every number is in `docs/research/legs_and_feet.md`. The body it joins is in
 `docs/design/body_rig_plan.html`, and its feather chart in `docs/research/feather_texture_study.md`.
 
-**Status.** On by default since 2026-11-02 (`LegRig.enabled`; clear it, or pass the rig gallery `--legs capsules`,
-for the old capsule legs). Mind the CPU cost while legs move (§7). The code is in:
+**Status.** On by default since 2026-11-02 (`LegRig.enabled`; clear it, or pass the rig gallery or the game `--legs
+capsules`, for the old capsule legs), skinned on the GPU (§7). The code is in:
 - `scripts/bird/leg_rig.gd` (`LegRig`);
 - `scripts/bird/leg_skin.gdshader`;
 - a few lines of `bird_rig.gd`'s leg code.
@@ -25,6 +25,7 @@ A/B sheets, capsules on the left and detailed legs on the right:
 | `docs/images/legs_fit_ab.png` | second pass: toes fitted to the branch, baked scales, the barn owl |
 | `docs/images/legs_bones_ab.png` | second pass: the measured bones for every bird, perched as the game stands them |
 | `docs/images/legs_toes_wrap.png` | second pass: `--view toes`, a cut along the branch, every species |
+| `docs/images/legs_skinned_ab.png` | GPU skinning: rebuilt every tick against skinned, perched, flaring and gliding |
 
 ---
 
@@ -232,34 +233,43 @@ The shader draws:
 - **Reticulate scales** elsewhere: a jittered cell pattern, its edges as grooves;
 - **The barn owl's bristles** (`bristles`): fine pale hairs lying along the toes, over the scales.
 
-## 7. Cost
+## 7. Cost: GPU skinning
 
-These numbers are from `tests/probe_legs.gd` and the rig gallery's `--measure`. They are console-build times on the dev
-machine.
+The legs are skinned on the GPU (2026-11-02). Profiling (`.\perf.ps1`, scripts/app/perf.gd) found the first version
+rebuilding both legs' meshes in GDScript nearly every tick in flight -- about 3.9 ms a bird a tick -- which with four
+birds pushed the game into a death spiral of catch-up ticks (about 8 fps).
 
-| Per bird | Capsules | Detailed legs |
+**How it works now** (`LegRig._build_rest`, `pose`):
+- **Built once, at rest:** the species' perched pose (its pitch and stance; toes open; the owl's outer toe swung back).
+  The same loft builds the meshes, and every vertex gets bone weights.
+- **22 bones a leg**, each its own frame (origin at the bone's start, along it, the side its up): the trunk (it carries
+  the breathing and fluff scale), tibia, tarsus, the pad (level in the world), a root per toe (the pad turned to the
+  toe's heading: the owl's outer toe swings), each phalanx, each claw.
+- **Weights:** the trousers' loop on the trunk, and the fillet blending off it; across the ankle by the bisecting
+  plane, over half the shank's radius (the trousers and the skin share the rule, and the hem ring rides the tarsus
+  alone in both, so the two stay one ring); the pad's loops on the pad; a toe's base loop on its root, each toe ring
+  on its phalanx, a joint's ring shared by the bones either side; the claw on its bone.
+- **Each tick:** only the bones are posed (`_bone_xforms`); the toes' curl is cached (it changes only with the branch
+  radius and the owl's swing).
+- **The trousers** depend on where the leg leaves the body, which bones can't move. They are skinned too, but rebuilt
+  at the pose -- re-rested, their binds this pose's bones, their hem the skin's top ring as drawn -- once that exit
+  drifts `TROUSER_DRIFT` (0.4 % of L, about 2 mm) from where they were built. So they are never more than that off
+  their exact shape. Pure skinning stretched them into long streaked tubes in a landing flare (the owl worst).
+- **Tucked legs ride the body in cruising flight** (`BirdRig.leg_world`): held level in the world when perched,
+  landing or reaching for a grip, locked to the body otherwise, as birds carry them. Held to the world in flight,
+  every wingbeat's pitch swung them and moved their exit.
+
+| Per bird, per tick | Rebuilt (before) | Skinned |
 |---|---|---|
-| Meshes / draw calls | 12 `CapsuleMesh` instances | 4 (feathers and skin per leg) |
-| Vertices / triangles | 12 default capsules | 1,770 to 2,070 / 2,960 to 3,470 |
-| GPU, 5 birds perched | 1.54 to 1.65 ms | 1.34 to 1.46 ms (no measurable cost) |
-| CPU `apply_pose`, legs still (perched, flying straight) | 1.8 to 2.5 ms | the same (cached) |
-| CPU, legs moving every frame | — | **+3.1 to 3.3 ms** (both legs rebuilt) |
+| Flying, legs tucked | 3.9 ms | about 0.1 ms (bones) |
+| Landing / take-off (legs swinging) | 3.9 ms | about 0.1 ms, plus a trousers rebuild (about 3.5 ms) every few ticks |
 
-The rebuild is the cost to watch. LegRig rebuilds a leg only when an input moves more than `REBUILD_TOL` (0.5 mm, or
-a few hundredths of a degree), and keeps the trunk loop until the leg moves 0.2 % of L. Legs move during landings and
-take-offs and, because the femur follows the world frame, a little as a flying bird pitches.
-
-That is fine for the player's bird and the gallery. It is not fine for six AI birds landing at once. Options, cheapest
-first:
-1. **Level of detail.** Beyond about 1,000 px² on screen, draw the capsules, or a frozen copy of the last mesh.
-2. **Rebuild budget.** At most N legs rebuilt a frame (round-robin, nearest first).
-3. **Skinning (production).** Build each leg mesh once in its rest pose with bone weights, and let the GPU deform it:
-   - toe bones go under `tarsus.L/R`, 14 a foot;
-   - the trouser loop is weighted to `body`, the fillet blends to `tibia`.
-
-   The per-frame cost then falls to posing about 18 bones a leg. The joins stay exact at rest and close in motion; the
-   trunk loop would no longer slide along the shell as the leg swings, which is what a bird's skin does anyway. This
-   is the way to ship it. The procedural loft stays as the generator of the rest mesh.
+**Known differences from rebuilding every tick:**
+- The owl's swung outer toe: its base loop turns with it over the pad, but carries the pad's scale coordinates from
+  where it was built. Built swung (as perched), it matches on the perch; in flight, toe forward and tucked, the scale
+  pattern is a few scales out at that toe's base.
+- Toe joints and the ankle blend between their two bones (linear blend skinning): at a sharply bent joint the ring
+  on its inside shrinks a little, where the rebuilt ring sat on the bisector.
 
 ## 8. Testing (`tests/test_leg_rig.gd`)
 
@@ -311,7 +321,7 @@ the constants that build them. Every species is checked, both legs, perched, fla
 | Fringe cards on the trousers' hem (§5) | designed |
 | Barred trousers (falcon, western Red-tail) | designed (a body shader term) |
 | Baked scale tile (§6) | **built** |
-| Skinned legs and a level of detail (§7) | designed |
+| Skinned legs (§7) | **built** |
 
 ## 10. Open choices
 

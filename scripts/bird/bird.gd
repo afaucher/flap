@@ -123,7 +123,10 @@ func fly_from(pos: Vector3, dir: Vector3, spd: float) -> void:
 
 
 func _physics_process(dt: float) -> void:
+	var p0 := Perf.t()
 	var inp: FlightInput = controller.sample(self, dt) if controller != null else FlightInput.new()
+	Perf.add("bird.control", p0)
+	p0 = Perf.t()
 	last_input = inp
 	_grace = maxf(0.0, _grace - dt)
 	if _pass_body != null:
@@ -142,7 +145,10 @@ func _physics_process(dt: float) -> void:
 	else:
 		_state_age += dt
 	_push_left = maxf(0.0, _push_left - dt)
+	Perf.add("bird.move", p0)
+	p0 = Perf.t()
 	_animate_rig(dt)
+	Perf.add("bird.rig", p0)
 
 
 # --- Flying ------------------------------------------------------------------------------------

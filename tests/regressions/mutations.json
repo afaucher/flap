@@ -518,15 +518,15 @@
  },
  {
   "id": "toes-stale-branch",
-  "bug": "The legs' rebuild cache left the branch radius out of its key, so toes kept the curl of the last branch they gripped (2026-11-02).",
+  "bug": "The toes' curl was cached without the branch radius (first the legs' rebuild key, now the toe-curl cache), so toes kept the curl of the last branch they gripped (2026-11-02).",
   "tests": [
    "test_leg_rig"
   ],
   "edits": [
    {
     "file": "scripts/bird/leg_rig.gd",
-    "find": "fwd_h.x, fwd_h.y, fwd_h.z, grip, swing, rig.grip_radius])",
-    "replace": "fwd_h.x, fwd_h.y, fwd_h.z, grip, swing])"
+    "find": "\tvar key := Vector2(rig.grip_radius, swing if k == 2 else 0.0)",
+    "replace": "\tvar key := Vector2(0.0, swing if k == 2 else 0.0)"
    }
   ]
  },
@@ -793,6 +793,34 @@
     "file": "scripts/bird/bird_rig.gd",
     "find": "\tfor b in _brows:\n\t\tb.material_override = m\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "legs-world-held-in-flight",
+  "bug": "Tucked legs in cruising flight were held level with the world, so every wingbeat's pitch swung them and the leg meshes were rebuilt nearly every tick (the 2026-11-02 frame-rate collapse).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tvar lw_t := 1.0 if sitting or landing or flare > 0.2 or t.has_grip else 0.0\n",
+    "replace": "\tvar lw_t := 1.0\n"
+   }
+  ]
+ },
+ {
+  "id": "trousers-rebuilt-every-tick",
+  "bug": "The leg meshes were rebuilt in GDScript whenever an input moved half a millimetre: in flight, every tick, about 4 ms a bird (2026-11-02).",
+  "tests": [
+   "test_leg_rig"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "(ex[0] as Vector3).distance_to(tr.e) > L * TROUSER_DRIFT",
+    "replace": "(ex[0] as Vector3).distance_to(tr.e) >= 0.0"
    }
   ]
  },

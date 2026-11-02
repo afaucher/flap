@@ -152,7 +152,9 @@ func _best_perch(bird: Bird, climb_budget: float, floor_y: float) -> Perch:
 
 func _replan(bird: Bird) -> void:
 	replans += 1
+	var p0 := Perf.t()
 	route = planner.plan_to_perch(bird.global_position + bird.model.flight_dir() * 0.5, target, bird.profile, _last_tree)
+	Perf.add("ai.plan", p0)
 	wp = 1
 	_min_dist = INF
 	_progress_clock = clock
