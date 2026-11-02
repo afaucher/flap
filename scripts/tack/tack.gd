@@ -54,7 +54,9 @@ func muzzle_world(kind: String, i: int) -> Vector3:
 
 
 func _process(dt: float) -> void:
+	var p0 := Perf.t()
 	update(dt)
+	Perf.add("tack", p0)
 
 
 ## Ride along: the saddle swells with the plumage (the trunk's fluff and breath scale), the rider kneels in

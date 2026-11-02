@@ -6,8 +6,10 @@ extends Node3D
 ##   --seed <n>         arena seed (default 7)
 ##   --ai <n>           AI birds flying around (default 3)
 ##   --autopilot        the player's bird flies itself (P toggles in game)
+##   --legs <kind>      detail (default) | capsules: the legs drawn
 ##   --shot <png>       save a screenshot after --shot-after seconds (default 3) and quit
 ##   --shot-after <s>
+##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
 
 var layout: ArenaLayout
 var arena: ArenaBuilder
@@ -32,6 +34,8 @@ func _ready() -> void:
 	var ai_arg := Boot.arg_value(args, "--ai")
 	var ai_count := int(ai_arg) if ai_arg != "" else 3
 	use_autopilot = args.has("--autopilot")
+	if Boot.arg_value(args, "--legs") != "":
+		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"
 
 	_environment()
 	layout = ArenaLayout.generate(arena_seed)
@@ -63,6 +67,14 @@ func _ready() -> void:
 			Tack.fit(b.rig, b)
 		b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
 		ai_birds.append(b)
+
+	var perf := Boot.arg_value(args, "--perf")
+	if perf != "":   # (profile `perf` seconds of play, write the report and quit: .\perf.ps1)
+		var rec := Perf.new()
+		rec.seconds = float(perf)
+		if Boot.arg_value(args, "--perf-out") != "":
+			rec.out = Boot.arg_value(args, "--perf-out")
+		add_child(rec)
 
 	var shot := Boot.arg_value(args, "--shot")
 	if shot != "":
@@ -124,15 +136,19 @@ func _spawn_player(pid: String, at: Perch) -> void:
 func _physics_process(_dt: float) -> void:
 	if bird == null:
 		return
+	var p0 := Perf.t()
 	arena.show_candidate(bird.candidate, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
+	Perf.add("game.candidate", p0)
 
 
 func _process(_dt: float) -> void:
 	if bird != null:
+		var p0 := Perf.t()
 		var t := bird.telemetry()
 		hud.gamepad = player.using_gamepad
 		hud.set_state(t)
 		audio.set_state(t)
+		Perf.add("game.hud_audio", p0)
 	camera.look_input = player.look
 
 

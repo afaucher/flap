@@ -152,10 +152,14 @@ func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, f
 	var redo_s := not _same(ks, _key_s[i]) or redo_f   # (the skin starts at the feather tube's hem)
 	if redo_f:
 		_key_f[i] = kf
+		var pf := Perf.t()
 		_build_feathers(i, knee, ankle, foot, up_w, fwd_h, st)
+		Perf.add("  leg_feathers_rebuild (in legs)", pf)
 	if redo_s:
 		_key_s[i] = ks
+		var ps := Perf.t()
 		_build_skin(i, ankle, foot, up_w, fwd_h, grip, swing)
+		Perf.add("  leg_skin_rebuild (in legs)", ps)
 	return toe_tips[i]
 
 

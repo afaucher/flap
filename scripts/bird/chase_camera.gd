@@ -63,6 +63,12 @@ func _desired(target: Vector3, look: Vector3) -> Vector3:
 func _process(dt: float) -> void:
 	if bird == null:
 		return
+	var p0 := Perf.t()
+	_follow(dt)
+	Perf.add("camera", p0)
+
+
+func _follow(dt: float) -> void:
 	var t := bird.telemetry()
 	var target := bird.get_global_transform_interpolated().origin
 	_look = _look.slerp(_look_dir(t), 1.0 - exp(-4.0 * dt)).normalized()

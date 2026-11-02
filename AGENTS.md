@@ -34,11 +34,15 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
   Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); the
-  range fires each round from its tube (`.ange.ps1 -Loadout rockets,seekers`).
+  range fires each round from its tube (`.
+ange.ps1 -Loadout rockets,seekers`).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
+- `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
+  game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
+  ticks per frame, worst frames, the machine's load while it ran).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a

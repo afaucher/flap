@@ -1165,6 +1165,12 @@ func _init_feather_coords() -> void:
 ## build), since they don't move.
 ## `lead`: the side of the card (+1: +UV.x) the feather's leading, outer-vane edge is on (plumage level 6).
 func _place(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int, fi: int, bone: int, custom: Color, bend := 0.0, lead := 1.0) -> void:
+	var p0 := Perf.t()
+	_place_body(mm, mmu, idx, xf, kind, fi, bone, custom, bend, lead)
+	Perf.add("  feather_writes (in wings)", p0)
+
+
+func _place_body(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind: int, fi: int, bone: int, custom: Color, bend := 0.0, lead := 1.0) -> void:
 	mm.set_instance_transform(idx, xf)
 	if mmu != null:
 		mmu.set_instance_transform(idx, xf)
@@ -1271,6 +1277,7 @@ func set_ghost(amount: float) -> void:
 func animate(t: Dictionary, dt: float) -> void:
 	if not _built:
 		return
+	var p0 := Perf.t()
 	var state: int = t.state
 	var sitting := state == Bird.State.PERCHED or state == Bird.State.GROUNDED
 	var landing := state == Bird.State.LANDING
@@ -1408,6 +1415,7 @@ func animate(t: Dictionary, dt: float) -> void:
 		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
 		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
 	grip_radius = float(t.get("grip_radius", 0.0)) if t.has_grip else 0.0
+	Perf.add("rig.animate_logic", p0)
 	apply_pose()
 
 
@@ -1556,6 +1564,7 @@ func _to_rig(i: int, p2: Vector2) -> Vector3:
 
 
 func apply_pose() -> void:
+	var p0 := Perf.t()
 	_pose_bone("body", Vector3.ZERO, Vector3(0, 0, -_L * 0.3), Vector3.UP)
 	var plain_i := 0
 	var emarg_i := 0
@@ -1564,7 +1573,9 @@ func apply_pose() -> void:
 	feather_codes.clear()
 	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
 	if _defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01:
+		var pd := Perf.t()
 		_defs = shape.feathers(fold, slot, _under_row)
+		Perf.add("  feather_defs (in wings)", pd)
 		_defs_fold = fold
 		_defs_slot = slot
 	var defs := _defs
@@ -1676,6 +1687,8 @@ func apply_pose() -> void:
 		_pose_bone("forearm." + ("L" if i == 0 else "R"), elbow, wrist, arm_n)
 		_pose_bone("hand." + ("L" if i == 0 else "R"), wrist, hand, hand_n)
 
+	Perf.add("rig.wings_feathers", p0)
+	p0 = Perf.t()
 	# Tail: 12 rectrices fanned, pitched and twisted as a group.
 	# Full spread tops out where 12 feathers a fifth as wide as long still overlap (~100 deg), as on a real tail.
 	var fan := deg_to_rad(lerpf(shape.tail_fan * 0.3, TAIL_FAN_MAX, tail_spread))
@@ -1702,6 +1715,8 @@ func apply_pose() -> void:
 		_cards_pitch = tail_pitch
 		_pose_cards()
 
+	Perf.add("rig.tail_cards", p0)
+	p0 = Perf.t()
 	# Legs: hip -> knee (a short femur, near horizontal in the world, hidden in the belly) -> ankle (bends
 	# aft, the bird's "backward knee") -> foot.
 	var frame := _world_frame()
@@ -1728,6 +1743,8 @@ func apply_pose() -> void:
 		_pose_bone("tibia." + side, knee, ankle, Vector3.BACK)
 		_pose_bone("tarsus." + side, ankle, foot, Vector3.BACK)
 
+	Perf.add("rig.legs", p0)
+	p0 = Perf.t()
 	# Neck: three bones from the front of the trunk to the head, folded into an S when retracted (the lower
 	# neck bends forward, the middle back up).
 	var nbase := body.neck_base
@@ -1766,7 +1783,10 @@ func apply_pose() -> void:
 		up = Vector3.BACK
 	head_basis = Basis.looking_at(fwd, up)
 	_head.basis = head_basis
+	Perf.add("rig.neck_head", p0)
+	p0 = Perf.t()
 	_loft_neck()   # (after the head's basis: its end takes the head's colours in the head's frame)
+	Perf.add("rig.neck_loft", p0)
 	_pose_bone("head", _head_pos, _head_pos + fwd * _L * 0.1, up)
 
 
