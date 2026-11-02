@@ -23,6 +23,7 @@ A/B sheets, capsules on the left and detailed legs on the right:
 | `docs/images/legs_ab_feet.png` | perched, feet close up |
 | `docs/images/legs_ab_flare.png` | landing flare, feet reaching |
 | `docs/images/legs_fit_ab.png` | second pass: toes fitted to the branch, baked scales, the barn owl |
+| `docs/images/foot_tuck_ab.png` | the foot's frame: tucked feet along the tarsus, swinging level through a landing (bird lab, hawk, `land_level`, side) |
 | `docs/images/legs_bones_ab.png` | second pass: the measured bones for every bird, perched as the game stands them |
 | `docs/images/legs_toes_wrap.png` | second pass: `--view toes`, a cut along the branch, every species |
 | `docs/images/legs_skinned_ab.png` | GPU skinning: rebuilt every tick against skinned, perched, flaring and gliding |
@@ -138,8 +139,19 @@ trunk shell ──loop on the shell──▶ trousers ──hem ring = tarsus's 
   forward are −36°, 6°, 50° and 190° (the hallux back and a little in). The inner toe splays less, so it stays clear
   of the other foot's.
 - **The owl** swings its outer toe to 125° as it grips: BirdRig's existing `toe_grip` and `zygo` give 2 + 2.
-- **Frame.** Toes are laid out in the world-level frame (`_world_frame`, as the femur is), so they stay level on a
-  branch whatever the body's pitch.
+- **Frame** (`LegRig.foot_frame`). Standing or reaching for a grip (`BirdRig.leg_reach` 1) the pad and toes are laid
+  out in the world-level frame (`_world_frame`, as the femur is), so they stay level on a branch whatever the body's
+  pitch. Tucked in flight (`leg_reach` 0) the foot turns with the tarsus: square to it, as on a standing leg, then
+  flexed `TUCK_FLEX` (85°) toward its line, so the toes trail back along it, soles to the tail, closed `TUCK_GRIP`
+  (0.6) into a loose fist, as a raptor carries its feet. Before, the toes stayed level in the body's frame, pointing
+  forward off a tarsus that points back: the feet looked on backwards (mutation `foot-level-when-tucked`).
+  As the foot reaches, the level frame turns toward the square one while the flex eases out: the toes swing down and
+  forward. Two things carry over from tick to tick so the swing never jumps: the tarsus's front (kept square to the
+  tarsus, drawn back toward the body's side × the tarsus where that is well defined; taken from the body's side
+  alone it spun as a landing leg swung out past it, mutation `foot-front-side-axis`), and which way round the turn
+  off level goes (the shortest way flipped the owl's foot over where the turn passed a half turn, mutation
+  `foot-frame-flip`). `test_foot_frame` measures the drawn pad and middle toe: along the tarsus tucked, level
+  perched, and through landings no more than 30° a tick past the tarsus's own turn.
 - **Phalanges.** Toe I has 2, II 3, III 4, IV 5; the last one is inside the claw. Lengths are given as shares of the
   toe, and the middle toe is 0.075 to 0.09 L without its claw: the research's §1.4 found the old toes 30 to 40 %
   short.
@@ -243,7 +255,7 @@ birds pushed the game into a death spiral of catch-up ticks (about 8 fps).
 - **Built once, at rest:** the species' perched pose (its pitch and stance; toes open; the owl's outer toe swung back).
   The same loft builds the meshes, and every vertex gets bone weights.
 - **22 bones a leg**, each its own frame (origin at the bone's start, along it, the side its up): the trunk (it carries
-  the breathing and fluff scale), tibia, tarsus, the pad (level in the world), a root per toe (the pad turned to the
+  the breathing and fluff scale), tibia, tarsus, the pad (in the foot's frame), a root per toe (the pad turned to the
   toe's heading: the owl's outer toe swings), each phalanx, each claw.
 - **Weights:** the trousers' loop on the trunk, and the fillet blending off it; across the ankle by the bisecting
   plane, over half the shank's radius (the trousers and the skin share the rule, and the hem ring rides the tarsus
