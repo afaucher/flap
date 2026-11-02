@@ -1,124 +1,121 @@
 class_name BirdRig
 extends Node3D
-## Greybox bird with articulated wings, built from the profile's dimensions
-## (docs/research/wing_shapes_and_articulation.md, "Gameplay takeaways"):
-##   body capsule + head + beak; per side a SHOULDER pivot -> inner arm panel -> WRIST pivot -> outer hand
-##   panel -> four primary "fingers" (they splay apart when slow and spread: slotted tips); a TAIL fan of
-##   five feathers that fans when slow, turning or flaring; two legs that swing forward to land and perch.
-## Driven only by the bird's telemetry snapshot: flap phase, wing tuck, flare, bank, state.
-## Local axes: -Z is the nose, +X the right wing, +Y up.
+## The bird's visual model: a Skeleton3D posed every tick from a handful of control values, with
+## individual feathers placed on its bones (docs/design/wing_rig.md; the drawings in wing_rig_plan.html use
+## the same WingShape numbers).
+##
+## Per wing: shoulder -> humerus -> elbow -> forearm -> wrist -> hand, driven by FIVE values -- `flap`
+## (shoulder elevation), `fold` (elbow + wrist, coupled), `sweep` (shoulder protraction), `twist` (arm-wing
+## incidence) and `alula` -- plus `hand_lift` (the flexed, drooping hand of the upstroke) and `slot` (the
+## emarginated primaries splaying in slow flight). The wing in flight is forward kinematics; folding blends
+## in a two-bone IK that puts the wrist on an anchor on the body's flank, so any species' folded wing hugs
+## its own body. Legs are two-bone IK to the perch's grip point (or tucked), the head looks at a target and
+## stays level with the world (head stabilisation). Feathers: primaries, secondaries, tertials, greater and
+## lesser coverts, alula, 12 rectrices -- one shared tapered mesh in two MultiMeshes (plain, emarginated).
+##
+## animate() maps a Bird.telemetry() snapshot to the control values (smoothed); apply_pose() solves and
+## writes everything. Rig space: -Z is the nose, +X the right wing, +Y up (the Bird's body frame).
 
-const FINGERS := 4
-const TAIL_FEATHERS := 5
+const SIDES := [-1.0, 1.0]   ## left, right
+const TAIL_FEATHERS := 12
+const PLAIN_PROFILE := [[0.0, 0.05], [0.04, 0.22], [0.35, 0.5], [0.7, 0.48], [0.9, 0.34], [1.0, 0.0]]
+const EMARG_PROFILE := [[0.0, 0.05], [0.04, 0.22], [0.35, 0.5], [0.55, 0.42], [0.66, 0.2], [0.9, 0.17], [1.0, 0.0]]
+const CAMBER := 0.03   ## feather arch height, as a share of its length
 
 var profile: BirdProfile
-var shoulders: Array[Node3D] = []   ## [left, right]
-var wrists: Array[Node3D] = []
-var fingers: Array = []             ## per side: Array[Node3D]
-var tail: Node3D
-var tail_feathers: Array[Node3D] = []
-var legs: Array[Node3D] = []
+var shape: WingShape
+var skeleton: Skeleton3D
 
-var _flap_angle := 0.0
-var _sweep := 0.0
-var _wrist_fold := 0.0
-var _spread_tail := 0.2
-var _leg_fwd := 0.0
-var _splay := 0.0
+# --- Control values (set by animate(), or directly by tests, then apply_pose()) ------------------------
+var flap := deg_to_rad(5.0)     ## rad, shoulder elevation (+ = wings up)
+var hand_lift := 0.0            ## deg, upstroke wrist flex (hand folds back and droops)
+var fold := 0.0                 ## 0 spread .. 1 folded
+var sweep := 0.0                ## deg, + = whole wing swept forward
+var twist := 0.0                ## rad, arm-wing incidence (+ = leading edge up)
+var alula := 0.0                ## 0..1
+var slot := 0.0                 ## 0..1
+var tail_spread := 0.2
+var tail_pitch := 0.0           ## rad, + = tail down
+var tail_twist := 0.0           ## rad
+var look_dir := Vector3.FORWARD ## rig space, where the head looks
+var world_up := Vector3.UP      ## rig space, for head stabilisation
+var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var toe_grip := 0.0             ## 0 open .. 1 curled round a branch
+
+# --- Solved pose (rig space; read by tests) ------------------------------------------------------------
+var wing_joints: Array = [[], []]     ## per side: [shoulder, elbow, wrist, hand tip]
+var leg_joints: Array = [[], []]      ## per side: [hip, ankle, foot]
+var head_basis := Basis()
+var fold_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var feather_xforms: Array[Transform3D] = []   ## every feather this tick (the MultiMeshes' copy; tests, debug)
+
+var _L := 0.45
+var _sh_up := 0.0
+var _hip: Array[Vector3] = []
+var _tib := 0.0
+var _tars := 0.0
+var _head_pos := Vector3.ZERO
+var _tail_base := Vector3.ZERO
+var _bones := {}
+var _parents := {}
+var _plain: MultiMesh
+var _emarg: MultiMesh
+var _plain_count := 0
+var _emarg_count := 0
+var _colors := {}
+var _head: Node3D
+var _leg_meshes: Array = [[], []]     ## per side: [tibia, tarsus, toe x4]
+var _fairings: Array = [[], []]       ## per side: [patagium, humerus, forearm, hand] (the wing's thickness)
+var _built := false
+var _defs: Array = []
+var _defs_fold := -1.0
+var _defs_slot := -1.0
 
 
 func build(p: BirdProfile) -> void:
 	profile = p
-	var L := p.body_length
-	var chord := p.wing_area / p.span       # mean chord
+	shape = WingShape.for_profile(p)
+	_L = p.body_length
+	_sh_up = _L * 0.06
+	_tib = _L * 0.17
+	_tars = _L * 0.15
+	_hip = [Vector3(-_L * 0.06, -_L * 0.06, _L * 0.02), Vector3(_L * 0.06, -_L * 0.06, _L * 0.02)]
+	_head_pos = Vector3(0.0, _L * 0.1, -_L * 0.3)
+	_tail_base = Vector3(0.0, _L * 0.02, _L * 0.24)
+	# The fold anchor: beside and a little behind and below the shoulder, at least as far from it as the arm
+	# bones can fold to (|humerus - forearm|), so the IK always reaches it.
+	var l := shape.bone_lengths()
+	var reach := maxf(absf(l[0] - l[1]) * 1.4, _L * 0.08)
+	for i in 2:
+		var s: float = SIDES[i]
+		var sh := Vector3(s * shape.shoulder.x, _sh_up, shape.shoulder.y)
+		fold_anchor[i] = sh + Vector3(s * 0.35, -0.3, 0.6).normalized() * reach
+		foot_targets[i] = _tucked_foot(i)
 	var tint := _tint(p.id)
-	var body_mat := _material(tint.darkened(0.25))
-	var wing_mat := _material(tint)
-	var dark := _material(tint.darkened(0.5))
-	var beak_mat := _material(Color(0.75, 0.62, 0.3))
-
-	var body := MeshInstance3D.new()
-	var cap := CapsuleMesh.new()
-	cap.radius = L * 0.15
-	cap.height = L * 0.78
-	body.mesh = cap
-	body.rotation.x = PI * 0.5
-	body.material_override = body_mat
-	add_child(body)
-	var head := MeshInstance3D.new()
-	var sph := SphereMesh.new()
-	sph.radius = L * 0.13
-	sph.height = L * 0.26
-	head.mesh = sph
-	head.position = Vector3(0, L * 0.05, -L * 0.42)
-	head.material_override = body_mat
-	add_child(head)
-	var beak := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.0
-	cone.bottom_radius = L * 0.045
-	cone.height = L * 0.14
-	beak.mesh = cone
-	beak.rotation.x = -PI * 0.5
-	beak.position = Vector3(0, L * 0.03, -L * 0.57)
-	beak.material_override = beak_mat
-	add_child(beak)
-
-	var inner_len := p.span * 0.2
-	var outer_len := p.span * 0.17
-	var finger_len := p.span * 0.09
-	for s in [-1.0, 1.0]:
-		var shoulder := Node3D.new()
-		shoulder.position = Vector3(s * L * 0.1, L * 0.06, -L * 0.1)
-		add_child(shoulder)
-		shoulder.add_child(_panel(Vector3(inner_len, 0.012, chord * 1.2), Vector3(s * inner_len * 0.5, 0, chord * 0.25), wing_mat))
-		var wrist := Node3D.new()
-		wrist.position = Vector3(s * inner_len, 0, 0)
-		shoulder.add_child(wrist)
-		wrist.add_child(_panel(Vector3(outer_len, 0.01, chord * 0.95), Vector3(s * outer_len * 0.5, 0, chord * 0.2), wing_mat))
-		var side_fingers: Array[Node3D] = []
-		for f in FINGERS:
-			var pivot := Node3D.new()
-			pivot.position = Vector3(s * outer_len, 0, chord * (-0.15 + 0.17 * f))
-			wrist.add_child(pivot)
-			pivot.add_child(_panel(Vector3(finger_len, 0.008, chord * 0.16), Vector3(s * finger_len * 0.5, 0, 0), dark))
-			side_fingers.append(pivot)
-		shoulders.append(shoulder)
-		wrists.append(wrist)
-		fingers.append(side_fingers)
-
-	tail = Node3D.new()
-	tail.position = Vector3(0, L * 0.02, L * 0.36)
-	add_child(tail)
-	for i in TAIL_FEATHERS:
-		var f := Node3D.new()
-		tail.add_child(f)
-		f.add_child(_panel(Vector3(p.tail_length * 0.26, 0.008, p.tail_length), Vector3(0, 0, p.tail_length * 0.5), wing_mat))
-		tail_feathers.append(f)
-
-	for s in [-1.0, 1.0]:
-		var hip := Node3D.new()
-		hip.position = Vector3(s * L * 0.06, -L * 0.1, L * 0.02)
-		add_child(hip)
-		var leg := MeshInstance3D.new()
-		var lc := CapsuleMesh.new()
-		lc.radius = L * 0.025
-		lc.height = L * 0.32
-		leg.mesh = lc
-		leg.position = Vector3(0, -L * 0.14, 0)
-		leg.material_override = beak_mat
-		hip.add_child(leg)
-		legs.append(hip)
+	_colors = {
+		WingShape.Kind.PRIMARY: tint.darkened(0.3),
+		WingShape.Kind.SECONDARY: tint.darkened(0.18),
+		WingShape.Kind.TERTIAL: tint.darkened(0.1),
+		WingShape.Kind.ALULA: tint.darkened(0.25),
+		WingShape.Kind.GREATER_COVERT: tint.darkened(0.02),
+		WingShape.Kind.LESSER_COVERT: tint.lightened(0.08),
+		"tail": tint.darkened(0.22),
+	}
+	_build_skeleton()
+	_build_body(tint)
+	_build_fairings(_colors[WingShape.Kind.LESSER_COVERT])
+	_build_feathers()
+	_built = true
+	apply_pose()
 
 
-func _panel(size: Vector3, offset: Vector3, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mi.mesh = box
-	mi.position = offset
-	mi.material_override = mat
-	return mi
+static func _tint(bird_id: String) -> Color:
+	match bird_id:
+		"owl": return Color(0.66, 0.58, 0.46)
+		"hawk": return Color(0.55, 0.42, 0.32)
+		"falcon": return Color(0.45, 0.5, 0.58)
+		"sparrow": return Color(0.6, 0.5, 0.4)
+	return Color(0.3, 0.3, 0.33)
 
 
 func _material(c: Color) -> StandardMaterial3D:
@@ -128,63 +125,476 @@ func _material(c: Color) -> StandardMaterial3D:
 	return m
 
 
-static func _tint(bird_id: String) -> Color:
-	match bird_id:
-		"owl": return Color(0.66, 0.58, 0.46)
-		"hawk": return Color(0.55, 0.42, 0.32)
-		"falcon": return Color(0.45, 0.5, 0.58)
-		"sparrow": return Color(0.6, 0.5, 0.4)
-	return Color(0.28, 0.28, 0.3)
+# --- Construction ------------------------------------------------------------------------------------
+
+func _build_skeleton() -> void:
+	skeleton = Skeleton3D.new()
+	skeleton.name = "Skeleton"
+	add_child(skeleton)
+	var names := ["body", "head", "tail"]
+	for side in ["L", "R"]:
+		for b in ["humerus", "forearm", "hand", "tibia", "tarsus"]:
+			names.append("%s.%s" % [b, side])
+	for n in names:
+		_bones[n] = skeleton.add_bone(n)
+	for side in ["L", "R"]:
+		_parents["humerus." + side] = "body"
+		_parents["forearm." + side] = "humerus." + side
+		_parents["hand." + side] = "forearm." + side
+		_parents["tibia." + side] = "body"
+		_parents["tarsus." + side] = "tibia." + side
+	_parents["head"] = "body"
+	_parents["tail"] = "body"
+	for n in _parents:
+		skeleton.set_bone_parent(_bones[n], _bones[_parents[n]])
 
 
-## Pose the rig from a Bird.telemetry() snapshot.
+func _build_body(tint: Color) -> void:
+	var body_mat := _material(tint.darkened(0.12))
+	var leg_mat := _material(Color(0.72, 0.6, 0.32))
+	var body := MeshInstance3D.new()
+	var cap := CapsuleMesh.new()
+	cap.radius = _L * 0.15
+	cap.height = _L * 0.62
+	body.mesh = cap
+	body.rotation.x = PI * 0.5
+	body.material_override = body_mat
+	add_child(body)
+	_head = Node3D.new()
+	_head.position = _head_pos
+	add_child(_head)
+	var head := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	var hr := _L * (0.15 if profile.id == "owl" else 0.105)
+	sph.radius = hr
+	sph.height = hr * 2.0
+	head.mesh = sph
+	head.material_override = body_mat
+	_head.add_child(head)
+	var beak := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = _L * 0.035
+	cone.height = _L * (0.07 if profile.id == "owl" else 0.12)
+	beak.mesh = cone
+	beak.rotation.x = -PI * 0.5
+	beak.position = Vector3(0.0, -_L * 0.01, -hr - cone.height * 0.4)
+	beak.material_override = leg_mat
+	_head.add_child(beak)
+	for e in [-1.0, 1.0]:   # eyes: dark dots so the look direction reads
+		var eye := MeshInstance3D.new()
+		var es := SphereMesh.new()
+		es.radius = hr * 0.18
+		es.height = hr * 0.36
+		eye.mesh = es
+		eye.material_override = _material(Color(0.05, 0.05, 0.05))
+		eye.position = Vector3(e * hr * (0.45 if profile.id == "owl" else 0.75), hr * 0.25, -hr * (0.8 if profile.id == "owl" else 0.55))
+		_head.add_child(eye)
+	for i in 2:
+		var parts: Array = []
+		for k in 6:
+			var mi := MeshInstance3D.new()
+			var c := CapsuleMesh.new()
+			c.radius = _L * (0.03 if k == 0 else (0.018 if k == 1 else 0.01))
+			c.height = 1.0   # rescaled per frame
+			mi.mesh = c
+			mi.material_override = body_mat if k == 0 else leg_mat
+			add_child(mi)
+			parts.append(mi)
+		_leg_meshes[i] = parts
+
+
+## The wing's thickness: the limb itself, the patagium (the skin web from shoulder to wrist) and the covert
+## padding over them. Each is an ellipsoid along its bone with the bone at its front edge: thick and rounded
+## at the leading edge, trailing back over the coverts, thinning from the root to the hand. The flight
+## feathers carry on behind as the thin trailing edge.
+func _build_fairings(c: Color) -> void:
+	var mat := _material(c)
+	var sph := SphereMesh.new()
+	sph.radius = 0.5
+	sph.height = 1.0
+	sph.radial_segments = 16
+	sph.rings = 8
+	for i in 2:
+		var parts: Array = []
+		for k in 4:
+			var mi := MeshInstance3D.new()
+			mi.mesh = sph
+			mi.material_override = mat
+			add_child(mi)
+			parts.append(mi)
+		_fairings[i] = parts
+
+
+## Fairing size per piece as fractions of the root chord: [chordwise width, thickness].
+const FAIRING := [[0.55, 0.13], [0.36, 0.12], [0.3, 0.09], [0.2, 0.055]]
+
+
+func _place_fairing(mi: MeshInstance3D, a: Vector3, b: Vector3, n: Vector3, side: float, piece: int, fade: float) -> void:
+	var rc := shape.root_chord()
+	var d := b - a
+	var length := d.length()
+	if length < 1e-5 or fade <= 0.01:
+		mi.visible = false
+		return
+	mi.visible = true
+	var u := d / length
+	var nn := (n - u * u.dot(n)).normalized()
+	var aft := (u.cross(nn) * side).normalized()
+	var w: float = FAIRING[piece][0] * rc * fade
+	var t: float = FAIRING[piece][1] * rc * fade
+	mi.transform = Transform3D(Basis(aft * w, nn * t, u * length * 1.15), (a + b) * 0.5 + aft * w * 0.32)
+
+
+func _feather_mesh(profile_pts: Array) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3.UP)
+	for k in profile_pts.size() - 1:
+		var a: Array = profile_pts[k]
+		var b: Array = profile_pts[k + 1]
+		var al := Vector3(-a[1] * 0.5, 0.0, a[0])
+		var ar := Vector3(a[1] * 0.5, 0.0, a[0])
+		var bl := Vector3(-b[1] * 0.5, 0.0, b[0])
+		var br := Vector3(b[1] * 0.5, 0.0, b[0])
+		for v in [al, ar, br, al, br, bl]:
+			# A gentle arch along the feather (3% of its length at the middle): cambered, not a flat card.
+			var arched := Vector3(v.x, CAMBER * sin(PI * v.z), v.z)
+			st.set_normal(Vector3.UP)
+			st.add_vertex(arched)
+	return st.commit()
+
+
+func _build_feathers() -> void:
+	var defs := shape.feathers(0.0)
+	_plain_count = TAIL_FEATHERS
+	_emarg_count = 0
+	for f in defs:
+		if f.emarg:
+			_emarg_count += 2
+		else:
+			_plain_count += 2
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness = 0.9
+	_plain = _multimesh(_feather_mesh(PLAIN_PROFILE), _plain_count, mat, "Feathers")
+	_emarg = _multimesh(_feather_mesh(EMARG_PROFILE), maxi(_emarg_count, 1), mat, "SlottedPrimaries")
+	if _emarg_count == 0:
+		_emarg.visible_instance_count = 0
+
+
+func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> MultiMesh:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = count
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = node_name
+	mmi.multimesh = mm
+	mmi.material_override = mat
+	add_child(mmi)
+	return mm
+
+
+# --- Telemetry -> control values -------------------------------------------------------------------------
+
+## Map a Bird.telemetry() snapshot to the control values (smoothed) and pose the rig.
 func animate(t: Dictionary, dt: float) -> void:
-	var k := 1.0 - exp(-14.0 * dt)
+	if not _built:
+		return
 	var state: int = t.state
 	var sitting := state == Bird.State.PERCHED or state == Bird.State.GROUNDED
 	var landing := state == Bird.State.LANDING
-	var flare: float = 1.0 if landing else t.flare
-	var flap_target := deg_to_rad(5.0)   # gliding dihedral
-	var wrist_target := 0.0
-	var sweep_target: float = t.fold * deg_to_rad(30.0)
-	wrist_target = t.fold * deg_to_rad(110.0)
+	var flare: float = 1.0 if landing else float(t.flare)
+	var speed: float = t.speed
+	var slow := 1.0 - clampf((speed - float(t.v_stall)) / maxf(float(t.v_best), 0.1), 0.0, 1.0)
+	var alpha: float = t.alpha
+	var k := 1.0 - exp(-14.0 * dt)
+	var ks := 1.0 - exp(-8.0 * dt)
+
+	var flap_t := deg_to_rad(5.0)
+	var lift_t := 0.0
 	if t.flapping and not sitting:
 		var ph: float = t.flap_phase
-		flap_target = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))   # top at 0, bottom at 0.5
+		flap_t = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))   # top at 0, bottom at 0.5
 		if ph > 0.5:
-			wrist_target = maxf(wrist_target, deg_to_rad(55.0) * sin((ph - 0.5) * TAU))   # flexed upstroke
+			lift_t = 50.0 * sin((ph - 0.5) * TAU)
 		k = 1.0   # wingbeats are fast: no smoothing
+	var fold_t: float = t.fold
+	var sweep_t := 12.0 * flare
+	var twist_t := clampf(alpha * 0.6, deg_to_rad(-8.0), deg_to_rad(18.0))
 	if landing:
-		flap_target = deg_to_rad(25.0)
-		sweep_target = -deg_to_rad(12.0)   # wings swing forward in the flare
+		flap_t = deg_to_rad(25.0)
+		fold_t = 0.0
+		twist_t = deg_to_rad(30.0)
 	if sitting:
-		flap_target = deg_to_rad(-8.0)
-		sweep_target = deg_to_rad(80.0)
-		wrist_target = deg_to_rad(150.0)
-	_flap_angle = lerpf(_flap_angle, flap_target, k)
-	_sweep = lerpf(_sweep, sweep_target, 1.0 - exp(-12.0 * dt))
-	_wrist_fold = lerpf(_wrist_fold, wrist_target, 1.0 - exp(-12.0 * dt))
-	var slow := 1.0 - clampf((float(t.speed) - t.v_stall) / maxf(t.v_best, 0.1), 0.0, 1.0)
-	_splay = lerpf(_splay, (1.0 - t.fold) * maxf(slow, flare), 1.0 - exp(-8.0 * dt))
-	var tail_target: float = 0.15 + 0.5 * absf(t.bank) / maxf(t.max_bank, 0.1) + 0.6 * slow + flare
-	if sitting:
-		tail_target = 0.0
-	_spread_tail = lerpf(_spread_tail, clampf(tail_target, 0.0, 1.0), 1.0 - exp(-8.0 * dt))
-	_leg_fwd = lerpf(_leg_fwd, 1.0 if (landing or flare > 0.3) else (0.5 if sitting else 0.0), 1.0 - exp(-10.0 * dt))
+		flap_t = deg_to_rad(-10.0)
+		fold_t = 1.0
+		sweep_t = 0.0
+		twist_t = 0.0
+	flap = lerpf(flap, flap_t, k)
+	hand_lift = lerpf(hand_lift, lift_t, k)
+	fold = lerpf(fold, fold_t, 1.0 - exp(-10.0 * dt))
+	sweep = lerpf(sweep, sweep_t, ks)
+	twist = lerpf(twist, twist_t, ks)
+	var alula_t := 1.0 if (flare > 0.2 or (alpha > deg_to_rad(12.0) and speed < float(t.v_best) * 0.8)) and not sitting else 0.0
+	alula = lerpf(alula, alula_t, 1.0 - exp(-20.0 * dt))
+	slot = lerpf(slot, (1.0 - fold) * maxf(slow, flare), ks)
+	var spread_t: float = 0.15 + 0.5 * absf(float(t.bank)) / maxf(float(t.max_bank), 0.1) + 0.6 * slow + flare
+	tail_spread = lerpf(tail_spread, 0.0 if sitting else clampf(spread_t, 0.0, 1.0), ks)
+	tail_pitch = lerpf(tail_pitch, 0.6 * flare if not sitting else 0.15, ks)
+	tail_twist = lerpf(tail_twist, -float(t.bank) * 0.25 if not sitting else 0.0, ks)
 
+	# Head: look at the target, level with the world.
+	var inv := global_transform.affine_inverse()
+	var target_rig: Vector3 = inv * (t.look_target as Vector3)
+	var want := (target_rig - _head_pos)
+	if want.length() > 0.01:
+		look_dir = look_dir.slerp(want.normalized(), 1.0 - exp(-10.0 * dt)).normalized()
+	world_up = (global_transform.basis.inverse() * Vector3.UP).normalized()
+
+	# Feet: on the grip point when there is one in reach, reaching forward in a flare, else tucked.
 	for i in 2:
-		var s := -1.0 if i == 0 else 1.0
-		shoulders[i].rotation = Vector3(0.0, -s * _sweep, s * _flap_angle)
-		wrists[i].rotation = Vector3(0.0, -s * _wrist_fold, 0.0)
-		for f in FINGERS:
-			var fan := (f - (FINGERS - 1) * 0.5) * deg_to_rad(7.0) * _splay
-			fingers[i][f].rotation = Vector3(0.0, -s * fan, 0.0)
-	var fan_total := lerpf(deg_to_rad(8.0), deg_to_rad(110.0), _spread_tail)
-	for i in TAIL_FEATHERS:
-		var u := float(i) / float(TAIL_FEATHERS - 1) - 0.5
-		tail_feathers[i].rotation = Vector3(0.0, u * fan_total, 0.0)
-	# Tail pitches down in the flare (airbrake), twists a little with bank.
-	tail.rotation = Vector3(-flare * 0.6, 0.0, -float(t.bank) * 0.25)
-	for leg in legs:
-		# Hanging back (0) when flying, swung forward (1) to reach for the perch.
-		leg.rotation = Vector3(lerpf(-1.2, 0.35, _leg_fwd), 0.0, 0.0)
+		var want_foot := _tucked_foot(i)
+		var grip := 0.0
+		if t.has_grip:
+			var g: Vector3 = inv * (t.grip as Vector3)
+			var side_off := Vector3(SIDES[i] * _L * 0.04, 0.0, 0.0)
+			var reach := _tib + _tars
+			if (g + side_off).distance_to(_hip[i]) < reach * 1.6:
+				want_foot = g + side_off
+				grip = 1.0 if sitting else 0.0
+		elif flare > 0.3:
+			want_foot = _hip[i] + Vector3(0.0, -_L * 0.22, -_L * 0.16)
+		foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
+		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
+	apply_pose()
+
+
+func _tucked_foot(i: int) -> Vector3:
+	return _hip[i] + Vector3(0.0, -_L * 0.05, _L * 0.26)
+
+
+# --- Solving --------------------------------------------------------------------------------------------
+
+## Two-bone IK: the middle joint for a chain root -> (l1) -> mid -> (l2) -> end reaching `target`, bent
+## toward `pole`. Lengths are kept; an out-of-reach target is approached as far as the chain allows.
+static func two_bone(root: Vector3, target: Vector3, l1: float, l2: float, pole: Vector3) -> Vector3:
+	var to := target - root
+	var d := clampf(to.length(), absf(l1 - l2) + 1e-5, l1 + l2 - 1e-5)
+	var dir := to.normalized() if to.length() > 1e-6 else Vector3.FORWARD
+	var cos_a := clampf((l1 * l1 + d * d - l2 * l2) / (2.0 * l1 * d), -1.0, 1.0)
+	var p := pole - root
+	var perp := p - dir * dir.dot(p)
+	if perp.length() < 1e-6:
+		perp = dir.cross(Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT)
+	perp = perp.normalized()
+	var a := acos(cos_a)
+	return root + (dir * cos(a) + perp * sin(a)) * l1
+
+
+## The end of a two-bone chain once its middle joint is known.
+static func chain_end(mid: Vector3, target: Vector3, l2: float) -> Vector3:
+	var to := target - mid
+	return mid + (to.normalized() if to.length() > 1e-6 else Vector3.FORWARD) * l2
+
+
+func _wing_plane(i: int) -> Basis:
+	var s: float = SIDES[i]
+	return Basis(Vector3.BACK, s * flap) * Basis(Vector3.RIGHT, twist)
+
+
+## Plane (top view) point -> rig space, for one side, before IK.
+func _to_rig(i: int, p2: Vector2) -> Vector3:
+	var s: float = SIDES[i]
+	var shoulder := Vector3(s * shape.shoulder.x, 0.0, shape.shoulder.y)
+	var swept := p2
+	if absf(sweep) > 1e-4:
+		swept = shape.shoulder + (p2 - shape.shoulder).rotated(deg_to_rad(-sweep))
+	var flat := Vector3(s * swept.x, 0.0, swept.y)
+	return shoulder + _wing_plane(i) * (flat - shoulder) + Vector3(0.0, _sh_up, 0.0)
+
+
+func apply_pose() -> void:
+	_pose_bone("body", Vector3.ZERO, Vector3(0, 0, -_L * 0.3), Vector3.UP)
+	var plain_i := 0
+	var emarg_i := 0
+	feather_xforms.clear()
+	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
+	if _defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01:
+		_defs = shape.feathers(fold, slot)
+		_defs_fold = fold
+		_defs_slot = slot
+	var defs := _defs
+	var lengths := shape.bone_lengths()
+	var j2 := shape.joints(fold)
+	var ik_w := smoothstep(0.55, 1.0, fold)
+	var unit := _L / 0.45   # feather layer offsets scale with the bird
+	for i in 2:
+		var s: float = SIDES[i]
+		var sh := _to_rig(i, j2[0])
+		var el_fk := _to_rig(i, j2[1])
+		var wr_fk := _to_rig(i, j2[2])
+		var hd_fk := _to_rig(i, j2[3])
+		# Upstroke: the hand flexes back (in the wing plane) and droops about the forearm axis.
+		var arm_n := _wing_plane(i) * Vector3.UP
+		if absf(hand_lift) > 1e-3:
+			var back := (hd_fk - wr_fk).rotated(arm_n, -s * deg_to_rad(hand_lift * 0.6))
+			var fore_axis := (wr_fk - el_fk).normalized()
+			hd_fk = wr_fk + back.rotated(fore_axis, s * deg_to_rad(hand_lift) * 0.7)
+		# Fold IK: the wrist heads for the flank anchor as the wing folds; the elbow bends toward its FK place.
+		var target := wr_fk.lerp(fold_anchor[i], ik_w)
+		var elbow := two_bone(sh, target, lengths[0], lengths[1], el_fk)
+		var wrist := chain_end(elbow, target, lengths[1])
+		var hand := wrist + (hd_fk - wr_fk)
+		wing_joints[i] = [sh, elbow, wrist, hand]
+		var hand_n := arm_n
+		if absf(hand_lift) > 1e-3:
+			hand_n = arm_n.rotated((wr_fk - el_fk).normalized(), s * deg_to_rad(hand_lift) * 0.7)
+		var segs := [[sh, elbow, arm_n], [elbow, wrist, arm_n], [wrist, hand, hand_n]]
+		for f in defs:
+			var seg: Array = segs[int(f.bone)]
+			var a: Vector3 = seg[0]
+			var b: Vector3 = seg[1]
+			var u := (b - a).normalized()
+			var n: Vector3 = seg[2]
+			n = (n - u * u.dot(n)).normalized()
+			var aft := (u.cross(n) * s).normalized()
+			var rel := deg_to_rad(f.rel)
+			if f.kind == WingShape.Kind.ALULA:
+				rel -= deg_to_rad(25.0) * alula   # deploys forward as a slat
+			var d := (u * cos(rel) + aft * sin(rel)).normalized()
+			# Folding, the IK swings the arm bones well away from their FK angles; the feathers instead blend
+			# toward their designed folded direction (aft along the body), so the folded wing lies flat.
+			if ik_w > 0.0 and int(f.bone) != WingShape.Bone.HAND:
+				d = d.slerp(_fk_feather_dir(i, f, fold), ik_w).normalized()
+			var base: Vector3 = a.lerp(b, f.t) + n * (float(f.layer) * unit)
+			if f.kind == WingShape.Kind.ALULA:
+				base += n * _L * 0.02 * alula
+			var xf := _feather_xform(base, d, n, f.len, f.w)
+			feather_xforms.append(xf)
+			if f.emarg:
+				_emarg.set_instance_transform(emarg_i, xf)
+				_emarg.set_instance_color(emarg_i, _colors[WingShape.Kind.PRIMARY])
+				emarg_i += 1
+			else:
+				_plain.set_instance_transform(plain_i, xf)
+				_plain.set_instance_color(plain_i, _colors[int(f.kind)])
+				plain_i += 1
+		var fr: Array = _fairings[i]
+		_place_fairing(fr[0], sh, wrist, arm_n, s, 0, 1.0 - fold)   # the patagium folds away with the wing
+		_place_fairing(fr[1], sh, elbow, arm_n, s, 1, 1.0)
+		_place_fairing(fr[2], elbow, wrist, arm_n, s, 2, 1.0)
+		_place_fairing(fr[3], wrist, hand, hand_n, s, 3, 1.0)
+		_pose_bone("humerus." + ("L" if i == 0 else "R"), sh, elbow, arm_n)
+		_pose_bone("forearm." + ("L" if i == 0 else "R"), elbow, wrist, arm_n)
+		_pose_bone("hand." + ("L" if i == 0 else "R"), wrist, hand, hand_n)
+
+	# Tail: 12 rectrices fanned, pitched and twisted as a group.
+	var fan := deg_to_rad(lerpf(shape.tail_fan * 0.3, maxf(shape.tail_fan * 1.7, 110.0), tail_spread))
+	var tb := Basis(Vector3.RIGHT, tail_pitch) * Basis(Vector3.BACK, tail_twist)
+	var tn := tb * Vector3.UP
+	for k in TAIL_FEATHERS:
+		var u := (k - 5.5) / 5.5
+		var length := profile.tail_length * _tail_shape(u)
+		var d := tb * Vector3(sin(u * fan * 0.5), 0.0, cos(u * fan * 0.5))
+		var base := _tail_base + Vector3(u * _L * 0.04, 0.0, 0.0) + tn * (0.0005 * absf(u) * unit)
+		var txf := _feather_xform(base, d, tn, length, profile.tail_length * 0.14)
+		feather_xforms.append(txf)
+		_plain.set_instance_transform(plain_i, txf)
+		_plain.set_instance_color(plain_i, _colors["tail"])
+		plain_i += 1
+	_pose_bone("tail", _tail_base, _tail_base + tb * Vector3(0, 0, profile.tail_length), tn)
+
+	# Legs: hip -> ankle (bends aft, the bird's "backward knee") -> foot.
+	for i in 2:
+		var hip: Vector3 = _hip[i]
+		var pole := hip + Vector3(0.0, -_L * 0.05, _L * 0.3)
+		var ankle := two_bone(hip, foot_targets[i], _tib, _tars, pole)
+		var foot := chain_end(ankle, foot_targets[i], _tars)
+		leg_joints[i] = [hip, ankle, foot]
+		var parts: Array = _leg_meshes[i]
+		_place_capsule(parts[0], hip, ankle)
+		_place_capsule(parts[1], ankle, foot)
+		var curl := deg_to_rad(70.0) * toe_grip
+		var toes := [Vector3(-0.35, 0.0, -1.0), Vector3(0.0, 0.0, -1.0), Vector3(0.35, 0.0, -1.0), Vector3(0.0, 0.0, 1.0)]
+		for k in 4:
+			var td: Vector3 = (toes[k] as Vector3).normalized()
+			td = td.rotated(td.cross(Vector3.UP).normalized() if k < 3 else Vector3.RIGHT, -curl if k < 3 else curl)
+			_place_capsule(parts[2 + k], foot, foot + td * _L * (0.07 if k < 3 else 0.05))
+		_pose_bone("tibia." + ("L" if i == 0 else "R"), hip, ankle, Vector3.BACK)
+		_pose_bone("tarsus." + ("L" if i == 0 else "R"), ankle, foot, Vector3.BACK)
+
+	# Head: clamp the look to the neck's range, keep it level with the world.
+	var fwd := look_dir
+	var yaw := atan2(fwd.x, -fwd.z)
+	var pitch := asin(clampf(fwd.y, -1.0, 1.0))
+	yaw = clampf(yaw, deg_to_rad(-110.0), deg_to_rad(110.0))
+	pitch = clampf(pitch, deg_to_rad(-60.0), deg_to_rad(60.0))
+	fwd = Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
+	var up := world_up.slerp(Vector3.UP, 0.3)
+	if absf(fwd.dot(up.normalized())) > 0.98:
+		up = Vector3.BACK
+	head_basis = Basis.looking_at(fwd, up)
+	_head.basis = head_basis
+	_pose_bone("head", _head_pos, _head_pos + fwd * _L * 0.1, up)
+
+
+## A feather's direction in the FK pose (its bone at the FK angle in the wing plane), in rig space.
+func _fk_feather_dir(i: int, f: Dictionary, fold_v: float) -> Vector3:
+	var a := WingShape.bone_angles(fold_v)
+	var bone_deg: float = [a.x, a.y, a.z][int(f.bone)]
+	var d2 := WingShape.dir2(bone_deg + float(f.rel) - (sweep if absf(sweep) > 1e-4 else 0.0))
+	return (_wing_plane(i) * Vector3(SIDES[i] * d2.x, 0.0, d2.y)).normalized()
+
+
+func _tail_shape(u: float) -> float:
+	match shape.tail_shape:
+		"rounded": return 1.0 - 0.16 * u * u
+		"fan": return 1.0 - 0.08 * u * u
+		"notched": return 0.86 + 0.14 * absf(u)
+		"narrow": return 1.0 - 0.1 * u * u
+	return 1.0
+
+
+## A feather's instance transform: the unit feather (+Z along, X across, Y normal) laid along `d`.
+static func _feather_xform(base: Vector3, d: Vector3, n: Vector3, length: float, width: float) -> Transform3D:
+	var z := d.normalized()
+	var x := n.cross(z).normalized()
+	var y := z.cross(x).normalized()
+	return Transform3D(Basis(x * width, y * length, z * length), base)   # (y scales the arch with the feather)
+
+
+func _place_capsule(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
+	var d := b - a
+	var length := d.length()
+	if length < 1e-5:
+		mi.visible = false
+		return
+	mi.visible = true
+	var y := d / length
+	var x := y.cross(Vector3.BACK if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
+	var z := x.cross(y).normalized()
+	var r: float = (mi.mesh as CapsuleMesh).radius
+	mi.transform = Transform3D(Basis(x, y * maxf(length, r * 2.0), z), (a + b) * 0.5)
+
+
+## Write a bone's pose so its origin is `a` and its -Z runs toward `b` (the skeleton mirrors the solve, for
+## skinned art and the editor's bone view).
+func _pose_bone(bone_name: String, a: Vector3, b: Vector3, up: Vector3) -> void:
+	var idx: int = _bones[bone_name]
+	var d := b - a
+	var basis := Basis.IDENTITY
+	if d.length() > 1e-6:
+		var u := up if absf(d.normalized().dot(up.normalized())) < 0.98 else Vector3.RIGHT
+		basis = Basis.looking_at(d.normalized(), u)
+	var global := Transform3D(basis, a)
+	var parent := skeleton.get_bone_parent(idx)
+	var local := global
+	if parent >= 0:
+		local = skeleton.get_bone_global_pose(parent).affine_inverse() * global
+	skeleton.set_bone_pose_position(idx, local.origin)
+	skeleton.set_bone_pose_rotation(idx, local.basis.get_rotation_quaternion())

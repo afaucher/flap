@@ -109,7 +109,10 @@ FLYING --settle slowly onto anything flat--> GROUNDED --FLAP--> FLYING (jump up,
 
 **Takeoff grace.** For 0.5 s after taking off, touching down doesn't count as landing. That stops the take off, touch, re-land loop that used to trap AI birds on the ground.
 
-- **Catch area.** A sphere of `grab_radius` around the perch's grip point: 1.5 m for most birds, 1.0 m for the sparrow.
+- **Landing point.** The **aim point**: the grip point closest to the bird's line of flight. The path straight ahead is checked out to 2.5 catch radii, and the aim point is where that path passes closest to the branch's grip line (or the treetop's disc). It is the spot you're flying at, not the spot nearest your body.
+  - The highlight lights the whole grip line and puts the ring on the aim point.
+  - Flying across a branch, you land where your path crosses it.
+- **Catch area.** The aim point must be within `grab_radius` of the bird: 1.5 m for most birds, 1.0 m for the sparrow.
 - **Catch speed.** Speed must be ≤ `grab_speed_max` = `grab_speed_factor` × V_stall. That works out to about 6.8 m/s for the crow and 10.6 m/s for the falcon.
   - Every bird's catch speed sits between its stall speed and its best-glide speed. Coming in at glide speed is slightly too fast, so you have to flare a little. That's the skill: dive under the perch and swoop up into it, the way hawks do.
   - The HUD speed tape has a cyan "catch" mark.
@@ -124,7 +127,7 @@ FLYING --settle slowly onto anything flat--> GROUNDED --FLAP--> FLYING (jump up,
   - **Hold to catch:** catch can be held the whole way in.
   - **Tap buffer:** a quick tap stays live for 0.25 s, so a tap a touch early still catches.
   - **Perch assist** (`perch_assist`, default 0.6) works in the last 5 m: it auto-flares when closing faster than 85% of catch speed, and pulls the bird gently onto the perch line.
-- **Transition.** A cubic Hermite blend runs from the bird's position and velocity to the seat at rest. Its duration scales with distance over speed, clamped to 0.15–0.45 s, and orientation slerps to the perched pose. The rig spreads the wings forward, fans and drops the tail, and swings the legs forward.
+- **Transition.** A cubic Hermite blend runs from the bird's position and velocity to the seat at rest over the aim point. Its duration scales with distance over speed, clamped to 0.15–0.45 s. The bird ends up facing **across the branch toward the side it came from**, so its feet wrap the branch. On a treetop it simply faces the way it was flying. The rig spreads the wings forward, fans and drops the tail, and swings the legs forward.
 - **Release.**
   - The bird leaves the way it faces at `hop_speed` (2.5–3.5 m/s): about 6° down when it takes off with a flap, 20° down when it lets go.
   - It starts clear of the branch.
@@ -150,27 +153,31 @@ All three fade linearly with height. The real effect is smaller. It's exaggerate
 
 ## 4. How perches are defined in space (`scripts/world/perch.gd`)
 
-A perch is plain data with four fields:
-- **grip point:** where the feet close, on top of the branch or trunk top
-- **facing:** a horizontal unit vector
-- **kind:** `BRANCH` or `TREETOP`
-- **tree_id**
+A perch is a **grip set**, not a point. There are two kinds:
+- **Branch perch:** the grip line along the top of the branch. It runs from 12 cm clear of the trunk's surface to 8 cm short of the tip.
+- **Treetop perch:** a grip disc on top of the trunk.
 
-The **facing** does three jobs:
-1. It's where the bird looks while perched.
-2. It's the direction it drops off in on release.
-3. It's the side the AI approaches from.
+The queries:
+- `closest_grip(p)`: the grip point nearest `p`.
+- `aim_grip(pos, dir, ahead)`: the grip point nearest the flight path. This is where a bird lands.
+- `distance_to(p)`: distance from `p` to the grip set.
+- `facing_for(travel)`: which way a bird sits after arriving moving along `travel`. On a branch that's across it, toward the side the bird came from. On a treetop it's the travel direction.
 
-Facings by perch kind:
-- **Branch perches face across the branch**, at a random side. The drop-off then falls clear of the branch, and the approach never aims at the trunk. An earlier version faced along the branch, and released birds landed on their own branch.
-- **Treetop perches face the arena centre**, looking out over the clearing.
+Each perch also keeps a representative `position` (the middle of the line, or the centre of the disc). Spatial lookups and spawning use it. Each also has a default `facing`:
+- Branches face across the branch, at a random side.
+- Treetops face the arena centre.
+
+Spawning uses the default facing, and so does the AI's approach side. The AI aims at an approach anchor on the outer part of the branch, where there's the most room. The bird still lands where its path meets the branch.
+
+Perched birds can turn freely with the stick. Leaving a perch, the bird passes through its own tree for 0.35 s. That way, facing along the branch can't drop it onto the branch.
 
 Perches are generated with the trees:
 - Each tree grows `height / 4.5` branches, spiralling up the trunk between 35% and 88% of its height.
-- Each branch gets one perch at 80% of its length.
-- Each tree gets one treetop perch.
+- Each branch carries one grip line.
+- Each tree gets one treetop disc.
+- Grip lines are drawn as pale strips along the branch tops, and discs on the trunk tops.
 
-A spatial hash on 8 m cells serves `perches_near()`. Seed 7 gives 137 trees and 375 perches. Most perches are low, with a handful above 20 m.
+A spatial hash on 8 m cells, keyed by each perch's middle and padded by the longest half grip line, serves `perches_near()`. That returns perches by their nearest grip point. Seed 7 gives 137 trees and 375 perches. Most perches are low, with a handful above 20 m.
 
 ## 5. The arena and its flight paths (`scripts/world/arena_layout.gd`)
 

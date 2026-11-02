@@ -9,6 +9,8 @@ const WORLD_LAYER := 1
 var layout: ArenaLayout
 var tree_bodies: Array[StaticBody3D] = []   ## by tree id
 var highlight: MeshInstance3D
+var _hl_line: MeshInstance3D
+var _hl_perch: Perch
 var _hl_mat: StandardMaterial3D
 var _mats := {}
 
@@ -171,14 +173,30 @@ static func _basis_along(d: Vector3) -> Basis:
 	return Basis(x, y, z)
 
 
+## The grip set, drawn on the wood: a pale strip along the top of the branch, or a disc on the trunk top.
 func _perch_marker(p: Perch) -> void:
-	var mi := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(0.1, 0.03, 0.1)
-	mi.mesh = box
+	var mi := _grip_mesh(p, 0.012)
 	mi.material_override = _mat("perch", Color(0.85, 0.78, 0.45), 0.6)
-	mi.position = p.position + Vector3.UP * 0.015
 	add_child(mi)
+
+
+func _grip_mesh(p: Perch, lift: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	if p.kind == Perch.Kind.TREETOP:
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = p.disc
+		cyl.bottom_radius = p.disc
+		cyl.height = 0.02
+		cyl.radial_segments = 16
+		mi.mesh = cyl
+		mi.position = p.position + Vector3.UP * lift
+	else:
+		var box := BoxMesh.new()
+		box.size = Vector3(maxf(0.03, p.thickness * 0.9), 0.02, p.a.distance_to(p.b))
+		mi.mesh = box
+		mi.position = p.position + Vector3.UP * lift
+		mi.basis = Basis.looking_at((p.b - p.a).normalized(), Vector3.UP)
+	return mi
 
 
 func _highlight() -> void:
@@ -196,16 +214,27 @@ func _highlight() -> void:
 	add_child(highlight)
 
 
-## Show the catchable perch: white = approaching, green = SPACE catches now, red = in reach but too fast.
-func show_candidate(p: Perch, status: int, grab_radius: float) -> void:
+## Show the catchable perch: its whole grip line lit, and a ring (the catch reach) at the grip point nearest
+## the bird -- where it would land. White = approaching, green = catch now, red = in reach but too fast.
+func show_candidate(p: Perch, status: int, grab_radius: float, grip := Vector3.ZERO) -> void:
 	if p == null:
 		highlight.visible = false
+		if _hl_line != null:
+			_hl_line.visible = false
 		return
 	highlight.visible = true
-	highlight.position = p.position
+	highlight.position = grip if grip != Vector3.ZERO else p.position
 	var s := grab_radius / 0.5 if status != Perch.Catch.OUT_OF_RANGE else 0.6
 	highlight.scale = Vector3(s, 1.0, s)
 	match status:
 		Perch.Catch.OK: _hl_mat.albedo_color = Color(0.3, 1.0, 0.4)
 		Perch.Catch.TOO_FAST: _hl_mat.albedo_color = Color(1.0, 0.35, 0.3)
 		_: _hl_mat.albedo_color = Color(1, 1, 1, 0.8)
+	if p != _hl_perch:
+		if _hl_line != null:
+			_hl_line.queue_free()
+		_hl_line = _grip_mesh(p, 0.03)
+		_hl_line.material_override = _hl_mat
+		add_child(_hl_line)
+		_hl_perch = p
+	_hl_line.visible = true

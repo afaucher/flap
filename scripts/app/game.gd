@@ -115,7 +115,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 func _physics_process(_dt: float) -> void:
 	if bird == null:
 		return
-	arena.show_candidate(bird.candidate, bird.candidate_status, bird.profile.grab_radius)
+	arena.show_candidate(bird.candidate, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
 
 
 func _process(_dt: float) -> void:

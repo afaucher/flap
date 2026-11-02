@@ -47,6 +47,7 @@ func _fly_arena(arena_seed: int, per_species: Dictionary) -> void:
 		add_child(b)
 		b.setup(BirdProfile.by_id(BirdProfile.IDS[i]), layout, pilot)
 		b.arena = arena
+		b.rig.visible = false   # (nothing renders here; skip the feather maths)
 		b.perch_at(layout.perches[(i * 53 + 5) % layout.perches.size()])
 		birds.append(b)
 		pilots.append(pilot)

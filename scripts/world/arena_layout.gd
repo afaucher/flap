@@ -14,6 +14,8 @@ extends RefCounted
 
 const GROUND_Y := 0.0
 const HASH_CELL := 8.0
+const GRIP_TRUNK_GAP := 0.12   ## m, the grip line starts this far out from the trunk's surface
+const GRIP_TIP_GAP := 0.08     ## m, and stops this far short of the tip
 
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 
@@ -55,6 +57,7 @@ var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData
 var perches: Array[Perch] = []
 var _perch_hash := {}               ## Vector2i -> Array[int] perch ids
+var max_perch_reach := 0.0          ## m, the longest half grip line (for hashed lookups)
 var _tree_hash := {}                ## Vector2i -> Array[int] tree ids
 
 
@@ -111,8 +114,8 @@ func _site_ok(pos: Vector2, tier_index: int, spacing: float) -> bool:
 	return true
 
 
-## Branches spiral up the trunk, each with a perch near its tip (facing across the branch); every tree also
-## has a treetop perch.
+## Branches spiral up the trunk, each carrying a perch: the grip line along its top, from just clear of the
+## trunk to just short of the tip. Every tree also has a treetop perch: a grip disc on top of the trunk.
 func _grow(t: TreeData, rng: RandomNumberGenerator) -> void:
 	var spec: Dictionary = TIERS[t.tier]
 	var n := maxi(1, int(t.height / 4.5))
@@ -127,24 +130,26 @@ func _grow(t: TreeData, rng: RandomNumberGenerator) -> void:
 		var length := rng.randf_range(spec.branch_len.x, spec.branch_len.y) + t.radius
 		b.tip = b.root + dir * length + Vector3.UP * rng.randf_range(0.0, 0.25)
 		b.radius = clampf(t.radius * 0.35, 0.04, 0.12)
-		var grip := b.root.lerp(b.tip, 0.8) + Vector3.UP * b.radius
-		# A bird sits across a branch: it faces (and drops off, and is approached) at right angles to it,
-		# so the drop-off falls clear of the branch and the approach never aims at the trunk.
+		# (Measured along the horizontal: the branch rises a little toward its tip.)
+		var t0 := clampf((t.radius + GRIP_TRUNK_GAP) / length, 0.0, 0.6)
+		var t1 := clampf(1.0 - GRIP_TIP_GAP / length, t0 + 0.1, 1.0)
+		var up := Vector3.UP * b.radius
+		# The default facing (spawning, the AI's approach side) is across the branch, at random to one side:
+		# the drop-off falls clear of the branch and the approach never aims at the trunk.
 		var across := dir.rotated(Vector3.UP, PI * 0.5 * (1.0 if rng.randf() < 0.5 else -1.0))
-		var p := Perch.new(perches.size(), grip, across, Perch.Kind.BRANCH, t.id)
-		p.thickness = b.radius
+		var p := Perch.branch(perches.size(), b.root.lerp(b.tip, t0) + up, b.root.lerp(b.tip, t1) + up, across, t.id, b.radius)
 		b.perch_id = p.id
 		_add_perch(p)
 		t.branches.append(b)
 	# Treetop: faces the arena centre, so a bird sitting up there looks over the clearing.
 	var to_center := Vector3(-t.base.x, 0.0, -t.base.y)
-	var top := Perch.new(perches.size(), t.top() + Vector3.UP * 0.05, to_center if to_center.length() > 0.1 else Vector3.FORWARD, Perch.Kind.TREETOP, t.id)
-	top.thickness = t.radius
+	var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.03, t.radius * 0.75 - 0.03), to_center if to_center.length() > 0.1 else Vector3.FORWARD, t.id)
 	_add_perch(top)
 
 
 func _add_perch(p: Perch) -> void:
 	perches.append(p)
+	max_perch_reach = maxf(max_perch_reach, p.reach())
 	_add_to_hash(_perch_hash, Vector2(p.position.x, p.position.z), p.id)
 
 
@@ -167,18 +172,19 @@ static func _dist_to_segment_2d(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 # --- Queries -----------------------------------------------------------------------------------
 
-## Perches within `radius` of `pos`, nearest first.
+## Perches with a grip point within `radius` of `pos`, nearest grip first.
 func perches_near(pos: Vector3, radius: float) -> Array[Perch]:
 	var out: Array[Perch] = []
-	var c0 := _cell(Vector2(pos.x - radius, pos.z - radius))
-	var c1 := _cell(Vector2(pos.x + radius, pos.z + radius))
+	var r := radius + max_perch_reach   # (perches are hashed by their middle)
+	var c0 := _cell(Vector2(pos.x - r, pos.z - r))
+	var c1 := _cell(Vector2(pos.x + r, pos.z + r))
 	for cx in range(c0.x, c1.x + 1):
 		for cz in range(c0.y, c1.y + 1):
 			for pid in _perch_hash.get(Vector2i(cx, cz), []):
 				var p: Perch = perches[pid]
-				if p.position.distance_to(pos) <= radius:
+				if p.distance_to(pos) <= radius:
 					out.append(p)
-	out.sort_custom(func(a: Perch, b: Perch): return a.position.distance_squared_to(pos) < b.position.distance_squared_to(pos))
+	out.sort_custom(func(a: Perch, b: Perch): return a.distance_to(pos) < b.distance_to(pos))
 	return out
 
 

@@ -27,19 +27,19 @@ func _init(l: ArenaLayout, c := 0.9) -> void:
 ## Where the final approach starts: out along the perch's facing and a little below it, so the bird
 ## dives under and swoops up into the perch (bleeding speed on the way up, as birds do).
 static func approach_point(p: Perch, profile: BirdProfile) -> Vector3:
-	return p.position + p.facing * approach_length(profile) + Vector3.DOWN * 1.2
+	return p.approach_anchor() + p.facing * approach_length(profile) + Vector3.DOWN * 1.2
 
 
 ## A point twice as far out, so the bird reaches the approach point already lined up with the perch.
 static func pre_approach_point(p: Perch, profile: BirdProfile) -> Vector3:
-	return p.position + p.facing * approach_length(profile) * 2.0 + Vector3.DOWN * 0.6
+	return p.approach_anchor() + p.facing * approach_length(profile) * 2.0 + Vector3.DOWN * 0.6
 
 
 static func approach_length(profile: BirdProfile) -> float:
 	return maxf(6.0, profile.v_best * 0.8)
 
 
-## Waypoints from `from` to perch `p` (ending at the perch's grip point), or [] if no route was found.
+## Waypoints from `from` to perch `p` (ending at its approach anchor, on the outer part of the branch), or [] if no route was found.
 ## `from_tree`: the tree the bird is leaving (ignored for the first leg, which starts right beside it).
 func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -1) -> Array[Vector3]:
 	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
@@ -54,7 +54,7 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 		return route
 	if lined_up:
 		route.append(app)
-	route.append(p.position)
+	route.append(p.approach_anchor())
 	return route
 
 

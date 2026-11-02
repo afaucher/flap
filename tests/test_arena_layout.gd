@@ -51,7 +51,23 @@ func setup() -> void:
 		near(p.facing.length(), 1.0, 1e-4, "facing is unit")
 		var tr: ArenaLayout.TreeData = a.trees[p.tree_id]
 		if p.kind == Perch.Kind.BRANCH:
-			check(Vector2(p.position.x, p.position.z).distance_to(tr.base) > tr.radius + 0.3, "branch perch stands off the trunk")
+			# The grip line runs along the top of the branch, from clear of the trunk toward the tip.
+			check(Vector2(p.a.x, p.a.z).distance_to(tr.base) >= tr.radius + ArenaLayout.GRIP_TRUNK_GAP - 1e-3, "grip line starts clear of the trunk")
+			check(p.a.distance_to(p.b) > 0.3, "grip line has length (%.2f m)" % p.a.distance_to(p.b))
+			near(p.facing.dot((p.b - p.a).normalized()), 0.0, 0.15, "default facing is across the branch")
+			var side := Vector3.UP.cross((p.b - p.a).normalized()).normalized()
+			check(p.closest_grip(p.position + side).distance_to(p.position) < 1e-4, "closest grip from beside the middle is the middle")
+			check(p.closest_grip(p.a + (p.a - p.b) * 3.0).distance_to(p.a) < 1e-4, "closest grip clamps to the line's end")
+			# Flying across the branch, the aim point is where the path crosses it, not the nearest point.
+			var across := Vector3.UP.cross((p.b - p.a).normalized()).normalized()
+			var cross_at := p.a.lerp(p.b, 0.8)
+			var start := cross_at - across * 2.0 + (p.a - p.b).normalized() * 0.5
+			var aim := p.aim_grip(start, (cross_at - start).normalized(), 4.0)
+			check(aim.distance_to(cross_at) < 1e-3, "aim point is where the path meets the branch")
+			check(aim.distance_to(p.closest_grip(start)) > 0.2, "aim point differs from the nearest point")
+		else:
+			check(p.disc > 0.0, "treetop has a grip disc")
+			check(p.closest_grip(p.position + Vector3(5, 0, 0)).distance_to(p.position) <= p.disc + 1e-4, "treetop grip stays on its disc")
 	check(kinds[Perch.Kind.TREETOP] == a.trees.size(), "one treetop perch per tree")
 	check(kinds[Perch.Kind.BRANCH] > a.trees.size(), "more branch perches than trees")
 	# Perches at every altitude band, most of them low.
@@ -67,11 +83,11 @@ func setup() -> void:
 	var near_list := a.perches_near(probe, 12.0)
 	var brute := 0
 	for p in a.perches:
-		if p.position.distance_to(probe) <= 12.0:
+		if p.distance_to(probe) <= 12.0:
 			brute += 1
 	eq(near_list.size(), brute, "perches_near finds them all")
 	for i in range(1, near_list.size()):
-		check(near_list[i - 1].position.distance_to(probe) <= near_list[i].position.distance_to(probe), "nearest first")
+		check(near_list[i - 1].distance_to(probe) <= near_list[i].distance_to(probe), "nearest grip first")
 	var sp := a.start_perch()
 	check(sp != null and sp.kind == Perch.Kind.TREETOP and sp.position.y > 15.0, "start on a tall treetop")
 	finish()

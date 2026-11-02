@@ -10,6 +10,7 @@ perches to rest. This is the flight-model prototype; combat comes next.
 .\run.ps1 --bird falcon        # crow | owl | hawk | falcon | sparrow
 .\run.ps1 --seed 3 --ai 5      # another arena, more AI birds
 .\run.ps1 --autopilot          # watch your bird fly itself (P toggles)
+.\run.ps1 --scene res://scenes/rig_gallery.tscn --pose flap --view three   # the bird models side by side
 .\test_runner.ps1 -TestAll     # headless tests
 .\build.ps1                    # tests, then export build\windows\Flap.exe + zip
 ```

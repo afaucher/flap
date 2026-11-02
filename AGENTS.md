@@ -23,8 +23,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `EnergyModel` (burst + stamina), `FlightInput`.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
   collision).
-- `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (greybox
-  articulated mesh), `PlayerController` (mouse virtual stick), `ChaseCamera`.
+- `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
+  wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
+  calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup), `scripts/test_support/`.
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.

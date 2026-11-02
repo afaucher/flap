@@ -173,7 +173,7 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 	if route.is_empty():
 		return _hold_glide(bird)
 
-	var dist_perch := pos.distance_to(target.position)
+	var dist_perch := target.distance_to(pos)   # (to the nearest grip point on the branch)
 	# Progress / stuck watchdog: re-plan if no closer for 8 s, pick a new perch after 3 failed tries.
 	if dist_perch < _min_dist - 0.5:
 		_min_dist = dist_perch
@@ -199,7 +199,7 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 	mode = Mode.FINAL if final else Mode.CRUISE
 	var aim := route[wp]
 	if final and dist_perch < 6.0:
-		aim = target.position + Vector3.UP * 0.2
+		aim = target.approach_anchor() + Vector3.UP * 0.2   # the outer branch: the bird lands where its path meets it
 
 	var desired := (aim - pos).normalized()
 	# A steep bank sheds vertical lift: near the ground, bank gently.
@@ -286,7 +286,7 @@ func _avoid(bird: Bird, desired: Vector3, dt: float, bank_room: float) -> Vector
 	var c := 0.6
 	var tree := bird.perch.tree_id if bird.perch != null else -1
 	var ahead := m.flight_dir()
-	var final_tree := target.tree_id if target != null and pos.distance_to(target.position) < 8.0 else -1
+	var final_tree := target.tree_id if target != null and target.distance_to(pos) < 8.0 else -1
 	if _arc_clear(bird, look, c, final_tree) and bird.layout.segment_clear(pos, pos + ahead * look, c, final_tree) and pos.y + ahead.y * look > 1.5:
 		avoiding = maxf(0.0, avoiding - dt)
 		return desired

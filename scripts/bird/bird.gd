@@ -5,7 +5,7 @@ extends CharacterBody3D
 ## AIPilot) supplies one FlightInput per physics tick; both have exactly the same authority.
 ##
 ## States: FLYING -> (CATCH held as a perch comes into reach slow enough) -> LANDING (a short Hermite blend onto
-## the perch seat) -> PERCHED -> (FLAP: take off with a free wingbeat, or CATCH: let go and drop) -> FLYING.
+## the grip point where the bird meets the branch) -> PERCHED -> (FLAP: take off with a free wingbeat, or CATCH: let go and drop) -> FLYING.
 ## Perched (or on the ground) the stick turns the bird to look around; it leaves the way it faces.
 ## Settling slowly onto the ground or anything flat stands on it (GROUNDED); FLAP jumps up and takes off.
 ## Hitting a trunk or branch bounces, costs speed and briefly takes the controls away.
@@ -25,6 +25,7 @@ const BOUNCE := 0.3            ## restitution off trunks
 const BONK_KEEP := 0.6         ## share of speed kept after a bounce
 const BONK_MIN := 1.0          ## m/s into a surface for a hit to count as a bonk (less is a graze)
 const TURN_RATE := 150.0       ## deg/s a full stick turns a sitting bird
+const AIM_AHEAD := 2.5         ## the landing point is sought along this many catch radii of flight path
 const TAKEOFF_GRACE := 0.5     ## s after leaving the ground or a perch before touching down counts as landing
 const LEAVE_PASS := 0.35       ## s the bird passes through the tree it just left (it may face along a branch)
 
@@ -40,6 +41,9 @@ var perch: Perch = null        ## held (PERCHED) or being landed on (LANDING)
 var candidate: Perch = null
 var candidate_status := Perch.Catch.OUT_OF_RANGE
 var candidate_distance := INF
+var candidate_grip := Vector3.ZERO   ## the candidate's grip point nearest the bird
+var perch_grip := Vector3.ZERO       ## where the feet hold on (landing on / sitting on `perch`)
+var _land_facing := Vector3.FORWARD
 var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a perch in the last few metres
 var bonks := 0
 var stun := 0.0
@@ -57,6 +61,8 @@ var _land_from := Vector3.ZERO
 var _land_vel := Vector3.ZERO
 var _land_from_basis := Basis()
 var _grace := 0.0
+var _rig_dt := 0.0
+var _rig_tick := 0
 var _pass_body: Node = null
 var _pass_left := 0.0
 
@@ -83,7 +89,8 @@ func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
 func perch_at(p: Perch) -> void:
 	perch = p
 	state = State.PERCHED
-	global_position = p.seat(profile)
+	perch_grip = p.position
+	global_position = Perch.seat_at(perch_grip, profile)
 	model.position = global_position
 	model.velocity = Vector3.ZERO
 	facing = p.facing
@@ -116,8 +123,7 @@ func _physics_process(dt: float) -> void:
 		State.FLYING: _fly(dt, inp)
 		State.LANDING: _land(dt)
 		State.PERCHED, State.GROUNDED: _sit(dt, inp)
-	if rig != null:
-		rig.animate(telemetry(), dt)
+	_animate_rig(dt)
 
 
 # --- Flying ------------------------------------------------------------------------------------
@@ -164,13 +170,16 @@ func _update_candidate() -> void:
 	for p in layout.perches_near(global_position, APPROACH_RADIUS):
 		if p.id == _released_perch_id and _release_lock > 0.0:
 			continue
-		var to := p.position - global_position
+		# Aim at the grip point straight ahead on the flight path, not merely the nearest one.
+		var grip := p.aim_grip(global_position, dir, profile.grab_radius * AIM_AHEAD)
+		var to := grip - global_position
 		var d := to.length()
-		if d > profile.grab_radius and dir.dot(to / d) < 0.5:
+		if d > profile.grab_radius and dir.dot(to / maxf(d, 1e-4)) < 0.5:
 			continue   # behind or off to the side: not where we're headed
 		candidate = p
+		candidate_grip = grip
 		candidate_distance = d
-		candidate_status = p.catch_status(profile, global_position, model.velocity)
+		candidate_status = p.catch_status(profile, global_position, model.velocity, grip)
 		return
 
 
@@ -179,7 +188,7 @@ func _apply_assists() -> void:
 	var push := Vector3.ZERO
 	model.flare = 0.0
 	if candidate != null and perch_assist > 0.0 and candidate_distance < 5.0:
-		var to := candidate.position - global_position
+		var to := candidate_grip - global_position
 		var d := maxf(candidate_distance, 0.01)
 		var near_k := smoothstep(5.0, 1.5, d)
 		var closing := model.velocity.dot(to / d)
@@ -244,14 +253,18 @@ func _begin_landing(p: Perch) -> void:
 	_land_from = global_position
 	_land_vel = model.velocity
 	_land_from_basis = global_basis
-	var dist := _land_from.distance_to(p.seat(profile))
+	# Land where the bird's flight path meets the branch (the aim point it was caught at), facing across the
+	# branch toward the side it came from.
+	perch_grip = candidate_grip if p == candidate else p.aim_grip(global_position, model.flight_dir(), profile.grab_radius * AIM_AHEAD)
+	_land_facing = p.facing_for(model.velocity)
+	var dist := _land_from.distance_to(Perch.seat_at(perch_grip, profile))
 	_land_dur = clampf(dist / maxf(_land_vel.length(), 1.0) * 1.6, 0.15, 0.45)
 
 
 func _land(dt: float) -> void:
 	_land_t += dt
 	var s := clampf(_land_t / _land_dur, 0.0, 1.0)
-	var target := perch.seat(profile)
+	var target := Perch.seat_at(perch_grip, profile)
 	# Cubic Hermite: leaves at the flight velocity, arrives at rest.
 	var s2 := s * s
 	var s3 := s2 * s
@@ -259,13 +272,13 @@ func _land(dt: float) -> void:
 	model.velocity = (pos - global_position) / dt if dt > 0.0 else Vector3.ZERO
 	global_position = pos
 	model.position = pos
-	var sit := Basis.looking_at(perch.facing, Vector3.UP)
+	var sit := Basis.looking_at(_land_facing, Vector3.UP)
 	global_basis = _land_from_basis.slerp(sit, smoothstep(0.0, 1.0, s)).orthonormalized()
 	model.energy.tick(dt, false, 0.0, true)
 	if s >= 1.0:
 		state = State.PERCHED
 		model.velocity = Vector3.ZERO
-		facing = perch.facing
+		facing = _land_facing
 		look_pitch = 0.0
 		perched.emit(perch)
 
@@ -296,7 +309,7 @@ func _sit(dt: float, inp: FlightInput) -> void:
 func _leave_perch(with_flap: bool) -> void:
 	var left := perch
 	var dir := (facing + Vector3.DOWN * (0.1 if with_flap else 0.35)).normalized()
-	global_position = left.seat(profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)
+	global_position = Perch.seat_at(perch_grip, profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)
 	model.launch(global_position, dir, profile.hop_speed)
 	if with_flap:
 		model.flap(true)   # the push-off wingbeat is free
@@ -329,11 +342,15 @@ func telemetry() -> Dictionary:
 		"position": global_position,
 		"velocity": m.velocity,
 		"flight_dir": m.flight_dir(),
+		"candidate_grip": candidate_grip,
 		"facing": facing if state == State.PERCHED or state == State.GROUNDED else -global_basis.z,
 		"look_pitch": look_pitch,
 		"flap_count": m.flap_count,
 		"ground_effect": m.ground_effect if state == State.FLYING else 0.0,
 		"catch_armed": _grab_buffer > 0.0 or last_input.catch_held,
+		"look_target": _look_target(),
+		"has_grip": _grip_point() != null,
+		"grip": _grip_point() if _grip_point() != null else Vector3.ZERO,
 		"speed": m.speed if state == State.FLYING else m.velocity.length(),
 		"v_best": p.v_best,
 		"v_stall": p.v_stall,
@@ -369,3 +386,46 @@ func telemetry() -> Dictionary:
 		"stunned": stun > 0.0,
 		"landing_t": clampf(_land_t / _land_dur, 0.0, 1.0) if state == State.LANDING else 0.0,
 	}
+
+
+## Where the head looks: the perch being landed on or caught, else ahead (sitting: where it faces, tilted
+## by its gaze).
+func _look_target() -> Vector3:
+	if perch != null and state == State.LANDING:
+		return perch_grip
+	if state == State.FLYING:
+		if candidate != null:
+			return candidate_grip
+		return global_position + model.flight_dir() * 8.0
+	return global_position + facing * 8.0 + Vector3.UP * look_pitch * 4.0
+
+
+## Where the feet reach for (world), or null: the perch while landing on or sitting on it, the ground
+## under a grounded bird, a catchable perch a few metres ahead.
+func _grip_point() -> Variant:
+	match state:
+		State.LANDING, State.PERCHED:
+			return perch_grip if perch != null else null
+		State.GROUNDED:
+			return Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)
+	if candidate != null and candidate_distance < 3.0:
+		return candidate_grip
+	return null
+
+
+## Pose the rig (about 150 us of feather maths per bird): every tick up close, every 2nd tick past 30 m,
+## every 4th past 60 m from the camera; not at all while it's hidden.
+func _animate_rig(dt: float) -> void:
+	if rig == null or not rig.visible:
+		return
+	_rig_dt += dt
+	_rig_tick += 1
+	var every := 1
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam != null:
+		var d := cam.global_position.distance_to(global_position)
+		every = 1 if d < 30.0 else (2 if d < 60.0 else 4)
+	if _rig_tick % every != 0 and state == State.FLYING:
+		return
+	rig.animate(telemetry(), _rig_dt)
+	_rig_dt = 0.0

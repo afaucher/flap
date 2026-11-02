@@ -1,0 +1,112 @@
+extends TestCase
+## The rig: bone lengths survive every pose (flap, fold, IK, upstroke); the spread wing spans the model's
+## span; folding puts the wrist on its flank anchor and packs the feathers in; left mirrors right; flap
+## raises and lowers the tips; legs reach their targets with the ankle bent aft; the head clamps to the
+## neck's range; the Skeleton3D matches the solve; a perched bird's feet are on the perch.
+
+
+func setup() -> void:
+	for p in BirdProfile.all():
+		var rig := BirdRig.new()
+		add_child(rig)
+		rig.build(p)
+		var w := rig.shape
+		var l := w.bone_lengths()
+		var half := p.span * 0.5
+		# Spread, level: tips at span / 2, mirrored.
+		_pose(rig, 0.0, 0.0, 0.0, 0.0)
+		near(_tip_x(rig, 1.0), half, half * 0.02, p.id + " right tip at span / 2")
+		near(_tip_x(rig, -1.0), half, half * 0.02, p.id + " left tip at span / 2")
+		for k in 4:
+			var r: Vector3 = rig.wing_joints[1][k]
+			var lft: Vector3 = rig.wing_joints[0][k]
+			near(lft.x, -r.x, 1e-4, p.id + " left mirrors right (x)")
+			near(lft.y, r.y, 1e-4, p.id + " left mirrors right (y)")
+			near(lft.z, r.z, 1e-4, p.id + " left mirrors right (z)")
+		# Lengths through a spread of poses.
+		for pose in [[0.6, 0.0, 0.0, 0.0], [-0.5, 0.3, 0.0, 40.0], [0.1, 0.8, 10.0, 0.0], [0.0, 1.0, 0.0, 0.0], [-0.2, 0.65, -5.0, 25.0]]:
+			_pose(rig, pose[0], pose[1], pose[2], pose[3])
+			for i in 2:
+				var j: Array = rig.wing_joints[i]
+				near(j[0].distance_to(j[1]), l[0], 1e-4, "%s humerus length %s" % [p.id, pose])
+				near(j[1].distance_to(j[2]), l[1], 1e-4, "%s forearm length %s" % [p.id, pose])
+				near(j[2].distance_to(j[3]), l[2], 1e-4, "%s hand length %s" % [p.id, pose])
+		# Flap up: tips above the shoulder; down: below.
+		_pose(rig, deg_to_rad(50.0), 0.0, 0.0, 0.0)
+		check(rig.wing_joints[1][3].y > rig.wing_joints[1][0].y + half * 0.3, p.id + " flap up raises the hand")
+		_pose(rig, deg_to_rad(-30.0), 0.0, 0.0, 0.0)
+		check(rig.wing_joints[1][3].y < rig.wing_joints[1][0].y, p.id + " flap down lowers the hand")
+		# Folded: wrist on the anchor, everything packed against the body.
+		_pose(rig, 0.0, 1.0, 0.0, 0.0)
+		for i in 2:
+			check(rig.wing_joints[i][2].distance_to(rig.fold_anchor[i]) < 1e-3, p.id + " folded wrist on its flank anchor")
+		check(_tip_x(rig, 1.0) < half * 0.5, "%s folded feathers stay near the body (%.2f of %.2f)" % [p.id, _tip_x(rig, 1.0), half])
+		# Skeleton mirrors the solve.
+		var fr := rig.skeleton.find_bone("forearm.R")
+		check(rig.skeleton.get_bone_global_pose(fr).origin.distance_to(rig.wing_joints[1][1]) < 1e-4, p.id + " skeleton forearm at the elbow")
+		var hl := rig.skeleton.find_bone("hand.L")
+		check(rig.skeleton.get_bone_global_pose(hl).origin.distance_to(rig.wing_joints[0][2]) < 1e-4, p.id + " skeleton hand at the wrist")
+		# Legs: a reachable target is reached, the ankle bends aft, lengths kept.
+		var hip: Vector3 = rig._hip[1]
+		rig.foot_targets[1] = hip + Vector3(0.0, -p.body_length * 0.25, -p.body_length * 0.05)
+		rig.apply_pose()
+		var lj: Array = rig.leg_joints[1]
+		check(lj[2].distance_to(rig.foot_targets[1]) < 1e-4, p.id + " foot on its target")
+		near(lj[0].distance_to(lj[1]), rig._tib, 1e-4, "tibia length")
+		near(lj[1].distance_to(lj[2]), rig._tars, 1e-4, "tarsus length")
+		check(lj[1].z > (lj[0].z + lj[2].z) * 0.5, p.id + " ankle bends aft")
+		# Out of reach: as far as the leg goes, toward it.
+		rig.foot_targets[1] = hip + Vector3(0.0, -5.0, 0.0)
+		rig.apply_pose()
+		near(rig.leg_joints[1][0].distance_to(rig.leg_joints[1][2]), rig._tib + rig._tars, 1e-3, p.id + " straight leg toward a far target")
+		# Head: looks right when told; clamps when told to look straight back.
+		rig.look_dir = Vector3.RIGHT
+		rig.apply_pose()
+		check((-rig.head_basis.z).x > 0.9, p.id + " head looks right")
+		rig.look_dir = Vector3.BACK
+		rig.apply_pose()
+		var hf := -rig.head_basis.z
+		check(absf(atan2(hf.x, -hf.z)) <= deg_to_rad(110.5), p.id + " head yaw clamped")
+		# Every feather transform is finite.
+		var ok := true
+		for t in rig.feather_xforms:
+			ok = ok and t.origin.is_finite() and t.basis.x.is_finite() and t.basis.z.is_finite()
+		check(ok, p.id + " finite feathers")
+		eq(rig.feather_xforms.size(), rig._plain_count + rig._emarg_count, p.id + " every feather placed")
+		rig.queue_free()
+
+	# A perched bird's feet are on its perch.
+	var layout := ArenaLayout.generate(7)
+	var arena := ArenaBuilder.new()
+	add_child(arena)
+	arena.build(layout)
+	await frames(2)
+	var b := Bird.new()
+	add_child(b)
+	b.setup(BirdProfile.crow(), layout, ScriptedInput.new())
+	var perch := layout.start_perch()
+	b.perch_at(perch)
+	await frames(30)
+	for i in 2:
+		var foot_world: Vector3 = b.rig.global_transform * (b.rig.leg_joints[i][2] as Vector3)
+		check(foot_world.distance_to(perch.position) < 0.04, "perched foot %d on the perch (%.3f m)" % [i, foot_world.distance_to(perch.position)])
+	check(b.rig.fold > 0.95, "perched wings folded")
+	finish()
+
+
+func _pose(rig: BirdRig, flap: float, fold: float, sweep: float, hand_lift: float) -> void:
+	rig.flap = flap
+	rig.fold = fold
+	rig.sweep = sweep
+	rig.hand_lift = hand_lift
+	rig.twist = 0.0
+	rig.slot = 0.0
+	rig.apply_pose()
+
+
+## The furthest feather tip on one side (x * side), from the rig's feather transforms.
+func _tip_x(rig: BirdRig, side: float) -> float:
+	var m := 0.0
+	for t in rig.feather_xforms:
+		m = maxf(m, (t.origin + t.basis.z).x * side)
+	return m

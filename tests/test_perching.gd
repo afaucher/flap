@@ -28,12 +28,13 @@ func setup() -> void:
 	for i in 120:
 		await frames(1)
 		if b.state == Bird.State.LANDING and caught_at == INF:
-			caught_at = b.global_position.distance_to(target.position)
+			caught_at = target.distance_to(b._land_from)
 		if b.state == Bird.State.PERCHED:
 			break
 	eq(b.state, Bird.State.PERCHED, "holding catch catches")
 	check(caught_at <= p.grab_radius + 0.01 and caught_at > p.grab_radius - 0.5, "caught on entering reach (%.2f m)" % caught_at)
-	check(b.global_position.distance_to(target.seat(p)) < 0.01, "seated on the perch")
+	check(b.global_position.distance_to(Perch.seat_at(b.perch_grip, p)) < 0.01, "seated on its grip point")
+	check(target.distance_to(b.perch_grip) < 1e-4, "the grip point is on the perch")
 	near(b.model.velocity.length(), 0.0, 1e-4, "at rest")
 	# Still holding catch on the perch: it stays.
 	await frames(10)
