@@ -3,10 +3,19 @@
 # (..\Hero-Reader\third_party\godot), then cast's build deps (..\cast\build\deps). No machine-wide fallback.
 function Resolve-FlapGodot {
     if ($env:FLAP_GODOT -and (Test-Path $env:FLAP_GODOT)) { return $env:FLAP_GODOT }
-    foreach ($rel in @("..\Hero-Reader\third_party\godot\Godot_v4.7-stable_win64_console.exe",
-                       "..\cast\build\deps\Godot_v4.7-stable_win64_console.exe")) {
-        $p = Join-Path $PSScriptRoot $rel
-        if (Test-Path $p) { return (Resolve-Path $p).Path }
+    # From a git worktree (.claude\worktrees\<name>), look next to the main checkout too.
+    $roots = @($PSScriptRoot)
+    $common = git -C $PSScriptRoot rev-parse --git-common-dir 2>$null
+    if ($common) {
+        if (-not [IO.Path]::IsPathRooted($common)) { $common = Join-Path $PSScriptRoot $common }
+        $roots += Split-Path ([IO.Path]::GetFullPath($common)) -Parent
+    }
+    foreach ($root in $roots) {
+        foreach ($rel in @("..\Hero-Reader\third_party\godot\Godot_v4.7-stable_win64_console.exe",
+                           "..\cast\build\deps\Godot_v4.7-stable_win64_console.exe")) {
+            $p = Join-Path $root $rel
+            if (Test-Path $p) { return (Resolve-Path $p).Path }
+        }
     }
     throw "Godot 4.7 not found. Set FLAP_GODOT to Godot_v4.7-stable_win64_console.exe."
 }

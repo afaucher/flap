@@ -67,9 +67,20 @@ func setup() -> void:
 				check(absf(gap) < p.body_length * 0.05, "%s folded joint %d on the body (gap %.2f L)" % [p.id, k, gap / p.body_length])
 			check(rig.wing_joints[i][1].z > rig.wing_joints[i][0].z, p.id + " folded elbow aft of the shoulder")
 			check(rig.wing_joints[i][2].z < rig.wing_joints[i][0].z, p.id + " folded wrist forward of the shoulder")
+		# Every folded wing feather starts on the body, points aft (not fanned out sideways or up like a
+		# propeller) and ends inside the body's silhouette, widened a little for the wingtips over the tail.
+		var L := p.body_length
+		var worst_dir := 1.0
+		var worst_tip := 0.0
 		for xf in rig.feather_xforms.slice(0, rig.feather_xforms.size() - BirdRig.TAIL_FEATHERS):
-			var gap := rig.body.gap((xf as Transform3D).origin)
-			check(gap < p.body_length * 0.08, "%s folded feather base on the body (gap %.2f L)" % [p.id, gap / p.body_length])
+			var f: Transform3D = xf
+			var gap := rig.body.gap(f.origin)
+			check(gap < L * 0.08, "%s folded feather base on the body (gap %.2f L)" % [p.id, gap / L])
+			worst_dir = minf(worst_dir, f.basis.z.normalized().z)
+			var tip := f.origin + f.basis.z
+			worst_tip = maxf(worst_tip, maxf(absf(tip.x) / (L * 0.15), absf(tip.y) / (L * 0.15)))
+		check(worst_dir > 0.7, "%s folded feathers point aft (worst %.2f)" % [p.id, worst_dir])
+		check(worst_tip < 1.6, "%s folded feather tips inside the body outline (worst %.2f radii)" % [p.id, worst_tip])
 		check(_tip_x(rig, 1.0) < half * 0.5, "%s folded feathers stay near the body (%.2f of %.2f)" % [p.id, _tip_x(rig, 1.0), half])
 		# Skeleton mirrors the solve.
 		var fr := rig.skeleton.find_bone("forearm.R")
@@ -138,9 +149,11 @@ func setup() -> void:
 		_pose(rig, 0.0, 0.0, 0.0, 0.0)
 		var sgap := _worst_gap(rig, WingShape.Kind.SECONDARY)
 		check(sgap <= 0.0, "%s secondaries overlap (worst gap %.1f mm)" % [p.id, sgap * 1000.0])
-		var tail_w: float = rig.feather_xforms[rig.feather_xforms.size() - 1].basis.x.length()
+		# Drawn width: the instance's width scale times the mesh's own outline (once drawn at half width
+		# because the outline peaked at 0.5 instead of 1).
+		var tail_w: float = rig.feather_xforms[rig.feather_xforms.size() - 1].basis.x.length() * _mesh_width(rig._plain.mesh, 0.5)
 		var tail_l: float = rig.feather_xforms[rig.feather_xforms.size() - 1].basis.z.length()
-		near(tail_w / tail_l, BirdRig.TAIL_WIDTH, 1e-4, p.id + " tail feathers are a fifth as wide as long")
+		near(tail_w / tail_l, BirdRig.TAIL_WIDTH, 0.01, p.id + " tail feathers are drawn a fifth as wide as long")
 		# Every feather transform is finite.
 		var ok := true
 		for t in rig.feather_xforms:
@@ -148,6 +161,9 @@ func setup() -> void:
 		check(ok, p.id + " finite feathers")
 		eq(rig.feather_xforms.size(), rig._plain_count + rig._emarg_count, p.id + " every feather placed")
 		check(rig.feather_material == null, p.id + " plain feathers by default (the shader is parked)")
+		# Instance colours are authored in sRGB: read as linear they wash out pale.
+		var feather_mat := (rig.get_node("Feathers") as MultiMeshInstance3D).material_override as StandardMaterial3D
+		check(feather_mat != null and feather_mat.vertex_color_use_as_albedo and feather_mat.vertex_color_is_srgb, p.id + " feather colours are sRGB")
 		# The parked shader still builds and gets its species look.
 		BirdRig.plain_feathers = false
 		var shaded := BirdRig.new()
@@ -213,10 +229,24 @@ func _worst_gap(rig: BirdRig, kind: int) -> float:
 		var b: Transform3D = picks[k]
 		var pa := a.origin + a.basis.z * 0.85
 		var pb := b.origin + b.basis.z * 0.85
-		var half := 0.9 * 0.5   # the outline's width at 85% of the length, halved
+		var half := _mesh_width(rig._plain.mesh, 0.85) * 0.5   # the drawn outline's width there, halved
 		var g := pa.distance_to(pb) - (a.basis.x.length() + b.basis.x.length()) * half
 		worst = maxf(worst, g)
 	return worst
+
+
+## A feather mesh's full width (in units of its width scale) at fraction `t` of its length, from its vertices.
+func _mesh_width(mesh: Mesh, t: float) -> float:
+	var verts: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var pts: Array[Vector2] = []
+	for v in verts:
+		pts.append(Vector2(v.z, absf(v.x)))
+	pts.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+	for k in range(1, pts.size()):
+		if pts[k].x >= t and pts[k - 1].x <= t:
+			var u := (t - pts[k - 1].x) / maxf(pts[k].x - pts[k - 1].x, 1e-6)
+			return lerpf(pts[k - 1].y, pts[k].y, u) * 2.0
+	return 0.0
 
 
 ## The furthest feather tip on one side (x * side), from the rig's feather transforms.

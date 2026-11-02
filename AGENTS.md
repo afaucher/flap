@@ -30,6 +30,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
+- `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
+  back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a
+  SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code.
 
 ## Rules
 - Profile numbers: set the readable ones (mass, span, area, e, glide ratio, CL max) and let `derive()` compute
@@ -37,3 +40,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   to make a tuning change pass.
 - Any assist (pitch damping, turn assist, auto-sweep, perch assist) must stay switchable to 0.
 - New tests extend `TestCase`; set `timeout_sec` in `_init()` (not `setup()`) for long ones.
+- Fixing a bug: add an entry to `tests/regressions/mutations.json` that reintroduces it, and run
+  `.\mutation_check.ps1 -Only <id>` -- it must come back KILLED. A test that passes with the bug back in
+  proves nothing. Run the whole check (a few minutes) before committing rig, flight-model or AI changes.
+- Tests measure what is drawn or simulated (the feather mesh's outline, the body mesh), not copies of the
+  constants that build it, and check behaviour both ways (left and right, pull and push).
+- The test runner fails on any engine `ERROR:`/`WARNING:` line, not just failed checks.

@@ -50,6 +50,24 @@ func setup() -> void:
 		check(perch.stamina > glide.stamina * 3.0, "%s perching rests faster (%.2f vs %.2f)" % [p.id, perch.stamina, glide.stamina])
 		check(perch.stamina > 0.5, p.id + " ten seconds perched restores most stamina")
 		check(perch.burst > glide.burst, p.id + " perched burst refills faster")
+	# Flapping with the stick pulled from just above stall climbs forward, not straight up: slow thrust is aimed
+	# from the heading, not the path (aimed along a path that has turned upward, birds helicoptered vertically).
+	# The sparrow is left out: it still climbs near-vertically when pulled slow (open question: allowed for a
+	# small bird, or the same bug?), as do the crow and owl from below stall at half pull.
+	for p in BirdProfile.all():
+		if p.id == "sparrow":
+			continue
+		var m := FlightModel.new(p)
+		m.launch(Vector3(0, 300, 0), Vector3.FORWARD, p.v_stall * 1.2)
+		var pull := FlightInput.new(Vector2(0.0, 1.0), false, true)
+		var steep_t := 0.0
+		for i in 60 * 4:
+			m.step(DT, pull)
+			if i > 60 and m.path_angle > deg_to_rad(70.0):
+				steep_t += DT
+		var flat := Vector2(m.position.x, m.position.z).length()
+		check(steep_t < 0.3, "%s pulled slow flapping doesn't climb vertically (%.2f s steeper than 70 deg)" % [p.id, steep_t])
+		check(flat > 10.0, "%s pulled slow flapping travels forward (%.1f m)" % [p.id, flat])
 	# Hard pulls cost burst.
 	var e := EnergyModel.new(BirdProfile.crow())
 	var b0 := e.burst

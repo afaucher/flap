@@ -63,4 +63,18 @@ func setup() -> void:
 		check(s.global_position.y > p.ground_effect_height and s.model.ground_effect == 0.0, p.id + " no ground effect up high")
 		s.queue_free()
 		await frames(1)
+
+		# The ground-effect thrust cushion is real (and switchable to 0): the same slow flapping start near the
+		# ground gains more energy with it than without it.
+		var with_gt := FlightModel.new(BirdProfile.by_id(p.id))
+		var no_p := BirdProfile.by_id(p.id)
+		no_p.ground_effect_thrust = 0.0
+		var without_gt := FlightModel.new(no_p)
+		var flap_hold := FlightInput.new(Vector2.ZERO, false, true)
+		for m in [with_gt, without_gt]:
+			m.launch(Vector3(0, 0.3, 0), Vector3(1, 0.3, 0).normalized(), p.v_stall * 0.5)
+			for i in 30:
+				m.ground_height = maxf(m.position.y - 0.3, 0.0)   # (the Bird sets this from the ground each tick)
+				m.step(1.0 / 60.0, flap_hold)
+		check(with_gt.specific_energy() > without_gt.specific_energy() + 0.05, "%s ground-effect thrust helps a slow start (%.2f vs %.2f)" % [p.id, with_gt.specific_energy(), without_gt.specific_energy()])
 	finish()

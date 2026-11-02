@@ -167,6 +167,25 @@ func setup() -> void:
 	tired.model.energy.stamina = 0.1
 	await frames(120)
 	check(tired.model.energy.stamina > 0.2, "two seconds perched restores stamina (%.2f)" % tired.model.energy.stamina)
+
+	# 10. A nearer perch out of reach doesn't hide a further one in reach: on a two-perch layout, a treetop just
+	# above the flight line (too high for the feet) is nearest; the one ahead and a little below is the candidate.
+	var mini := ArenaLayout.new()
+	var r := p.grab_radius
+	var at := Vector3(0.0, 5.0, 0.0)
+	var high := Perch.treetop(0, at + Vector3(r * 0.5, r * 0.6, 0.0), 0.02, Vector3.RIGHT, -1)
+	var low := Perch.treetop(1, at + Vector3(r * 1.0, -r * 0.3, 0.0), 0.02, Vector3.RIGHT, -1)
+	mini._add_perch(high)
+	mini._add_perch(low)
+	var cb := Bird.new()
+	add_child(cb)
+	cb.setup(p, mini, ScriptedInput.new())
+	cb.fly_from(at, Vector3.RIGHT, p.grab_speed_max * 0.8)
+	check(high.distance_to(at) < low.distance_to(at), "the out-of-reach perch is the nearer one")
+	eq(high.catch_status(p, at, cb.model.velocity, high.aim_grip(at, Vector3.RIGHT, r * Bird.AIM_AHEAD)), Perch.Catch.OUT_OF_RANGE, "the nearer perch is out of reach")
+	cb._update_candidate()
+	check(cb.candidate == low, "the perch in reach wins over a nearer one out of reach")
+	cb.queue_free()
 	finish()
 
 

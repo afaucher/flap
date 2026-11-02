@@ -66,6 +66,24 @@ func setup() -> void:
 		near(m3.bank, 0.0, 1e-4, p.id + " neutral levels the wings")
 		near(rad_to_deg(m3.path_angle), -rad_to_deg(p.glide_angle), 0.5, p.id + " back on the glide slope")
 
+	# The path bends exactly as the lift says, pulled or pushed past zero g: d(gamma)/dt = g (n - cos gamma) / V
+	# wings level. (Half the lift rotation was once skipped whenever the lift was negative.)
+	for p in BirdProfile.all():
+		for stick in [0.6, -1.0]:
+			var mg := settled(p)
+			fly(mg, Vector2(0.0, stick), 0.4)
+			var worst := 0.0
+			var seen_n := 0.0
+			for i in 20:
+				var g0 := mg.path_angle
+				var v0 := mg.speed
+				mg.step(DT, FlightInput.new(Vector2(0.0, stick)))
+				var want := BirdProfile.G * (mg.load_factor - cos(g0)) / v0 * DT
+				var lift_part := absf(mg.load_factor * BirdProfile.G / v0 * DT)
+				worst = maxf(worst, absf((mg.path_angle - g0) - want) / maxf(lift_part, 1e-4))
+				seen_n = mg.load_factor
+			check(worst < 0.1, "%s path bends with the lift at stick %.1f (n %.2f, worst error %.0f%% of the lift's turn)" % [p.id, stick, seen_n, worst * 100.0])
+
 	# Turn rate in a steady bank is the lift's sideways share: omega = n g sin(phi) / (V cos(gamma)).
 	var c := BirdProfile.crow()
 	var mt := settled(c)
