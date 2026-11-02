@@ -222,11 +222,19 @@ That gives three distinct altitude bands that play differently. Those bands are 
 
 ## 6. The AI pilot (`scripts/ai/ai_pilot.gd`, `scripts/ai/flight_planner.gd`)
 
-> **Known gap (2026-11-02): trunk bumps.** The AI clips trees about once per perch reached: in the greybox
-> (seed 7: 25 bumps for 25 perches, the test's limit) and more in the pine wood (`Pinewood`, the game's
-> default arena), where `test_ai_flight` allows 1.3 bumps a perch for now. Most are pine trunks at 4-10 m and,
-> coming in to land, the limbs and trunk of the perch's own tree (the planner skips that tree). The goal is
-> to bring the pine wood back to 1.0; `tests/probe_pinewood_bonks.gd` lists what each bump hits.
+> **Trunk bumps (closed 2026-11-02).** The AI used to clip trees about once per perch: 25 bumps for 25
+> perches in the greybox (seed 7) and 25 for 20 in the pine wood, which `test_ai_flight` let off at 1.3 a
+> perch. Three causes: the whiskers didn't fly the turn the bird was really in (a bird in a steep bank, or one
+> that needed half a second to roll the other way, saw the trunk too late, and its escape's climb never
+> reached the pitch); the planner and the whiskers ignored the tree being left and the one being landed on
+> outright (so first legs ran through the bird's own trunk and approaches through the perch tree's limbs);
+> and a bird with no route glided on blind. Avoidance now predicts the flight (layer 4 below), and the 1.3 is
+> gone (the rule is bumps <= perches again). Seed 7, 90 s: the greybox 35 perches and no bumps (was 25 and 25),
+> the pine wood 21 perches and 9 bumps (was 25 and 22 with today's limbs). Over nine arenas (the test's three and
+> seeds 3, 11, 21 of each): 256 perches and 38 bumps, against 253 and 154 before. The pine wood alone still
+> perches about a seventh less than the old whiskers did (98 against 113 over four seeds): the falcon, which
+> used to reach a perch by bouncing off the trunks on the way in, now rarely makes one there at all.
+> `tests/probe_pinewood_bonks.gd` lists what each bump hits and what the pilot was doing.
 
 The AI drives a bird with **exactly the player's inputs** (`FlightInput`: stick, flap, catch). While perched, it turns to face its route out before taking off. On final, it holds catch. It sees only the bird's own state and the arena geometry. It works in four layers:
 
@@ -240,15 +248,21 @@ The AI drives a bird with **exactly the player's inputs** (`FlightInput`: stick,
    - The cost is energy-aware: climbing a metre costs as much as 4 m of flight, and descending is free.
    - The route runs through a **pre-approach point** and an **approach point** out along the perch facing, ending 1.2 m below the perch. The bird arrives lined up and swoops up into the catch.
    - The route is string-pulled (any waypoint the previous point can see past is dropped).
+   - The tree it leaves and the one it lands on aren't ignored, just passed closer (0.4 m), leaving out the perch's own branch and the first and last metre (the push-off, the catch). A perch whose swoop in from the approach point crosses its own tree's other limbs gets no route (and is set aside for a minute).
+   - Out of a tight spot: deep in its own crown, with another of its limbs near every way out, it leaves through them (it passes through its own tree as it lets go); wedged nearer another tree than its planning berth, the first leg may pass at 0.6 m.
 3. **Guidance.**
    - Bank toward the next waypoint (bank-to-turn). The bank limit shrinks near the ground, because steep banks shed vertical lift.
    - Pitch to hold the path angle that reaches the waypoint.
    - Flap when it needs to climb or is slow.
    - Push when near the stall.
    - On final, pull to bleed speed below the catch speed, holding catch once the target is the bird's catch candidate.
-4. **Avoidance.** Whiskers sweep the next second of flight against the geometry.
-   - If the sweep is blocked, it steers to the nearest clear direction: sideways, then climbing.
-   - A watchdog re-plans if the bird makes no progress for 8 s. It goes around if it overshoots, or if the perch leaves its forward cone on final.
+4. **Avoidance.** It predicts the next stretch of flight the way the bird will really fly it, in 0.1 s chords, and checks them against the geometry (0.6 m clearance).
+   - The prediction steers by the guidance law: the bank slews at the species' roll rate (after the stick's lag), only as far as guidance allows at that height, and turns the path at g·tan(bank)/v. The path angle eases toward the one asked for, less what a steep bank sheds. A bird already banked hard, or one that needs half a second to roll the other way, sees what its turn curves into in time.
+   - If the route's path stays clear, it flies the route. Otherwise it tries a fan of headings (out to 150° either way), level, then climbing, then sinking, and flies the clear one that ends nearest the way it wants to go. The escape sets the path angle too, so a climb really climbs. If nothing is clear, it takes the one that stays clear longest; if it is hemmed in from the first metre, it keeps to the route (which was planned clear).
+   - Coming in to land (within 8 m), the perch's own tree counts too, at 0.3 m and without the perch's branch. The prediction ends where it passes closest to the perch if the feet can reach it (the catch), so the trunk behind a branch doesn't wave it off. Just after take-off (within 12 m), the tree it left counts the same way, past the first metre.
+   - With no route (no perch reachable), it still glides round trunks.
+   - A watchdog re-plans if the bird makes no progress for 8 s. It goes around if it overshoots, or if the perch leaves its forward cone on final. A perch not reached in 25 s (circling one it can't make the approach to) is given up and left alone for 60 s.
+   - Cost: the path is flown first and checked against only the trees whose reach overlaps it. In the pine wood that's about 0.7 ms a bird per tick, against 1.15 ms for the whiskers it replaced.
 
 **Fitted to the bird's turning circle.** The AI computes each species' turn radius at cruise: v*² / (g·tan(85% of its bank limit)).
 
@@ -262,30 +276,30 @@ The AI drives a bird with **exactly the player's inputs** (`FlightInput`: stick,
 That radius shapes three things:
 - **Planning clearance:** 0.9 m + 0.15 × radius.
 - **Perch floor:** birds that turn wider than 4.5 m only pick perches above the 9 m understory. If nothing up there is in reach, they fall back to any perch with a bigger climb allowance.
-- **Whisker reach:** the larger of 1 s of flight or 1.3 turn radii. The whiskers also sweep the **arc** the bird is turning along, not just a straight line.
+- **Prediction reach:** the larger of 1.1 s of flight or 1.3 turn radii, plus a quarter second.
 
 The climb budget is scaled by the species' sprint × wingbeat strength, so the hawk climbs less than the crow.
 
 **Recovering low down.** When slow below 6 m, the AI flaps hard along a near-level path with wings nearly level, instead of pushing. It used to push, which flew high-stall birds such as the falcon into the ground. It only flaps on full-strength wingbeats, unless it's recovering.
 
-**Status.** `test_ai_flight` flies all five species for 90 s in two arenas (seeds 7 and 3):
+**Status.** `test_ai_flight` flies all five species for 90 s in two greybox arenas (seeds 7 and 3) and the pine wood; each must touch trees no more often than it perches:
 
 | Species | Seed 7 | Seed 3 |
 |---|---|---|
-| Crow | 7 | 6 |
-| Owl | 6 | 5 |
-| Hawk | 6 | 5 |
-| Falcon | 4 | 2 |
-| Sparrow | 5 | 8 |
-| **Flock** | **28** (10 bonks) | **26** (9 bonks) |
+| Crow | 9 | 7 |
+| Owl | 9 | 6 |
+| Hawk | 7 | 6 |
+| Falcon | 3 | 6 |
+| Sparrow | 7 | 7 |
+| **Flock** | **35** (0 bonks) | **32** (3 bonks) |
+
+and in the pine wood (seed 7): crow 6, owl 5, hawk 6, falcon 0, sparrow 4; **21** (9 bonks).
 
 Every species must chain at least 4 perches across both arenas.
 
 **Before the fit,** the hawk and falcon managed 0. They were choosing low perches in the 4–9 m understory, where trunks are about 5.5 m apart, but the hawk needs about 7 m to turn. Straight whiskers missed the trunks that a steady turn curved into. Pushing to recover speed near the ground flew the falcon into it.
 
-**Still weak:** the falcon bonks the most. Next steps:
-- A speed-planned final approach that starts its flare by distance rather than by a fixed gain.
-- Trajectory sampling for avoidance: roll the model forward for candidate stick inputs.
+**Still weak:** the falcon (stall speed 9 m/s, a 5 m turn) perches least, worst of all in the pine wood, where it rarely makes the approach to a perch low among the trunks. Most of the bumps left are the last metre of a landing: arriving a little too fast to catch, into the perch's own trunk. Next step: a speed-planned final approach that starts its flare by distance rather than by a fixed gain.
 
 **Why this shape.** The same input surface gives three things:
 - AI and players are interchangeable (autopilot is the P key, and a player can take over any AI bird).

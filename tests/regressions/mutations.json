@@ -1568,5 +1568,218 @@
     "replace": "\tvar d := Vector2(-local.x, -local.y)\n\treturn d.normalized() if d.length() > 1e-4 else Vector2(0, 1)"
    }
   ]
+ },
+ {
+  "id": "ai-predict-instant-roll",
+  "bug": "AI avoidance assumed the bird could roll and turn at once (straight whiskers, escapes it couldn't fly): fast, wide-turning birds saw a trunk their turn curved into too late and clipped trunks about once per perch (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance",
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\tif t >= PREDICT_LAG:\n\t\t\tvar room := _bank_room(bird.profile, pos.y)\n\t\t\tbank = move_toward(bank, clampf(err * TURN_GAIN, -room, room), roll * PREDICT_STEP)",
+    "replace": "\t\tif true:\n\t\t\tvar room := _bank_room(bird.profile, pos.y)\n\t\t\tbank = clampf(err * TURN_GAIN, -room, room)"
+   }
+  ]
+ },
+ {
+  "id": "ai-predict-fixed-bank-room",
+  "bug": "AI avoidance predicted turns with the full bank limit while guidance banks less low down, and ignored the height a steep bank sheds: a bird sinking in a turn saw the trunk ahead too late (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance",
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t\tvar room := _bank_room(bird.profile, pos.y)\n\t\t\tbank = move_toward(",
+    "replace": "\t\t\tvar room := _bank_room(bird.profile, 99.0)\n\t\t\tbank = move_toward("
+   },
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\tvar sink := BANK_SINK * (1.0 / maxf(cos(bank), 0.3) - 1.0)",
+    "replace": "\t\tvar sink := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "ai-escape-heading-only",
+  "bug": "An avoidance escape that climbed only set the heading: the pitch still followed the route, so the bird flew level into what it meant to climb over (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tgamma_cmd = steer[1]\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "ai-final-ignores-own-tree",
+  "bug": "Coming in to land, AI avoidance ignored the perch's whole tree: it flew through its own trunk at a branch on the far side, and clipped the tree's other limbs (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\tif own >= 0 and not layout.tree_clear(own, a, b, OWN_TREE_CLEARANCE, target.id):",
+    "replace": "\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "ai-takeoff-own-tree-full",
+  "bug": "Just after take-off, AI avoidance counted the tree it left like any other: every way out looked blocked by the branch it sat on, so it flew blind into the tree's other limbs (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tvar left := _last_tree if _takeoff_pos.distance_to(pos) < DEPARTURE_RANGE and _last_tree != own else -1",
+    "replace": "\tvar left := -1"
+   }
+  ]
+ },
+ {
+  "id": "planner-ignores-own-trees",
+  "bug": "The route planner ignored the tree a route left and the one it landed on: first legs ran through the bird's own trunk, and approaches swooped through the perch tree's other limbs (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tif a_tree >= 0 and not _a_through and not layout.tree_clear(a_tree, a + dir * end, b, OWN_TREE_CLEARANCE, _a_perch):",
+    "replace": "\tif false:"
+   },
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tif not _leg_ok(app, p.approach_anchor(), -1, p.tree_id):\n\t\treturn none",
+    "replace": "\tif false:\n\t\treturn none"
+   }
+  ]
+ },
+ {
+  "id": "planner-no-push-off",
+  "bug": "Checking the tree a route leaves from its very start found no way out from a perch right against the trunk (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tvar end := minf(PUSH_OFF, d.length() * 0.5)",
+    "replace": "\tvar end := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "ai-hemmed-in-first-candidate",
+  "bug": "Hemmed in on every side, AI avoidance flew whichever escape came first in its fan (and dived) instead of keeping to the planned route (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif best_score <= 0.0:\n\t\treturn [want, gamma]",
+    "replace": "\tif false:\n\t\treturn [want, gamma]"
+   }
+  ]
+ },
+ {
+  "id": "ai-glide-blind",
+  "bug": "With no route (no perch reachable, or none planned), the AI glided straight on without looking and flew into trunks (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tvar sx := clampf(_signed_heading(m.flight_dir(), steer[0]) * TURN_GAIN, -room, room) / deg_to_rad(p.max_bank_deg)",
+    "replace": "\tvar sx := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "ai-no-attempt-budget",
+  "bug": "An AI bird circled a perch it couldn't make the approach to for most of a minute: each near pass reset its stuck watchdog (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif clock - _attempt_start > ATTEMPT_TIME:\n\t\treturn _give_up(bird, dt)",
+    "replace": "\tif false:\n\t\treturn _give_up(bird, dt)"
+   },
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\tif cand.tree_id == _last_tree or clock < float(_given_up.get(cand.id, -1.0)):",
+    "replace": "\t\tif cand.tree_id == _last_tree:"
+   }
+  ]
+ },
+ {
+  "id": "tree-reach-longest-branch",
+  "bug": "A tree's reach (how far its wood gets from the trunk, used to skip it in clearance checks) was its longest branch: an oak limb in two pieces reaches further, so its outer half was missed (2026-11-02).",
+  "tests": [
+   "test_arena_layout"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\t\t\t\tfor q in [br.root, br.tip]:\n\t\t\t\t\t\t_reach = maxf(_reach, q.distance_to(Geometry3D.get_closest_point_to_segment(q, lo, top())) + br.radius)",
+    "replace": "\t\t\t\t\t_reach = maxf(_reach, br.root.distance_to(br.tip) + br.radius)"
+   }
+  ]
+ },
+ {
+  "id": "planner-no-way-out-of-crown",
+  "bug": "Passing its own tree closer on the way out left a bird deep in a pine crown (another of its limbs near every way out) with no route at all: it sat on the perch (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tif starts.is_empty() and a_tree >= 0:\n\t\t# Deep in a crown",
+    "replace": "\tif false:\n\t\t# Deep in a crown"
+   }
+  ]
+ },
+ {
+  "id": "planner-wedged-start",
+  "bug": "A wide-turning bird perched closer to another tree than its planning berth found no first leg out and never left (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\tstarts = _attach(a, a_tree, true, minf(clearance, START_CLEARANCE))",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "ai-no-route-picked-again",
+  "bug": "A perch the planner found no route to was picked again every second (the bird waited on its perch, or replanned every tick in flight) (2026-11-02).",
+  "tests": [
+   "test_ai_avoidance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)\n",
+    "replace": ""
+   }
+  ]
  }
 ]
