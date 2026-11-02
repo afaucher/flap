@@ -151,6 +151,19 @@ static func beak_meshes(id: String, r: float, base: Vector3) -> Array:
 ## The owl's facial disc: the Barn Owl's heart-shaped dish of feathers over the front of the head, pale with a
 ## dark rim. It follows the head's front (`skull`: the head sphere's scale), raised a little and rising toward
 ## the rim into a ruff, then wraps back onto the head just past it, so it is part of the head, not a mask.
+## It is the whole front of the head: the heart's top notch on the forehead (DISC_TOP of the head's radius above
+## its centre), its point at the chin (DISC_BOTTOM below). (It once ran from 0.4 above the centre to 1.1 below:
+## a face plate low on a brown dome, seen from ahead and above.)
+const DISC_TOP := 0.65
+const DISC_BOTTOM := 0.8
+const DISC_K := (DISC_TOP + DISC_BOTTOM) / 1.5          ## the heart's height scale (its curve spans 0.5 .. -1.0)
+const DISC_Y := DISC_TOP - 0.5 * (DISC_TOP + DISC_BOTTOM) / 1.5   ## its centre, above the head's (share of r)
+
+
+static func _disc_outline(t: float, r: float) -> Vector2:
+	return Vector2(0.95 * r * sin(t), r * DISC_K * (0.75 * cos(t) - 0.25 * cos(2.0 * t)))
+
+
 static func disc_mesh(r: float, face: Color, rim: Color, skull := Vector3.ONE) -> ArrayMesh:
 	var rows: Array = []
 	var cols: Array = []
@@ -162,8 +175,9 @@ static func disc_mesh(r: float, face: Color, rim: Color, skull := Vector3.ONE) -
 		var crow: Array = []
 		for j in n:
 			var t := -TAU * j / n   # (wound to face forward)
-			var x := 0.95 * r * sin(t) * s
-			var y := r * (0.75 * cos(t) - 0.25 * cos(2.0 * t)) * s - 0.1 * r
+			var o := _disc_outline(t, r)
+			var x := o.x * s
+			var y := o.y * s + DISC_Y * r
 			row.append(Vector3(x, y, disc_z(x, y, s, r, skull)))
 			crow.append(face.lerp(rim, smoothstep(0.82, 0.92, s)))
 		rows.append(row)
@@ -182,14 +196,14 @@ static func disc_z(x: float, y: float, s: float, r: float, skull: Vector3) -> fl
 
 ## Where (x, y) (head space) falls in the heart-shaped disc: 0 at its centre, 1 on its rim.
 static func disc_s(x: float, y: float, r: float) -> float:
-	var q := Vector2(x, y + 0.1 * r)
+	var q := Vector2(x, y - DISC_Y * r)
 	if q.length() < 1e-6:
 		return 0.0
 	var best := -2.0
 	var rim := 1.0
 	for k in 96:
 		var t := TAU * k / 96.0
-		var o := Vector2(0.95 * r * sin(t), r * (0.75 * cos(t) - 0.25 * cos(2.0 * t)))
+		var o := _disc_outline(t, r)
 		var c := o.normalized().dot(q.normalized())
 		if c > best:
 			best = c

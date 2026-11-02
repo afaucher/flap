@@ -1100,5 +1100,94 @@
     "replace": "\tif true:\n"
    }
   ]
+ },
+ {
+  "id": "foot-level-when-tucked",
+  "bug": "The foot pad and toes were always laid out level (the world's frame, or the body's in cruising flight), never with the tarsus: tucked in flight the toes pointed forward off a tarsus pointing back, the feet on backwards (2026-11-02).",
+  "tests": [
+   "test_foot_frame"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tif reach >= 0.999:\n\t\t_front[i] = Vector3.ZERO\n",
+    "replace": "\tif true:\n\t\t_front[i] = Vector3.ZERO\n"
+   }
+  ]
+ },
+ {
+  "id": "foot-frame-flip",
+  "bug": "The foot's turn from level toward the tucked frame took the shortest way each tick: where it passed a half turn (the owl's, its tucked toes up in its belly) the foot flipped over in one tick (2026-11-02).",
+  "tests": [
+   "test_foot_frame"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tif other.distance_to(last) < (axis * ang).distance_to(last):\n",
+    "replace": "\tif ang > PI:\n"
+   }
+  ]
+ },
+ {
+  "id": "foot-front-side-axis",
+  "bug": "The tarsus's front (the tucked foot's reference) came from the body's side axis alone, each tick afresh: as a landing leg swung out past the side it spun, and the foot with it (2026-11-02).",
+  "tests": [
+   "test_foot_frame"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tvar front: Vector3 = _front[i] if _front[i] != Vector3.ZERO else side_front\n",
+    "replace": "\tvar front: Vector3 = side_front\n"
+   }
+  ]
+ },
+ {
+  "id": "foot-front-slerp-axis",
+  "bug": "The tucked foot's front was drawn back toward the body's side with Vector3.slerp: with the two nearly parallel its rotation axis came out off unit and the engine logged an error every tick (2026-11-02).",
+  "tests": [
+   "test_ground_takeoff"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\tvar pulled := front.lerp(side_front.normalized(), 0.2 * side_front.length_squared())\n",
+    "replace": "\t\tvar pulled := front.slerp(side_front.normalized(), 0.2 * side_front.length_squared())\n"
+   }
+  ]
+ },
+ {
+  "id": "owl-disc-low",
+  "bug": "The owl's facial disc ran from 0.4 head radii above the centre to 1.1 below: a face plate low on a brown dome, seen from ahead and above, not the front of the head (2026-11-02).",
+  "tests": [
+   "test_face"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "const DISC_TOP := 0.65\n",
+    "replace": "const DISC_TOP := 0.4\n"
+   },
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "const DISC_BOTTOM := 0.8\n",
+    "replace": "const DISC_BOTTOM := 1.1\n"
+   }
+  ]
+ },
+ {
+  "id": "owl-chin-band",
+  "bug": "The owl disc's dark ruff ran full strength round the chin: a brown band under the face, seen from below in flight (2026-11-02).",
+  "tests": [
+   "test_face"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tvar rim_k := 0.3 + 0.7 * smoothstep(-0.9, -0.3, up)\n",
+    "replace": "\t\t\tvar rim_k := 1.0\n"
+   }
+  ]
  }
 ]

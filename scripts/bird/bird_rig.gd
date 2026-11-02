@@ -1111,7 +1111,11 @@ func _head_color(th: float, ph: float) -> Color:
 		var hr := body.head_r
 		var s := Face.disc_s(d.x * body.skull.x * hr, d.y * body.skull.y * hr, hr)
 		if s < 1.12:
-			var disc := Plumage.hex(h.disc[0]).lerp(Plumage.hex(h.disc[1]), smoothstep(0.82, 0.92, s))
+			# (the dark ruff strong round the sides and top, only a thin line under the chin)
+			var q := Vector2(d.x * body.skull.x, d.y * body.skull.y - Face.DISC_Y)
+			var up := q.y / maxf(q.length(), 1e-5)
+			var rim_k := 0.3 + 0.7 * smoothstep(-0.9, -0.3, up)
+			var disc := Plumage.hex(h.disc[0]).lerp(Plumage.hex(h.disc[1]), smoothstep(0.82, 0.92, s) * rim_k)
 			c = disc.lerp(c, smoothstep(1.0, 1.12, s))
 	return c
 
@@ -1923,7 +1927,7 @@ func apply_pose() -> void:
 		var foot := chain_end(ankle, target, _tars)
 		leg_joints[i] = [hip, knee, ankle, foot]
 		if legs != null:   # (the detailed legs: lofted, joined, segmented toes, claws)
-			toe_tips[i] = legs.pose(i, knee, ankle, foot, up_w, fwd_h, toe_grip, toe_grip if body.zygo else 0.0)
+			toe_tips[i] = legs.pose(i, knee, ankle, foot, up_w, fwd_h, toe_grip, toe_grip if body.zygo else 0.0, leg_reach[i])
 		else:
 			_place_capsule_legs(i, knee, ankle, foot)
 		var side := "L" if i == 0 else "R"
