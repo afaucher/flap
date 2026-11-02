@@ -4,6 +4,7 @@ extends Node3D
 ## camera and the HUD. Optional AI birds fly perch to perch around it. Command-line options (after `--`):
 ##   --bird <id>        crow | owl | hawk | falcon | sparrow (default crow)
 ##   --seed <n>         arena seed (default 7)
+##   --sdr              no HDR display output (default: HDR where the display offers it; F4 toggles)
 ##   --forest greybox   the old grey test arena (default: the pine wood, Pinewood, in ForestLight)
 ##   --ai <n>           AI birds flying around (default 3)
 ##   --autopilot        the player's bird flies itself (P toggles in game)
@@ -53,6 +54,7 @@ func _ready() -> void:
 	else:
 		_environment()
 	layout = Pinewood.generate(arena_seed) if pinewood else ArenaLayout.generate(arena_seed)
+	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)

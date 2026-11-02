@@ -57,6 +57,7 @@ func _ready() -> void:
 	else:
 		Game.add_environment(self)
 	layout = Pinewood.generate(7) if pinewood else ArenaLayout.generate(7)
+	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)
