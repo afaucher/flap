@@ -1529,7 +1529,7 @@
   "edits": [
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\tif a_tree >= 0 and not layout.tree_clear(a_tree, a + dir * end, b, OWN_TREE_CLEARANCE, _a_perch):",
+    "find": "\tif a_tree >= 0 and not _a_through and not layout.tree_clear(a_tree, a + dir * end, b, OWN_TREE_CLEARANCE, _a_perch):",
     "replace": "\tif false:"
    },
    {

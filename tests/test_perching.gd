@@ -123,6 +123,25 @@ func setup() -> void:
 			break
 	check(assisted_ok, "the flare assist bleeds a fast approach down to a catch")
 	assisted.queue_free()
+	# ... and not so hard that it stops short: a hawk just under its catch speed, a crow a little over it, holding
+	# catch, get there. (A gain twice as strong braked the hawk short of its perches.)
+	for c in [["hawk", 0.95, 7.0, 0.6], ["crow", 1.15, 9.0, 1.0]]:
+		var bp5 := BirdProfile.by_id(c[0])
+		var ctl_h := ScriptedInput.new()
+		var ha := _bird(bp5, ctl_h)
+		ha.perch_assist = 1.0
+		ctl_h.catch_hold = true
+		var from_h: Vector3 = target.position + target.facing * float(c[2]) + Vector3.UP * float(c[3])
+		ha.fly_from(from_h, (target.position + Vector3.UP * 0.8 - from_h).normalized(), bp5.grab_speed_max * float(c[1]))
+		var got_there := false
+		for i in 150:
+			await frames(1)
+			if ha.state == Bird.State.LANDING or ha.state == Bird.State.PERCHED:
+				got_there = true
+				break
+		check(got_there, "the flare assist brings a %s at %.2f x its catch speed in to the catch, not short of it" % [c[0], c[1]])
+		ha.queue_free()
+		await frames(1)
 
 	# 7. Facing along the branch (over it) and leaving: passes through its own tree, no bonk, no standing on it.
 	var bp: Perch = null

@@ -279,6 +279,7 @@ func _routes_round_own_trees() -> void:
 		var d := (route[1] - route[0]).normalized()
 		check(layout.tree_clear(t.id, route[0] + d * FlightPlanner.PUSH_OFF, route[1], FlightPlanner.OWN_TREE_CLEARANCE * 0.99, sat.id), "the first leg passes its own trunk, not through it")
 	check(planner.plan_to_perch(stub.position, goal, crow, t.id, stub.id).size() >= 3, "a route out from a stub right against its trunk")
+	check(not planner._a_through, "... past its own trunk, not through it (the push-off's first metre is let off)")
 	var swoop_from := FlightPlanner.approach_point(goal, crow)
 	var mid := swoop_from.lerp(goal.approach_anchor(), 0.5)
 	var open_route := planner.plan_to_perch(sat.position, goal, crow, t.id, sat.id)
@@ -295,15 +296,17 @@ func _routes_out_of_tight_spots() -> void:
 	var layout := ArenaLayout.new()
 	var t := _tree(layout, 0.0, 0.0, 16.0, 0.4)
 	var sat := _limb(layout, t, 8.0, Vector3(1.0, 0.0, 0.0), 3.0)
-	for i in 14:   # (a cage of limbs 4-13 m up, every 15 degrees)
-		for k in 24:
-			if i == 6 and k == 0:
+	for i in 41:   # (a cage of limbs 2-14 m up, every 0.3 m and 7.5 degrees, 6 m long)
+		for k in 48:
+			if absf(2.0 + i * 0.3 - 8.0) < 0.2 and k == 0:
 				continue
-			_limb(layout, t, 4.0 + i * 0.7, Vector3(1.0, 0.0, 0.0).rotated(Vector3.UP, deg_to_rad(15.0 * k)), 5.0, 0.0, false)
+			_limb(layout, t, 2.0 + i * 0.3, Vector3(1.0, 0.0, 0.0).rotated(Vector3.UP, deg_to_rad(7.5 * k)), 6.0, 0.0, false)
 	var far := _tree(layout, 40.0, 0.0, 20.0, 0.3)
 	var goal := _limb(layout, far, 9.0, Vector3(0.0, 0.0, 1.0), 3.0)
 	var crow := BirdProfile.crow()
-	check(not FlightPlanner.new(layout).plan_to_perch(sat.position, goal, crow, t.id, sat.id).is_empty(), "deep in its own crown: still a route out")
+	var caged := FlightPlanner.new(layout)
+	check(not caged.plan_to_perch(sat.position, goal, crow, t.id, sat.id).is_empty(), "deep in its own crown: still a route out")
+	check(caged._a_through, "... through its own limbs (no way out passes them)")
 	var hawk := BirdProfile.by_id("hawk")
 	var l2 := ArenaLayout.new()
 	var t2 := _tree(l2, 0.0, 0.0, 16.0, 0.3)
