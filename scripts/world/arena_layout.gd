@@ -50,6 +50,7 @@ class BranchData:
 	var radius := 0.06
 	var perch_id := -1
 	var dead := false               ## a dead stub (bare, greyer)
+	var solid := true               ## false: a twig drawn but brushed through (no collision; the planner ignores it)
 
 
 ## An outpost: a timber deck bolted to a trunk, its outer edge a rounded landing rail (a branch perch), a
@@ -266,6 +267,8 @@ func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) 
 		if pts[0].distance_to(pts[1]) < t.radius + clearance:
 			return false
 		for br in t.branches:
+			if not br.solid:
+				continue
 			var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
 			if bp[0].distance_to(bp[1]) < br.radius + clearance:
 				return false
@@ -297,6 +300,8 @@ func obstacle_distance(pos: Vector3, search := 12.0) -> float:
 		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.top())
 		best = minf(best, pos.distance_to(axis) - t.radius)
 		for br in t.branches:
+			if not br.solid:
+				continue
 			var q := Geometry3D.get_closest_point_to_segment(pos, br.root, br.tip)
 			best = minf(best, pos.distance_to(q) - br.radius)
 	for o in outposts:

@@ -49,8 +49,12 @@ func _ready() -> void:
 	var lo := Boot.arg_value(args, "--loadout").split(",", false)
 	if lo.size() == 2 and Saddle.POD_KINDS.has(lo[0]) and Saddle.POD_KINDS.has(lo[1]):
 		loadout = [lo[0], lo[1]]
-	Game.add_environment(self)
-	layout = ArenaLayout.generate(7)
+	var pinewood := Boot.arg_value(args, "--forest") != "greybox"   # (the pine wood in its light; --forest greybox: the old test arena)
+	if pinewood:
+		ForestLight.setup(self)
+	else:
+		Game.add_environment(self)
+	layout = Pinewood.generate(7) if pinewood else ArenaLayout.generate(7)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)

@@ -21,6 +21,9 @@ const OUTPOSTS := 9
 ## airier (fewer whorls, pads only at the tips, smaller, some limbs bare) -- the crown layer's sightlines.
 ## 0.5: in the crown band (about 22 m) almost half of level looks reach 40 m, against a fifth at 1 (probe_sightlines).
 static var crown_density := 0.5
+## Whether the dead stubs on the clear trunks are perches (switching them off didn't change how often the AI
+## bumps trunks: that's the trunks' spacing).
+static var STUB_PERCHES := true
 const GRIP_TRUNK_GAP := ArenaLayout.GRIP_TRUNK_GAP
 const GRIP_TIP_GAP := ArenaLayout.GRIP_TIP_GAP
 
@@ -137,8 +140,9 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 		var d := Vector3(sin(ang), 0.0, cos(ang))
 		var r := _r_at(t, y)
 		var root := c + Vector3.UP * y
-		var tip := root + d * (r + rng.randf_range(0.25, 0.7)) + Vector3.UP * rng.randf_range(-0.08, 0.12)
-		_branch(a, t, root, tip, rng.randf_range(0.025, 0.045), true, true)
+		# (long enough to land on without the wings meeting the trunk: a stub of 25-70 cm drew the AI in to bump it)
+		var tip := root + d * (r + rng.randf_range(0.7, 1.3)) + Vector3.UP * rng.randf_range(-0.08, 0.12)
+		_branch(a, t, root, tip, rng.randf_range(0.03, 0.05), STUB_PERCHES, true)
 	# The crown of an old Scots pine: irregular and flat-topped, not a cone -- a few whorls of strongly upswept
 	# limbs, the longest high up (an umbrella), each ending in an irregular tuft of needles (a clump of pads,
 	# some off to the side, sizes varying), with a tuft part-way along the longer limbs.
@@ -212,7 +216,7 @@ static func _grow_oak(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumber
 
 ## A young Scots pine: a whorl of branches a year (~0.45 m apart) almost to the ground, each a little longer than
 ## the one above (a cone), angled up, a tuft of needles at its end and one part-way along the longer ones; the
-## leader's tuft on top. Its twigs are too thin to perch on (solid, though: you don't fly through a sapling).
+## leader's tuft on top. Its twigs are too thin to perch on, and birds brush through them (drawn, not solid).
 static func _grow_sapling(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
 	var c := Vector3(t.base.x, 0.0, t.base.y)
 	t.crown_base = t.height * rng.randf_range(0.04, 0.16)
@@ -229,6 +233,7 @@ static func _grow_sapling(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNu
 			var root := c + Vector3.UP * y
 			var tip := root + d * reach + Vector3.UP * reach * rng.randf_range(0.2, 0.45)
 			var br := _branch(a, t, root, tip, lerpf(0.022, 0.009, f), false)
+			br.solid = false   # (twigs: a bird brushes through them, so does its planner)
 			var rp := (0.2 + 0.24 * reach) * rng.randf_range(0.85, 1.15)
 			t.foliage.append([br.tip + Vector3.UP * 0.04, Vector3(rp, rp * 0.65, rp)])
 			if reach > 0.3:

@@ -1189,5 +1189,19 @@
     "replace": "\t\t\tvar rim_k := 1.0\n"
    }
   ]
+ },
+ {
+  "id": "sapling-twigs-solid",
+  "bug": "Young pines' twigs were solid and in the planner's way: AI birds bumped them eleven times in 90 s, low over the floor (2026-11-02).",
+  "tests": [
+   "test_ai_flight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\tbr.solid = false   # (twigs: a bird brushes through them, so does its planner)\n",
+    "replace": ""
+   }
+  ]
  }
 ]
