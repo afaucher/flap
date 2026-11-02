@@ -14,6 +14,7 @@ The research behind Flap's flight model, bird rig and looks. Each note cites its
 | `feather_rendering.md` | How feathers are rendered in games and film, the visual effects of real feathers, the parked feather shader | `scripts/bird/feather.gdshader`, `BirdRig.FEATHER_LOOK`, `BirdRig.plain_feathers` |
 | `plumage_coloring.md` | Plumage pattern elements, top versus underside colour for the five species, a cheapest-first plan and per-species colour specs | `scripts/bird/plumage.gd`, `BirdRig` colours |
 | `feather_texture_study.md` | EXPERIMENT: baked feather textures (an atlas of feather types, a contour-feather tile for the body), the hawk A/B, its cost, and what the body mesh must provide for body feathers | `scripts/bird/feather_atlas.gd`, `feather_texture.gdshader`, `body_feathers.gdshader`, `Plumage.TEXTURE` (level 6) |
+| `flight_feather_look.md` | What reads on the large feathers at whole-bird distance (vanes, overlap steps, gloss, translucency, bars in bands, the crow's gloss), ranked by payoff per effort with rendering techniques | `feather_texture.gdshader`, `Plumage.TEXTURE` / `GLOSS` |
 | `eyes_and_beaks.md` | Eyes, beaks and head motion for the five species, and a plan to add them to the rig (written separately) | `scripts/bird/bird_rig.gd`, `body_shape.gd` |
 
 **Sources that refuse automated fetches.** All About Birds (Cornell), the JEB PDFs on `cob.silverchair.com`, ScienceOpen and some publisher sites returned HTTP 403. Claims from them rest on abstracts, journal landing pages or search summaries, and each note says so where it matters.

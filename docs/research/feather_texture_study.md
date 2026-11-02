@@ -167,6 +167,47 @@ In order of value for the cost:
 Feather cards on top of the textured body (1) and better light (2) would close most of the remaining gap to
 the references. Textures alone are near their limit at this camera distance.
 
+### Third pass: the silhouette, light and the flight feathers (2026-11-02)
+
+**Silhouette cards.** The textured shell's outline is a clean curve. On a bird, the feather tips break it.
+`BirdRig` adds small contour-feather cards, about 66 per bird, in four tracts (`CARD_TRACTS`):
+- **scapulars** over the shoulders, lying onto the wing root and the top of the folded wing;
+- **flanks** below the folded wing;
+- **the rump**: the uppertail coverts, which follow the tail's pitch part way;
+- **the vent**: the undertail coverts.
+
+How they're built:
+- Each card takes the body's colour where it is rooted, and the lesser-covert atlas cells, as row `contour` of
+  the feather material. That row's spot colour is a multiple of the card's own colour, as on the body tile.
+- The cards are children of the trunk, so fluff and breathing scale them.
+- Flat and small: the first, larger and lifted cards stood off the curved back as a shelf.
+- The legs' trousers are left to the leg rig.
+- Switch: `BirdRig.silhouette_cards`; gallery `--no-cards`.
+- Images: `docs/images/silhouette_cards_ab.png`.
+
+**Light** (`scripts/app/lighting.gd`, `docs/images/lighting_ab.png`):
+- sky ambient;
+- bird-scale sun shadow cascades and small-radius SSAO, in the game too;
+- per-group gloss and translucency (`Plumage.GLOSS`).
+
+Translucency uses Godot's transmittance terms, not `BACKLIGHT`: the feather above shadows each card, and
+`BACKLIGHT` is shadowed with it.
+
+**Flight feathers** (`docs/research/flight_feather_look.md`, which ranks what reads at whole-bird distance;
+`docs/images/flight_feather_ab.png`):
+- **Vanes.** The outer and inner vanes are coloured apart (`TEXTURE` `vane`), and fringes are per vane
+  (`fringe_vane`: the sparrow's outer-vane edges).
+- **Bars.** Bars are read in metres from the tip, so they run on as bands across feathers of different lengths.
+- **Overlap.** A soft step shadow falls where the inner neighbour covers the inner vane; it deepens as the wing
+  folds (uniform `cover`).
+- **Crow.** A blue-violet gloss tint.
+
+Still to do, from that ranking:
+- cupped and twisted vane geometry;
+- the emargination and notch outline;
+- anisotropic sheen;
+- wear and moult gaps.
+
 ## What was built
 
 | Piece | File | What it does |

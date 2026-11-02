@@ -21,10 +21,17 @@ uniform vec4 cell_shape[16];   // per atlas cell: shaft position (UV.x), chevron
 uniform float relief = 0.8;
 uniform float variety = 1.0;   // each feather's own variation (0: all alike)
 // Per strip row (group and face), from Plumage.texture_look:
-uniform vec4 spot[18];         // spot colour (sRGB), amount
-uniform vec4 fringe[18];       // fringe colour (sRGB), width (edge-distance units: 1 = half a vane in)
-uniform vec4 misc[18];         // spot size (0..1), shaft tone (x colour), texture strength, vane cup
-uniform vec4 gloss[18];        // roughness, specular, transmission (light through the vane from behind), -
+uniform vec4 spot[20];         // spot colour (sRGB), amount
+uniform vec4 fringe[20];       // fringe colour (sRGB), width (edge-distance units: 1 = half a vane in)
+uniform vec4 misc[20];         // spot size (0..1), shaft tone (x colour), texture strength, vane cup
+uniform vec4 gloss[20];        // roughness, specular, transmission (light through the vane from behind), -
+uniform vec4 vane_out[20];     // the outer (leading, narrow) vane's colour (sRGB), amount
+uniform vec4 vane_in[20];      // the inner vane's colour (sRGB), amount (fading in toward the base)
+uniform vec4 vane_misc[20];    // fringe on the outer vane, on the inner vane; the group's longest feather (m: bars
+                               // in metres from the tip, 0: by share of length); 1 = a top face that a neighbour covers
+uniform float cover = 0.5;     // how much of a flight feather's inner vane its neighbour hides (follows the fold)
+uniform int contour_row = 18;  // rows from here on are the body's silhouette cards: spot colour a multiple of
+uniform float contour_fringe = 0.25;   // the card's own colour, the fringe mixed in by this much (as the body tile)
 uniform float sheen = 1.0;     // scales the flight feathers' sheen and translucency (0: the old matte cards)
 uniform float strength = 1.0;  // all texture detail (0: the level-5 look plus the cup)
 
@@ -32,6 +39,7 @@ varying flat float row;
 varying flat float cell;
 varying flat float lead;
 varying flat float seed;
+varying flat float flen;
 
 void vertex() {
 	row = INSTANCE_CUSTOM.r;
@@ -39,6 +47,7 @@ void vertex() {
 	float c = INSTANCE_CUSTOM.b;
 	cell = abs(c) - 1.0;
 	lead = c < 0.0 ? -1.0 : 1.0;
+	flen = length(MODEL_MATRIX[2].xyz);   // the feather's length (m: the instance transform's z scales with it)
 	// Flex: the feather bends along its length (as feather_marks.gdshader).
 	float bend = INSTANCE_CUSTOM.g;
 	VERTEX.y += bend * VERTEX.z * VERTEX.z;
@@ -67,23 +76,43 @@ void fragment() {
 	// Colour along the feather, its bands bent into shallow chevrons along the barbs. (Bars stay in register
 	// across neighbours, as on a real wing: no per-feather shift.)
 	float off = abs(us - cell_shape[ci].x) * cell_shape[ci].y * k;
-	vec3 col = texture(strip, vec2(clamp(v - off, 0.0, 1.0), (float(r) + 0.5) / rows)).rgb * COLOR.rgb;
+	// Bars in metres from the tip, so they run on as bands across feathers of different lengths (a shorter
+	// feather reads the strip from further toward its tip end).
+	vec4 vm = vane_misc[r];
+	float vs = vm.z > 0.0 ? 1.0 - (1.0 - v) * flen / vm.z : v;
+	vec3 col = texture(strip, vec2(clamp(vs - off, 0.0, 1.0), (float(r) + 0.5) / rows)).rgb * COLOR.rgb;
+	// The two vanes differ (from above a wing shows mostly outer vanes, from below inner ones).
+	float shaft_u = cell_shape[ci].x;
+	float outer = smoothstep(shaft_u - 0.03, shaft_u + 0.03, us);
+	vec4 vo = vane_out[r];
+	vec4 vi = vane_in[r];
+	col = mix(col, vo.rgb * COLOR.rgb, vo.a * outer * k);
+	col = mix(col, vi.rgb * COLOR.rgb, vi.a * (1.0 - outer) * (1.0 - 0.6 * v) * k);
 	col *= 1.0 + (h1 - 0.5) * 0.08 * vary;                                            // tone
 	col *= vec3(1.0 + (h2 - 0.5) * 0.04 * vary, 1.0, 1.0 - (h2 - 0.5) * 0.04 * vary);  // warmth
 	vec4 sp = spot[r];
 	float ss = m.x * (1.0 + (h3 - 0.5) * 0.35 * vary);
-	col = mix(col, sp.rgb, smoothstep(0.88 - ss * 0.7, 1.0 - ss * 0.7, t.b) * sp.a * k);
+	bool contour = r >= contour_row;
+	col = mix(col, contour ? col * sp.rgb : sp.rgb, smoothstep(0.88 - ss * 0.7, 1.0 - ss * 0.7, t.b) * sp.a * k);
 	vec4 fr = fringe[r];
-	float fw = fr.a * (1.0 + (h2 - 0.5) * 0.6 * vary);   // fringes wear unevenly
-	col = mix(col, fr.rgb, (1.0 - smoothstep(fw * 0.45, fw, t.a)) * step(0.001, fr.a) * k);
+	float fw = fr.a * (1.0 + (h2 - 0.5) * 0.6 * vary) * mix(vm.y, vm.x, outer);   // fringes wear unevenly; per vane
+	col = mix(col, contour ? mix(col, fr.rgb, contour_fringe) : fr.rgb, (1.0 - smoothstep(fw * 0.45, fw, t.a)) * step(0.001, fr.a) * k);
 	col = mix(col, col * m.y, t.g * k);
 	ALBEDO = to_linear(col) * mix(1.0, t.r * 1.1, k);
+	// The step where the inner neighbour lies over this feather's inner vane: a soft dark band just before its
+	// edge (the layers are too close for the sun's shadow to draw it). Top faces of flight feathers.
+	float cov = clamp((shaft_u - us) / (shaft_u + 1.0), 0.0, 1.0);   // 0 at the shaft .. 1 the inner edge
+	ALBEDO *= 1.0 - 0.32 * vm.w * k * smoothstep(1.0 - cover - 0.22, 1.0 - cover, cov);
 	// Sheen: smooth vanes; the fringe's worn barbs and the shaft rougher. Translucency: a low sun behind the
 	// feather shines through the vane (the shaft, opaque, stays dark; thicker toward the base).
 	vec4 gl = gloss[r];
 	float edge = 1.0 - smoothstep(0.0, 0.25, t.a);
 	ROUGHNESS = mix(0.9, clamp(gl.x + 0.2 * edge + 0.15 * t.g, 0.0, 1.0), sheen);
 	SPECULAR = mix(0.35, gl.y, sheen);
+	// Gloss tint (the crow): highlights and sky reflections take a dark blue-violet, as a metal's, the diffuse
+	// stays near black.
+	METALLIC = gl.w * sheen * (1.0 - edge);
+	ALBEDO = mix(ALBEDO, vec3(0.05, 0.05, 0.11), gl.w * sheen * 0.8);
 	// (transmittance, not BACKLIGHT: the feather above shadows each card from a sun behind it, and BACKLIGHT is
 	// shadowed with it; transmittance reads the thickness off the shadow map, so a thin vane glows through)
 	float through = gl.z * sheen * (1.0 - 0.8 * t.g) * mix(0.6, 1.0, v);

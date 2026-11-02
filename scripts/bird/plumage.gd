@@ -88,12 +88,26 @@ const DATA := {
 ## over "default": `spot` [colour, amount, size 0..1] (the atlas's dark spots), `fringe` [colour, width]
 ## (a pale or dark edge; width 1 = half a vane in), `shaft` (the rachis as a multiple of the vane colour:
 ## > 1 paler), `detail` (barbs, splits, layer shadows; 0 off), `cup` (how far the shading normal leans across
-## the vane). `body`: the contour-feather tile -- `tile` (its size, share of the body length; 8 rows of 4),
+## the vane), `vane` [outer colour, amount, inner colour, amount] (the two vanes differ: from above a wing shows
+## mostly outer vanes, from below inner ones -- docs/research/flight_feather_look.md 2; the inner tint fades in
+## toward the base), `fringe_vane` [outer, inner] (how much of the fringe each vane edge carries). `body`: the contour-feather tile -- `tile` (its size, share of the body length; 8 rows of 4),
 ## `spot` [colour multiple, amount on the back, on the belly, size], `fringe` [colour, amount, width].
 const TEXTURE := {
 	"default": {
-		"default": {"spot": ["#000000", 0.0, 0.5], "fringe": ["#000000", 0.0], "shaft": 1.0, "detail": 1.0, "cup": 0.3},
+		"default": {"spot": ["#000000", 0.0, 0.5], "fringe": ["#000000", 0.0], "shaft": 1.0, "detail": 1.0, "cup": 0.3,
+			"vane": ["#000000", 0.0, "#000000", 0.0], "fringe_vane": [1.0, 1.0]},
 		"body": {"tile": 0.24, "spot": ["#808080", 0.0, 0.0, 0.5], "fringe": ["#ffffff", 0.0, 0.3]},
+	},
+	"falcon": {
+		"primary_top": {"vane": ["#1d2026", 0.55, "#3a4048", 0.2]},
+		"secondary_top": {"vane": ["#3d4652", 0.3, "#000000", 0.0]},
+	},
+	"owl": {
+		"primary_top": {"vane": ["#a08460", 0.3, "#e3d6bf", 0.4]},
+		"secondary_top": {"vane": ["#a8895f", 0.2, "#e6dac4", 0.35]},
+	},
+	"sparrow": {
+		"default": {"fringe_vane": [1.0, 0.25]},   # (buff and rufous edges on the outer vanes)
 	},
 	"hawk": {
 		"default": {"spot": ["#2a1c14", 0.0, 0.5], "fringe": ["#b39066", 0.0], "shaft": 1.1, "detail": 1.0, "cup": 0.35},
@@ -102,31 +116,32 @@ const TEXTURE := {
 		"tertial_top": {"spot": ["#33241a", 0.6, 0.35], "fringe": ["#a0805a", 0.1]},
 		"alula_top": {"fringe": ["#8a6c50", 0.1]},
 		"secondary_top": {"spot": ["#3a2a1e", 0.4, 0.3], "fringe": ["#a08a6c", 0.05]},
-		"primary_top": {"spot": ["#2e2018", 0.3, 0.3], "fringe": ["#8a7058", 0.04]},
+		"primary_top": {"spot": ["#2e2018", 0.3, 0.3], "fringe": ["#8a7058", 0.04], "vane": ["#2c2019", 0.45, "#8a7e72", 0.35]},
+		"primary_under": {"shaft": 0.95, "vane": ["#cfc8bd", 0.35, "#f2eee8", 0.3]},
+		"secondary_under": {"shaft": 0.95, "vane": ["#d2ccc2", 0.25, "#f2eee8", 0.2]},
 		"tail_top": {"shaft": 1.1},
 		"under_covert_under": {"spot": ["#8a6a50", 0.3, 0.3], "shaft": 0.95, "detail": 0.6},
 		"greater_under": {"detail": 0.6},
 		"lesser_under": {"detail": 0.6},
-		"primary_under": {"shaft": 0.95},
-		"secondary_under": {"shaft": 0.95},
 		"body": {"tile": 0.18, "spot": ["#8c7361", 0.55, 0.3, 0.3], "fringe": ["#c0a07a", 0.25, 0.25]},
 	},
 }
-## Level 6: how each feather group takes the light, [roughness, specular, transmission]. The flight feathers'
+## Level 6: how each feather group takes the light, [roughness, specular, transmission, gloss tint]. The flight feathers'
 ## vanes are smooth, tightly zipped barbs: a soft sheen, and thin enough that a low sun behind them shines through
 ## (the shaft, opaque, stays dark). Coverts are softer, matte and denser. Per species over "default"; the crow is
-## glossy (its iridescence is not modelled yet), the owl's velvety flight feathers matte.
+## glossy with a faint blue-violet cast (the 4th value: its highlights take a dark blue-violet tint, as a
+## metal's do; docs/research/flight_feather_look.md 8), the owl's velvety flight feathers matte.
 const GLOSS := {
 	"default": {"primary": [0.62, 0.45, 0.4], "secondary": [0.65, 0.45, 0.35], "tertial": [0.7, 0.4, 0.3], "tail": [0.62, 0.45, 0.4],
 		"alula": [0.7, 0.4, 0.25], "greater": [0.8, 0.38, 0.2], "lesser": [0.85, 0.35, 0.15], "lesser_bar": [0.85, 0.35, 0.15],
-		"under_covert": [0.85, 0.35, 0.25]},
-	"crow": {"primary": [0.42, 0.6, 0.3], "secondary": [0.45, 0.6, 0.28], "tertial": [0.5, 0.55, 0.25], "tail": [0.42, 0.6, 0.3],
-		"greater": [0.55, 0.5, 0.15], "lesser": [0.6, 0.5, 0.12]},
+		"under_covert": [0.85, 0.35, 0.25], "contour": [0.92, 0.35, 0.1]},
+	"crow": {"primary": [0.42, 0.6, 0.3, 0.45], "secondary": [0.45, 0.6, 0.28, 0.45], "tertial": [0.5, 0.55, 0.25, 0.4], "tail": [0.42, 0.6, 0.3, 0.45],
+		"greater": [0.55, 0.5, 0.15, 0.3], "lesser": [0.6, 0.5, 0.12, 0.25]},
 	"owl": {"primary": [0.85, 0.3, 0.45], "secondary": [0.85, 0.3, 0.42], "tail": [0.85, 0.3, 0.42]},
 }
 const STRIP := 64   ## texels along a feather in the mark strip
 ## Rows of the mark strip: one per feather group and face.
-const GROUPS := ["primary", "secondary", "tertial", "greater", "lesser", "lesser_bar", "alula", "under_covert", "tail"]
+const GROUPS := ["primary", "secondary", "tertial", "greater", "lesser", "lesser_bar", "alula", "under_covert", "tail", "contour"]   ## (contour: BirdRig's silhouette cards, coloured per card from the body)
 
 
 static func hex(s: String) -> Color:
@@ -163,6 +178,7 @@ static func base(id: String, g: String) -> Array:
 		"lesser", "lesser_bar": return [hex(w.lesser), hex(w.under)]
 		"alula": return [hex(w.alula), hex(w.carpal)]
 		"under_covert": return [hex(w.under), hex(w.under)]
+		"contour": return [Color.WHITE, Color.WHITE]   # (the card's instance colour is the body's colour where it is rooted)
 	return [Color.WHITE, Color.WHITE]
 
 
@@ -238,8 +254,14 @@ static func row_index(g: String, under: bool) -> int:
 
 
 ## Level 6: one strip row's feather-texture look (TEXTURE), its entry over the species' and the global defaults.
+## The silhouette cards ("contour") take the body tile's look: spots and fringe as on the body (the shader reads
+## a contour row's spot colour as a multiple of the card's colour, as the body shader does).
 static func texture_look(id: String, g: String, under: bool) -> Dictionary:
 	var sp: Dictionary = TEXTURE.get(id, TEXTURE["default"])
+	if g == "contour":
+		var b := body_texture(id)
+		return {"spot": [b.spot[0], 0.5 * (float(b.spot[1]) + float(b.spot[2])), b.spot[3]], "fringe": [b.fringe[0], float(b.fringe[2]) * 1.2],
+			"shaft": 0.9, "detail": 0.8, "cup": 0.35}
 	var out: Dictionary = TEXTURE["default"]["default"].duplicate()
 	out.merge(sp.get("default", {}), true)
 	var key := "%s_%s" % [g, "under" if under else "top"]

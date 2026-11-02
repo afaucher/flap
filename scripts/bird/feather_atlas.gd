@@ -76,7 +76,7 @@ static func cell(g: String, slotted: bool, fi: int, side := 0) -> int:
 		"secondary", "tertial": t = Type.SECONDARY
 		"tail": t = Type.TAIL
 		"greater", "under_covert": t = Type.GREATER
-		"lesser", "lesser_bar": t = Type.LESSER
+		"lesser", "lesser_bar", "contour": t = Type.LESSER
 	var nv := int(TYPES[t].variants)
 	return _first(t) + _variant(nv, fi, side)
 

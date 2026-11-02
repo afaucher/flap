@@ -34,6 +34,32 @@ func setup() -> void:
 	add_child(rig)
 	rig.build(BirdProfile.by_id("hawk"))
 	check(rig.marks_material != null and rig.marks_material.shader == BirdRig.TEXTURE_SHADER, "level 6 feathers use the texture shader")
+	# Silhouette cards: rooted on the trunk's shell, mirrored left and right (centre tracts aside), riding on the
+	# trunk (its fluff scales them), drawn with the feather material in the body's own colour.
+	var nc := rig.card_xforms.size()
+	check(nc > 40 and rig.get_node_or_null("Trunk/SilhouetteCards") != null, "silhouette cards on the trunk (%d)" % nc)
+	var worst_root := 0.0
+	var unmirrored := 0
+	for ci in nc:
+		var o: Vector3 = rig.card_xforms[ci].origin
+		worst_root = maxf(worst_root, absf(rig.body.gap(o)))
+		if rig.CARD_TRACTS[rig.card_tracts[ci]].get("centre", false):
+			continue
+		var found := false
+		for cj in nc:
+			found = found or rig.card_xforms[cj].origin.distance_to(o * Vector3(-1, 1, 1)) < 1e-4
+		unmirrored += 0 if found else 1
+	check(worst_root < rig._L * 0.02, "cards rooted on the shell (worst %.4f m)" % worst_root)
+	check(unmirrored == 0, "cards mirrored left and right (%d unmatched)" % unmirrored)
+	for tract in ["scapular", "flank", "rump", "vent"]:
+		check(rig.card_tracts.has(tract), "a %s tract" % tract)
+	BirdRig.silhouette_cards = false
+	var bare := BirdRig.new()
+	add_child(bare)
+	bare.build(BirdProfile.by_id("hawk"))
+	BirdRig.silhouette_cards = true
+	check(bare.card_xforms.is_empty() and bare.get_node_or_null("Trunk/SilhouetteCards") == null, "cards switch off")
+	bare.queue_free()
 	# Light: flight feathers smoother and more translucent than the coverts (per row of the material), and the
 	# crow's glossier than the owl's velvety ones.
 	var gl: PackedVector4Array = rig.marks_material.get_shader_parameter("gloss")

@@ -199,6 +199,8 @@ func build(p: BirdProfile) -> void:
 	_build_feathers()
 	if plain_feathers and Plumage.level >= 6:
 		_texture_body()
+		if silhouette_cards:
+			_build_cards()
 	_built = true
 	apply_pose()
 
@@ -660,11 +662,29 @@ func _texture_feathers(m: ShaderMaterial) -> void:
 	var fringes := PackedVector4Array()
 	var misc := PackedVector4Array()
 	var gloss := PackedVector4Array()
+	var vane_out := PackedVector4Array()
+	var vane_in := PackedVector4Array()
+	var vane_misc := PackedVector4Array()
+	# (each flight group's longest feather: bars are read in metres from the tip, so they line up into bands
+	# across feathers of different lengths -- docs/research/flight_feather_look.md 12)
+	var longest := {}
+	for f in shape.feathers(0.0, 0.0, _under_row):
+		var fg := Plumage.group(int(f.kind), int(f.i), int(f.bone))
+		longest[fg] = maxf(float(longest.get(fg, 0.0)), float(f.len))
+	longest["tail"] = profile.tail_length
 	for g in Plumage.GROUPS:
 		for u in 2:
 			var gl := Plumage.gloss(profile.id, g)
-			gloss.append(Vector4(float(gl[0]), float(gl[1]), float(gl[2]), 0.0))
+			gloss.append(Vector4(float(gl[0]), float(gl[1]), float(gl[2]), float(gl[3]) if gl.size() > 3 else 0.0))
 			var look := Plumage.texture_look(profile.id, g, u == 1)
+			var vn: Array = look.get("vane", ["#000000", 0.0, "#000000", 0.0])
+			var vo := Plumage.hex(vn[0])
+			var vi := Plumage.hex(vn[2])
+			vane_out.append(Vector4(vo.r, vo.g, vo.b, float(vn[1])))
+			vane_in.append(Vector4(vi.r, vi.g, vi.b, float(vn[3])))
+			var fv: Array = look.get("fringe_vane", [1.0, 1.0])
+			var flight: bool = g in ["primary", "secondary", "tertial", "tail"]
+			vane_misc.append(Vector4(float(fv[0]), float(fv[1]), float(longest.get(g, 0.0)) if flight else 0.0, 1.0 if flight and u == 0 else 0.0))
 			var sc := Plumage.hex(look.spot[0])
 			var fc := Plumage.hex(look.fringe[0])
 			spots.append(Vector4(sc.r, sc.g, sc.b, float(look.spot[1])))
@@ -674,6 +694,9 @@ func _texture_feathers(m: ShaderMaterial) -> void:
 	m.set_shader_parameter("fringe", fringes)
 	m.set_shader_parameter("misc", misc)
 	m.set_shader_parameter("gloss", gloss)
+	m.set_shader_parameter("vane_out", vane_out)
+	m.set_shader_parameter("vane_in", vane_in)
+	m.set_shader_parameter("vane_misc", vane_misc)
 
 
 ## Plumage level 6: one contour-feather material (body_feathers.gdshader) over the trunk, neck, head and the
@@ -701,6 +724,120 @@ func _texture_body() -> void:
 	for i in 2:
 		for k in 4:
 			(_fairings[i][k] as MeshInstance3D).material_override = m
+
+# --- Silhouette cards (plumage level 6) ---------------------------------------------------------------------
+## Loose contour feathers where the body's outline shows (docs/research/feather_texture_study.md, "Silhouette").
+## The textured shell is smooth, so its outline is a clean curve; on a bird the feathers there lie over each other
+## and their tips break it. Small cards in the tracts that show most, each coloured with the body's own colour where
+## it is rooted and drawn with the lesser-covert atlas cells (row "contour" of the feather material):
+##   scapular  over each shoulder, onto the wing's root (and the top of the folded wing)
+##   flank     low on each side, along the folded wing's lower edge
+##   rump      the uppertail coverts, over the tail's base (they follow the tail's pitch part way)
+##   vent      the undertail coverts
+## (The legs' trousers belong to the leg rig.) Per tract: `rows` x `n` cards; `t` the angle round the trunk
+## [from, to] (deg: 0 the side, 90 the back, -90 the keel; mirrored for the left side unless `centre`); `u` along
+## the trunk [from, to] (0 front .. 1 back; "sh" / "hip" mark the shoulder's or hip's u, plus the offset); `len`
+## (share of L) and `w` (share of len); `lift` (deg off the surface: the tip stands off it); `tail` how far the
+## cards follow the tail's pitch; `arch` the cards' camber (1: a flight feather's).
+static var silhouette_cards := true
+const CARD_TRACTS := {
+	"scapular": {"rows": 3, "n": 4, "t": [42.0, 72.0], "u": ["sh", -0.02, "sh", 0.22], "len": 0.1, "w": 0.45, "lift": 0.0, "tail": 0.0, "arch": 0.25},
+	"flank": {"rows": 2, "n": 4, "t": [-36.0, -62.0], "u": ["sh", 0.12, "hip", 0.06], "len": 0.11, "w": 0.55, "lift": 4.0, "tail": 0.0},
+	"rump": {"rows": 2, "n": 5, "t": [58.0, 122.0], "u": ["", 0.8, "", 0.95], "len": 0.12, "w": 0.6, "lift": 4.0, "tail": 0.5, "centre": true},
+	"vent": {"rows": 2, "n": 4, "t": [-62.0, -118.0], "u": ["", 0.8, "", 0.95], "len": 0.11, "w": 0.6, "lift": 5.0, "tail": 0.4, "centre": true},
+}
+var card_xforms: Array[Transform3D] = []   ## each silhouette card this pose (trunk space; tests)
+var card_tracts: PackedStringArray = []
+var _cards: MultiMesh
+var _cards_u: MultiMesh
+var _card_defs: Array = []   ## per card: {pos, n, aft (trunk space), len, w, lift, tail, colour, row}
+var _cards_pitch := INF
+var _cover_fold := INF
+
+
+## A point of the trunk's shell at angle `t` (rad, 0 the +X side, PI/2 the back) and `u` along it: [point, outward
+## normal, aft tangent] (trunk space).
+func _trunk_point(t: float, u: float) -> Array:
+	var z := lerpf(body.front_z(), body.back_z(), u)
+	var at := func(tt: float, zz: float) -> Vector3:
+		var r := body.ring_at(zz)
+		var h := r[2] if sin(tt) >= 0.0 else r[3]
+		return Vector3(r[1] * BodyShape._se(cos(tt), sin(tt)), r[0] + h * BodyShape._se(sin(tt), sin(tt)), zz)
+	var p: Vector3 = at.call(t, z)
+	var dz := (body.back_z() - body.front_z()) * 0.01
+	var aft: Vector3 = (at.call(t, z + dz) - at.call(t, z - dz)).normalized()
+	var round_t: Vector3 = (at.call(t + 0.01, z) - at.call(t - 0.01, z)).normalized()
+	var n := round_t.cross(aft).normalized()
+	if n.dot(p - Vector3(0.0, body.ring_at(z)[0], z)) < 0.0:
+		n = -n
+	return [p, n, aft]
+
+
+func _build_cards() -> void:
+	_card_defs.clear()
+	card_tracts.clear()
+	var u_sh := body.u_at(body.shoulder.z)
+	var u_hip := body.u_at(body.hip.z)
+	for tract in CARD_TRACTS:
+		var c: Dictionary = CARD_TRACTS[tract]
+		var u0: float = (u_sh if c.u[0] == "sh" else (u_hip if c.u[0] == "hip" else 0.0)) + float(c.u[1])
+		var u1: float = (u_sh if c.u[2] == "sh" else (u_hip if c.u[2] == "hip" else 0.0)) + float(c.u[3])
+		for side in ([1.0] if c.get("centre", false) else [-1.0, 1.0]):
+			for r in int(c.rows):
+				var u := lerpf(u0, u1, (r + 0.5) / float(c.rows))
+				for k in int(c.n):
+					var f := clampf((k + 0.5 + 0.5 * float(r % 2) - 0.25) / float(c.n), 0.0, 1.0)
+					var t := deg_to_rad(lerpf(c.t[0], c.t[1], f))
+					if side < 0.0:
+						t = PI - t
+					var sp: Array = _trunk_point(t, u)
+					# (front rows lie over the rows behind: their tips cover the next row's bases)
+					_card_defs.append({"pos": sp[0], "n": sp[1], "aft": sp[2], "len": float(c.len) * _L, "w": float(c.len) * float(c.w) * _L,
+						"lift": deg_to_rad(float(c.lift)), "tail": float(c.tail), "arch": float(c.get("arch", 0.6)), "colour": _body_color_at(u, sin(t), absf(cos(t))), "row": float(int(c.rows) - r)})
+					card_tracts.append(tract)
+	var n := _card_defs.size()
+	_cards = _multimesh(_feather_mesh(PLAIN_PROFILE), n, marks_material, "SilhouetteCards")
+	_cards_u = _multimesh(_feather_mesh(PLAIN_PROFILE, true), n, marks_material, "SilhouetteCardsUnder")
+	for node_name in ["SilhouetteCards", "SilhouetteCardsUnder"]:   # (they ride on the trunk: its fluff and breathing scale them too)
+		var mmi := get_node(node_name)
+		remove_child(mmi)
+		_trunk.add_child(mmi)
+	var row_top := Plumage.row_index("contour", false)
+	var row_under := Plumage.row_index("contour", true)
+	marks_material.set_shader_parameter("contour_row", row_top)
+	marks_material.set_shader_parameter("contour_fringe", float(Plumage.body_texture(profile.id).fringe[1]))
+	for i in n:
+		var d: Dictionary = _card_defs[i]
+		var code := FeatherAtlas.cell("contour", false, i, 0) + 1.0
+		var vseed := FeatherAtlas._hash(float(i) * 1.37, 4.2)
+		_cards.set_instance_color(i, d.colour)
+		_cards_u.set_instance_color(i, d.colour)
+		_cards.set_instance_custom_data(i, Color(row_top, 0.0, code, vseed))
+		_cards_u.set_instance_custom_data(i, Color(row_under, 0.0, code, vseed))
+	_pose_cards()
+
+
+## Lay the silhouette cards for this pose (only the rump's and vent's change: they follow the tail's pitch).
+func _pose_cards() -> void:
+	if _cards == null:
+		return
+	card_xforms.clear()
+	var tail_dir := Basis(Vector3.RIGHT, tail_pitch) * Vector3.BACK
+	var unit := _L / 0.45
+	for i in _card_defs.size():
+		var d: Dictionary = _card_defs[i]
+		var n: Vector3 = d.n
+		var aft: Vector3 = d.aft
+		if float(d.tail) > 0.0:
+			var td := (tail_dir - n * n.dot(tail_dir)).normalized()
+			aft = aft.slerp(td, float(d.tail)).normalized()
+		var dir := (aft * cos(float(d.lift)) + n * sin(float(d.lift))).normalized()
+		var base: Vector3 = d.pos + n * ((0.0006 + 0.0004 * float(d.row)) * unit) - dir * float(d.len) * 0.08
+		var xf := _feather_xform(base, dir, n, float(d.len), float(d.w), float(d.arch))
+		card_xforms.append(xf)
+		_cards.set_instance_transform(i, xf)
+		_cards_u.set_instance_transform(i, xf)
+
 
 func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> MultiMesh:
 	var mm := MultiMesh.new()
@@ -1491,7 +1628,13 @@ func apply_pose() -> void:
 		_place(_plain, _plain_u, plain_i, txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
 		plain_i += 1
 	_paint_dirty = false
+	if marks_material != null and Plumage.level >= 6 and absf(fold - _cover_fold) > 0.01:
+		_cover_fold = fold   # (how much of each flight feather's inner vane its neighbour hides: more as the wing closes)
+		marks_material.set_shader_parameter("cover", lerpf(0.45, 0.85, fold))
 	_pose_bone("tail", _tail_base, _tail_base + tb * Vector3(0, 0, profile.tail_length), tn)
+	if _cards != null and absf(tail_pitch - _cards_pitch) > 1e-3:
+		_cards_pitch = tail_pitch
+		_pose_cards()
 
 	# Legs: hip -> knee (a short femur, near horizontal in the world, hidden in the belly) -> ankle (bends
 	# aft, the bird's "backward knee") -> foot.
