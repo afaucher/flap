@@ -174,9 +174,21 @@ func _arms(id: String, pose: String, tack: Tack) -> void:
 		check((ha - che).dot(front) > 0.0, "%s %s: hand %d in front of the chest" % [id, pose, i])
 
 
-## Standing on the footrest, each boot as drawn rests on the bar: its sole within a centimetre of the bar's top
+## Riding, each boot comes down onto its rear-set peg. Standing on the footrest, each boot as drawn rests on the bar: its sole within a centimetre of the bar's top
 ## (world up), the bar under it between heel and toe, nearer the heel (the arch).
 func _footing(id: String, pose: String, tack: Tack) -> void:
+	if tack.rider.stand < 0.01 and tack.rider.upright < 0.01:
+		# Riding: each boot comes down onto its rear-set peg (some part of the drawn boot within 2.5 real cm).
+		for i in 2:
+			var mi := tack.rider.get_node("foot%d" % i) as MeshInstance3D
+			var peg: Vector3 = tack.saddle.ride_pegs[i] * tack.saddle.scale.x
+			var near := INF
+			var m := mi.mesh as ArrayMesh
+			for sfc in m.get_surface_count():
+				for v in (m.surface_get_arrays(sfc)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+					near = minf(near, (mi.transform * v).distance_to(peg))
+			check(near < 2.5 * tack.rider.k, "%s %s: boot %d rests on its peg (%.1f real cm off)" % [id, pose, i, near / tack.rider.k])
+		return
 	if tack.rider.stand < 0.99:
 		return
 	var r := tack.rider
@@ -317,6 +329,16 @@ func _rider(id: String, pose: String, rig: BirdRig, tack: Tack) -> void:
 		var sc := tack.saddle.scale.x   # (the saddle rides the plumage's fluff: compare with it as drawn)
 		var support: Vector3 = (tack.saddle.pegs[i] if standing else tack.saddle.heels[i]) * sc
 		check(an.distance_to(support) < r.height * 0.15, "%s %s %s foot on its support (%.1f mm)" % [id, pose, side, an.distance_to(support) * 1000.0])
+		# The ankle, as drawn: within a man's range -- 20 deg flexed up to 45 down from square to the shin
+		# (68..135 deg) -- and not rolled over (its instep faces up the shin, within 20 deg).
+		var fb := (r.get_node("foot%d" % i) as MeshInstance3D).transform.basis
+		var toe := (fb * Vector3.FORWARD).normalized()
+		var shin := (kn - an).normalized()
+		var ang := rad_to_deg(toe.angle_to(shin))
+		check(ang > 68.0 and ang < 135.0, "%s %s %s ankle: foot %.0f deg to the shin (68..135)" % [id, pose, side, ang])
+		var plane_n := toe.cross(shin).normalized()
+		var roll := rad_to_deg(asin(clampf(absf((fb * Vector3.UP).normalized().dot(plane_n)), 0.0, 1.0)))
+		check(roll < 20.0, "%s %s %s ankle: the foot isn't rolled (%.0f deg)" % [id, pose, side, roll])
 		var sh: Vector3 = j["shoulder%d" % i]
 		var reach := r._r("upper_arm") + r._r("forearm")
 		var hold: Vector3 = (tack.saddle.holds[i] if standing else tack.saddle.grips[i]) * sc
@@ -375,7 +397,20 @@ func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
 		for u in 9:
 			low = minf(low, rig.body.gap(piv.lerp(axis1, u / 8.0)))
 		check(low > half, "%s: mount %d's pod clears the bird's body" % [id, i])
-	# Every round's line of fire passes over the bird's head (as the rig carries it gliding), along the body's
+	# The bands round each pod are drawn tight on it: every point of a band's line within a few mm outside the
+	# pod's outline, and the outline touching the band all round (no point of it far inside).
+	for cl in sv.clamp_loops:
+		var pod: Transform3D = cl[1]
+		var hull := Saddle._hull(sv._pod_outline(cl[2]))
+		var off := 0.0
+		for p in (cl[0] as PackedVector3Array):
+			var q := pod.affine_inverse() * p * sv.cm
+			var d := INF
+			for h in hull.size():
+				d = minf(d, Vector2(q.x, q.y).distance_to(Geometry2D.get_closest_point_to_segment(Vector2(q.x, q.y), hull[h], hull[(h + 1) % hull.size()])))
+			off = maxf(off, d)
+		check(off < 0.6, "%s: the %s pod's band is snug (%.1f real cm off it at most)" % [id, cl[2], off])
+		# Every round's line of fire passes over the bird's head (as the rig carries it gliding), along the body's
 	# axis and along a flight path 4 deg below it.
 	var hc: Vector3 = rig.neck_joints[3] + rig.head_offset
 	var hr: float = rig.body.head_r

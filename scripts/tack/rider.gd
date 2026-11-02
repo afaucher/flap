@@ -37,6 +37,7 @@ var _scarf_pts: Array[Vector3] = []
 var _t := 0.0
 const SCARF_N := 10
 const HOLD_REACH := 0.72        ## standing: shoulders to the hand loops, of the arm's length (leaning back)
+const ANKLE_ANGLE := 118.0      ## deg between the shin and the foot, riding (heel raised on the peg)
 const SOLE := 3.6                ## real cm from the ankle down to the boot's sole (the foot mesh)
 const ARCH := 6.0                ## real cm from the ankle forward to the arch: standing, the bar goes there
 ## The coat's girth (torso frame, real cm): [y, half width, half depth, z offset], as built, the collar's
@@ -851,11 +852,17 @@ func pose(dt: float, stand_t: float, upright_t: float, up: Vector3, look: Vector
 		var kn := _ik(hip, ankle, _r("thigh"), _r("shin"), pole)
 		_place_seg("thigh%d" % i, hip, kn, -facing)
 		_place_seg("shin%d" % i, kn, ankle, -facing)
-		# The foot: on its peg, toes forward and a little down (riding) or in toward the bird (standing).
-		var toe_dir := (tang - sn * 0.3).normalized().slerp(stand_dir, st).normalized()
-		var top_dir := sn.slerp(u, st).normalized()
+		# The foot. Riding: a racer's on a rear-set peg -- ANKLE_ANGLE from the shin, down from the ankle to the
+		# peg under its ball, turned out a little, the instep facing up the shin (no roll). Standing: flat on the bar, toes in toward the bird
+		# (the ankle takes the lean).
+		var shin_up := (kn - ankle).normalized()
+		var ahead := (-sn - shin_up * (-sn).dot(shin_up)).normalized()   # (toward the back: down to the peg)
+		var flex := deg_to_rad(ANKLE_ANGLE)
+		var ride_toe := (shin_up * cos(flex) + ahead * sin(flex)).rotated(shin_up, -s * deg_to_rad(8.0)).normalized()
+		var toe_dir := ride_toe.slerp(stand_dir, st).normalized()
 		var fz := -toe_dir
-		var fy := (top_dir - fz * top_dir.dot(fz)).normalized()
+		var up_f := shin_up.slerp(u, st)
+		var fy := (up_f - fz * up_f.dot(fz)).normalized()
 		_place("foot%d" % i, ankle, Basis(fy.cross(fz).normalized(), fy, fz))
 		joints["hip%d" % i] = hip
 		joints["knee%d" % i] = kn
