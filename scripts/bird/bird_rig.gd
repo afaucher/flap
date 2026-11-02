@@ -74,6 +74,7 @@ var leg_joints: Array = [[], []]      ## per side: [hip, ankle, foot]
 var head_basis := Basis()
 var fold_anchor: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var fold_elbow: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## folded elbow, on the flank
+var body_mesh: MeshInstance3D   ## the body capsule (tests measure the folded wing against it)
 ## Flat-colour feathers (the default). The feather shader (feather.gdshader) is parked: set this false to
 ## try it (rig gallery: --feather-shader). docs/research/feather_rendering.md has its status.
 static var plain_feathers := true
@@ -201,6 +202,7 @@ func _build_body(tint: Color) -> void:
 	var body_mat := _plumage(tint.darkened(0.12)) if not plain_feathers else _material(tint.darkened(0.12))
 	var leg_mat := _material(Color(0.72, 0.6, 0.32))
 	var body := MeshInstance3D.new()
+	body_mesh = body
 	var cap := CapsuleMesh.new()
 	cap.radius = _L * 0.15
 	cap.height = _L * 0.62
