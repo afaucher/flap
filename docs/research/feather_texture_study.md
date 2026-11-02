@@ -220,6 +220,22 @@ loose barb tips and down soften the outline.
 - **Cost.** No extra draws: a test and a noise read in the body shader.
 - **Switch.** `BirdRig.outline_down`; gallery `--no-down`.
 
+**In the sun** (the round-four concept's backlit kestrel, `docs/images/feather_sun_ab.jpg`). The flight
+feathers' and the body's shaders have their own light pass, driven by each feather's texture rather than by the
+card: a vane is a thin sheet of barbs, so
+- **through the vane:** a sun behind it shines through, most where the vane is thin and pale, none through the shaft
+  (Godot's transmittance, which reads the thickness the light crosses off the shadow map, scaled by
+  `through_boost`);
+- **edges:** each feather's free edge and tip -- the barbs' ends -- catch the light and glow, most looking toward the
+  sun (`edge_glow`);
+- **barbs:** the sheen streaks along the barbs, tight across them (an anisotropic Ward lobe, `barb_sheen`; the crow's
+  gloss tints it);
+- **wrapped diffuse:** soft barbs don't fall off hard at the terminator.
+
+Measured on the forest preview's sunlit falcon (`tools/light_match.py`'s numbers on a crop round the bird): the
+brightest 5 % rose with the light pass, but most of the gap to the concept was the bird sitting in a trunk's shade
+(the preview now frames it in sun) and its colouring: the falcon is now a kestrel, as in the concept.
+
 ## What was built
 
 | Piece | File | What it does |

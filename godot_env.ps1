@@ -1,6 +1,8 @@
 # godot_env.ps1 - locate the Godot 4.7 console binary for this project (ported from ..\cast).
-# Order: $env:FLAP_GODOT, then the copy Hero-Reader's tools/setup.py installed next door
-# (..\Hero-Reader\third_party\godot), then cast's build deps (..\cast\build\deps). No machine-wide fallback.
+# Order: $env:FLAP_GODOT, then Flap's own copy in build\deps (gitignored: Godot_v4.7-stable_win64.exe and its
+# _console.exe), then cast's build deps (..\cast\build\deps), then the copy Hero-Reader's tools/setup.py installed
+# next door (..\Hero-Reader\third_party\godot). No machine-wide fallback. Flap's own copy comes first because screen
+# recorders such as Nvidia's name a capture after the program's folder: Hero-Reader's showed up as "Hero Reader".
 function Resolve-FlapGodot {
     if ($env:FLAP_GODOT -and (Test-Path $env:FLAP_GODOT)) { return $env:FLAP_GODOT }
     # From a git worktree (.claude\worktrees\<name>), look next to the main checkout too.
@@ -11,8 +13,9 @@ function Resolve-FlapGodot {
         $roots += Split-Path ([IO.Path]::GetFullPath($common)) -Parent
     }
     foreach ($root in $roots) {
-        foreach ($rel in @("..\Hero-Reader\third_party\godot\Godot_v4.7-stable_win64_console.exe",
-                           "..\cast\build\deps\Godot_v4.7-stable_win64_console.exe")) {
+        foreach ($rel in @("build\deps\Godot_v4.7-stable_win64_console.exe",
+                           "..\cast\build\deps\Godot_v4.7-stable_win64_console.exe",
+                           "..\Hero-Reader\third_party\godot\Godot_v4.7-stable_win64_console.exe")) {
             $p = Join-Path $root $rel
             if (Test-Path $p) { return (Resolve-Path $p).Path }
         }

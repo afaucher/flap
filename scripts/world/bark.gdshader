@@ -49,15 +49,23 @@ float vnoise(vec2 p) {
 	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
+uniform bool built = false;   // a built mesh (ArenaBuilder's limbs and trunks): UV metres, UV2 (height share, seed)
+
 void vertex() {
-	float r = INSTANCE_CUSTOM.x;
-	float h = INSTANCE_CUSTOM.y;
-	seed = INSTANCE_CUSTOM.z;
-	h_frac = VERTEX.y + 0.5;
-	// Round the trunk: a whole number of A tiles at the base (so the wrap meets itself), in metres.
-	float tile = b_only ? tile_b : tile_a;
-	float around = max(1.0, round(TAU * r / tile)) * tile;
-	m_uv = vec2(UV.x * around, h_frac * h);
+	if (built) {
+		m_uv = UV;
+		h_frac = UV2.x;
+		seed = UV2.y;
+	} else {
+		float r = INSTANCE_CUSTOM.x;
+		float h = INSTANCE_CUSTOM.y;
+		seed = INSTANCE_CUSTOM.z;
+		h_frac = VERTEX.y + 0.5;
+		// Round the trunk: a whole number of A tiles at the base (so the wrap meets itself), in metres.
+		float tile = b_only ? tile_b : tile_a;
+		float around = max(1.0, round(TAU * r / tile)) * tile;
+		m_uv = vec2(UV.x * around, h_frac * h);
+	}
 }
 
 void fragment() {

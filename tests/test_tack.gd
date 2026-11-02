@@ -21,7 +21,7 @@ func setup() -> void:
 		var rig := BirdRig.new()
 		add_child(rig)
 		rig.build(BirdProfile.by_id(id))
-		var tack := Tack.fit(rig)
+		var tack := Tack.fit(rig, null, ["rockets", "seekers"])   # (one of each kind: both mounts measured)
 		_fit(id, rig, tack)
 		for pose in ["glide", "folded"]:
 			RigPoses.apply(rig, pose, 0.0)

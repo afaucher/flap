@@ -52,6 +52,10 @@ var ground_pitch_deg := 0.0          ## ... and standing on the ground
 var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a perch in the last few metres
 var bonks := 0
 var stun := 0.0
+## Battle damage: the flight feathers a hit knocked out (BirdRig.feather_key -> true), up to DOWN_FEATHERS; they
+## cost their wing its area (FlightModel.wing_loss) and the rig leaves them out. mend() grows them back.
+var lost_feathers := {}
+const DOWN_FEATHERS := 8
 var last_input := FlightInput.new()
 var facing := Vector3.FORWARD  ## where a sitting bird looks (turned by the stick); it leaves this way
 var look_pitch := 0.0          ## -1..1, a sitting bird looking down/up (camera)
@@ -445,6 +449,54 @@ func _pass_through(tree_id: int) -> void:
 	_pass_left = LEAVE_PASS
 	add_collision_exception_with(_pass_body)
 
+# --- Battle damage -------------------------------------------------------------------------------
+
+## Knock out up to `n` flight feathers nearest `at` (world; never past DOWN_FEATHERS lost in all). Returns the keys lost.
+func lose_feathers(at: Vector3, n: int) -> Array:
+	n = mini(n, DOWN_FEATHERS - lost_feathers.size())
+	if n <= 0:
+		return []
+	var local := rig.global_transform.affine_inverse() * at
+	var near := []
+	for f in rig.flight_feathers():
+		if not lost_feathers.has(f.key):
+			near.append([(f.mid as Vector3).distance_squared_to(local), f.key])
+	near.sort_custom(func(a, b): return a[0] < b[0])
+	var out := []
+	for e in near.slice(0, n):
+		lost_feathers[e[1]] = true
+		out.append(e[1])
+	_wing_loss()
+	return out
+
+
+## 1 whole .. 0 at DOWN_FEATHERS lost.
+func health() -> float:
+	return clampf(1.0 - float(lost_feathers.size()) / DOWN_FEATHERS, 0.0, 1.0)
+
+
+func is_down() -> bool:
+	return lost_feathers.size() >= DOWN_FEATHERS
+
+
+## Every feather back (the nest, a rearm, a respawn).
+func mend() -> void:
+	lost_feathers.clear()
+	_wing_loss()
+
+
+func _wing_loss() -> void:
+	var loss := Vector2.ZERO
+	var half := profile.wing_area * 0.5
+	for key in lost_feathers:
+		var side := BirdRig.feather_side(key)
+		if side < 0:
+			loss.x += rig.feather_area(key) / half
+		elif side > 0:
+			loss.y += rig.feather_area(key) / half
+	model.wing_loss = loss.clamp(Vector2.ZERO, Vector2.ONE * 0.9)
+
+
 # --- Telemetry (the only thing the HUD, camera and rig read) ------------------------------------
 
 func telemetry() -> Dictionary:
@@ -500,6 +552,9 @@ func telemetry() -> Dictionary:
 		"altitude": global_position.y,
 		"bonks": bonks,
 		"stunned": stun > 0.0,
+		"health": health(),
+		"lost_feathers": lost_feathers,
+		"wing_loss": model.wing_loss,
 		"landing_t": clampf(_land_t / _land_dur, 0.0, 1.0) if state == State.LANDING else 0.0,
 		"state_age": _state_age,
 	}

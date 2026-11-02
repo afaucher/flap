@@ -38,6 +38,9 @@ class TreeData:
 	var kind := 0                   ## Kind
 	var crown_base := 0.0           ## m above the ground where the crown (foliage) starts
 	var foliage: Array = []         ## visual only (birds fly through it): [centre: Vector3, radii: Vector3]
+	## The limbs as drawn (Pinewood): [points: PackedVector3Array, radii: PackedFloat32Array, material key]. The
+	## solid branches (BranchData) are chords along these curves; the perch stretch of a limb is exactly straight.
+	var limbs: Array = []
 
 	func top() -> Vector3:
 		return Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)

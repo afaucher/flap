@@ -4,6 +4,7 @@ extends Node3D
 ## camera and the HUD. Optional AI birds fly perch to perch around it. Command-line options (after `--`):
 ##   --bird <id>        crow | owl | hawk | falcon | sparrow (default crow)
 ##   --seed <n>         arena seed (default 7)
+##   --sdr              no HDR display output (default: HDR where the display offers it; F4 toggles)
 ##   --forest greybox   the old grey test arena (default: the pine wood, Pinewood, in ForestLight)
 ##   --ai <n>           AI birds flying around (default 3)
 ##   --autopilot        the player's bird flies itself (P toggles in game)
@@ -13,6 +14,7 @@ extends Node3D
 ##   --shot <png>       save a screenshot after --shot-after seconds (default 3) and quit
 ##   --shot-after <s>
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
+##   --no-rider         no war tack on any bird (the menu's Flight)
 
 var layout: ArenaLayout
 var arena: ArenaBuilder
@@ -25,10 +27,11 @@ var autopilot: AIPilot
 var ai_birds: Array[Bird] = []
 var profile_id := "crow"
 var use_autopilot := false
+var rider := true            ## crows, falcons and hawks carry the war tack (--no-rider: none)
 
 
 func _ready() -> void:
-	var args := OS.get_cmdline_user_args()
+	var args := Boot.args()
 	var bid := Boot.arg_value(args, "--bird")
 	if BirdProfile.IDS.has(bid):
 		profile_id = bid
@@ -37,6 +40,7 @@ func _ready() -> void:
 	var ai_arg := Boot.arg_value(args, "--ai")
 	var ai_count := int(ai_arg) if ai_arg != "" else 3
 	use_autopilot = args.has("--autopilot")
+	rider = not args.has("--no-rider")
 	if args.has("--rig-tick"):
 		Bird.rig_in_process = false
 	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; project.godot sets 3)
@@ -50,6 +54,7 @@ func _ready() -> void:
 	else:
 		_environment()
 	layout = Pinewood.generate(arena_seed) if pinewood else ArenaLayout.generate(arena_seed)
+	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)
@@ -74,7 +79,7 @@ func _ready() -> void:
 		add_child(b)
 		b.setup(BirdProfile.by_id(pid), layout, pilot)
 		b.arena = arena
-		if Tack.RIDDEN.has(pid):
+		if rider and Tack.RIDDEN.has(pid):
 			Tack.fit(b.rig, b)
 		b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
 		ai_birds.append(b)
@@ -136,7 +141,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	add_child(bird)
 	bird.setup(BirdProfile.by_id(pid), layout, autopilot if use_autopilot else player)
 	bird.arena = arena
-	if Tack.RIDDEN.has(pid):
+	if rider and Tack.RIDDEN.has(pid):
 		Tack.fit(bird.rig, bird)   # (crows, falcons and hawks carry a rider and the war tack)
 	bird.perch_at(at)
 	camera.bird = bird

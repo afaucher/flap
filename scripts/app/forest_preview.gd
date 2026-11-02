@@ -21,6 +21,7 @@ func _ready() -> void:
 		Game.add_environment(self)
 	else:
 		ForestLight.setup(self, Boot.arg_value(args, "--gi") == "on")
+	HdrOutput.add(self)
 	var arena := ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)

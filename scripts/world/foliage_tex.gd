@@ -142,7 +142,7 @@ static func _needle_col(rng: RandomNumberGenerator) -> Color:
 
 ## A shoot from p along dir, `length` px, needles in pairs along it; forks into side shoots.
 static func _shoot(cv: Canvas, rng: RandomNumberGenerator, p: Vector2, dir: Vector2, length: float, depth: int, px_per_cm: float) -> void:
-	var twig := Color(0.42, 0.3, 0.18)
+	var twig := Color(0.3, 0.32, 0.18)   # (a shoot's stem: green-brown, and mostly hidden in its needles)
 	var bend := rng.randf_range(-0.25, 0.25)
 	var pts: Array[Vector2] = [p]
 	var dd := dir
@@ -151,7 +151,7 @@ static func _shoot(cv: Canvas, rng: RandomNumberGenerator, p: Vector2, dir: Vect
 		dd = dd.rotated(bend / seg).normalized()
 		pts.append(pts[-1] + dd * length / seg)
 	for i in seg:
-		cv.stroke(pts[i], pts[i + 1], lerpf(2.6, 1.2, float(i) / seg) * (1.0 if depth == 0 else 0.7), twig)
+		cv.stroke(pts[i], pts[i + 1], lerpf(1.8, 0.9, float(i) / seg) * (1.0 if depth == 0 else 0.7), twig)
 	# Needles: pairs every few mm, 4-6 cm, angled forward ~45 deg, longer and denser toward the tip.
 	var total := int(length / (0.25 * px_per_cm))
 	for i in total:

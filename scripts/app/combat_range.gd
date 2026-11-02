@@ -1,14 +1,14 @@
 extends Node3D
 ## The combat range (proof of concept for ranged combat, docs/design/combat_concepts.html): the forest arena,
 ## your bird with a saddle launcher, and a target bird flying a figure-eight through the clearing. Fly onto
-## it and fire: rockets (lead it) or seekers (hold it in the cone for a second to lock). Three hits down it;
-## it comes back a moment later. The target flies a racetrack above the clearing: straights long enough to lock,
-## turns that break it. Sit on any perch for two seconds to rearm.
+## it and fire: rockets (lead it) or seekers (hold it in the cone for a second to lock). Each hit knocks out
+## flight feathers (2.5 on average); eight lost down it, and it comes back a moment later, mended. The target
+## flies a racetrack above the clearing: straights long enough to lock, turns that break it. Your base is the
+## outpost nearest the clearing (with no outposts, the start perch): sit on its rail for two seconds to rearm
+## and grow lost feathers back; the HUD points home when you need it.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
-##       [--loadout rockets,seekers]
-## Crows, falcons and hawks carry the war tack: a pod each side of the rider (--loadout: left,right, each
-## "rockets" -- three -- or "seekers" -- two), and each round leaves from its own tube. Other birds fire from
-## ahead of the beak with the full AMMO.
+## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
+## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
 ## --demo flies your bird for you (chasing the target and firing), for screenshots and the test.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
 ## T target evasion on/off, R restart, Esc release the mouse.
@@ -33,12 +33,13 @@ var bird_id := "crow"
 var target_id := "crow"
 var start_seekers := false
 var evade := true            ## the target breaks when locked or shot at (T toggles)
-var loadout: Array = []      ## the pods, left and right (empty: Saddle.DEFAULT_LOADOUT)
+var loadout: Array = []      ## the pods, left and right: both of one kind (empty: Saddle.DEFAULT_LOADOUT)
 var tacks := {}              ## Bird -> Tack
+var home: Perch              ## your base's perch: where you rearm and mend
 
 
 func _ready() -> void:
-	var args := OS.get_cmdline_user_args()
+	var args := Boot.args()
 	if BirdProfile.IDS.has(Boot.arg_value(args, "--bird")):
 		bird_id = Boot.arg_value(args, "--bird")
 	if BirdProfile.IDS.has(Boot.arg_value(args, "--target")):
@@ -46,15 +47,17 @@ func _ready() -> void:
 	demo = args.has("--demo")
 	start_seekers = args.has("--seekers")
 	evade = not args.has("--no-evade")
-	var lo := Boot.arg_value(args, "--loadout").split(",", false)
-	if lo.size() == 2 and Saddle.POD_KINDS.has(lo[0]) and Saddle.POD_KINDS.has(lo[1]):
-		loadout = [lo[0], lo[1]]
+	if Boot.arg_value(args, "--loadout") == "seekers":
+		start_seekers = true
+	if start_seekers:
+		loadout = ["seekers", "seekers"]
 	var pinewood := Boot.arg_value(args, "--forest") != "greybox"   # (the pine wood in its light; --forest greybox: the old test arena)
 	if pinewood:
 		ForestLight.setup(self)
 	else:
 		Game.add_environment(self)
 	layout = Pinewood.generate(7) if pinewood else ArenaLayout.generate(7)
+	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)
@@ -118,6 +121,9 @@ func restart() -> void:
 	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
 	world.player = world.add_bird(bird, weapons)
 	_arm(bird, world.player)
+	home = _home()
+	world.player.rearm_perch = home.id
+	combat_hud.home = home.position
 	if start_seekers:
 		world.player.weapon = Launcher.Weapon.SEEKERS
 	camera.bird = bird
@@ -137,6 +143,19 @@ func _arm(b: Bird, l: Launcher) -> void:
 	l.set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(kinds[w], i))
 
 
+## Your base: the rail of the outpost nearest the clearing (the start perch where the layout has none).
+func _home() -> Perch:
+	var best: Perch = layout.start_perch()
+	var best_d := INF
+	for o in layout.outposts:
+		var od := o as ArenaLayout.OutpostData
+		var d := Vector2(od.centre.x - CIRCUIT_CENTRE.x, od.centre.z - CIRCUIT_CENTRE.z).length()
+		if od.rail_perch_id >= 0 and d < best_d:
+			best_d = d
+			best = layout.perches[od.rail_perch_id]
+	return best
+
+
 func _spawn(id: String, ctl: Object, n: String) -> Bird:
 	var b := Bird.new()
 	b.name = n
@@ -147,6 +166,7 @@ func _spawn(id: String, ctl: Object, n: String) -> Bird:
 
 
 func _launch_target() -> void:
+	target.mend()
 	var w: Array = target_pilot.waypoints
 	target_pilot.wp = 1
 	target.fly_from(w[0], ((w[1] as Vector3) - (w[0] as Vector3)).normalized(), target.profile.v_best)

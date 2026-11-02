@@ -119,6 +119,13 @@ static var flat_perch := false   ## rig gallery: the old level perched pose (bef
 var feather_material: ShaderMaterial
 var feather_xforms: Array[Transform3D] = []
 var feather_codes: PackedFloat32Array = []    ## plumage level 6: each feather_xforms entry's atlas code (INSTANCE_CUSTOM.b); tests
+var feather_keys: PackedInt32Array = []       ## feather_key() per feather_xforms entry (battle damage)
+var lost := {}                                ## feather_key -> true: knocked out (Bird.lost_feathers), left out of the drawing
+## Battle damage: the flight feathers a hit can knock out (primaries, secondaries, tertials, the tail), and the
+## share of the wing's area each carries (feather_area).
+const FLIGHT_KINDS := [WingShape.Kind.PRIMARY, WingShape.Kind.SECONDARY, WingShape.Kind.TERTIAL]
+const FLIGHT_SHARE := 0.8   ## of each wing's area, the share its flight feathers make (the rest: the arm's web, the coverts)
+var _feather_area := {}
 var feather_kinds: PackedInt32Array = []      ## WingShape.Kind per feather_xforms entry (6 = tail); tests   ## every feather this tick (the MultiMeshes' copy; tests, debug)
 
 var _L := 0.45
@@ -232,6 +239,7 @@ func build(p: BirdProfile) -> void:
 	_build_body(tint)
 	_build_fairings(_colors[WingShape.Kind.LESSER_COVERT])
 	_build_feathers()
+	_measure_feathers()
 	if plain_feathers and Plumage.level >= 6:
 		_texture_body()
 		if silhouette_cards:
@@ -743,6 +751,51 @@ func _build_feathers() -> void:
 		if _emarg_u != null:
 			_emarg_u.visible_instance_count = 0
 	_paint_dirty = true
+
+
+## A feather's identity through every pose: its wing (1000 left, 2000 right; 3000 the tail), kind and index.
+static func feather_key(side_i: int, kind: int, fi: int) -> int:
+	return (1000 if side_i == 0 else 2000) + kind * 100 + fi
+
+
+## -1 left wing, 1 right, 0 the tail.
+static func feather_side(key: int) -> int:
+	return -1 if key < 2000 else (1 if key < 3000 else 0)
+
+
+## The share of its wing's area (m^2) a flight feather carries: the spread wing's flight feathers, by their planform
+## (length x width), make up FLIGHT_SHARE of the half wing. 0 for the tail and anything else.
+func feather_area(key: int) -> float:
+	return float(_feather_area.get(key, 0.0))
+
+
+func _measure_feathers() -> void:
+	var total := 0.0
+	var defs := shape.feathers(0.0, 0.0, false)
+	for f in defs:
+		if FLIGHT_KINDS.has(int(f.kind)):
+			total += float(f.len) * float(f.w)
+	var per := profile.wing_area * 0.5 * FLIGHT_SHARE / maxf(total, 1e-9)
+	for f in defs:
+		if FLIGHT_KINDS.has(int(f.kind)):
+			for i in 2:
+				_feather_area[feather_key(i, int(f.kind), int(f.i))] = float(f.len) * float(f.w) * per
+
+
+## The flight feathers as last drawn: [{key, mid (rig space, the feather's middle)}] (lost ones included).
+func flight_feathers() -> Array:
+	var out := []
+	for n in feather_xforms.size():
+		var key := feather_keys[n]
+		if key >= 3000 or FLIGHT_KINDS.has(floori((key % 1000) / 100.0)):
+			var xf := feather_xforms[n]
+			out.append({"key": key, "mid": xf.origin + xf.basis.z * 0.5})
+	return out
+
+
+## A lost feather: shrunk to nothing at its root.
+static func _gone(xf: Transform3D) -> Transform3D:
+	return Transform3D(xf.basis * Basis.from_scale(Vector3.ONE * 1e-4), xf.origin)
 
 
 ## Plumage level 6: the feather atlas and each strip row's look (Plumage.texture_look) on the feather shader.
@@ -1397,6 +1450,7 @@ func animate(t: Dictionary, dt: float) -> void:
 		return
 	poses += 1
 	var p0 := Perf.t()
+	lost = t.get("lost_feathers", lost)
 	var state: int = t.state
 	var sitting := state == Bird.State.PERCHED or state == Bird.State.GROUNDED
 	var landing := state == Bird.State.LANDING
@@ -1741,6 +1795,7 @@ func apply_pose() -> void:
 	var emarg_i := 0
 	feather_xforms.clear()
 	feather_kinds.clear()
+	feather_keys.clear()
 	# (each feather's instance data only changes with the feather set or the paint: written then, not every pose;
 	# the wing's flex reaches the shader as one uniform)
 	if _custom_dirty or _paint_dirty:
@@ -1845,8 +1900,12 @@ func apply_pose() -> void:
 			if f.kind == WingShape.Kind.LESSER_COVERT and int(f.bone) != WingShape.Bone.HAND:
 				sz = maxf(smoothstep(0.3, 0.9, fold), 0.001)   # (spread, the arm's surface is these coverts; they come out as it slackens)
 			var xf := _feather_xform(base, d, n, f.len * sz, f.w * sz, maxf(1.0 - ik_w, 0.02))
+			var key := feather_key(i, int(f.kind), int(f.i))
+			if lost.has(key):
+				xf = _gone(xf)
 			feather_xforms.append(xf)
 			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
+			feather_keys.append(key)
 			if f.emarg:
 				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
 				emarg_i += 1
@@ -1885,8 +1944,11 @@ func apply_pose() -> void:
 		# its inner neighbour, so the fan overlaps like a spread deck of cards.
 		var base := _tail_base + Vector3(u * _L * 0.05, 0.0, 0.0) + tn * (0.0008 * (1.0 - absf(u)) * unit)
 		var txf := _feather_xform(base, d, tn, length, length * TAIL_WIDTH)
+		if lost.has(3000 + k):
+			txf = _gone(txf)
 		feather_xforms.append(txf)
 		feather_kinds.append(6)
+		feather_keys.append(3000 + k)
 		_place(_plain, _plain_u, plain_i, txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
 		plain_i += 1
 	_paint_dirty = false

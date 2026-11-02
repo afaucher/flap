@@ -4,12 +4,13 @@ extends RefCounted
 ## you aim it by flying the bird, like a First World War fighter. Two weapons:
 ##   ROCKETS  6 rounds, 4 a second while fire is held; unguided, so you fly the gunsight onto the lead marker.
 ##   SEEKERS  3 rounds; hold a target inside the LOCK_CONE for LOCK_TIME to lock, then fire.
-## Ammo is restocked by sitting on a perch for RESTOCK_TIME (later: outposts only).
+## Ammo is restocked, and lost feathers grown back, by sitting RESTOCK_TIME on the bird's base: its `rearm_perch`
+## (the range sets an outpost's rail; unset, any perch does).
 ## Stepped by CombatWorld; reads the bird's public state only (state, model, global transform).
 
 enum Weapon { ROCKETS, SEEKERS }
 
-const AMMO := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 3}
+const AMMO := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 4}
 const COOLDOWN := {Weapon.ROCKETS: 0.25, Weapon.SEEKERS: 0.6}
 const LOCK_CONE := 15.0       ## deg off the aim to start and build a lock
 const LOCK_KEEP := 25.0       ## deg off the aim before a lock is dropped
@@ -30,6 +31,7 @@ var lock_target: Bird = null
 var lock := 0.0               ## 0..1 lock progress on lock_target
 var cooldown := 0.0
 var shots := 0
+var rearm_perch := -1          ## the base's perch (Perch.id): the only place to rearm and mend (-1: any perch)
 var _perched := 0.0
 var _birds: Array = []
 
@@ -66,15 +68,18 @@ func step(dt: float, world: CombatWorld) -> void:
 	_birds = world.birds
 	cooldown = maxf(0.0, cooldown - dt)
 	var inp: CombatInput = controller.sample(self, dt) if controller != null else CombatInput.new()
-	if inp.weapon_next:
-		weapon = Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
+	var other := Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
+	if inp.weapon_next and int(capacity[other]) > 0:   # (a bird carrying one kind has nothing to switch to)
+		weapon = other
 		lock = 0.0
 		lock_target = null
 	_update_lock(dt)
-	if bird.state == Bird.State.PERCHED:
+	if bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch)):
 		_perched += dt
 		if _perched >= RESTOCK_TIME:
 			ammo = capacity.duplicate()
+			if not bird.lost_feathers.is_empty():
+				bird.mend()
 	else:
 		_perched = 0.0
 	var want := inp.fire_pressed or (weapon == Weapon.ROCKETS and inp.fire_held)

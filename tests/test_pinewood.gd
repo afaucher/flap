@@ -19,6 +19,7 @@ func setup() -> void:
 	_pines(a)
 	_oaks(a)
 	_outposts(a)
+	_young_pines(a)
 	_sightlines(a)
 	finish()
 
@@ -79,6 +80,26 @@ func _oaks(a: ArenaLayout) -> void:
 		check(long_level >= 8, "oak %d carries long, nearly level limbs to perch on (%d)" % [t.id, long_level])
 	check(oaks >= 3, "a few oaks (%d)" % oaks)
 	check(in_clearing, "an oak stands in the clearing")
+
+
+## A bird brushes through a young pine's twigs: a line through its branches, clear of its stem, is open to
+## the planner (left and right of the stem).
+func _young_pines(a: ArenaLayout) -> void:
+	var n := 0
+	var blocked := 0
+	for t in a.trees:
+		if t.kind != ArenaLayout.Kind.SAPLING or t.branches.size() < 4:
+			continue
+		n += 1
+		var y: float = t.height * 0.4
+		for s in [-1.0, 1.0]:
+			var off := Vector3(s * (t.radius + 0.15), 0.0, 0.0)
+			var p0 := Vector3(t.base.x, y, t.base.y) + off + Vector3(0, 0, -2.0)
+			var p1 := Vector3(t.base.x, y, t.base.y) + off + Vector3(0, 0, 2.0)
+			if not a.segment_clear(p0, p1, 0.05):
+				blocked += 1
+	check(n > 50, "young pines (%d)" % n)
+	check(blocked < n * 0.1, "birds brush through young pines' twigs (%d of %d paths blocked)" % [blocked, n * 2])
 
 
 func _outposts(a: ArenaLayout) -> void:
