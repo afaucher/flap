@@ -29,6 +29,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
+- `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
+  `BackSurface`), `Rider`, `TackMesh` + the leather/metal/cloth shaders. Look at it with
+  `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros]]`.
+- `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a

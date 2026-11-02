@@ -417,5 +417,33 @@
     "replace": "\n"
    }
   ]
+ },
+ {
+  "id": "tack-knee-backward",
+  "bug": "The rider's kneeling knee aimed behind the hip, so the shin folded up past the thigh: a broken-looking leg (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\tvar kneel_pole := ((saddle.knees[i] * sc - hip).normalized() + pb.x * s * 0.3).normalized()",
+    "replace": "\t\tvar kneel_pole := -((saddle.knees[i] * sc - hip).normalized() + pb.x * s * 0.3).normalized()"
+   }
+  ]
+ },
+ {
+  "id": "tack-shallow-perch-stands",
+  "bug": "The rider stood on the footrest on every perch; on a crow's shallow back that left the hands far out of reach of anything (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/tack.gd",
+    "find": "const STAND_PITCH := Vector2(38.0, 52.0)",
+    "replace": "const STAND_PITCH := Vector2(0.0, 1.0)"
+   }
+  ]
  }
 ]
