@@ -29,6 +29,7 @@ const AIM_AHEAD := 2.5         ## the landing point is sought along this many ca
 const FLARE_PITCH := 55.0      ## deg, how far the body pitches up mid-landing (the braking flare)
 const TAKEOFF_GRACE := 0.5     ## s after leaving the ground or a perch before touching down counts as landing
 const PUSH_TIME := 0.15        ## s the feet keep pushing on the perch after take-off (the leap)
+const LEAP_START := 0.3        ## share of the take-off speed at the first tick; the legs add the rest over PUSH_TIME
 const LEAVE_PASS := 0.35       ## s the bird passes through the tree it just left (it may face along a branch)
 
 var profile: BirdProfile
@@ -73,6 +74,7 @@ var _state_age := 0.0
 var _age_state := -1
 var _push_grip := Vector3.ZERO   ## the perch or ground just pushed off from (the legs extend toward it)
 var _push_left := 0.0
+var _leap := Vector3.ZERO        ## velocity the legs are still to add over the push (m/s, world)
 
 
 func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
@@ -229,6 +231,8 @@ func _apply_assists() -> void:
 		var to_seat := Perch.seat_at(candidate_grip, profile) - global_position
 		var lateral := to_seat - dir * to_seat.dot(dir)
 		push += lateral * 4.0 * perch_assist * near_k
+	if _push_left > 0.0:   # (the leap: the legs extending speed the bird up over the push, not in one tick)
+		push += _leap / PUSH_TIME
 	var horiz := Vector2(global_position.x, global_position.z)
 	if horiz.length() > layout.boundary:
 		var back := -horiz.normalized() * (horiz.length() - layout.boundary) * 3.0
@@ -350,22 +354,28 @@ func _sit(dt: float, inp: FlightInput) -> void:
 	elif inp.flap_pressed:
 		_push_grip = Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)
 		_push_left = PUSH_TIME
-		# Jump and beat: mostly up, a little forward, with ground effect helping the first wingbeats.
+		# Jump and beat: mostly up, a little forward, with ground effect helping the first wingbeats. The legs
+		# build the speed up over the push (_leap) rather than in one tick.
 		var v := facing * profile.hop_speed * 0.6 + Vector3.UP * maxf(3.5, profile.hop_speed * 1.1)
-		model.launch(global_position + Vector3.UP * 0.05, v.normalized(), v.length())
+		model.launch(global_position, v.normalized(), v.length() * LEAP_START)
+		_leap = v * (1.0 - LEAP_START)
 		model.flap(true)
 		_grace = TAKEOFF_GRACE
 		state = State.FLYING
 
 
-## FLAP: push off with a free wingbeat; CATCH: just let go and drop.
+## FLAP: push off with a free wingbeat; CATCH: just let go and drop. From the seat, as it sits: the bird passes
+## through its own tree for a moment (_pass_through), so it needn't be moved clear of the branch first -- that jump
+## (a third of a metre for a hawk, in one tick) read as a shove off the perch. The push leaves a little upward so the
+## body rises over the branch; letting go, it tips forward and falls.
 func _leave_perch(with_flap: bool) -> void:
 	var left := perch
 	_push_grip = perch_grip
 	_push_left = PUSH_TIME
-	var dir := (facing + Vector3.DOWN * (0.1 if with_flap else 0.35)).normalized()
-	global_position = Perch.seat_at(perch_grip, profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)
-	model.launch(global_position, dir, profile.hop_speed)
+	var dir := (facing + (Vector3.UP * 0.15 if with_flap else Vector3.DOWN * 0.35)).normalized()
+	global_position = Perch.seat_at(perch_grip, profile)
+	model.launch(global_position, dir, profile.hop_speed * LEAP_START)
+	_leap = dir * profile.hop_speed * (1.0 - LEAP_START)
 	if with_flap:
 		model.flap(true)   # the push-off wingbeat is free
 	_released_perch_id = left.id

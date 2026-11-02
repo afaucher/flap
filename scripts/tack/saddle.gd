@@ -32,7 +32,13 @@ var seat_z := 0.0             ## rig z of the seat's middle
 var seat_point := Vector3.ZERO
 var seat_normal := Vector3.UP
 var grips: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
-var holds: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## standing: leather hand loops on the back of the rack
+var holds: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## standing: where the hands hold the grab rail
+var grip_dirs: Array[Vector3] = [Vector3.LEFT, Vector3.RIGHT]   ## each grip's axis, outward
+var grip_ends: Array = [[], []]                            ## each grip's inner and outer end
+var hold_dirs: Array[Vector3] = [Vector3.LEFT, Vector3.RIGHT]   ## the grab rail's, outward
+var buttons: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## the firing buttons' tops
+## The grab rail behind the dash: (y, z) in the controls' frame, real cm.
+const RAIL := Vector2(9.0, -6.0)
 var pegs: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var knees: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## kneeling: where the knees rest (on the flaps)
 var ride_pegs: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## riding: the side pegs' tops, under the boots' balls
@@ -492,21 +498,26 @@ func _launcher() -> void:
 	_disc(_tm("roundel"), lx.call(0.0, -6.0, -17.2), Vector3(0.0, 0.25, -1.0).normalized(), 3.2 * k, 0.3 * k)
 	for s in [-1.0, 1.0]:
 		var i := int(s > 0)
-		var bar := PackedVector3Array([head, lx.call(s * 3.5, -0.6, -13.5), lx.call(s * 6.5, -1.2, -9.0), lx.call(s * 8.0, -1.8, -4.0)])
+		var bar := PackedVector3Array([head, lx.call(s * 2.0, -0.7, -12.5), lx.call(s * 3.0, -1.3, -8.5)])
 		brass.sweep(bar, PackedVector3Array([Vector3.UP]), TackMesh.circle(1.0 * k, 10), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.5]))
-		var g0: Vector3 = lx.call(s * 8.0, -1.8, -4.0)
-		var g1: Vector3 = lx.call(s * 13.5, -2.5, -1.5)
+		# The grip runs the width of a gloved fist and out past it each side; the hand closes round its middle.
+		var g0: Vector3 = lx.call(s * 3.0, -1.3, -8.5)
+		var g1: Vector3 = lx.call(s * 17.5, -2.6, -2.6)
 		var grip := PackedVector3Array()
-		for q in 5:
-			grip.append(g0.lerp(g1, q / 4.0))
+		for q in 7:
+			grip.append(g0.lerp(g1, q / 6.0))
 		_tm("strap").sweep(grip, PackedVector3Array([Vector3.UP]), PackedVector2Array(_grip_section(1.7 * k)), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.9]))
-		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.9 * k, 0.0), Vector2(1.9 * k, 0.6 * k), Vector2(0.0, 0.7 * k)]), 12, Transform3D(Basis(Vector3.BACK, -s * PI * 0.5), g1))
-		grips[i] = g0.lerp(g1, 0.55)
-		# The thumb button, on a brass bezel at the grip's inner end.
-		var bp: Vector3 = lx.call(s * 8.6, 0.2, -3.6)
-		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.2 * k, 0.0), Vector2(1.2 * k, 0.5 * k), Vector2(0.0, 0.5 * k)]), 12, Transform3D(Basis.IDENTITY, bp))
+		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.9 * k, 0.0), Vector2(1.9 * k, 0.6 * k), Vector2(0.0, 0.7 * k)]), 12, Transform3D(_basis_y((g1 - g0).normalized()), g1))
+		grips[i] = g0.lerp(g1, 0.53)
+		grip_dirs[i] = (g1 - g0).normalized()
+		grip_ends[i] = [g0, g1]
+		# The thumb button, on a brass bezel on top of the grip right above the fist, under the thumb.
+		var up_g := (Vector3.UP - grip_dirs[i] * Vector3.UP.dot(grip_dirs[i])).normalized()
+		var bp: Vector3 = grips[i] - grip_dirs[i] * 2.5 * k + up_g * 1.6 * k
+		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.1 * k, 0.0), Vector2(1.1 * k, 0.5 * k), Vector2(0.0, 0.5 * k)]), 12, Transform3D(_basis_y(up_g), bp))
 		var kind: String = loadout[i] if i < loadout.size() else DEFAULT_LOADOUT[i]
-		_tm("red" if kind == "rockets" else "nickel").lathe(_ball(0.8 * k), 10, Transform3D(Basis(Vector3.UP, 0.0).scaled(Vector3(1.0, 0.6, 1.0)), bp + Vector3.UP * 0.4 * k))
+		_tm("red" if kind == "rockets" else "nickel").lathe(_ball(0.75 * k), 10, Transform3D(_basis_y(up_g).scaled(Vector3(1.0, 0.6, 1.0)), bp + up_g * 0.4 * k))
+		buttons[i] = bp + up_g * 0.9 * k
 	# The dash: a blued plate on the column's head, tilted to the rider, three brass-rimmed dials.
 	var dash := Basis(Vector3.RIGHT, deg_to_rad(-35.0))
 	var dc: Vector3 = lx.call(0.0, 2.2, -14.0)
@@ -521,20 +532,18 @@ func _launcher() -> void:
 		# (a needle on each gauge; the compass a card with a lubber line)
 		var needle := dash * Vector3(0.6 if d[2] == "gauge" else 0.0, 0.0, -1.0).normalized()
 		_tm("dark").sweep(PackedVector3Array([c + dash * Vector3(0, 0.38, 0) * k, c + dash * Vector3(0, 0.38, 0) * k + needle * r * 0.7]), PackedVector3Array([dash * Vector3.UP]), PackedVector2Array([Vector2(0.12, 0.0) * k, Vector2(-0.12, 0.0) * k, Vector2(-0.12, 0.08) * k, Vector2(0.12, 0.08) * k]), true)
-	# A brass rail behind the dash on two posts: the standing rider's hand loops hang from it.
+	# A grab rail behind the dash, low, on two posts: what the standing rider holds (wrapped in leather where the
+	# hands go).
 	for s in [-1.0, 1.0]:
-		brass.sweep(PackedVector3Array([lx.call(s * 7.0, 1.0, -10.0), lx.call(s * 7.0, 11.0, -6.0)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.7 * k, 6), true)
-	brass.sweep(PackedVector3Array([lx.call(-10.0, 11.0, -6.0), lx.call(10.0, 11.0, -6.0)]), PackedVector3Array([Vector3.UP]), TackMesh.circle(0.9 * k, 8), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.7]))
+		brass.sweep(PackedVector3Array([lx.call(s * 8.0, 1.0, -10.0), lx.call(s * 8.0, RAIL.x, RAIL.y)]), PackedVector3Array([Vector3.BACK]), TackMesh.circle(0.7 * k, 6), true)
+	brass.sweep(PackedVector3Array([lx.call(-11.0, RAIL.x, RAIL.y), lx.call(11.0, RAIL.x, RAIL.y)]), PackedVector3Array([Vector3.UP]), TackMesh.circle(0.9 * k, 8), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.7]))
 	for s in [-1.0, 1.0]:
-		var loop := PackedVector3Array()
-		var ups := PackedVector3Array()
-		for j in 13:
-			var a := PI * j / 12.0
-			loop.append(lx.call(s * 6.0 + 3.0 * cos(a), 11.0 + 7.0 * sin(a), -6.0 + 3.0 * sin(a)))
-			ups.append(Vector3(cos(a), sin(a), 0.0))
-		var lsec: Array = _tm("strap").strap_section(2.2 * k, 0.5 * k)
-		_tm("strap").sweep(loop, ups, lsec[0], true, lsec[1], lsec[2], PackedFloat32Array([0.6]))
-		holds[int(s > 0)] = lx.call(s * 6.0, 18.0, -3.0)
+		var wrap := PackedVector3Array()
+		for q in 4:
+			wrap.append(lx.call(s * (2.0 + 2.8 * q), RAIL.x, RAIL.y))
+		_tm("strap").sweep(wrap, PackedVector3Array([Vector3.UP]), PackedVector2Array(_grip_section(1.25 * k)), true, PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array([0.9]))
+		holds[int(s > 0)] = lx.call(s * 6.0, RAIL.x, RAIL.y)
+		hold_dirs[int(s > 0)] = Vector3(s, 0.0, 0.0)
 	muzzle = lx.call(0.0, 0.0, -40.0)
 	# The mounts, left and right.
 	mounts.clear()

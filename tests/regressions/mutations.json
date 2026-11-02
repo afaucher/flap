@@ -876,8 +876,8 @@
   "edits": [
    {
     "file": "scripts/tack/rider.gd",
-    "find": "\t\tvar toe_dir := ride_toe.slerp(stand_dir, st).normalized()\n",
-    "replace": "\t\tvar toe_dir := (tang - sn * 0.3).normalized().slerp(stand_dir, st).normalized()\n"
+    "find": "const ANKLE_ANGLE := 118.0 ",
+    "replace": "const ANKLE_ANGLE := 165.0 "
    }
   ]
  },
@@ -897,15 +897,137 @@
  },
  {
   "id": "riding-boot-off-peg",
-  "bug": "Riding, the boots hung in the air short of their rear-set pegs (2026-11-02).",
+  "bug": "Riding, the boots hung in the air short of their rear-set pegs: the ankle went to a fixed spot, not where the sole meets the peg (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t\tfor it in 5:\n",
+    "replace": "\t\t\tfor it in 0:\n"
+   },
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t\tankle = (saddle.ride_pegs[i] * sc - (toe_dir * BALL - fy * SOLE) * k).lerp(on_bar, st)\n",
+    "replace": "\t\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "hands-along-forearm",
+  "bug": "The hands were laid along the forearms, not closed round the grips: the grips ran through the backs of the gloves (2026-11-02).",
+  "tests": [
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/rider.gd",
+    "find": "\t\t_place(\"hand%d\" % i, wrist - hy * 1.0 * k, Basis(fx, hy, fx.cross(hy).normalized()))\n",
+    "replace": "\t\t_place_seg(\"hand%d\" % i, wrist, wrist + (wrist - el).normalized() * 9.0 * k, -sn)\n"
+   }
+  ]
+ },
+ {
+  "id": "buttons-out-of-reach",
+  "bug": "The firing buttons sat at the grips' inner ends, away from the hands, where no thumb could reach them (2026-11-02).",
   "tests": [
    "test_tack"
   ],
   "edits": [
    {
     "file": "scripts/tack/saddle.gd",
-    "find": "const PEG := Vector2(13.0, 27.0)",
-    "replace": "const PEG := Vector2(8.0, 27.0)"
+    "find": "\t\tvar bp: Vector3 = grips[i] - grip_dirs[i] * 2.5 * k + up_g * 1.6 * k\n",
+    "replace": "\t\tvar bp: Vector3 = grips[i] - grip_dirs[i] * 8.5 * k + up_g * 1.6 * k\n"
+   }
+  ]
+ },
+ {
+  "id": "perch-push-shove",
+  "bug": "Leaving a perch moved the bird clear of the branch in one tick (a third of a metre for a hawk) before it flew on at its launch speed: a shove off the perch (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tglobal_position = Perch.seat_at(perch_grip, profile)\n\tmodel.launch(global_position, dir, profile.hop_speed * LEAP_START)\n",
+    "replace": "\tglobal_position = Perch.seat_at(perch_grip, profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)\n\tmodel.launch(global_position, dir, profile.hop_speed * LEAP_START)\n"
+   }
+  ]
+ },
+ {
+  "id": "takeoff-speed-instant",
+  "bug": "A take-off gave the bird its whole launch speed in one tick (a hawk off the ground: 0 to 4.4 m/s), and the head, lagging the jolt, flicked as it caught up (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "const LEAP_START := 0.3 ",
+    "replace": "const LEAP_START := 1.0 "
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-jump",
+  "bug": "Wingbeats were followed exactly with no easing: starting to flap, a new flap, or the flare's beats taking over at the catch jumped the wings to wherever the beat's phase was (a crow's wings went from level to raised in one frame) (2026-11-02).",
+  "tests": [
+   "test_wingbeat_onset"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t_beat_off = Vector2(flap - flap_t, hand_lift - lift_t)\n",
+    "replace": "\t\t\t_beat_off = Vector2.ZERO\n"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const BEAT_FADE := 0.12 ",
+    "replace": "const BEAT_FADE := 0.0001 "
+   }
+  ]
+ },
+ {
+  "id": "tucked-leg-flips",
+  "bug": "Tucked in flight the knee bent the ankle back in the world, which with the body pitched up for a flare points up through it: the owl's legs flipped up into its body and out of its back (2026-11-02).",
+  "tests": [
+   "test_landing_legs"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tvar pole_body := knee + Vector3.DOWN * _L * 0.3\n",
+    "replace": "\t\tvar pole_body := knee - fwd_h * _L * 0.3 - up_w * _L * 0.05\n"
+   }
+  ]
+ },
+ {
+  "id": "touchdown-stance-jump",
+  "bug": "At touchdown the body took its perched stance in one tick (meant for a bird placed on a perch), a jump of a few centimetres (2026-11-02).",
+  "tests": [
+   "test_landing_legs"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "var arrived := sitting and age < 0.05 and _prev_state != Bird.State.LANDING",
+    "replace": "var arrived := sitting and age < 0.05"
+   }
+  ]
+ },
+ {
+  "id": "touchdown-feet-snap",
+  "bug": "Through a landing the feet chased the grip at a fixed rate and snapped the rest of the way onto it at touchdown (2026-11-02).",
+  "tests": [
+   "test_landing_legs"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tfoot_targets[i] = _land_foot[i].lerp(want_foot, smoothstep(0.0, 0.85, float(t.landing_t)))\n",
+    "replace": "\t\t\tfoot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 - exp(-12.0 * dt))\n"
    }
   ]
  }
