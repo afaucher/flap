@@ -5,10 +5,8 @@ extends Node3D
 ## flight feathers (2.5 on average); eight lost down it, and it comes back a moment later, mended. The target flies a racetrack above the clearing: straights long enough to lock,
 ## turns that break it. Sit on any perch for two seconds to rearm.
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
-##       [--loadout rockets,seekers]
-## Crows, falcons and hawks carry the war tack: a pod each side of the rider (--loadout: left,right, each
-## "rockets" -- three -- or "seekers" -- two), and each round leaves from its own tube. Other birds fire from
-## ahead of the beak with the full AMMO.
+## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
+## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
 ## --demo flies your bird for you (chasing the target and firing), for screenshots and the test.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
 ## T target evasion on/off, R restart, Esc release the mouse.
@@ -33,12 +31,12 @@ var bird_id := "crow"
 var target_id := "crow"
 var start_seekers := false
 var evade := true            ## the target breaks when locked or shot at (T toggles)
-var loadout: Array = []      ## the pods, left and right (empty: Saddle.DEFAULT_LOADOUT)
+var loadout: Array = []      ## the pods, left and right: both of one kind (empty: Saddle.DEFAULT_LOADOUT)
 var tacks := {}              ## Bird -> Tack
 
 
 func _ready() -> void:
-	var args := OS.get_cmdline_user_args()
+	var args := Boot.args()
 	if BirdProfile.IDS.has(Boot.arg_value(args, "--bird")):
 		bird_id = Boot.arg_value(args, "--bird")
 	if BirdProfile.IDS.has(Boot.arg_value(args, "--target")):
@@ -46,9 +44,10 @@ func _ready() -> void:
 	demo = args.has("--demo")
 	start_seekers = args.has("--seekers")
 	evade = not args.has("--no-evade")
-	var lo := Boot.arg_value(args, "--loadout").split(",", false)
-	if lo.size() == 2 and Saddle.POD_KINDS.has(lo[0]) and Saddle.POD_KINDS.has(lo[1]):
-		loadout = [lo[0], lo[1]]
+	if Boot.arg_value(args, "--loadout") == "seekers":
+		start_seekers = true
+	if start_seekers:
+		loadout = ["seekers", "seekers"]
 	Game.add_environment(self)
 	layout = ArenaLayout.generate(7)
 	arena = ArenaBuilder.new()

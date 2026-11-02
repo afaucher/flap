@@ -7,7 +7,7 @@ extends Control
 ##              builds; solid when locked
 ##   bracket    on the target: range and closing speed
 ##   arrow      at the screen edge when the target is off-screen or behind
-##   rack       bottom right: rockets and seekers left, the selected one bright
+##   rack       bottom right: the rounds left of each weapon carried, the selected one bright
 ##   health     over the rack: your bird's feathers (Bird.health), a notch per feather it can lose; and a short bar
 ##              under the target's bracket
 ##   tally      top right: shots, hits, downed
@@ -127,8 +127,11 @@ func _bar(r: Rect2, h: float, notches: int) -> void:
 
 func _rack(l: Launcher) -> void:
 	var base := Vector2(size.x - 210, size.y - 64)
-	var rows := [[Launcher.Weapon.ROCKETS, "ROCKETS"], [Launcher.Weapon.SEEKERS, "SEEKERS"]]
-	for i in 2:
+	var rows := []
+	for row in [[Launcher.Weapon.ROCKETS, "ROCKETS"], [Launcher.Weapon.SEEKERS, "SEEKERS"]]:
+		if int(l.capacity[row[0]]) > 0:
+			rows.append(row)
+	for i in rows.size():
 		var w: int = rows[i][0]
 		var sel := l.weapon == w
 		var y := base.y + i * 24

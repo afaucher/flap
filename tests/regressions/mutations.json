@@ -1343,5 +1343,33 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "flight-menu-rider",
+  "bug": "The menu's Flight is the game with no rider or weapons; the tack mustn't be fitted when --no-rider is given (2026-11-02).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/game.gd",
+    "find": "\tif rider and Tack.RIDDEN.has(pid):\n\t\tTack.fit(bird.rig, bird)",
+    "replace": "\tif Tack.RIDDEN.has(pid):\n\t\tTack.fit(bird.rig, bird)"
+   }
+  ]
+ },
+ {
+  "id": "switch-to-empty-weapon",
+  "bug": "A bird carries one kind of round; switching weapon mustn't select the kind it has none of (2026-11-02).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "if inp.weapon_next and int(capacity[other]) > 0:",
+    "replace": "if inp.weapon_next:"
+   }
+  ]
  }
 ]

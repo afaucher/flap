@@ -9,7 +9,7 @@ extends RefCounted
 
 enum Weapon { ROCKETS, SEEKERS }
 
-const AMMO := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 3}
+const AMMO := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 4}
 const COOLDOWN := {Weapon.ROCKETS: 0.25, Weapon.SEEKERS: 0.6}
 const LOCK_CONE := 15.0       ## deg off the aim to start and build a lock
 const LOCK_KEEP := 25.0       ## deg off the aim before a lock is dropped
@@ -66,8 +66,9 @@ func step(dt: float, world: CombatWorld) -> void:
 	_birds = world.birds
 	cooldown = maxf(0.0, cooldown - dt)
 	var inp: CombatInput = controller.sample(self, dt) if controller != null else CombatInput.new()
-	if inp.weapon_next:
-		weapon = Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
+	var other := Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
+	if inp.weapon_next and int(capacity[other]) > 0:   # (a bird carrying one kind has nothing to switch to)
+		weapon = other
 		lock = 0.0
 		lock_target = null
 	_update_lock(dt)

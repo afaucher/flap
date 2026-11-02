@@ -78,7 +78,7 @@ var _fluff_slider: HSlider
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	var args := OS.get_cmdline_user_args()
+	var args := Boot.args()
 	if BirdProfile.IDS.has(Boot.arg_value(args, "--bird")):
 		bird_id = Boot.arg_value(args, "--bird")
 	if Boot.arg_value(args, "--scenario") != "":
