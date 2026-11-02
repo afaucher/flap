@@ -2,9 +2,10 @@ extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..5]
-##       [--shot <png> --shot-after <s>]
+##       [--zoom <x>] [--shot <png> --shot-after <s>] [--measure <frames>]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
-## clock (feather flutter) for repeatable screenshots.
+## clock (feather flutter) for repeatable screenshots. --measure prints the mean GPU render time and pose time over that many
+## frames (after a warm-up) and quits: the plumage levels' cost (docs/research/feather_texture_study.md).
 ## glide (default) holds the wings spread; flap animates a wingbeat; folded is the perched pose with feet
 ## gripping; flare is the landing pose (wings forward, alula out, tail fanned down, feet reaching).
 
@@ -12,6 +13,10 @@ var rigs: Array[BirdRig] = []
 var pose := "glide"
 var t := 0.0
 var frozen := false
+var measure := 0
+var _frames := 0
+var _gpu_ms := 0.0
+var _pose_us := 0
 
 
 func _ready() -> void:
@@ -75,6 +80,8 @@ func _ready() -> void:
 	add_child(cam)
 	var mid := Vector3(x * 0.5, 0, 0)
 	var k := 1.0 if only == "" else profiles[0].span * 0.36   # close-up: frame one bird
+	if Boot.arg_value(args, "--zoom") != "":   # (closer: the camera at 1 / zoom the distance)
+		k /= float(Boot.arg_value(args, "--zoom"))
 	match view:
 		"front":
 			cam.look_at_from_position(mid + Vector3(0, 0.15, -3.2) * k, mid, Vector3.UP)
@@ -107,14 +114,26 @@ func _ready() -> void:
 		get_viewport().get_texture().get_image().save_png(shot)
 		print("screenshot: ", shot)
 		get_tree().quit()
+	measure = int(Boot.arg_value(args, "--measure")) if Boot.arg_value(args, "--measure") != "" else 0
+	if measure > 0:
+		RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
 
 func _process(dt: float) -> void:
 	if not frozen:
 		t += dt
+	var t0 := Time.get_ticks_usec()
 	_pose_all(t)
 	for r in rigs:
 		r.set_clock(t)
+	if measure > 0:
+		_frames += 1
+		if _frames > 60:   # (warm-up: shader compiles, first uploads)
+			_pose_us += Time.get_ticks_usec() - t0
+			_gpu_ms += RenderingServer.viewport_get_measured_render_time_gpu(get_viewport().get_viewport_rid())
+		if _frames == 60 + measure:
+			print("measure: plumage %d, %d rigs, %d frames: GPU %.3f ms/frame, pose %.3f ms/frame" % [Plumage.level, rigs.size(), measure, _gpu_ms / measure, _pose_us / 1000.0 / measure])
+			get_tree().quit()
 
 
 func _pose_all(time: float) -> void:
