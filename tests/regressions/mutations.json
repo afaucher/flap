@@ -838,5 +838,33 @@
     "replace": ":"
    }
   ]
+ },
+ {
+  "id": "perch-push-shove",
+  "bug": "Leaving a perch moved the bird clear of the branch in one tick (a third of a metre for a hawk) before it flew on at its launch speed: a shove off the perch (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tglobal_position = Perch.seat_at(perch_grip, profile)\n\tmodel.launch(global_position, dir, profile.hop_speed * LEAP_START)\n",
+    "replace": "\tglobal_position = Perch.seat_at(perch_grip, profile) + facing * (left.thickness + profile.body_length * 0.35 + 0.05)\n\tmodel.launch(global_position, dir, profile.hop_speed * LEAP_START)\n"
+   }
+  ]
+ },
+ {
+  "id": "takeoff-speed-instant",
+  "bug": "A take-off gave the bird its whole launch speed in one tick (a hawk off the ground: 0 to 4.4 m/s), and the head, lagging the jolt, flicked as it caught up (2026-11-02).",
+  "tests": [
+   "test_takeoff_pose"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "const LEAP_START := 0.3 ",
+    "replace": "const LEAP_START := 1.0 "
+   }
+  ]
  }
 ]
