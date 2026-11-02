@@ -65,6 +65,11 @@ th { font: 600 12px/1.3 var(--display); letter-spacing: .08em; text-transform: u
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .note { font-size: 14px; color: var(--muted); }
 .swatches { display: flex; gap: 5px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; }
+.gallery figure { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.gallery img { width: 100%; height: auto; aspect-ratio: 1376 / 768; object-fit: cover; border-radius: 3px; display: block; background: var(--panel); }
+.gallery figcaption { font-size: 14px; color: var(--muted); }
+.gallery b { color: var(--ink); font-weight: 600; }
 .swatches i { width: 24px; height: 14px; border-radius: 2px; border: 1px solid var(--rule); }
 </style>
 
@@ -84,6 +89,25 @@ th { font: 600 12px/1.3 var(--display); letter-spacing: .08em; text-transform: u
       <li><strong>Ask for the light.</strong> The nanite frame was right in spirit and far too dark. Name the time of day and say "bright, high-key daylight" when it matters.</li>
       <li><strong>Give our scale.</strong> Our weapons work at 10–40 m. A HUD reading "310 m" teaches the wrong game.</li>
       <li><strong>One moment per image.</strong> A frame that shows a single readable action (the pass, the snatch, the shot) beats a busy montage.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="round2">
+    <h2 id="round2">Round two: what came back</h2>
+    <p>One image per concept, from each brief's first prompt. All four follow the camera and lighting instructions this time. The generator still adds HUD elements we didn't ask for (health bars, a heat gauge) and changes labels.</p>
+    <div class="gallery">
+      <figure><img src="concepts/r2_aces_hedgerow.jpg" onerror="this.onerror=null;this.src='../images/concepts/r2_aces_hedgerow.jpg'" alt="Over the shoulder of a tiny pilot in a leather saddle on a kestrel, a brass rotary launcher with a ring sight, brass altitude and speed gauges, an ammo counter, a smoking crow with a rider ahead over a poppy hedgerow"><figcaption><b>Hedgerow Aces · the strongest.</b> Exactly the brief: over-the-shoulder, a brass rotary launcher with a ring sight, gauges and an ammo counter on the saddle, a smoking enemy rider over the hedgerow, bright daylight. The kestrel's wings carry the shot. Missing: the lead bead, the wing chart, the pennants. The counter reads 44, not 4.</figcaption></figure>
+      <figure><img src="concepts/r2_nanite_rooftops.jpg" onerror="this.onerror=null;this.src='../images/concepts/r2_nanite_rooftops.jpg'" alt="A crow with teal-lit feather shafts seen from behind over a sunny suburban street, firing teal shards at a rival marked 20 m, a crystal-covered transformer on a pole, rooftop territory icons and a charge ring"><figcaption><b>Nanite crows in daylight · fixed.</b> Readable and bright; the glow now reads as the attack, not the scenery. The territory strip, charge ring (3/5), shard volley, swarm burst and the hive transformer all landed. It added a health bar; the rival has a marker instead of an outline.</figcaption></figure>
+      <figure><img src="concepts/r2_field_harvest.jpg" onerror="this.onerror=null;this.src='../images/concepts/r2_field_harvest.jpg'" alt="A red-tailed hawk from behind over a wheat field, a vole inside a green ring, a combine harvester, a rival hawk bracketed at 18 m, a compass with a nest icon"><figcaption><b>The hunting ground · right idea, wrong scale.</b> The reach ring, the 18 m bracket, the compass with the nest and the speed pips are all there. But the hawk is standing in the stubble, not diving; the vapour trails float in the sky instead of following the rival; and it invented a heat gauge and a health dial.</figcaption></figure>
+      <figure><img src="concepts/r2_blood_seastacks.jpg" onerror="this.onerror=null;this.src='../images/concepts/r2_blood_seastacks.jpg'" alt="Behind an armoured rider with a lance on a giant golden eagle over sea stacks, a rival rider inside a golden timing ring, a stone ring gate, crowded stands with flags, seat meters and a lap counter"><figcaption><b>Bloodsport at noon · strong.</b> The timing ring (2 s), the seat meters, the gate, the stands and the rider-from-behind framing all work, and the bright noon helps a lot. The rival crosses rather than coming head-on, and "pass" became "lap".</figcaption></figure>
+    </div>
+    <h3>Where this leaves the concepts</h3>
+    <ul>
+      <li><strong>Hedgerow Aces</strong> has the most character and fits ranged combat without losing the birds. It's the one to push.</li>
+      <li><strong>Nanite crows</strong> works in daylight and keeps the real-bird game intact until the moment of attack.</li>
+      <li><strong>Bloodsport</strong> is the most spectacular, but its giants would need a different flight model (soaring, few wingbeats).</li>
+      <li><strong>The hunting ground</strong> is the closest to the game we have, and the least distinctive as an image.</li>
+      <li>Every image makes the targets large and close. At our real distances a rival is a few pixels wide, which is where trails and brackets earn their keep. The next round should show one fight at true scale.</li>
     </ul>
   </section>
 
