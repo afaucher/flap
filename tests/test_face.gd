@@ -1,7 +1,8 @@
 extends TestCase
 ## Faces (docs/research/eyes_and_beaks.md 4.8): the beak reaches its length ahead of the head; the eyes sit on
 ## the head; fixations average the species' mean; the head stays inside its yaw/pitch limits; a blink follows a
-## big saccade; the neck's surface starts exactly on the trunk's front ring (no seam).
+## big saccade; the neck's surface starts exactly on the trunk's front ring (no seam); the owl's disc is the front
+## of its head, forehead to chin.
 
 
 func setup() -> void:
@@ -35,6 +36,24 @@ func setup() -> void:
 		rig.look_dir = Vector3.UP
 		rig.apply_pose()
 		check(asin((-rig.head_basis.z).y) <= deg_to_rad(float(fd.head_pitch[1]) + 0.5), p.id + " head pitch within its range")
+		# The owl's facial disc is the front of its head: pale from the forehead to the chin (the heart's top on the
+		# forehead, not a face plate low on a brown dome), with its dark ruff only a thin line under the chin.
+		if fd.has("disc"):
+			var ha := ((rig._head.get_node("HeadSurface") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)
+			var hp := ha[Mesh.ARRAY_VERTEX] as PackedVector3Array
+			var hc := ha[Mesh.ARRAY_COLOR] as PackedColorArray
+			var top := -INF
+			var chin := INF
+			for k in hp.size():
+				var v := hp[k]
+				if v.z > -0.25 * hr:
+					continue
+				if hc[k].get_luminance() > 0.8:
+					top = maxf(top, v.y)
+				if v.y < -0.45 * hr and absf(v.x) < 0.25 * hr:
+					chin = minf(chin, hc[k].get_luminance())
+			check(top > 0.45 * hr, "%s disc reaches the forehead (pale to %.2f head radii above the centre)" % [p.id, top / hr])
+			check(chin > 0.6, "%s disc: no dark band under the chin (darkest %.2f)" % [p.id, chin])
 		# The neck's first ring is the trunk's front ring.
 		rig.look_dir = Vector3.FORWARD
 		rig.apply_pose()

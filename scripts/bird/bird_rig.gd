@@ -1111,7 +1111,11 @@ func _head_color(th: float, ph: float) -> Color:
 		var hr := body.head_r
 		var s := Face.disc_s(d.x * body.skull.x * hr, d.y * body.skull.y * hr, hr)
 		if s < 1.12:
-			var disc := Plumage.hex(h.disc[0]).lerp(Plumage.hex(h.disc[1]), smoothstep(0.82, 0.92, s))
+			# (the dark ruff strong round the sides and top, only a thin line under the chin)
+			var q := Vector2(d.x * body.skull.x, d.y * body.skull.y - Face.DISC_Y)
+			var up := q.y / maxf(q.length(), 1e-5)
+			var rim_k := 0.3 + 0.7 * smoothstep(-0.9, -0.3, up)
+			var disc := Plumage.hex(h.disc[0]).lerp(Plumage.hex(h.disc[1]), smoothstep(0.82, 0.92, s) * rim_k)
 			c = disc.lerp(c, smoothstep(1.0, 1.12, s))
 	return c
 
