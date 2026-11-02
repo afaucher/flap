@@ -48,12 +48,14 @@ func _views() -> Array:
 	var oak: ArenaLayout.TreeData = layout.trees[0]
 	v.append(["The clearing's oak, from its edge at 9 m", Vector3(4.0, 9.0, 30.0), oak.top() * Vector3(1, 0, 1) + Vector3.UP * 8.0])
 	v.append(["Overview", Vector3(0.0, 75.0, 120.0), Vector3(0.0, 0.0, 10.0)])
-	# The pine outpost whose approach looks most into the sun (the concept's backlit view), with a falcon
+	# The pine outpost whose approach looks half into the sun (the concept's view), with a falcon
 	# and its rider flaring onto the rail.
 	var toward_sun0 := -(Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
 	var on_pine: ArenaLayout.OutpostData = null
 	for o in layout.outposts:
-		if layout.trees[o.tree_id].kind == ArenaLayout.Kind.PINE and (on_pine == null or o.out.dot(-toward_sun0) > on_pine.out.dot(-toward_sun0)):
+		# (the concept's sun: ahead of the camera and off to one side, ~55 deg, so it lights the wings' tops and
+		# rims their edges rather than leaving the bird's back in its own shadow)
+		if layout.trees[o.tree_id].kind == ArenaLayout.Kind.PINE and (on_pine == null or absf(o.out.dot(-toward_sun0) - 0.55) < absf(on_pine.out.dot(-toward_sun0) - 0.55)):
 			on_pine = o
 	var bird_at := _bird(on_pine)
 	# The concept's angle: above and behind a bird coming in to the outpost, looking across it into the light.
