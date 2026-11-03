@@ -2284,5 +2284,47 @@
     "replace": "\t\t\tscore -= 0.0"
    }
   ]
+ },
+ {
+  "id": "pines-in-openings",
+  "bug": "Pines were placed inside the clearing, the glade and the gaps (no open ground in the wood) (2026-11-02).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\tif p.length() > a.boundary - 3.0 or in_opening(a, p):\n",
+    "replace": "\t\tif p.length() > a.boundary - 3.0:\n"
+   }
+  ]
+ },
+ {
+  "id": "pines-evenly-spread",
+  "bug": "The pines stood evenly spread at one spacing, no clumps (the stand had no structure) (2026-11-02).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\tvar f := smoothstep(-0.05, 0.3, field.get_noise_2dv(p))\n",
+    "replace": "\t\tvar f := 0.5\n"
+   }
+  ]
+ },
+ {
+  "id": "young-pines-anywhere",
+  "bug": "Young pines were scattered evenly, under the clumps as much as in the gaps' light (2026-11-02).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\tif rng.randf() > 0.05 + 0.95 * lit * lit:\n",
+    "replace": "\t\tif false:\n"
+   }
+  ]
  }
 ]

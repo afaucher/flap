@@ -539,12 +539,16 @@ func _floor() -> void:
 	var xfs := []
 	var cols := []
 	var cus := []
-	for i in 5200:
+	# (bracken grows where the light gets in: thick in the gaps and glades, thin under the clumps)
+	for i in 6400:
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary
 		if p.length() > layout.boundary:
 			continue
+		var lit := Pinewood.light(layout, p)
+		if rng.randf() > lerpf(0.4, 1.0, lit):
+			continue
 		var base := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
-		var size := rng.randf_range(0.6, 1.4)
+		var size := rng.randf_range(0.6, 1.4) * lerpf(0.8, 1.2, lit)
 		var phase := rng.randf()
 		var tint := Color(1, 1, 1).lerp(Color(1.1, 1.0, 0.75), rng.randf()) * rng.randf_range(0.85, 1.05)
 		var fronds := rng.randi_range(4, 7)
