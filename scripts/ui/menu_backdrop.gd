@@ -30,14 +30,9 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.seed = 11
-	Game.add_environment(self)
-	for c in get_children():
-		if c is DirectionalLight3D:
-			sun = c
-	# Late afternoon: the sun low and warm, from behind the camera's left.
-	sun.rotation_degrees = Vector3(-24, -128, 0)
-	sun.light_color = Color(1.0, 0.86, 0.66)
-	sun.light_energy = 1.35
+	sun = ForestLight.setup(self)   # (the game's light and its look; the sun's colour and height from the look)
+	# The sun from behind the camera's left, so the birds are lit on the rail.
+	sun.rotation_degrees.y = -35.0
 	Lighting.bird_shadows(sun, 30.0, 3.0)
 	var layout := ArenaLayout.new()
 	layout.style = "pinewood"

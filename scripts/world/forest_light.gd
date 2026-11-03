@@ -13,6 +13,10 @@ extends RefCounted
 ##            so the bird, its rider and the trees you fly among stay sharp); `far_blur` false (--no-far-blur) or
 ##            F5 in the game and the range turns it off
 ## Returns the sun.
+## Looks (LOOKS; `--look <name>`, F6 in the game and the range steps through them; golden by default): the
+## afternoon above, and others laid over it -- sun, sky, haze and grade -- each a set of property overrides plus an
+## optional per-channel tone curve (`curve`: input level -> output colour, a colourist's split-tone). probe_grade
+## renders them for comparing; docs/design/color_grading.md.
 
 const SUN_ELEVATION := 30.0
 const SUN_AZIMUTH := 205.0     ## deg, round +Y from -Z
@@ -20,9 +24,48 @@ const FAR_BLUR_FROM := 45.0    ## m: nothing nearer is blurred
 const FAR_BLUR_OVER := 45.0    ## m over which it fades in (full by ~90 m: the arena's edge)
 const FAR_BLUR_AMOUNT := 0.035 ## Godot's dof amount (its default 0.1 is a strong photographic blur)
 static var far_blur := true
+static var look := "golden"   ## the default (2026-11-03: the concept art's)
+const LOOKS := {
+	"afternoon": {},
+	# The concept art's (r4_aces_outpost): later, lower and more orange, a hazy sky glowing round the sun, warm
+	# lit haze, the highlights lifted and gold, shadows a warm brown.
+	"golden": {
+		"sun.rotation_degrees:x": -20.0, "sun.light_color": Color(1.0, 0.8, 0.6), "sun.light_energy": 3.4,
+		"sun.light_volumetric_fog_energy": 1.6,
+		"sky.rayleigh_coefficient": 1.6, "sky.mie_coefficient": 0.02, "sky.turbidity": 10.0,
+		"env.tonemap_exposure": 1.2, "env.adjustment_saturation": 0.95, "env.adjustment_contrast": 1.18,
+		"env.fog_light_color": Color(0.84, 0.75, 0.58), "env.fog_sun_scatter": 0.6, "env.fog_density": 0.0016,
+		"env.volumetric_fog_density": 0.005, "env.volumetric_fog_albedo": Color(1.0, 0.9, 0.76),
+		"env.ambient_light_color": Color(0.58, 0.48, 0.36),
+		"curve": [[0.0, Color(0.015, 0.01, 0.005)], [0.25, Color(0.26, 0.235, 0.2)], [0.6, Color(0.62, 0.59, 0.52)], [1.0, Color(1.0, 0.97, 0.88)]],
+	},
+	# Early morning: a pale sun from the other side, cool blue mist hanging in the wood, soft and low in contrast.
+	"misty_morning": {
+		"sun.rotation_degrees:x": -12.0, "sun.rotation_degrees:y": 40.0, "sun.light_color": Color(1.0, 0.82, 0.66),
+		"sun.light_energy": 2.2, "sun.light_volumetric_fog_energy": 2.0,
+		"sky.rayleigh_coefficient": 2.6, "sky.mie_coefficient": 0.012, "sky.turbidity": 6.0,
+		"env.tonemap_exposure": 1.1, "env.adjustment_saturation": 1.1, "env.adjustment_contrast": 1.05,
+		"env.fog_light_color": Color(0.7, 0.76, 0.82), "env.fog_density": 0.0035, "env.fog_sun_scatter": 0.5,
+		"env.volumetric_fog_density": 0.006, "env.volumetric_fog_albedo": Color(0.94, 0.95, 1.0),
+		"env.ambient_light_color": Color(0.45, 0.5, 0.56), "env.ambient_light_energy": 0.45,
+		"curve": [[0.0, Color(0.01, 0.02, 0.035)], [0.3, Color(0.28, 0.3, 0.33)], [0.7, Color(0.71, 0.7, 0.68)], [1.0, Color(1.0, 0.96, 0.9)]],
+	},
+	# Overcast: no sun to speak of, a white sky, flat light and muted greens; everything readable, nothing dramatic.
+	"overcast": {
+		"sun.light_energy": 0.6, "sun.light_color": Color(0.92, 0.94, 1.0), "sun.light_angular_distance": 8.0,
+		"sky.rayleigh_coefficient": 0.6, "sky.mie_coefficient": 0.06, "sky.turbidity": 20.0,
+		"env.ambient_light_energy": 1.1, "env.ambient_light_sky_contribution": 1.0,
+		"env.tonemap_exposure": 1.3, "env.adjustment_saturation": 0.9, "env.adjustment_contrast": 1.05,
+		"env.fog_light_color": Color(0.78, 0.8, 0.8), "env.fog_density": 0.003, "env.fog_sun_scatter": 0.0,
+		"env.volumetric_fog_density": 0.002, "env.volumetric_fog_albedo": Color(0.9, 0.92, 0.94),
+	},
+}
 
 
 static func setup(parent: Node, gi := false) -> DirectionalLight3D:
+	var a := Boot.arg_value(Boot.args(), "--look")
+	if LOOKS.has(a):
+		look = a
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
@@ -101,7 +144,70 @@ static func setup(parent: Node, gi := false) -> DirectionalLight3D:
 	sun.shadow_bias = 0.03
 	parent.add_child(sun)
 	RenderingServer.directional_shadow_atlas_set_size(8192, true)
+	_base = {"env": _props(env), "sky": _props(sm), "sun": _props(sun)}
+	_lay(env, sm, sun, look)
 	return sun
+
+
+static var _base := {}   ## the afternoon's values of every property a look sets (to go back to before another)
+
+
+static func _props(o: Object) -> Dictionary:
+	var d := {}
+	for p in o.get_property_list():
+		d[p.name] = o.get(p.name)
+	return d
+
+
+## Look `name` on the pine wood's light (from the afternoon).
+static func _lay(env: Environment, sm: PhysicalSkyMaterial, sun: DirectionalLight3D, name: String) -> void:
+	var objs := {"env": env, "sky": sm, "sun": sun}
+	for o in objs:   # (back to the afternoon first)
+		for k in LOOKS:
+			for key in (LOOKS[k] as Dictionary):
+				if key.begins_with(o + "."):
+					var prop: String = key.get_slice(".", 1).get_slice(":", 0)
+					objs[o].set(prop, _base[o][prop])
+	env.adjustment_color_correction = null
+	var l: Dictionary = LOOKS[name]
+	for key in l:
+		if key == "curve":
+			var g := Gradient.new()
+			var offs := PackedFloat32Array()
+			var cols := PackedColorArray()
+			for c in l.curve:
+				offs.append(c[0])
+				cols.append(c[1])
+			g.offsets = offs
+			g.colors = cols
+			var t := GradientTexture1D.new()
+			t.gradient = g
+			t.width = 256
+			env.adjustment_color_correction = t
+			continue
+		var o: Object = objs[key.get_slice(".", 0)]
+		var prop: String = key.get_slice(".", 1)
+		if prop.contains(":"):   # (one component of a vector: rotation_degrees:x)
+			var v: Vector3 = o.get(prop.get_slice(":", 0))
+			v["xyz".find(prop.get_slice(":", 1))] = l[key]
+			o.set(prop.get_slice(":", 0), v)
+		else:
+			o.set(prop, l[key])
+
+
+## The next look on the world `node` is in (F6). Returns its name.
+static func next_look(node: Node) -> String:
+	look = LOOKS.keys()[(LOOKS.keys().find(look) + 1) % LOOKS.size()]
+	var we: WorldEnvironment = null
+	var sun: DirectionalLight3D = null
+	for c in node.get_children():
+		if c is WorldEnvironment:
+			we = c
+		elif c is DirectionalLight3D and c.name == "Sun":
+			sun = c
+	if we != null and sun != null:
+		_lay(we.environment, we.environment.sky.sky_material, sun, look)
+	return look
 
 
 ## The far blur on or off for the world `node` is in (F5). Returns whether it's on now.
