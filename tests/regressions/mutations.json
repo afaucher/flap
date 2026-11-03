@@ -1579,8 +1579,8 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\t\tif t >= PREDICT_LAG:\n\t\t\tvar room := _bank_room(bird.profile, pos.y)\n\t\t\tbank = move_toward(bank, clampf(err * TURN_GAIN, -room, room), roll * PREDICT_STEP)",
-    "replace": "\t\tif true:\n\t\t\tvar room := _bank_room(bird.profile, pos.y)\n\t\t\tbank = clampf(err * TURN_GAIN, -room, room)"
+    "find": "\t\tif t >= PREDICT_LAG:\n\t\t\tvar room := _bank_room(bird.profile, pos.y, frac)\n\t\t\tbank = move_toward(bank, clampf(err * TURN_GAIN, -room, room), roll * PREDICT_STEP)",
+    "replace": "\t\tif true:\n\t\t\tvar room := _bank_room(bird.profile, pos.y, frac)\n\t\t\tbank = clampf(err * TURN_GAIN, -room, room)"
    }
   ]
  },
@@ -1594,8 +1594,8 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\t\t\tvar room := _bank_room(bird.profile, pos.y)\n\t\t\tbank = move_toward(",
-    "replace": "\t\t\tvar room := _bank_room(bird.profile, 99.0)\n\t\t\tbank = move_toward("
+    "find": "\t\t\tvar room := _bank_room(bird.profile, pos.y, frac)\n\t\t\tbank = move_toward(",
+    "replace": "\t\t\tvar room := _bank_room(bird.profile, 99.0, frac)\n\t\t\tbank = move_toward("
    },
    {
     "file": "scripts/ai/ai_pilot.gd",
@@ -1613,7 +1613,7 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\tgamma_cmd = steer[1]\n",
+    "find": "\tgamma_cmd = steer_to[1]\n",
     "replace": ""
    }
   ]
