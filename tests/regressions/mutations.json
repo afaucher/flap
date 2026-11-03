@@ -1424,8 +1424,8 @@
   "edits": [
    {
     "file": "scripts/combat/launcher.gd",
-    "find": "if bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch)):",
-    "replace": "if bird.state == Bird.State.PERCHED:"
+    "find": "return bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch))",
+    "replace": "return bird.state == Bird.State.PERCHED"
    }
   ]
  },
@@ -1751,6 +1751,62 @@
     "file": "scripts/ai/ai_pilot.gd",
     "find": "\t\t_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "owl-wingbeat-loud",
+  "bug": "An owl's wingbeat as loud as a crow's (owls fly silently: their fringed flight feathers) (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/flight_audio.gd",
+    "find": "\t\"owl\": [70.0, 0.1, 0.02, 0.1],",
+    "replace": "\t\"owl\": [70.0, 0.1, 0.18, 0.1],"
+   }
+  ]
+ },
+ {
+  "id": "burst-sounds-swapped",
+  "bug": "A burst on the ground sounded like one on a trunk and the other way round (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "cue(\"burst_ground\" if world != null and at.y < 0.5 else \"burst_wood\", at)",
+    "replace": "cue(\"burst_wood\" if world != null and at.y < 0.5 else \"burst_ground\", at)"
+   }
+  ]
+ },
+ {
+  "id": "rack-clinks-off-base",
+  "bug": "The rearm clinks played on any perch, not only the base, where nothing refills (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tif l.on_base() and not l.full():",
+    "replace": "\tif l.bird.state == Bird.State.PERCHED and not l.full():"
+   }
+  ]
+ },
+ {
+  "id": "lock-beeps-flat",
+  "bug": "The lock's beeps kept one pitch and pace however far the lock had built (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\t\t\t_lock_next = _t + lerpf(0.4, 0.09, l.lock)",
+    "replace": "\t\t\t_lock_next = _t + 0.25"
    }
   ]
  }

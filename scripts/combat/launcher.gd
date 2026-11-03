@@ -31,6 +31,7 @@ var lock_target: Bird = null
 var lock := 0.0               ## 0..1 lock progress on lock_target
 var cooldown := 0.0
 var shots := 0
+var dry_fires := 0             ## fire pressed with the weapon empty (GameAudio: the dry click)
 var rearm_perch := -1          ## the base's perch (Perch.id): the only place to rearm and mend (-1: any perch)
 var _perched := 0.0
 var _birds: Array = []
@@ -76,7 +77,7 @@ func step(dt: float, world: CombatWorld) -> void:
 		lock = 0.0
 		lock_target = null
 	_update_lock(dt)
-	if bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch)):
+	if on_base():
 		_perched += dt
 		if _perched >= RESTOCK_TIME:
 			ammo = capacity.duplicate()
@@ -87,6 +88,18 @@ func step(dt: float, world: CombatWorld) -> void:
 	var want := inp.fire_pressed or (weapon == Weapon.ROCKETS and inp.fire_held)
 	if want and cooldown <= 0.0 and int(ammo[weapon]) > 0 and bird.state == Bird.State.FLYING:
 		fire(world)
+	elif inp.fire_pressed and int(ammo[weapon]) == 0:
+		dry_fires += 1
+
+
+## Sitting on the base's perch, where the rack refills and feathers grow back.
+func on_base() -> bool:
+	return bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch))
+
+
+## All rounds in and every feather on.
+func full() -> bool:
+	return ammo == capacity and bird.lost_feathers.is_empty()
 
 
 func fire(world: CombatWorld) -> Projectile:

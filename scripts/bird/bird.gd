@@ -504,6 +504,7 @@ func telemetry() -> Dictionary:
 	var p := profile
 	return {
 		"bird": p.display_name,
+		"species": p.id,
 		"state": state,
 		"position": global_position,
 		"velocity": m.velocity,

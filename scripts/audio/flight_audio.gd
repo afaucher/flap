@@ -6,12 +6,20 @@ extends Node
 ##   WHOOSH: crossing a speed band (SpeedBands) sweeps a band-passed noise burst -- rising when speeding up,
 ##     falling when slowing -- centred on a pitch of its own for each band, so each crossing is recognisable:
 ##     the low one is "slow enough to catch", the middle one is best glide.
-##   THUMP: each wingbeat, a short low thump.
+##   THUMP: each wingbeat, a short low thump, the species' own (BEATS): a crow's heavy whump, a hawk's and a kestrel's
+##     crisp beat, a sparrow's quick whirr, and an owl's next to nothing (its fringed flight feathers silence it).
 ## Synthesis is in render() (pure, testable headless); _process feeds it to an AudioStreamGenerator.
 
 const RATE := 22050.0
 const WHOOSH_LEN := 0.45
-const THUMP_LEN := 0.12
+## Wingbeat per species (telemetry "species"): [pitch Hz, length s, level, noise share].
+const BEATS := {
+	"crow": [85.0, 0.12, 0.18, 0.25],
+	"owl": [70.0, 0.1, 0.02, 0.1],
+	"hawk": [105.0, 0.09, 0.16, 0.4],
+	"falcon": [125.0, 0.07, 0.14, 0.5],
+	"sparrow": [190.0, 0.05, 0.09, 0.8],
+}
 
 var volume := 0.8
 var band := -1
@@ -38,6 +46,7 @@ var _whoosh_t := 1e9
 var _whoosh_from := 400.0
 var _whoosh_to := 1200.0
 var _thump_t := 1e9
+var _beat: Array = BEATS.crow
 
 
 func _ready() -> void:
@@ -47,6 +56,7 @@ func _ready() -> void:
 	gen.buffer_length = 0.15
 	_player = AudioStreamPlayer.new()
 	_player.stream = gen
+	_player.bus = &"Flight"
 	add_child(_player)
 	# Headless (tests) there is nothing to hear, and the dummy audio driver never releases a started
 	# generator playback (reported as a leak at exit). Tests drive render() directly.
@@ -70,6 +80,7 @@ func set_state(t: Dictionary) -> void:
 		_start_whoosh(band, nb)
 		events.append([band, nb])
 	band = nb
+	_beat = BEATS.get(t.get("species", "crow"), BEATS.crow)
 	var fc: int = t.flap_count
 	if _flaps >= 0 and fc > _flaps:
 		_thump_t = 0.0
@@ -129,9 +140,9 @@ func render(n: int) -> PackedVector2Array:
 			s += _h_band * env * 0.35 * volume
 			_whoosh_t += dt
 		# Thump: a low decaying sine with a little noise.
-		if _thump_t < THUMP_LEN:
-			var e := 1.0 - _thump_t / THUMP_LEN
-			s += (sin(TAU * 85.0 * _thump_t) + noise * 0.25) * e * e * 0.18 * volume
+		if _thump_t < float(_beat[1]):
+			var e := 1.0 - _thump_t / float(_beat[1])
+			s += (sin(TAU * float(_beat[0]) * _thump_t) + noise * float(_beat[3])) * e * e * float(_beat[2]) * volume
 			_thump_t += dt
 		s = clampf(s, -1.0, 1.0)
 		out[i] = Vector2(s, s)

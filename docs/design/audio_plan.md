@@ -1,7 +1,7 @@
 # Audio plan
 
-What Flap needs to sound like, what each sound must do, and where the sounds come from. Planning only: nothing
-here is built yet. Dated 2026-11-02.
+What Flap needs to sound like, what each sound must do, and where the sounds come from. Dated 2026-11-02. The
+first pass is built: see **As built** at the end.
 
 ## Where we are
 
@@ -218,11 +218,59 @@ Each step lands with its tests, a mutation entry per fixed bug, and an A/B recor
 scripted flight before and after, via the bird lab or the range) in place of the A/B images we use for visual
 changes.
 
-## Decisions for you
+## Decisions
 
-1. **Sonniss: yes or no?** It means a gitignored `assets/audio/external/`, fetched by a setup step from your own
-   download, so a fresh clone builds with CC0 stand-ins only. The alternative is CC0, CC BY and our own bakes only.
-2. **The owl's voice:** a barn owl screech (true to the model) or a hoot (what players expect)?
+Settled (user, 2026-11-02):
+- **Synthesize what the plan proposed.** The user will record claws on a cat tree for the perch catch.
+- **Fireworks:** use ..\cast's firework recording for the bursts.
+
+Still open:
+1. **Sonniss:** not used so far. Using it means a gitignored `assets/audio/external/`, fetched by a setup step from
+   your own download.
+2. **The owl's voice:** a barn owl screech for now (true to the model). The alternative is a hoot (what players
+   expect).
 3. **Music:** none, menu only, or a light in-flight score?
-4. **Vocal birds:** AI birds call during fights (crows mobbing, kestrels alarm-calling). Should your own bird
-   ever call, for example on a button?
+4. **Your own bird's call:** should your bird ever call, for example on a button?
+
+## As built (2026-11-02)
+
+**Code** (`scripts/audio/`):
+- `GameAudio` decides what plays when. Its inputs:
+  - your bird's telemetry;
+  - the `Bird` signals (`perched`, `released`, `bonked`);
+  - the `CombatWorld` signals (`launched`, `burst`, `struck`, `downed`);
+  - the launchers' public state (`lock`, `lock_target`, `shots`, `dry_fires`, `on_base()`, `full()`).
+
+  It records every cue it asks for in `events`, so `test_sounds` checks what would be heard, headless.
+- `Sfx` plays cues, ported from ..\cast's `Sfx`:
+  - pooled players and a voice cap per cue;
+  - a minimum gap between plays, and pitch jitter;
+  - takes picked at random, never the same one twice running;
+  - 3D players with Doppler and a distance low-pass.
+- `FlightAudio` keeps the live wind, whooshes and wingbeats. The wingbeat is now per species, and the owl's is next to
+  silent. It plays on the Flight bus.
+
+**Buses** (`default_bus_layout.tres`):
+- Master has a limiter.
+- Flight and Ambience duck under SFX through a sidechain compressor.
+- Ambience also has a short forest reverb.
+- UI is dry.
+
+**Sounds:**
+- `SoundRecipes` holds 46 sounds (89 takes), built on `SoundDsp` (filters, noise, tones, note lists, loops).
+- `tools/bake_sounds.gd` bakes them into `assets/audio/sfx/` in about 4 s.
+- Everything is synthesized except the bursts, which are built on the bang of the CC0 firework recording that ..\cast
+  uses (Freesound 336008), pitched up 3-7 semitones.
+- The pinewood birdsong is squirrel racer's recipes, ported.
+- **Stand-ins:**
+  - `perch_catch`, until the cat-tree recording;
+  - the five species' calls, synthesized after their real calls.
+
+**Not built yet:**
+- the near-miss whizz;
+- the canopy brush;
+- the out-of-stamina rasp;
+- trunk creaks and outpost life;
+- clearing versus trunk reverb;
+- menu sounds;
+- per-bus volume in the menu.

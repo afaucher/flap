@@ -9,6 +9,7 @@ source URL, author and licence here.
 |---|---|---|
 | `assets/feathers/` | Feather textures | Baked by `tools/bake_feathers.gd` from the project's own procedural feather shader |
 | `assets/legs/` | Leg scale tiles | Baked by `ScaleTile` (`scripts/bird/scale_tile.gd`) |
+| `assets/audio/sfx/` | Every game sound | Baked by `tools/bake_sounds.gd` from `SoundRecipes` (`scripts/audio/sound_recipes.gd`); the bursts are built on the Freesound recording below |
 
 ## Downloaded
 
@@ -23,3 +24,10 @@ packed as `arm`, displacement).
 | `assets/textures/bark/jolcham_oak_bark_01/` | Jolcham Oak Bark 01 | Charlotte Baglioni | 1.0 x 2.0 m | <https://polyhaven.com/a/jolcham_oak_bark_01> | CC0 1.0 |
 | `assets/textures/ground/forrest_ground_03/` | Forest Ground 03 (pine-needle litter) | Rob Tuytel | 2.0 x 2.0 m | <https://polyhaven.com/a/forrest_ground_03> | CC0 1.0 |
 | `assets/textures/planks/weathered_planks/` | Weathered Planks | Dario Barresi, Dimitrios Savva | 2.0 x 2.0 m | <https://polyhaven.com/a/weathered_planks> | CC0 1.0 |
+
+Freesound (CC0 1.0, public domain dedication; no attribution required, credited here anyway). Copied 2026-11-02 from
+`../cast/assets/audio/third_party/freesound/`, which downloaded it on 2026-10-18.
+
+| Path | Title | Author | Source | Licence |
+|---|---|---|---|---|
+| `assets/audio/third_party/freesound/336008__rudmer_rotteveel__whistle-and-explosion-single_firework.wav` | Whistle and Explosion Single_Firework | Rudmer_Rotteveel | <https://freesound.org/people/Rudmer_Rotteveel/sounds/336008/> | CC0 1.0 |

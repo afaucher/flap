@@ -18,6 +18,8 @@ extends Node3D
 
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String)
+signal launched(p: Projectile)        ## a round left its launcher (GameAudio: the launch and its motor)
+signal struck(bird: Bird, at: Vector3)   ## a burst hurt `bird` (GameAudio: the feather puff and its alarm call)
 
 static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.fuse)
 const SHOVE := 4.0          ## m/s, push from a burst at its centre
@@ -125,6 +127,7 @@ func spawn(p: Projectile) -> void:
 	_smoke.append({"id": p.id, "pts": [[p.pos, _clock]], "open": true, "kind": p.kind})
 	if player != null and p.shooter == player.bird:
 		stats.shots += 1
+	launched.emit(p)
 
 
 func _physics_process(dt: float) -> void:
@@ -278,6 +281,7 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	b.stun = maxf(b.stun, HIT_STUN)
 	b.lose_feathers(at, feathers_for(strength))
 	_feathers(b, away)
+	struck.emit(b, at)
 	if was_up and b.is_down():
 		b.stun = DOWN_STUN
 		if by_player:
