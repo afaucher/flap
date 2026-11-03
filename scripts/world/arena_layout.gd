@@ -91,6 +91,9 @@ var boundary := 85.0                ## the arena is this circle: trees inside it
 var ceiling := 60.0                 ## soft ceiling
 var clearing_radius := 16.0
 var avenues: Array = []             ## of [Vector2 a, Vector2 b, float half_width]
+## Open ground in the wood (Pinewood): {centre: Vector2, r: float, ph: float, kind: "clearing" | "glade" | "gap"}
+## -- no standing pine inside its edge (Pinewood.edge: irregular, about r out).
+var openings: Array = []
 var ring_radius := 56.0
 var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData

@@ -220,6 +220,18 @@ So **trunk density falls with height**: 6.0, 2.1 and 0.4 trunks per 1000 m² abo
 
 That gives three distinct altitude bands that play differently. Those bands are where combat will live (section 9).
 
+**The pine wood** (`Pinewood`, the game's default arena) has the structure of an old stand instead of lanes. Its
+pines grow in clumps, 5.5 m apart inside one and 13 m in the thin ground between. A noise field about 34 m across
+sets where the clumps are. The open ground:
+- **The clearing:** 40 m across round the big oak.
+- **A sunlit glade:** about as big, 40 to 55 m out.
+- **Gaps:** seven smaller ones, 12 to 20 m across.
+- **The oaks' glades:** an open space round each oak.
+
+Young pines seed in groups where the light gets in, and bracken grows thicker there too. `test_pinewood` holds
+this: no pine stands in an opening, the counts in 16 m squares vary more than a random scatter's, and fewer than a
+fifth of the young pines are in shade. `tests/probe_layout_map.gd` draws the plan.
+
 ## 6. The AI pilot (`scripts/ai/ai_pilot.gd`, `scripts/ai/flight_planner.gd`)
 
 > **Trunk bumps (closed 2026-11-02).** The AI used to clip trees about once per perch: 25 bumps for 25
@@ -293,7 +305,7 @@ The climb budget is scaled by the species' sprint × wingbeat strength, so the h
 | Sparrow | 7 | 7 |
 | **Flock** | **35** (0 bonks) | **32** (3 bonks) |
 
-and in the pine wood (seed 7): crow 6, owl 5, hawk 6, falcon 0, sparrow 4; **21** (9 bonks).
+and in the pine wood (seed 7, clumped): crow 8, owl 6, hawk 4, falcon 0, sparrow 3; **21** (1 bonk).
 
 Every species must chain at least 4 perches across both arenas.
 
