@@ -6,13 +6,12 @@ extends RefCounted
 ##            `scan_every` s), within VIEW_RANGE, line of sight clear of the trunks -- each as it was `reaction` s
 ##            ago, carried on to now along the velocity it had then; one it loses is remembered for MEMORY s,
 ##            carried on along its last velocity.
-##   threats  rounds in flight it can see by their smoke (within ROUND_RANGE): time to closest approach and miss
-##            distance, from straight-line motion -- or, for a seeker guided at it, a hit at its time to go.
-##   locked   enemy launchers holding a lock on it above half (the HUD's lock warning).
+##   threats  rounds coming at it, as the HUD warns the player (CombatWorld.warnings_for): time to closest approach
+##            and miss distance from a rocket's straight line; a seeker taken as guided at it, a hit at its time to go.
+##   locked   a lock on it above half (the HUD's lock warning), and where from.
 ## Line of sight uses ArenaLayout's geometry, refreshed every LOS_EVERY s per bird, never physics queries.
 
 const VIEW_RANGE := 90.0
-const ROUND_RANGE := 45.0
 const MEMORY := 3.0
 const LOS_EVERY := 0.15
 const HISTORY := 0.6        ## s of past states kept per bird (the reaction delay reads back into it)
@@ -107,32 +106,22 @@ func update(dt: float) -> Picture:
 			tr.pos += tr.vel * dt   # (remembered: carried on along its last velocity)
 		if clock - tr.seen_at <= MEMORY:
 			pic.tracks.append(tr)
-	# Rounds in flight, by their smoke.
+	# What the HUD warns the player of (CombatWorld.warnings_for): rounds coming at it, locks on it. A seeker
+	# coming is taken as guided at it; a rocket's miss is from its straight line.
+	var w := world.warnings_for(me)
 	var my_vel := me.model.velocity
-	for p in world.projectiles:
-		if p.shooter == me or not p.alive:
-			continue
-		var rel: Vector3 = p.pos - my_pos
-		if rel.length() > ROUND_RANGE:
-			continue
-		var rv: Vector3 = p.vel - my_vel
-		var guided: bool = p.kind == Projectile.Kind.SEEKER and p.target == me
-		var tgo: float
-		var miss: float
+	for r in w.rounds:
+		var rel: Vector3 = (r.pos as Vector3) - my_pos
+		var rv: Vector3 = (r.vel as Vector3) - my_vel
+		var guided: bool = r.kind == Projectile.Kind.SEEKER
+		var tgo := clampf(-rel.dot(rv) / maxf(rv.length_squared(), 1e-4), 0.0, 5.0)
+		var miss := 0.0 if guided else (rel + rv * tgo).length()
 		if guided:
-			tgo = rel.length() / maxf(-rv.dot(rel.normalized()), 1.0)
-			miss = 0.0
-		else:
-			tgo = clampf(-rel.dot(rv) / maxf(rv.length_squared(), 1e-4), 0.0, 5.0)
-			miss = (rel + rv * tgo).length()
-		if tgo <= 0.0 and not guided:
-			continue   # (past it, going away)
-		pic.threats.append({"pos": p.pos, "vel": p.vel, "tgo": tgo, "miss": miss, "kind": p.kind, "guided": guided})
-	# Lock warnings.
-	for l in world.launchers:
-		if l.bird != me and is_instance_valid(l.bird) and l.lock_target == me and l.lock > 0.5 and not world.friends(me, l.bird):
-			pic.locked = true
-			pic.locked_from = l.bird.global_position
+			tgo = float(r.tgo)
+		pic.threats.append({"pos": r.pos, "vel": r.vel, "tgo": tgo, "miss": miss, "kind": r.kind, "guided": guided})
+	if not (w.locks as Array).is_empty():
+		pic.locked = true
+		pic.locked_from = w.locks[0].from
 	return pic
 
 
