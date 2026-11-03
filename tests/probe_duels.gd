@@ -1,6 +1,7 @@
 extends TestCase
 ## Diagnostic: 1 v 1 duels between combat-AI birds (and an AI against the range's racetrack target), printing the
-## outcomes. DUEL=crow,hawk (the two species), DUEL_SECONDS=60, DUEL_SKILL=pilot, DUEL_FOREST=greybox.
+## outcomes. DUEL=crow,hawk (the two species), DUEL_SECONDS=60, DUEL_SKILL=pilot, DUEL_FOREST=greybox, DUEL_ARENA=7 (the
+## wood's seed), DUEL_TRACE=1 (the first bird every half second).
 
 func _init() -> void:
 	timeout_sec = 600.0
@@ -10,7 +11,8 @@ func setup() -> void:
 	var ids := (OS.get_environment("DUEL") if OS.get_environment("DUEL") != "" else "crow,crow").split(",")
 	var secs := float(OS.get_environment("DUEL_SECONDS")) if OS.get_environment("DUEL_SECONDS") != "" else 60.0
 	var skill := CombatSkill.preset(OS.get_environment("DUEL_SKILL"))
-	var layout := ArenaLayout.generate(7) if OS.get_environment("DUEL_FOREST") == "greybox" else Pinewood.generate(7)
+	var arena_seed := int(OS.get_environment("DUEL_ARENA")) if OS.get_environment("DUEL_ARENA") != "" else 7
+	var layout := ArenaLayout.generate(arena_seed) if OS.get_environment("DUEL_FOREST") == "greybox" else Pinewood.generate(arena_seed)
 	for id in ids:
 		print(CombatStyle.of(BirdProfile.by_id(id)).describe())
 	var a := CombatWorld.far_base(layout, Vector3(60, 0, 0))

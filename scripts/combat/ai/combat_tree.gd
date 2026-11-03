@@ -511,8 +511,14 @@ class Attack extends ActionLeaf:
 			aim = Engagement.lag_point(t.pos, t.vel, 6.0)
 			i.opts.flap = "none"
 		else:
+			# Range control (4.4): hold the weapon's band -- seekers far enough out to keep a jinking bird in the lock
+			# cone (and past the lock's 6 m minimum), rockets close enough for a short flight -- by speed.
+			var band: Vector2 = SEEKER_BAND if br.launcher.weapon == Launcher.Weapon.SEEKERS else ROCKET_BAND
+			var dv := 1.5 if d > band.y else (-2.0 if d < band.x else 0.0)
 			i.opts.flap = "hold"
-			i.opts.speed = clampf(t.vel.length() + 1.5, br.style.v_best * 0.9, br.style.v_best * 1.4)
+			i.opts.speed = clampf(t.vel.length() + dv, br.style.v_best * 0.85, br.style.v_best * 1.4)
+			if d < band.x and close > 0.5:
+				i.opts.flap = "none"
 		var err := deg_to_rad(br.skill.aim_error_deg)
 		var to := aim - pos
 		aim = pos + to.rotated(Vector3.UP, br.rng.randf_range(-err, err))
@@ -520,11 +526,15 @@ class Attack extends ActionLeaf:
 		return SUCCESS
 
 
+const SEEKER_BAND := Vector2(12.0, 28.0)   ## m behind a target an attacker with seekers holds
+const ROCKET_BAND := Vector2(8.0, 22.0)    ## ... with rockets
+
+
 ## Boom and zoom (docs/design/combat_ai.md, 4.4 and 5), for the birds that can't turn with their targets:
 ##   climb  -- run out to ROOM m from it, climbing, then turn back at a point STOOP_HEIGHT above it;
 ##   stoop  -- with the height and it ahead within reach (any aspect: a head-on pass too), dive on its rocket lead
-##             (which follows the turn it's seen making), wings unflapped, weapons free, until past it (close, behind
-##             me, or below it) or out of reach;
+##             (which follows the turn it's seen making; aimed past by how far the gunsight trails it), wings
+##             unflapped, weapons free, until past it (close, behind me, or below it) or out of reach;
 ##   zoom   -- pull up and climb away along my heading, trading the dive's speed for height, then climb again.
 class BoomAndZoom extends ActionLeaf:
 	const STOOP_HEIGHT := 9.0
@@ -551,7 +561,7 @@ class BoomAndZoom extends ActionLeaf:
 			else:
 				i.mode = "attack"
 				i.fire = true
-				var aim := br.rocket_lead(t)
+				var aim := CombatTree._overlead(br, br.rocket_lead(t))
 				i.aim = aim
 				i.opts.gamma = clampf(atan2(aim.y - pos.y, maxf(Vector2(aim.x - pos.x, aim.z - pos.z).length(), 1.0)), deg_to_rad(-60.0), deg_to_rad(10.0))
 				i.opts.flap = "none"
@@ -586,6 +596,18 @@ class BoomAndZoom extends ActionLeaf:
 		i.opts.flap = "hold"
 		i.opts.speed = br.style.v_best
 		return SUCCESS
+
+
+## Aim past `lead` by how far the gunsight trails it (where my nose points at that range): the guidance lags a
+## moving lead by a few degrees, which is a metre or two at 20 m -- outside the fuse.
+static func _overlead(br: CombatBrain, lead: Vector3) -> Vector3:
+	var l := br.launcher
+	var m := l.muzzle()
+	var nose := m + l.aim() * m.distance_to(lead)
+	return lead + (lead - nose) * OVERLEAD
+
+
+const OVERLEAD := 1.4
 
 
 ## Get into a shooting position: behind it, and above by the style's energy wanted.

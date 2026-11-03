@@ -1,9 +1,8 @@
 extends TestCase
 ## The combat AI in the pine wood (docs/design/combat_ai.md, 8), pilot skill:
 ##   - against the range's racetrack target flying straight on, a rocket bird and a seeker bird each land hits
-##     and down it within 40 s; the hawk and the falcon, boom and zoom, stoop on it and land hits;
-##   - against the target breaking when shot at, it lands more hits than the range's old demo shooter
-##     (CircuitPilot's chase + the trigger-finger AICombat);
+##     and down it within 40 s (the hawk and the falcon, boom and zoom: test_combat_boom_zoom);
+##   - (against the target breaking when shot at, it beats the range's old demo shooter: test_combat_vs_demo);
 ##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this;
 ##   - in a long turning fight with a sparrow that breaks and turns (an AI with nothing to shoot), it banks no
 ##     harder than its lift holds at the speed it has: it never stalls, nor spirals down (a hawk and a sparrow,
@@ -28,16 +27,6 @@ func setup() -> void:
 		check(r.hits >= 3, "%s lands hits on a target flying straight on (%d)" % [id, r.hits])
 		check(r.downs >= 1, "%s downs it within 40 s" % id)
 		check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
-	# The energy fighters can't turn with it: they boom and zoom (climb above, stoop through with rockets, zoom up).
-	for id in ["hawk", "falcon"]:
-		var r: Dictionary = await _versus_racetrack(id, false, false)
-		print("%s (boom and zoom) vs the racetrack target, straight on: %d hits, %d shots, %d stoops, %d bonks" % [id, r.hits, r.shots, r.stoops, r.bonks])
-		check(r.stoops >= 2 and r.hits >= 2, "%s stoops on it and lands hits (%d stoops, %d hits)" % [id, r.stoops, r.hits])
-		check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
-	var ai: Dictionary = await _versus_racetrack("crow", true, false)
-	var demo: Dictionary = await _versus_racetrack("crow", true, true)
-	print("against the evading target: the combat AI %d hits (%d shots), the old demo shooter %d hits (%d shots)" % [ai.hits, ai.shots, demo.hits, demo.shots])
-	check(ai.hits > demo.hits, "the combat AI lands more hits on the evading target than the old demo shooter (%d vs %d)" % [ai.hits, demo.hits])
 	await _rearms_at_base()
 	for id in ["hawk", "sparrow"]:
 		for dir in [1.0, -1.0]:

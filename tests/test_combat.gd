@@ -568,6 +568,11 @@ func _range_match() -> void:
 			shots += l.shots
 			var st := CombatStyle.of(l.bird.profile)
 			kinds_ok = kinds_ok and int(l.capacity[st.weapon]) > 0 and l.weapon == st.weapon
+	var modes := {}
+	for b in ai:
+		var m: String = (b.controller as CombatPilot).brain.intent.mode
+		modes[m] = int(modes.get(m, 0)) + 1
+	print("range match after 30 s: %d rounds fired, modes %s, score %s" % [shots, modes, r.world.score])
 	check(shots >= 2, "the AI birds fight: %d rounds fired in 30 s" % shots)
 	check(kinds_ok, "each AI bird carries its species' round")
 	r.queue_free()

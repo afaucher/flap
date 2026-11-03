@@ -1,26 +1,31 @@
 extends TestCase
-## Diagnostic: the combat AI against the old demo shooter on the evading racetrack target, over several pine wood
-## seeds (test_combat_ai's comparison, one seed there).
-##   .	est_runner.ps1 -TestName probe_combat_seeds
+## The combat AI (pilot skill, a crow with seekers) against the range's old demo shooter (CircuitPilot's chase + the
+## trigger-finger AICombat) on the racetrack target that breaks when shot at, 40 s each, over four pine wood seeds:
+## the combat AI lands more hits in all, and isn't beaten by more than one hit on any seed.
 
 
 func _init() -> void:
-	timeout_sec = 600.0
+	timeout_sec = 900.0
 
 
 func setup() -> void:
 	var tot := [0, 0]
+	var worst := 0
 	for s in [7, 3, 11, 21]:
 		var ai: Dictionary = await _versus_racetrack("crow", true, false, s)
 		var demo: Dictionary = await _versus_racetrack("crow", true, true, s)
 		tot[0] += ai.hits
 		tot[1] += demo.hits
-		print("SEEDS pine wood %d, evading target: combat AI %d hits (%d shots), demo shooter %d hits (%d shots)" % [s, ai.hits, ai.shots, demo.hits, demo.shots])
-	print("SEEDS total: combat AI %d, demo shooter %d" % tot)
+		worst = maxi(worst, demo.hits - ai.hits)
+		print("pine wood %d, evading target: combat AI %d hits (%d shots), demo shooter %d hits (%d shots)" % [s, ai.hits, ai.shots, demo.hits, demo.shots])
+	print("in all: combat AI %d hits, demo shooter %d" % tot)
+	check(tot[0] > tot[1], "the combat AI lands more hits on the evading target than the old demo shooter (%d vs %d)" % tot)
+	check(worst <= 1, "and is never beaten by more than a hit on one seed (worst %d)" % worst)
 	finish()
 
 
-## (test_combat_ai's, with the arena seed a parameter)
+## One bird (the combat AI, or with `demo` the old chase-and-trigger) against the racetrack target for 40 s in the pine
+## wood of `arena_seed`.
 func _versus_racetrack(id: String, evade: bool, demo: bool, arena_seed: int) -> Dictionary:
 	var layout := Pinewood.generate(arena_seed)
 	var home := CombatWorld.far_base(layout, Vector3(60, 0, 0))

@@ -551,8 +551,15 @@ birds in a 3 v 3 (`docs/design/performance.md`).
   the hits from 4 to 16 in 90 s.
 - **Boom and zoom** (hawk, falcon: `CombatStyle.prefers_height`): the Fight branch's `BoomZoom` -- climb (run out to
   30 m from the target, climbing at 16 deg while above v*, then back at a point 9 m above it), stoop (with 5+ m of
-  height, the target ahead within 45 deg and 8-32 m: dive on the rocket lead, unflapped, weapons free), zoom (pull up 30 deg along the heading while faster than v*). Against the
-  racetrack target the hawk lands 4 hits and the falcon 3 in 40 s (before: none).
+  height, the target ahead within 45 deg and 8-32 m: dive on the rocket lead, unflapped, weapons free, aiming past the
+  lead by 1.4x how far the gunsight trails it -- without that, in the clumped wood, they never fired), zoom (pull up
+  30 deg along the heading while faster than v*). `test_combat_boom_zoom`: against the racetrack target, 40 s in each
+  of three woods, the hawk stoops 7 times and lands 4 hits, the falcon 9 and 3 (before: no hits). Their hit rate is
+  the weakest of the five (avoidance cuts many stoops short among the clumps): stage 6 material.
+- **Range control** in Attack: seekers hold 12-28 m behind the target, rockets 8-22 m, by speed. The seeker crow had
+  been closing to 5-10 m, inside the lock's 6 m minimum and too close to keep a jinking bird in the cone; with it the
+  combat AI beats the old demo shooter on the evading target in the clumped wood, 13 hits to 11 over four woods
+  (`test_combat_vs_demo`, which replaces test_combat_ai's one-seed comparison).
 - **Ambush** (owl: `CombatStyle.ambusher`): a perch 4-15 m above where it has seen the enemies fly
   (`CombatBrain.fight_area`, a slow average), 15-45 m out from there; sit (resting) until one passes below within
   30 m not flying straight at it, then drop off and fight; give up after `skill.ambush_patience` or when spotted.

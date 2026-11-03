@@ -2326,5 +2326,19 @@
     "replace": "\t\tif false:\n"
    }
   ]
+ },
+ {
+  "id": "combat-stoop-no-overlead",
+  "bug": "In a stoop the gunsight trailed the moving lead by 5-20 deg (1.5-2.5 m at 20 m, outside the fuse): fire control held every shot; in the clumped pine wood hawk and falcon never fired (2026-11-02).",
+  "tests": [
+   "test_combat_boom_zoom"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "const OVERLEAD := 1.4",
+    "replace": "const OVERLEAD := 0.0"
+   }
+  ]
  }
 ]

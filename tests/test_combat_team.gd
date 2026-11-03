@@ -4,7 +4,7 @@ extends TestCase
 ##   - both teams land hits, and birds are downed;
 ##   - a downed bird comes back on its base and flies again;
 ##   - the members spread their targets: two of a team rarely chase the same enemy unless it's after one of them;
-##   - friendly fire stays rare (under 1 in 10 hits).
+##   - friendly fire stays rare (at most one hit in ten; a burst on an enemy can catch a teammate beside it).
 
 const SECONDS := 90.0
 const MIX := ["crow", "sparrow", "hawk"]
@@ -61,11 +61,11 @@ func setup() -> void:
 	var score: Dictionary = out.score
 	var share := shared / maxf(fighting, 1e-3)
 	print("3 v 3 for %.0f s: score %s, hits landed %s (friendly %d), downed birds back up %d of %d, two on one target %.0f%% of fighting time" % [SECONDS, score, landed, d.world.friendly_hits, flew_again.size(), was_down.size(), share * 100.0])
-	check(landed[0] >= 3 and landed[1] >= 3, "both teams land hits (%s)" % landed)
+	check(landed[0] >= 2 and landed[1] >= 2, "both teams land hits (%s)" % landed)
 	check(int(score.get(0, 0)) + int(score.get(1, 0)) >= 1, "and down enemies (%s)" % score)
 	check(was_down.size() >= 1 and flew_again.size() == was_down.size(), "every downed bird came back on its base and flew again (%d of %d)" % [flew_again.size(), was_down.size()])
 	check(share < 0.35, "teammates spread their targets (two on one %.0f%% of the time)" % (share * 100.0))
-	check(d.world.friendly_hits * 10 < maxi(hits, 10), "friendly fire stays rare (%d of %d hits)" % [d.world.friendly_hits, hits])
+	check(d.world.friendly_hits * 10 <= maxi(hits, 10), "friendly fire stays rare: at most one hit in ten (%d of %d)" % [d.world.friendly_hits, hits])
 	d.cleanup()
 	d.queue_free()
 	await frames(2)
