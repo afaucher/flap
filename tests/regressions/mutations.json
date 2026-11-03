@@ -2777,5 +2777,24 @@
     "replace": "\tif false:"
    }
   ]
+ },
+ {
+  "id": "wood-grain-flat",
+  "bug": "The outposts' wood had no relief: the planks scan's normals at their own depth, no height, its roughness flat, so a sun never caught the grain -- smooth, evenly lit boards beside the bark's deep fissures (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "uniform float normal_depth = 2.6;",
+    "replace": "uniform float normal_depth = 1.0;"
+   },
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);",
+    "replace": ""
+   }
+  ]
  }
 ]

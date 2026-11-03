@@ -595,7 +595,7 @@ func _floor() -> void:
 ## ends; the round landing rail along its outer edge (the perch), rope-wound where the feet go, strapped at its
 ## ends; a hangar at the back by the trunk (on the right, seen from the rail) of vertical boards on battens under
 ## a pitched plank roof, a roundel painted on its front, a slatted opening in its outer side over a landing board;
-## brass-bound ammo boxes stacked by it; a rope ladder and a coil of rope off the far side, a windsock on its pole,
+## brass-bound ammo boxes stacked by it; a coil of rope off the far side, a windsock on its pole,
 ## pennants. The planks are their own meshes (_plank_mesh, test_planks); all the rest is one TimberMesh (one draw
 ## call: _outpost_frame), shared by the outposts of a size on a trunk of a size. Collision: the deck's box, the
 ## rail's capsule, the hangar's box -- the props are drawn only.
@@ -971,9 +971,8 @@ func _crates(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenera
 		tm.box("crate_latch", Transform3D(xb, c + b.y * (cs.y * 0.5 - 0.024) - b.z * (cs.z * 0.5 + 0.004)), Vector3(0.026, 0.016, 0.005), TimberMesh.Kind.BRASS, rng.randf())
 
 
-## The props (drawn only: no collision): off the deck's far end from the hangar, a rope ladder hanging from the
-## rim beam and a coil of rope on a peg beside it; a windsock on its pole at the back corner, a pennant at its top
-## and another on a rod at the hangar's roof.
+## The props (drawn only: no collision): off the deck's far end from the hangar, a coil of rope on a peg on the rim
+## beam; a windsock on its pole at the back corner, a pennant at its top and another on a rod at the hangar's roof.
 func _props(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenerator, d: Callable) -> void:
 	var X := Vector3.RIGHT
 	var Y := Vector3.UP
@@ -981,21 +980,7 @@ func _props(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenerat
 	var far := -HANGAR_SIDE   # (the deck's other end)
 	var ex: float = far * (o.width * 0.5 + 0.012)
 	var top := -PLANK_T - 0.02
-	# The ladder: two ropes, rungs every 0.2 m, hung from two pegs on the rim beam.
-	var zs := [0.0, 0.24]
-	var drop := 1.3
-	for z: float in zs:
-		var a: Vector3 = d.call(ex, top, z)
-		var b: Vector3 = d.call(ex, top - drop, z)
-		tm.cylinder("ladder_rope", TimberMesh.frame_along(b, a, Z), 0.0055, drop, TimberMesh.Kind.ROPE, rng.randf(), 6)
-		tm.cylinder("peg", TimberMesh.frame_along(d.call(ex - far * 0.022, top, z), d.call(ex + far * 0.01, top, z), Y), 0.007, 0.022, TimberMesh.Kind.IRON, rng.randf(), 6)
-	var ry := top - 0.12
-	while ry > top - drop + 0.05:
-		var a: Vector3 = d.call(ex, ry, zs[0] - 0.012)
-		var b: Vector3 = d.call(ex, ry, zs[1] + 0.012)
-		tm.cylinder("ladder_rung", TimberMesh.frame_along(a, b, Y), 0.009, a.distance_to(b), TimberMesh.Kind.ROUND, rng.randf(), 6)
-		ry -= 0.2
-	# The coil: turns of rope hung on a peg beside the ladder, each a little off the last.
+	# The coil: turns of rope hung on a peg, each a little off the last.
 	var pz := 0.34
 	var peg: Vector3 = d.call(ex, top - 0.005, pz)
 	tm.cylinder("peg", TimberMesh.frame_along(d.call(ex - far * 0.022, top - 0.005, pz), d.call(ex + far * 0.03, top - 0.005, pz), Y), 0.007, 0.052, TimberMesh.Kind.IRON, rng.randf(), 6)
@@ -1165,6 +1150,7 @@ func _timber(key: String, params: Dictionary) -> Material:
 		m.set_shader_parameter("scan_albedo", load(w + "_diff_2k.jpg"))
 		m.set_shader_parameter("scan_normal", load(w + "_nor_gl_2k.jpg"))
 		m.set_shader_parameter("scan_arm", load(w + "_arm_2k.jpg"))
+		m.set_shader_parameter("scan_disp", load(w + "_disp_2k.jpg"))
 		m.set_shader_parameter("scan_tint", Color(1.58, 1.3, 1.0))
 		for p in params:
 			m.set_shader_parameter(p, params[p])

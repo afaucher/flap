@@ -19,6 +19,13 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 uniform sampler2D scan_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D scan_disp : hint_default_black, filter_linear_mipmap_anisotropic, repeat_enable;
+// The grain in relief (as the bark's fissures are): the scan's normals deepened, and its height (raised latewood
+// ridges, eroded grooves between) bumped in, with fine ridges of its own along the grain; the ridges worn smoother
+// than the grooves, so a raking sun runs highlights along the grain and the grooves stay dark.
+uniform float normal_depth = 2.6;
+uniform float grain_depth = 0.008;       // m from the grooves to the ridges' tops
+uniform float ridge_gloss = 0.55;        // the ridges' roughness, as a share of the scan's
 uniform float scan_tile = 2.0;           // m the scan covers
 uniform vec3 scan_tint : source_color = vec3(1.0);
 uniform vec3 beam_tint : source_color = vec3(0.8, 0.74, 0.68);   // the squared beams: heavier, darker timber
@@ -316,11 +323,24 @@ void fragment() {
 		float im = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-20));
 		T *= im;
 		B *= im;
-		vec2 nxy = sn.xy * 2.0 - 1.0;
+		vec2 nxy = (sn.xy * 2.0 - 1.0) * normal_depth;
 		nxy.x *= m;
 		nxy.y *= vdir;
-		vec3 nt = vec3(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
+		vec3 nt = normalize(vec3(nxy, 1.0));
 		nrm = normalize(T * nt.x - B * nt.y + N * nt.z);
+		// The grain's relief: the scan's height, and fine ridges along the grain (they fade out with distance, where
+		// a pixel spans several: no shimmer).
+		float hd = textureGrad(scan_disp, uv, gx, gy).r;
+		float fine = 1.0 - smoothstep(0.3, 1.0, fwidth(cc) * 220.0);
+		float wav = vnoise(vec2(cc * 35.0 + s * 7.0, al * 1.5)) * 3.0 + vnoise(vec2(cc * 90.0, al * 6.0));   // (rings wander)
+		float rid = smoothstep(0.35, 0.85, vnoise(vec2(cc * 220.0 + wav + s * 13.0, al * 2.0))) * vnoise(vec2(cc * 40.0, al * 0.8 + s * 3.0));
+		float hg = mix(hd, hd * 0.85 + rid * 0.15, fine);
+		nrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);
+		float ridge = smoothstep(0.5, 0.8, hg);
+		rough = mix(min(rough * 1.08, 1.0), rough * ridge_gloss, ridge);
+		ao *= mix(0.4, 1.0, smoothstep(0.15, 0.6, hd));
+		col *= mix(0.72, 1.06, smoothstep(0.2, 0.75, hg));   // (dirt and shade down in the grooves, the ridges sun-bleached)
+		spec = 0.5;
 		if (groove > 0.0) {
 			nrm = bump(nrm, dpx, dpy, -groove * 0.002);
 		}

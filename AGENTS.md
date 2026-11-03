@@ -24,7 +24,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
   collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
   `TimberMesh` each (framing, ironwork, rail, the hangar back-right seen from the rail, ammo boxes, and drawn-only
-  props: rope ladder, coil, windsock, pennants; every vertex carries its piece's grain frame, so `planks.gdshader`
+  props: rope coil, windsock, pennants; every vertex carries its piece's grain frame, so `planks.gdshader`
   draws end grain on end faces and maps the planks scan at its true scale). Collision: deck box, rail capsule,
   hangar box only. Look with `tests/probe_timber.gd` (close-ups, `--warm`) and `tests/probe_outpost_concept.gd`
   (the menu's outpost framed like the concept, `--view`, `--warm`).

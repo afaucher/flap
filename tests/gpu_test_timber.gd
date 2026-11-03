@@ -9,6 +9,9 @@ extends TestCase
 ##  - The grain runs along a brace (as along a plank): the picture varies less along the piece than across it,
 ##    the piece turned either way on screen.
 ##  - A plank's top is one scan board, no gap line down its middle.
+##  - The grain stands in relief and catches the light: a plank's top raked by a low sun from one side and then the
+##    other (the same height, mirror azimuths: flat wood would come out the same both times) shows its grain lit
+##    and shadowed the opposite ways -- the ridges' sunward flanks bright, then dark.
 ## A GPU test: runs windowed (.\test_runner.ps1 -Gpu), since the headless renderer runs no shaders.
 
 const PX := 160
@@ -166,16 +169,43 @@ func setup() -> void:
 		var med := _median(inner)
 		var lo: float = inner.min()
 		check(lo > med * 0.62, "plank %d: no gap line down its middle (darkest %.3f, median %.3f)" % [i, lo, med])
+	# The grain in relief: raked from across the grain one way, then the other.
+	var relief := 0.0
+	for i in [3, 6, 9]:
+		var pl: MeshInstance3D = b.get_node("Outpost0_Plank%d" % i)
+		var box := pl.mesh.get_aabb()
+		var gt := pl.global_transform
+		var top_c := gt * Vector3(box.get_center().x, box.end.y, -0.2)
+		var along := (gt.basis * Vector3(0, 0, 1)).normalized()
+		var across := along.cross(Vector3.UP).normalized()
+		var size := box.size.x * 0.7
+		var lit := []
+		for sgn in [1.0, -1.0]:
+			var to_sun: Vector3 = (across * float(sgn) * 0.96 + Vector3.UP * 0.28).normalized()   # (16 deg up)
+			lit.append(await _shot(top_c, Vector3.UP, along, size, 0.03, -to_sun))
+		var d := 0.0
+		var m := 0.0
+		for y in range(8, PX - 8):
+			for x in range(8, PX - 8):
+				var a := _lum(lit[0], x, y)
+				var c := _lum(lit[1], x, y)
+				d += absf(a - c)
+				m += (a + c) * 0.5
+		relief += d / maxf(m, 1e-4)
+	relief /= 3.0
+	print("grain relief under a raking sun: %.3f" % relief)
+	check(relief > 0.12, "the grain stands in relief: raked from either side it lights differently (%.3f of its brightness)" % relief)
 	finish()
 
 
 ## Square-on orthographic picture of the surface at `c` facing `n`, `up` up the screen, `size` m tall.
-func _shot(c: Vector3, n: Vector3, up: Vector3, size: float, dist := 0.25) -> Image:
+## `light`: the way the sun shines (default: from over the camera's shoulder).
+func _shot(c: Vector3, n: Vector3, up: Vector3, size: float, dist := 0.25, light := Vector3.ZERO) -> Image:
 	cam.size = size
 	cam.global_position = c + n * dist
 	cam.look_at(c, up)
 	var right := n.cross(up).normalized()
-	sun.global_basis = Basis.looking_at((-n + up * 0.35 + right * 0.25).normalized(), up)
+	sun.global_basis = Basis.looking_at((-n + up * 0.35 + right * 0.25).normalized() if light == Vector3.ZERO else light.normalized(), up if absf(light.normalized().dot(up)) < 0.95 else n)
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
