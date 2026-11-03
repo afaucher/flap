@@ -18,6 +18,8 @@ extends Node3D
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
 ##   --no-rider         no war tack on any bird (the menu's Flight)
 ##   --no-far-blur      no softening of the far wood (ForestLight.far_blur; F5 toggles in game)
+##   --look <name>      the pine wood's look: afternoon (default) | golden | misty_morning | overcast (ForestLight.LOOKS;
+##                      F6 steps through them in game)
 ##   --hud <style>      classic (default) | ring | dev: the HUD's layout (FlightHud.style)
 
 var layout: ArenaLayout
@@ -190,6 +192,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
+		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
 		ForestLight.toggle_far_blur(self)
 	if e.is_action_pressed("toggle_debug"):
