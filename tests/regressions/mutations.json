@@ -280,7 +280,7 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\tif target == null:\n\t\tif not _choose_target(bird):\n\t\t\treturn _hold_glide(bird)",
+    "find": "\tif target == null:\n\t\tif not _choose_target(bird):\n\t\t\treturn _hold_glide(bird, dt)",
     "replace": "\tif target == null:\n\t\t_choose_target(bird)"
    }
   ]
