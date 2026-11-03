@@ -2210,20 +2210,6 @@
   ]
  },
  {
-  "id": "combat-break-pulls-out-of-dive",
-  "bug": "A defensive break commanded a climb whatever the bird was doing: pulled out of a dive into a climb at full bank, the hawk stalled (2026-11-02).",
-  "tests": [
-   "test_combat_ai"
-  ],
-  "edits": [
-   {
-    "file": "scripts/combat/ai/combat_tree.gd",
-    "find": "\t\tbr.defend_gamma = clampf(br.defend_gamma, b.model.path_angle - deg_to_rad(12.0), b.model.path_angle + deg_to_rad(12.0))",
-    "replace": "\t\tpass"
-   }
-  ]
- },
- {
   "id": "combat-sense-no-turn",
   "bug": "Combat sense tracks had no turn rate: the AI led a bird in a hard break as if it flew straight and missed it (2026-11-02).",
   "tests": [
@@ -2880,6 +2866,20 @@
     "file": "scripts/world/planks.gdshader",
     "find": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pitch-damper-stalls-dive",
+  "bug": "The pitch damper added angle of attack in proportion to the bird's acceleration with no cap: diving steeply, it took the wing past the stall by itself, and the stall flickered on and off (a sparrow breaking in a 63 deg dive; a player diving the same) (2026-11-03).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\t\talpha_target = minf(damped, maxf(alpha_target, p.alpha_stall * 0.97))",
+    "replace": "\t\talpha_target = damped"
    }
   ]
  }

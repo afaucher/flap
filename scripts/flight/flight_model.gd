@@ -155,10 +155,12 @@ func step(dt: float, input: FlightInput) -> void:
 	# along-path acceleration (zero in a steady glide) back into alpha adds lift while speed is building and
 	# sheds it while speed bleeds, which damps the swing. (Feeding back the path's rate instead only changes
 	# the bob's stiffness, and chatters.)
+	# The damper never takes the wing past the stall itself (accelerating down a steep dive, it would): only the stick can.
 	if not stalled and pitch_damping > 0.0:
 		var a_along := -BirdProfile.G * sin(path_angle) - _last_drag_accel
 		var authority := 1.0 - minf(1.0, absf(stick.y) * 1.5)
-		alpha_target += pitch_damping * 2.0 * p.alpha_best * clampf(a_along / BirdProfile.G, -0.5, 0.5) * authority
+		var damped := alpha_target + pitch_damping * 2.0 * p.alpha_best * clampf(a_along / BirdProfile.G, -0.5, 0.5) * authority
+		alpha_target = minf(damped, maxf(alpha_target, p.alpha_stall * 0.97))
 	if stalled:
 		# A stalled wing won't hold a high angle: the nose drops toward best glide unless you keep pulling.
 		alpha_target = minf(alpha_target, p.alpha_stall + deg_to_rad(p.alpha_pull_over_deg) * maxf(stick.y, 0.0))

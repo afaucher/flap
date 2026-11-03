@@ -49,9 +49,10 @@ func setup() -> void:
 		for id in ["hawk", "sparrow"]:
 			for dir in [1.0, -1.0]:
 				await _turning_fight(id, dir)
-		for side in [1.0, -1.0]:
-			for dive in [1.2, 2.0]:
-				await _pull_out(side, dive)
+		for id in ["sparrow", "hawk"]:
+			for side in [1.0, -1.0]:
+				for dive in [1.2, 2.0]:
+					await _pull_out(id, side, dive)
 	finish()
 
 
@@ -327,25 +328,29 @@ func _rests_out_of_sight() -> void:
 	await frames(2)
 
 
-## A sparrow diving at 50 or 63 deg (`dive`: drop per metre forward), its target behind it, up and to one side: the
-## pull out of the dive and the turn share the lift, and it comes round without stalling.
-func _pull_out(side: float, dive: float) -> void:
+## `id` diving at 50 or 63 deg (`dive`: drop per metre forward), an enemy behind it, up and to one side, lining up on
+## it: it breaks, and the break, the pull out of the dive and the turn share the lift -- it comes round without stalling.
+func _pull_out(id: String, side: float, dive: float) -> void:
 	var d := Duel.new()
 	add_child(d)
 	d.setup(ArenaLayout.new())
 	await frames(1)
-	d.add_bird("crow", 1, ScriptedInput.new(), null, Vector3(side * 12.0, 32, 12), Vector3.BACK)
-	var me: Dictionary = d.add_ai("sparrow", 0, Vector3(0, 30, 0), Vector3.FORWARD, CombatSkill.preset("pilot"), 4)
+	var from := Vector3(side * 4.0, 33, 16)
+	d.add_bird("crow", 1, ScriptedInput.new(), null, from, Vector3(0, 30, 0) - from)
+	var me: Dictionary = d.add_ai(id, 0, Vector3(0, 30, 0), Vector3.FORWARD, CombatSkill.preset("pilot"), 4)
 	(me.launcher as Launcher).ammo[(me.launcher as Launcher).weapon] = 0
 	(me.launcher as Launcher).capacity[(me.launcher as Launcher).weapon] = 0
 	var b: Bird = me.bird
 	b.fly_from(Vector3(0, 30, 0), Vector3(0, -dive, -1.0).normalized(), b.profile.v_best)
 	var stalled := 0
+	var broke := false
 	for f in 60 * 4:
 		await get_tree().physics_frame
 		stalled += 1 if b.model.stalled else 0
-	var what := "a sparrow pulling out of a %.0f deg dive, its target up behind to the %s" % [rad_to_deg(atan(dive)), "right" if side > 0 else "left"]
-	print("%s: stalled %d ticks, path angle now %.0f deg" % [what, stalled, rad_to_deg(b.model.path_angle)])
+		broke = broke or (me.brain as CombatBrain).intent.mode == "defend"
+	var what := "a %s pulling out of a %.0f deg dive, an enemy up behind to the %s" % [id, rad_to_deg(atan(dive)), "right" if side > 0 else "left"]
+	print("%s: broke %s, stalled %d ticks, path angle now %.0f deg" % [what, broke, stalled, rad_to_deg(b.model.path_angle)])
+	check(broke, "%s: it breaks (the enemy lines up on it)" % what)
 	check(stalled == 0, "%s: never stalls (%d ticks)" % [what, stalled])
 	d.cleanup()
 	d.queue_free()
