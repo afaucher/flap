@@ -65,8 +65,8 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
 		sm.set_shader_parameter("heath_on", true)
-		sm.set_shader_parameter("heath_from", layout.boundary - 7.0)   # (grass between the last trees and the fence,
-		sm.set_shader_parameter("heath_to", layout.boundary + 4.0)     # as in the heath concept)
+		sm.set_shader_parameter("heath_from", layout.boundary - 16.0)   # (grass coming in among the last trees, as in the
+		sm.set_shader_parameter("heath_to", layout.boundary + 4.0)      # heath concept: a wide, ragged change)
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)

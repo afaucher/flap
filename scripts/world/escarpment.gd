@@ -26,6 +26,8 @@ const SCREE_H := 5.5                ## m: how high it piles at the foot
 ## [face height, ledge width] m, foot to top: as in the concept, a lower broken tier and its heathery ledge, a
 ## second short one, then the tall wall to the top.
 const TIERS := [[5.5, 4.5], [6.0, 3.0], [19.0, 0.0]]
+const DIP := Vector4(30.0, 60.0, 0.35, 1.8)   ## the beds' fault blocks: m long (least, most), face scale (least, most)
+const SKYLINE := Vector3(24.0, 30.0, 44.0)    ## the top: m per stretch, its height (least, most)
 const GULLY := Vector3(28.0, 4.5, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const BLOCK := Vector2(7.0, 1.5)    ## m: a tier's blocks' mean width along it, and how much wider each tier up
 const FACE := 0.9                   ## m: how far a face leans back, bottom to top (steep: about 80 deg)
@@ -97,12 +99,16 @@ func column(theta: float) -> PackedFloat32Array:
 		var cell := floorf(arc / (BLOCK.x + BLOCK.y * i) + 0.37 * i + 0.35 * sin(arc * 0.21 + i * 1.7))
 		var b1 := _h(cell * 7.13 + i * 13.7 + 0.5)
 		var b2 := _h(cell * 3.71 + i * 5.3 + 0.25)
-		var last := i == TIERS.size() - 1   # (the top tier's blocks stand more nearly level: a skyline, not teeth,
-		# but stepping up and down by whole masses along it, as the concept's top does)
-		var face_h := float(tier[0]) * w * ((0.85 + 0.3 * b2) * (0.72 + 0.56 * _n1(arc / 31.0 + 17.0)) if last else (0.7 + 0.6 * b2)) * (0.85 + 0.3 * _n1(theta * (13.0 + i * 5.0) + i * 11.0))
+		var last := i == TIERS.size() - 1
+		var face_h: float
+		if last:   # (the top tier makes up the skyline, which steps and tilts on its own, not with the beds below)
+			face_h = maxf(skyline(arc) * w - h, 3.0 * w) * (0.92 + 0.16 * b2)
+		else:   # (the lower tiers' beds dip: each rises and falls along the cliff in its own fault blocks)
+			face_h = float(tier[0]) * w * dip(arc, i) * (0.85 + 0.3 * b2)
 		e += RECESS * b1 * w + (cleft if i == 0 else 0.0)
 		var face := FACE * (0.7 + 0.6 * b2)
-		var ledge := float(tier[1]) * (0.5 + _n1(theta * (17.0 + i * 3.0) + i * 5.0)) * (1.0 - 0.6 * b1)
+		# (and a ledge runs out here and there: the faces above and below meet in one)
+		var ledge := float(tier[1]) * (0.5 + _n1(theta * (17.0 + i * 3.0) + i * 5.0)) * (1.0 - 0.6 * b1) * smoothstep(0.28, 0.45, _n1(arc / 37.0 + i * 5.3 + 2.0))
 		col.append_array([e, face, face_h, ledge, h, 0.35 + 0.3 * _n1(theta * 23.0 + i * 7.0)])
 		h += face_h + ledge * 0.12
 		e += face + ledge
@@ -160,6 +166,30 @@ func normal(x: float, z: float, step := 0.25) -> Vector3:
 	var hx := height(x + step, z) - height(x - step, z)
 	var hz := height(x, z + step) - height(x, z - step)
 	return Vector3(-hx, 2.0 * step, -hz).normalized()
+
+
+## How much tier `i`'s face height is scaled `arc` m along the cliff: the rock broken into fault blocks DIP.x-DIP.y
+## m long, its beds tilted in each (a straight ramp from one height to another) and stepped at the faults between
+## them, so the ledges run diagonally, rise and fall, and don't line up with each other.
+func dip(arc: float, i: int) -> float:
+	var len := lerpf(DIP.x, DIP.y, _h(i * 9.1 + 3.0))
+	var u := arc / len + 0.43 * i
+	var cell := floorf(u)
+	var f := u - cell
+	var a := lerpf(DIP.z, DIP.w, _h(cell * 5.17 + i * 31.0 + 1.0))
+	var b := lerpf(DIP.z, DIP.w, _h(cell * 5.17 + i * 31.0 + 2.7))
+	return lerpf(a, b, f)
+
+
+## The top's height (before the taper) `arc` m along the cliff: a level run, a step, a tilt, in stretches SKYLINE.x
+## long, between SKYLINE.y and SKYLINE.z m.
+func skyline(arc: float) -> float:
+	var u := arc / SKYLINE.x + 0.21
+	var cell := floorf(u)
+	var f := smoothstep(0.0, 1.0, clampf((u - cell - 0.65) / 0.35, 0.0, 1.0))   # (level, then a short slope down or up)
+	var a := lerpf(SKYLINE.y, SKYLINE.z, _h(cell * 3.3 + 7.0))
+	var b := lerpf(SKYLINE.y, SKYLINE.z, _h((cell + 1.0) * 3.3 + 7.0))
+	return lerpf(a, b, f)
 
 
 ## 1 in the middle of a cleft at `arc` m along the cliff, falling to 0 out of it (the clefts: GULLY apart along it,

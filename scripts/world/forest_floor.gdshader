@@ -100,7 +100,7 @@ void fragment() {
 	col *= 0.9 + 0.2 * fbm(p * 2.5 + 5.0);
 	float heath_k = 0.0;
 	if (heath_on) {
-		heath_k = smoothstep(heath_from, heath_to, length(p) + (big - 0.5) * 10.0);
+		heath_k = smoothstep(heath_from, heath_to, length(p) + (big - 0.5) * 16.0 + (mid - 0.5) * 4.0);
 		col = mix(col, heath_albedo(p), heath_k);
 	}
 	ALBEDO = col;

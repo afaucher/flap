@@ -54,9 +54,32 @@ above the fight. A perch keeps a metre clear of a joint between blocks (the ledg
 The AI sees the rock: `ArenaLayout.rock_clear` is part of `clear_by` and `segment_clear` (skipped only for the rock's
 own perches, coming in or leaving), and the planner's lattice reaches out to the wall.
 
+## Structure: what makes it read as rock (round six)
+
+Traced against the concept, ours was a grid: the skyline, one ledge and the scree each one straight line across
+the frame, verticals evenly spaced between. The concept's lines are short, tilted and staggered. Now: the lower
+tiers' beds dip in fault blocks 30-60 m long (`Escarpment.dip`: a straight ramp in each, a step at each fault), so
+the ledges run on a slant, cross and end (a ledge runs out here and there and two faces meet in one); the top steps
+and tilts on its own (`skyline`); the face blocks lie in courses at fixed fractions of their tier (dipping with
+it), each course with its own joints (staggered), tilted to the bed's local slope (at most `BED_TILT`), longer
+than they're high; the top tier's beds run on level from below, cut by the skyline. The heath: a near ridge whose
+height swings round the ring (its crest on a slant), a valley, a long far ridge; a fence post every 2.8 m (drawn
+only) between the edge posts; the grass thinning in among the last trees and ending at the hills' foot.
+
+## Next for the cliff (research, round six)
+
+What games and tools do (sources in the session notes: Houdini strata and fracture breakdowns on 80.lv, Gaea's
+Stratify, Paris et al. 2020 "Modeling Rocky Scenery using Implicit Blocks", Peytavie et al. 2009 rock piles, DICE and
+Far Cry 5 GDC talks): cliffs are separate meshes over the terrain, cut by a fracture network -- bedding planes with
+uneven thickness and a dip, two near-vertical joint sets with uneven spacing, joints stopping at beds -- each panel
+(between joints, within a bed) set back by its bed's hardness, so hard beds over soft ones make the lips. Ranked
+for us: (1) the wall as its own displaced sheet r(theta, z) from such a joint-and-bed model (overhangs possible; the
+height field kept for the AI as its envelope); (2) blocks cut from the same planes (baked variants) instead of
+chamfered boxes, talus laid Peytavie-style; (3) the shader's bands, stains and joint lines driven by the same model.
+
 ## Cost
 
-Building it adds about 0.6 s to loading the wood (the rock's tier layout is worked out once per column of the grid,
+Building it adds about 0.6 s to loading the wood (now about 2 s with the sward and the fence: to bring down) (the rock's tier layout is worked out once per column of the grid,
 `Escarpment.column`; the dressing is placed on the built grid; the instance buffers are filled in one go). Drawn: the
 rock (90k triangles, one draw), the hills, and six instanced batches.
 

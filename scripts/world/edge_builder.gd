@@ -7,11 +7,16 @@ extends Node3D
 ## and heather thinning with distance, low rolling hills out to the horizon with stands of pines on them), and a
 ## two-strand wire fence along the edge posts. All outside the boundary; only the rock is solid.
 
-const GRASS_IN := 5.0       ## m inside the posts the heath's grass reaches (to the last trees; drawn only)
+const GRASS_IN := 15.0      ## m inside the posts the heath's grass reaches, thinning in among the last trees (drawn only)
+const GRASS_FULL := 3.0     ## m past the posts it's at its thickest
+const GRASS_TO := 300.0     ## m: as far out as it's sown; it ends where the ground rises into the hills (GRASS_RISE)
+const GRASS_RISE := Vector2(1.0, 7.0)   ## m above the valley floor: where it starts thinning, and where it's gone
 const HILLS_FROM := 130.0    ## m: where the hills mesh takes over from the ground plane and the escarpment's grid
 const HILLS_TO := 1100.0
 const WIRES := [0.6, 1.15]   ## m: the fence's two strands, up the posts
 const WIRE_R := 0.012
+const FENCE_EVERY := 2.8     ## m between fence posts (drawn only; every fourth or so an edge post, a perch)
+const FENCE_POST := Vector2(0.07, 1.3)   ## m: their radius and height
 const WIRE_SAG := 0.07       ## m at mid span
 const ROCK_SHADER := preload("res://scripts/world/rock.gdshader")
 const HEATH_SHADER := preload("res://scripts/world/heath.gdshader")
@@ -69,9 +74,15 @@ func hill(x: float, z: float) -> float:
 	var r := Vector2(x, z).length()
 	if r < HILLS_FROM:
 		return 0.0
-	var k := smoothstep(HILLS_FROM, 320.0, r)
-	var n := _fbm(Vector2(x, z) * 0.005) * 0.75 + _fbm(Vector2(x, z) * 0.018 + Vector2(5.0, 9.0)) * 0.25
-	return k * (6.0 + 85.0 * n * n) + smoothstep(450.0, HILLS_TO, r) * 55.0
+	# (layered, as the heath concept's: a near ridge whose height swings round the ring, so its crest runs across the
+	# view on a slant; a lower valley behind it; a long far ridge, blue with distance; a little roughness over all)
+	var dir := Vector2(x, z) / r   # (noise round the ring from the direction, not the angle: no seam where it wraps)
+	var k := smoothstep(HILLS_FROM, 190.0, r)
+	var near_h := 8.0 + 50.0 * _fbm(dir * 1.3 + Vector2(2.0, 0.0)) * _fbm(dir * 0.55 + Vector2(4.0, 7.0)) * 1.6
+	var near := near_h * exp(-pow((r - 240.0) / 85.0, 2.0))
+	var far := (40.0 + 45.0 * _fbm(dir * 0.8 + Vector2(9.0, 1.0))) * smoothstep(480.0, 820.0, r)
+	var rough := 10.0 * (_fbm(Vector2(x, z) * 0.012 + Vector2(5.0, 9.0)) - 0.4)
+	return k * maxf(0.0, near + far + rough + 4.0)
 
 
 # --- The escarpment -------------------------------------------------------------------------
@@ -250,57 +261,80 @@ func _blocks() -> void:
 
 
 const BLOCK_SHAPES := 4
-const COURSE := Vector2(1.2, 3.6)      ## m: a course's height on the faces
-const FACE_BLOCK := Vector2(4.5, 14.0) ## m: a face block's length along the cliff (beds longer than they're high)
+const FACE_BLOCK := Vector2(5.0, 15.0) ## m: a face block's length along the cliff (each course its own)
 const MASS := 1.1                      ## m: how far a mass of blocks (tens of metres along) stands out or back
 const PROUD := Vector2(-0.08, 0.16)    ## m: and each block on its own, out of its mass's face (less than 0: set back)
+const BED_TILT := 0.16                 ## the steepest a face block tilts with its bed (rise over run)
 const BED := 0.45                      ## m: whole beds (a course's height, all along) standing out or back together
 const LIP := Vector3(0.18, 0.3, 0.6)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
 
 
-## Courses of blocks up every face of every tier: each column of blocks FACE_BLOCK long along the cliff, each block
-## COURSE high, set at the face where it stands at that height, PROUD of it or back.
+## Courses of blocks up every face of every tier, following its beds: each tier's face split into courses at fixed
+## fractions of its height (so where the beds dip, the courses dip with them), each course laid along the cliff in
+## blocks of its own lengths (the joints staggered from course to course, not one seam all the way up), each block
+## tilted to its course's slope and set at the face where it stands, its mass and its bed PROUD of it or back.
 func _face_blocks(sets: Array) -> void:
-	var arc := -Escarpment.HALF * esc.foot
-	while arc < Escarpment.HALF * esc.foot:
-		var len := _rng.randf_range(FACE_BLOCK.x, FACE_BLOCK.y)
-		var theta := esc.at + (arc + len * 0.5) / esc.foot
-		arc += len
-		var col := esc.column(theta)
-		if col.is_empty() or col[0] < 0.08:
-			continue
-		var out := Vector3(sin(theta), 0.0, cos(theta))   # (away from the wood, into the rock)
-		var along := Vector3.UP.cross(out).normalized()
-		for i in Escarpment.TIERS.size():
-			var b := 3 + i * 6
-			var e: float = col[b]
-			var face: float = col[b + 1]
-			var face_h: float = col[b + 2]
-			var h0: float = col[b + 4]
-			if face_h < 1.0 or esc.gully(arc - len * 0.5) > 0.2:   # (none in a cleft: it stays dark and deep)
-				continue
-			var y := 0.0
-			while y < face_h - 0.4:
-				var ch := minf(_rng.randf_range(COURSE.x, COURSE.y), face_h - y)
-				var t := (y + ch * 0.5) / face_h   # (where the face stands at this height)
-				var r := col[1] + e + face * t
-				var bed := BED * (esc._n1((h0 + y + ch * 0.5) / 3.2 + 11.0) - 0.5) * 2.0   # (beds run on along the cliff)
-				var proud := MASS * (_mass(arc, i) - 0.5) * 2.0 + bed + _rng.randf_range(PROUD.x, PROUD.y)
+	for i in Escarpment.TIERS.size():
+		var mean_h: float = Escarpment.TIERS[i][0]
+		var n := clampi(roundi(mean_h / 4.2), 1, 6)
+		var cuts := [0.0]   # (the course boundaries, as fractions of the face's height)
+		for k in range(1, n):
+			cuts.append((k + _rng.randf_range(-0.25, 0.25)) / n)
+		cuts.append(1.0)
+		for k in n:
+			var t0: float = cuts[k]
+			var t1: float = cuts[k + 1]
+			var arc := -Escarpment.HALF * esc.foot + _rng.randf_range(0.0, FACE_BLOCK.y)
+			while arc < Escarpment.HALF * esc.foot:
+				var len := _rng.randf_range(FACE_BLOCK.x, FACE_BLOCK.y)
+				var a0 := arc
+				arc += len
+				var a1 := arc
+				if esc.gully(a0 + len * 0.5) > 0.2:   # (none in a cleft: it stays dark and deep)
+					continue
+				var c0 := esc.column(esc.at + a0 / esc.foot)
+				var c1 := esc.column(esc.at + a1 / esc.foot)
+				var cm := esc.column(esc.at + (a0 + len * 0.5) / esc.foot)
+				if c0.is_empty() or c1.is_empty() or cm.is_empty() or cm[0] < 0.08:
+					continue
+				var b := 3 + i * 6
+				var fh: float = cm[b + 2]
+				if fh < 1.0:
+					continue
+				var last := i == Escarpment.TIERS.size() - 1
+				# (the top tier's beds run on level from the rock below, mean_h apart, cut off where the skyline is
+				# lower; the others' at fractions of their own face, dipping with it)
+				var y0: float = cm[b + 4] + (mean_h * t0 if last else fh * t0)
+				var ch: float = mean_h * (t1 - t0) if last else fh * (t1 - t0)
+				ch = minf(ch, cm[b + 4] + fh - y0)
+				if ch < 0.4:
+					continue
+				var top_gap := 0.04 if (k == n - 1 or y0 + ch >= cm[b + 4] + fh - 0.01) else 0.0   # (the top course: just under the ledge)
+				# (its tilt: the bed's own slope here, a metre either way, never steeper than BED_TILT)
+				var ca := esc.column(esc.at + (a0 + len * 0.5 - 1.0) / esc.foot)
+				var cb := esc.column(esc.at + (a0 + len * 0.5 + 1.0) / esc.foot)
+				var slope := 0.0
+				if not last and not ca.is_empty() and not cb.is_empty():
+					slope = clampf(((cb[b + 4] + cb[b + 2] * t0) - (ca[b + 4] + ca[b + 2] * t0)) / 2.0, -BED_TILT, BED_TILT)
+				var theta := esc.at + (a0 + len * 0.5) / esc.foot
+				var out := Vector3(sin(theta), 0.0, cos(theta))   # (away from the wood, into the rock)
+				var along := Vector3.UP.cross(out).normalized()
+				var r: float = cm[1] + cm[b] + cm[b + 1] * (t0 + t1) * 0.5
+				var bed := BED * (esc._n1(float(i * 8 + k) * 1.7 + a0 / 60.0) - 0.5) * 2.0   # (a bed standing out or back, along a stretch)
+				var proud := MASS * (_mass(a0, i) - 0.5) * 2.0 + bed + _rng.randf_range(PROUD.x, PROUD.y)
 				var depth := 2.2 + MASS * 2.0
-				var top_gap := 0.04 if y + ch >= face_h - 0.01 else 0.0   # (the top course: just under the ledge)
-				var centre := out * (r - proud + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + h0 + y + (ch - top_gap) * 0.5)
-				var basis := Basis(along * (len - _rng.randf_range(0.02, 0.12)), Vector3.UP * (ch - top_gap - _rng.randf_range(0.01, 0.04)), out * depth)
-				basis = Basis(Vector3.UP, _rng.randf_range(-0.03, 0.03)) * Basis(along, _rng.randf_range(-0.02, 0.02)) * basis
-				var k := _rng.randi() % BLOCK_SHAPES
-				sets[k][0].append(Transform3D(basis, centre))
-				sets[k][1].append(_stone_colour())
-				if top_gap == 0.0 and ch > 2.0 and _rng.randf() < LIP.x:   # (a harder bed: it juts, a shadow under it)
+				var centre := out * (r - proud + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + y0 + (ch - top_gap) * 0.5)
+				var basis := Basis(along * (len - _rng.randf_range(0.03, 0.15)), Vector3.UP * (ch - top_gap - _rng.randf_range(0.01, 0.05)), out * depth)
+				basis = Basis(out, atan(slope)) * Basis(Vector3.UP, _rng.randf_range(-0.03, 0.03)) * basis
+				var kk := _rng.randi() % BLOCK_SHAPES
+				sets[kk][0].append(Transform3D(basis, centre))
+				sets[kk][1].append(_stone_colour())
+				if top_gap == 0.0 and ch > 1.6 and _rng.randf() < LIP.x:   # (a harder bed: it juts, a shadow under it)
 					var lip_out := proud + LIP.z * _rng.randf_range(0.6, 1.3)
-					var lip_c := out * (r - lip_out + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + h0 + y + ch - LIP.y * 0.5)
-					var lip_b := Basis(along * (len * _rng.randf_range(0.5, 1.0)), Vector3.UP * LIP.y, out * depth)
-					sets[k][0].append(Transform3D(lip_b, lip_c))
-					sets[k][1].append(_stone_colour())
-				y += ch
+					var lip_c := out * (r - lip_out + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + y0 + ch - LIP.y * 0.5)
+					var lip_b := Basis(out, atan(slope)) * Basis(along * (len * _rng.randf_range(0.5, 1.0)), Vector3.UP * LIP.y, out * depth)
+					sets[kk][0].append(Transform3D(lip_b, lip_c))
+					sets[kk][1].append(_stone_colour())
 
 
 ## The scree: blocks fallen from the faces, lying on its slope, sizes sorted down it (small against the foot, the
@@ -493,23 +527,37 @@ func _heath_cover() -> void:
 	var tc := []
 	var hx := []
 	var hc := []
-	for k in 140000:
+	for k in 230000:
 		var theta := _rng.randf() * TAU
-		var r := layout.boundary - GRASS_IN + pow(_rng.randf(), 1.5) * (HILLS_FROM + 20.0 - layout.boundary + GRASS_IN)
+		var r := layout.boundary - GRASS_IN + pow(_rng.randf(), 2.1) * (GRASS_TO - layout.boundary + GRASS_IN)
 		var x := sin(theta) * r
 		var z := cos(theta) * r
+		# (the forest floor gives way to grass gradually: thin in among the last trees, thinner in their shade, along
+		# a ragged line, thickening to the sward past the posts)
+		var fade := smoothstep(layout.boundary - GRASS_IN, layout.boundary + GRASS_FULL, r + (_vnoise(Vector2(x, z) * 0.06) - 0.5) * 12.0)
+		if _rng.randf() > fade:
+			continue
+		if r < layout.boundary and _rng.randf() > lerpf(0.3, 1.0, Pinewood.light(layout, Vector2(x, z))):
+			continue
 		if esc != null and esc.height_in(_column_near(theta), r) > 0.05:   # (on the rock)
 			continue
 		var h := hill(x, z)
+		# (out at the hills: thinning as the ground rises from the valley floor, along a ragged line, so the sward
+		# ends at the foot of the slopes and the hills above are heath)
+		if h > GRASS_RISE.x:
+			var rise := smoothstep(GRASS_RISE.x, GRASS_RISE.y, h + (_vnoise(Vector2(x, z) * 0.03 + Vector2(7.0, 2.0)) - 0.5) * 4.0)
+			if _rng.randf() < rise:
+				continue
+			fade *= 1.0 - rise * 0.5
 		var at := Vector3(x, ArenaLayout.GROUND_Y + h, z)
 		# (heather grows in patches: where a slow noise is high, low purple-brown tussocks instead of grass)
-		var patch := _fbm(Vector2(x, z) * 0.07 + Vector2(3.0, 1.0))
-		if patch < 0.56 or _rng.randf() < 0.15:
-			var size := _rng.randf_range(0.65, 1.35)
+		var patch := _vnoise(Vector2(x, z) * 0.07 + Vector2(3.0, 1.0)) * 0.7 + _vnoise(Vector2(x, z) * 0.21 + Vector2(9.0, 4.0)) * 0.3
+		if patch < 0.6 or _rng.randf() < 0.15:
+			var size := _rng.randf_range(0.38, 0.8) * lerpf(0.6, 1.0, fade)   # (knee high, below the fence wire)
 			tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.2, size * _rng.randf_range(0.75, 1.15), size * 1.2)), at))
 			tc.append(Color(1.0, 0.95, 0.85).lerp(Color(0.75, 0.85, 0.62), _rng.randf()) * _rng.randf_range(0.7, 1.05))
 		else:
-			var size := _rng.randf_range(0.6, 1.2)
+			var size := _rng.randf_range(0.45, 0.9)
 			hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.4, size * 0.5, size * 1.4)), at))
 			hc.append(Color(0.62, 0.36, 0.5).lerp(Color(0.45, 0.4, 0.35), _rng.randf()) * _rng.randf_range(0.6, 0.95))
 	tufts = _batch("tufts", _tuft_cards(), tx, tc)
@@ -549,6 +597,8 @@ func _fence() -> void:
 		return
 	posts.sort_custom(func(a, b): return atan2(a.base.x, a.base.y) < atan2(b.base.x, b.base.y))
 	var spacing := TAU / ArenaLayout.POST_COUNT
+	var fx := []
+	var fc := []
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	for i in posts.size():
@@ -557,16 +607,45 @@ func _fence() -> void:
 		var gap := absf(wrapf(atan2(b.base.x, b.base.y) - atan2(a.base.x, a.base.y), -PI, PI))
 		if gap > spacing * 2.5:
 			continue
+		# (between each pair of edge posts, thinner fence posts every FENCE_EVERY m or so, the wire stapled to each:
+		# the line of posts the heath concept's fence draws to the vanishing point)
+		var pa2 := Vector2(a.base)
+		var pb2 := Vector2(b.base)
+		var n := maxi(1, roundi(pa2.distance_to(pb2) / FENCE_EVERY))
+		var stops := [pa2]
+		for k in range(1, n):
+			var q := pa2.lerp(pb2, (k + _rng.randf_range(-0.15, 0.15)) / n)
+			stops.append(q)
+			var lean := Basis(Vector3(_rng.randf_range(-1, 1), 0.0, _rng.randf_range(-1, 1)).normalized(), _rng.randf_range(0.0, 0.05))
+			fx.append(Transform3D(lean * Basis().scaled(Vector3(1.0, _rng.randf_range(0.92, 1.05), 1.0)), Vector3(q.x, ArenaLayout.GROUND_Y, q.y)))
+			fc.append(Color(1, 1, 1) * _rng.randf_range(0.8, 1.1))
+		stops.append(pb2)
 		for y in WIRES:
-			var pa := Vector3(a.base.x, ArenaLayout.GROUND_Y + y, a.base.y)
-			var pb := Vector3(b.base.x, ArenaLayout.GROUND_Y + y, b.base.y)
-			_wire(verts, normals, pa, pb)
+			for k in stops.size() - 1:
+				var s0: Vector2 = stops[k]
+				var s1: Vector2 = stops[k + 1]
+				_wire(verts, normals, Vector3(s0.x, ArenaLayout.GROUND_Y + y, s0.y), Vector3(s1.x, ArenaLayout.GROUND_Y + y, s1.y))
 	var surf := []
 	surf.resize(Mesh.ARRAY_MAX)
 	surf[Mesh.ARRAY_VERTEX] = verts
 	surf[Mesh.ARRAY_NORMAL] = normals
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surf)
+	var post := CylinderMesh.new()
+	post.top_radius = FENCE_POST.x * 0.85
+	post.bottom_radius = FENCE_POST.x
+	post.height = FENCE_POST.y
+	post.radial_segments = 7
+	post.rings = 1
+	var pm := ArrayMesh.new()   # (its foot at the origin)
+	var arr := post.get_mesh_arrays()
+	var pv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	for i in pv.size():
+		pv[i].y += FENCE_POST.y * 0.5
+	arr[Mesh.ARRAY_VERTEX] = pv
+	pm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var fp := _batch("fence_posts", pm, fx, fc)
+	(fp.material_override as StandardMaterial3D).albedo_color = ArenaBuilder.FENCE_POST_COLOR
 	wires = MeshInstance3D.new()
 	wires.name = "FenceWires"
 	wires.mesh = m

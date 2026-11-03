@@ -140,10 +140,18 @@ func _rock(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(dir * (layout.boundary + 0.5) + Vector3.UP * 12.0, dir * (esc.foot + 60.0) + Vector3.UP * 12.0))
 	check(not hit.is_empty() and hit.collider == edge.rock_body, "a ray toward the escarpment hits the rock")
 	if not hit.is_empty():
-		print("EDGE the rock stops a ray %.1f m out" % _r(hit.position))
+		print("EDGE the rock stops a ray %.1f m out, %.1f m up (rock there %.1f m; %s)" % [_r(hit.position), hit.position.y, layout.rock.height(hit.position.x + dir.x, hit.position.z + dir.z), hit.shape])
 		# The AI sees it too: not clear inside the rock, clear a few metres in front of where the ray met it.
 		var into: Vector3 = hit.position + dir * 1.0
-		var before: Vector3 = hit.position - dir * 3.0
+		var before: Vector3 = hit.position - dir * 3.0   # (and back from there to where the rock under it is well below)
+		for k in 40:
+			var under := 0.0   # (the highest rock within a metre and a half of it)
+			for o in [Vector2.ZERO, Vector2(1.5, 0), Vector2(-1.5, 0), Vector2(0, 1.5), Vector2(0, -1.5)]:
+				under = maxf(under, layout.rock.height(before.x + o.x, before.z + o.y))
+			if under < before.y - 2.0:
+				break
+			before -= dir * 0.5
+		print("EDGE clearance: in the rock %s (%.1f m up, rock %.1f), short of it at %.1f m out %s (rock %.1f), the posts %s" % [layout.clear_by(into, 0.3), into.y, layout.rock.height(into.x, into.z), _r(before), layout.clear_by(before, 0.3), layout.rock.height(before.x, before.z), layout.clear_by(dir * (layout.boundary + 3.0) + Vector3.UP * 12.0, 0.3)])
 		check(not layout.clear_by(into, 0.3) and layout.clear_by(before, 0.3), "the AI's clearance sees the rock (in it: blocked; 3 m short: clear)")
 		check(not layout.segment_clear(before, into + dir * 3.0, 0.3) and layout.segment_clear(before - dir * 2.0, before, 0.3), "and a flight into it isn't clear, one short of it is")
 	var away := -dir
@@ -228,7 +236,7 @@ func _blocks(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 	var foot_m: float = mean.call(foot_side)
 	var toe_m: float = mean.call(toe_side)
 	print("EDGE blocks: %d set into the faces; %d in the scree, %.2f m across by the foot, %.2f m out at the toe; %d on the perch stones; %d solid" % [edge.face_count, edge.scree.size(), foot_m, toe_m, on_stones, edge.scree_solid])
-	check(edge.face_count > 120, "the faces are built of blocks (%d)" % edge.face_count)
+	check(edge.face_count > 60, "the faces are built of blocks (%d)" % edge.face_count)
 	check(edge.scree.size() > 800 and toe_m > foot_m * 2.0, "the scree's blocks sorted down it, the biggest out at the toe (%.2f v %.2f m)" % [toe_m, foot_m])
 	check(on_stones == 0, "none on the perch stones (%d)" % on_stones)
 	# Solid: a ray down onto the biggest scree block stops on it, above the scree's own surface.

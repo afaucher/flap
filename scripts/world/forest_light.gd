@@ -43,10 +43,10 @@ const LOOKS := {
 	# Clear: the arena-edge concepts' (r5_edge_split): bright, high-key midday under a clean blue sky, a near-white
 	# sun higher up, thin air (the far hills blue with distance, not cream), neutral shadows; grey rock reads grey.
 	"clear": {
-		"sun.rotation_degrees:x": -42.0, "sun.light_color": Color(1.0, 0.95, 0.88), "sun.light_energy": 3.0,
+		"sun.rotation_degrees:x": -42.0, "sun.light_color": Color(1.0, 0.95, 0.88), "sun.light_energy": 2.5,
 		"sun.light_volumetric_fog_energy": 0.6,
 		"sky.rayleigh_coefficient": 2.8, "sky.mie_coefficient": 0.004, "sky.turbidity": 3.0,
-		"env.tonemap_exposure": 1.05, "env.adjustment_saturation": 1.05, "env.adjustment_contrast": 1.1,
+		"env.tonemap_exposure": 0.95, "env.adjustment_saturation": 1.15, "env.adjustment_contrast": 1.12,
 		"env.fog_light_color": Color(0.66, 0.75, 0.88), "env.fog_sun_scatter": 0.15, "env.fog_density": 0.0009,
 		"env.fog_aerial_perspective": 0.6,
 		"env.volumetric_fog_density": 0.0008, "env.volumetric_fog_albedo": Color(0.92, 0.95, 1.0),
