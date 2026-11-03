@@ -49,7 +49,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   catch is held, instruments under F3), ring, or dev (`--hud`).
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
   rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
-- `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
+- `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
+  smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
+  and flutter to the ground; down; ruffled coverts; shedding.
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
