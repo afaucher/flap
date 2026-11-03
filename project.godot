@@ -15,6 +15,11 @@ config/description="Bird flight combat demo (greybox flight-model prototype)"
 run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.7")
 
+[autoload]
+
+BeehaveGlobalMetrics="*res://addons/beehave/metrics/beehave_global_metrics.gd"
+BeehaveGlobalDebugger="*res://addons/beehave/debug/global_debugger.gd"
+
 [display]
 
 window/size/viewport_width=1600
