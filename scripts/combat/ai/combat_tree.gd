@@ -385,7 +385,7 @@ static func _pick_perch(br: CombatBrain, score: Callable, climb := 6.0) -> Perch
 		var d := Vector2(c.position.x - pos.x, c.position.z - pos.z).length()
 		if d < 12.0 or d > 70.0 or c.position.y < floor_y or c.position.y > pos.y - d / (p.glide_ratio * 0.75) + budget:
 			continue
-		var sc: float = score.call(c, d)
+		var sc: float = score.call(c, d) - (1000.0 if c.fallback else 0.0)   # (an edge post: only when nothing else)
 		if sc > best_score:
 			best_score = sc
 			best = c

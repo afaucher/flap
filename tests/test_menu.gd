@@ -4,7 +4,7 @@ extends TestCase
 ## screen (Esc back): your bird, your weapon, the mode and, for a match, the AI's skill, each shown with what it
 ## means; Start opens the range as chosen -- that species, one kind of round (six rockets or four seekers, nothing
 ## to switch to), the 3 v 3 match at that skill, or target practice with no match. Behind the menu, birds
-## perched on an outpost's rail, their feet on it, idling: each looks about and, within a few seconds, moves its
+## perched on an outpost's rail, their feet on it (each under its own hip, the legs not crossed), idling: each looks about and, within a few seconds, moves its
 ## tail, wings, plumage or neck.
 
 
@@ -100,6 +100,9 @@ func _backdrop(menu: Menu) -> void:
 		for i in 2:
 			var foot := r.global_transform * (r.leg_joints[i][3] as Vector3)
 			check(absf(foot.y - bd.rail_top) < 0.03, "%s's %s foot on the rail (%.3f m off)" % [r.profile.id, ["left", "right"][i], foot.y - bd.rail_top])
+			var hip := r.leg_joints[i][0] as Vector3   # (each foot under its own hip: the legs not crossed, whichever way the bird faces)
+			var out: float = (r.leg_joints[i][3] as Vector3).x * float(BirdRig.SIDES[i])
+			check(out > 0.0 and hip.x * float(BirdRig.SIDES[i]) > 0.0, "%s's %s foot on its own side (%.3f m out)" % [r.profile.id, ["left", "right"][i], out])
 		rest.append({"c": [r.fold, r.tail_pitch, r.fluff, r.neck_ext], "head": r.head_basis.get_rotation_quaternion(), "moved": 0.0, "turned": 0.0})
 	for f in 7 * 60:
 		await frames(1)

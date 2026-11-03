@@ -19,10 +19,15 @@ const GRIP_TIP_GAP := 0.08     ## m, and stops this far short of the tip
 const BOX_MARGIN := 1e-3       ## m, the slack in a clearance query's box test (rounding in the distance test)
 const BAND := 2.0              ## m, the height bands a tree's branches are filed under for clearance queries
 const HANGAR_SIZE := Vector3(0.42, 0.5, 0.44)   ## an outpost's hangar, a box on its deck (along the rail, up, out)
+const HANGAR_SIDE := -1.0      ## which end of the deck it stands at (deck x): -1, on the right seen from the rail
 
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
-## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest).
-enum Kind { GENERIC, PINE, BROADLEAF, SAPLING }
+## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest). POST: one of the
+## arena's edge posts (add_posts), solid like a trunk, its top a perch -- somewhere to rest at the edge.
+enum Kind { GENERIC, PINE, BROADLEAF, SAPLING, POST }
+const POST_COUNT := 48
+const POST_HEIGHT := 6.0     ## m
+const POST_RADIUS := 0.25    ## m
 
 const TIERS := [
 	{"tier": Tier.UNDERSTORY, "count": 90, "h": Vector2(4.0, 9.0), "r": Vector2(0.12, 0.22), "spacing": 5.5, "branch_len": Vector2(0.9, 1.8)},
@@ -132,6 +137,7 @@ static func generate(s: int) -> ArenaLayout:
 	var a := ArenaLayout.new()
 	a.seed = s
 	a._generate()
+	a.add_posts()
 	return a
 
 
@@ -238,6 +244,37 @@ func _grow(t: TreeData, rng: RandomNumberGenerator) -> void:
 	var to_center := Vector3(-t.base.x, 0.0, -t.base.y)
 	var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.03, t.radius * 0.75 - 0.03), to_center if to_center.length() > 0.1 else Vector3.FORWARD, t.id)
 	_add_perch(top)
+
+
+## The edge posts: POST_COUNT round the arena just inside its boundary (the soft wall), each a solid post with a
+## perch on its top facing the middle (a fallback: the AI rests there only when nothing else is in reach); none
+## where a trunk stands within a metre of it, nor in an avenue.
+func add_posts() -> void:
+	for i in POST_COUNT:
+		var ang := TAU * i / POST_COUNT
+		var p := Vector2(sin(ang), cos(ang)) * (boundary - 0.5)
+		var crowded := false
+		for t in trees_near_segment(Vector3(p.x, 0.0, p.y), Vector3(p.x, 0.0, p.y), 2.0):
+			if (t as TreeData).base.distance_to(p) < (t as TreeData).radius + POST_RADIUS + 1.0:
+				crowded = true
+		for av in avenues:
+			if Geometry2D.get_closest_point_to_segment(p, av[0], av[1]).distance_to(p) < float(av[2]) + 1.0:
+				crowded = true
+		if crowded:
+			continue
+		var t := TreeData.new()
+		t.id = trees.size()
+		t.kind = Kind.POST
+		t.tier = Tier.UNDERSTORY
+		t.base = p
+		t.height = POST_HEIGHT
+		t.radius = POST_RADIUS
+		t.crown_base = POST_HEIGHT
+		trees.append(t)
+		_add_to_hash(_tree_hash, p, t.id)
+		var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, POST_RADIUS * 0.75 - 0.03, Vector3(-p.x, 0.0, -p.y).normalized(), t.id)
+		top.fallback = true
+		_add_perch(top)
 
 
 ## (Pinewood builds through these too.)
@@ -422,7 +459,7 @@ func _tree_clear(t: TreeData, a: Vector3, b: Vector3, clearance: float, skip_per
 ## The hangar's place on an outpost's deck, in the deck's frame (x along the rail, z out from the deck's middle): by
 ## the trunk, at one end of the deck.
 static func hangar_x(o: OutpostData) -> float:
-	return o.width * 0.5 - 0.27
+	return HANGAR_SIDE * (o.width * 0.5 - 0.27)
 
 
 static func hangar_z(o: OutpostData) -> float:

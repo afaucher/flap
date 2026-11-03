@@ -5,8 +5,11 @@ extends TestCase
 ##  - the drawn rail is the perch's collision: round, the rail's radius about the capsule's axis, the deck's width;
 ##    the deck's and the hangar's collision boxes are the ones the AI and the landing know;
 ##  - the planks' nails are where the planks cross the drawn bearers;
-##  - ironwork: bolts on the bearers' faces, brass corners on every ammo box;
-##  - the outpost is a handful of draw calls (its planks and one frame mesh), the same mesh for every outpost.
+##  - ironwork: domed carriage bolts on the bearers' faces, the braces' feet plated to the trunk's bark, brass
+##    corners on every ammo box;
+##  - the hangar stands at the back, on the right seen from the rail (as in the concept); the props (coil,
+##    windsock) are at the other end, drawn only: the outpost's collision is its deck, rail and hangar;
+##  - the outpost is a handful of draw calls (its planks and one frame mesh), one mesh for the outposts of a size.
 
 
 func setup() -> void:
@@ -19,6 +22,8 @@ func setup() -> void:
 	o.id = 2
 	o.centre = Vector3(3, 10, -2)
 	o.out = Vector3(1, 0, 1).normalized()
+	var tree := _tree(b.layout, 9, o, 0.62)   # (the trunk it's bolted to, as Pinewood places one)
+	o.tree_id = tree.id
 	b._outpost(o)
 	var fm: MeshInstance3D = b.get_node("Outpost2_Frame")
 	var arr := fm.mesh.surface_get_arrays(0)
@@ -111,6 +116,53 @@ func setup() -> void:
 			if not inside:
 				outside += 1
 		eq(outside, 0, "the AI's clearance queries hold the hangar (corners outside them)")
+	eq(boxes.size() + 1, body.get_child_count(), "the outpost's collision: its deck, its hangar and its rail, nothing else")
+	# The hangar at the back, on the right seen from the rail (looking in, toward the trunk).
+	var side := o.out.cross(Vector3.UP).normalized()
+	var right_seen := -side
+	var hc := Vector3.ZERO
+	var hn := 0
+	for p in pieces:
+		if String(p.name).begins_with("hangar_board"):
+			hc += fm.global_transform * (p.xform as Transform3D).origin
+			hn += 1
+	hc /= maxi(hn, 1)
+	check((hc - o.centre).dot(right_seen) > 0.3 and (hc - o.centre).dot(o.out) < -0.1, "the hangar stands at the back on the right seen from the rail (%.2f m right, %.2f m out)" % [(hc - o.centre).dot(right_seen), (hc - o.centre).dot(o.out)])
+	# The props off the other end: the coil hangs on the rim there, the windsock's pole stands on it; no ladder.
+	for name in ["coil", "windsock", "windsock_pole", "pennant"]:
+		check(by_name.has(name), "the outpost has its %s" % name)
+	check(not by_name.has("ladder_rope") and not by_name.has("ladder_rung"), "no rope ladder")
+	var coil: Vector3 = fm.global_transform * (by_name["coil"][0].xform as Transform3D).origin
+	check((coil - o.centre).dot(right_seen) < -o.width * 0.45, "the coil hangs off the deck's far end from the hangar")
+	# Carriage bolts: each head a dome (its crown on its axis), not a flat hex.
+	var domes := 0
+	var flat := 0
+	for p in by_name.get("bolt", []):
+		var top := -INF
+		var top_r := 0.0
+		for v in range(p.first, p.last):
+			if uv[v].y > top + 1e-6:
+				top = uv[v].y
+				top_r = Vector2(uv[v].x, uv2[v].x).length()
+			elif absf(uv[v].y - top) < 1e-6:
+				top_r = maxf(top_r, Vector2(uv[v].x, uv2[v].x).length())
+		var r: float = (p.size as Vector3).x * 0.5
+		if top_r < r * 0.1 and top > r * 0.3:
+			domes += 1
+		else:
+			flat += 1
+	check(domes > 20 and flat == 0, "the bolt heads are domed (%d domed, %d not)" % [domes, flat])
+	# The braces' feet: plates on the trunk's bark under them (their faces at the trunk's radius), lag-bolted.
+	var on_bark := 0
+	var ax2 := Vector2(tree.base.x, tree.base.y)
+	for p in by_name.get("plate", []):
+		var c: Vector3 = fm.global_transform * (p.xform as Transform3D).origin
+		if c.y < o.centre.y - 0.91:   # (the trunk plates: below the braces' feet)
+			var rr := Vector2(c.x, c.z).distance_to(ax2)
+			var want := Pinewood._r_at(tree, o.centre.y - 0.9)
+			check(absf(rr - want) < 0.006, "a brace's foot plate lies on the bark (%.1f mm off the trunk's face)" % ((rr - want) * 1000.0))
+			on_bark += 1
+	check(on_bark >= 2, "a plate on the trunk under each brace's foot, or more (%d)" % on_bark)
 
 	# The planks' nails: where each plank crosses a drawn bearer.
 	var plank: MeshInstance3D = b.get_node("Outpost2_Plank4")
@@ -151,16 +203,29 @@ func setup() -> void:
 				corners += 1
 		eq(corners, 8, "ammo box %d: brass at its eight corners" % i)
 
-	# Draw calls: nine planks and the frame; a second outpost of the same size shares the frame's mesh.
+	# Draw calls: the planks and the frame; a second outpost of the same size (on the same trunk) shares the frame's mesh.
 	var meshes := 0
 	for c in b.get_children():
 		if c is MeshInstance3D and String(c.name).begins_with("Outpost2_"):
 			meshes += 1
-	eq(meshes, 10, "an outpost is nine planks and one frame mesh")
+	eq(meshes, ArenaBuilder.PLANKS + 1, "an outpost is its planks and one frame mesh")
 	var o2 := ArenaLayout.OutpostData.new()
 	o2.id = 5
-	o2.centre = Vector3(-8, 12, 4)
+	o2.centre = Vector3(-8, 10, 4)
+	o2.tree_id = _tree(b.layout, 11, o2, 0.62).id
 	b._outpost(o2)
 	check((b.get_node("Outpost5_Frame") as MeshInstance3D).mesh == fm.mesh, "outposts of a size share one frame mesh")
 	await frames(1)
 	finish()
+
+
+## A trunk behind an outpost where Pinewood puts one: its axis r - 0.15 + depth/2 behind the deck's middle.
+func _tree(l: ArenaLayout, id: int, o: ArenaLayout.OutpostData, r: float) -> ArenaLayout.TreeData:
+	var t := ArenaLayout.TreeData.new()
+	t.id = id
+	t.height = 30.0
+	t.radius = r / lerpf(1.0, 0.4, clampf((o.centre.y - 0.9) / t.height, 0.0, 1.0))   # (r at the braces' feet)
+	var dist := Pinewood._r_at(t, o.centre.y) + o.depth * 0.5 - 0.15
+	t.base = Vector2(o.centre.x, o.centre.z) - Vector2(o.out.x, o.out.z) * dist
+	l.trees.append(t)
+	return t

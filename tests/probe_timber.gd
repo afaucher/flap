@@ -1,17 +1,17 @@
 extends TestCase
 ## Close-ups of an outpost's timber (ArenaBuilder._outpost, the pine wood's materials) as a 3 x 2 sheet: the deck's
 ## outer edge (the planks' ends), the hangar's corner, the rail's end, the bearers and braces from below, the deck
-## and hangar framed like docs/images/concepts/r4_aces_outpost.jpg, the roundel side. `--warm`: a low warm sun
+## and hangar framed like docs/images/concepts/r4_aces_outpost.jpg, the roundel on the hangar's front. `--warm`: a low warm sun
 ## (the concept's light) in place of the game's. Windowed:
 ##   Godot --path . -- --run-test probe_timber --out <png> [--warm]
 
 const VIEWS := [   ## [label, camera, looking at] (outpost frame: the deck's middle at y 1, out +z, its side -x)
 	["Deck edge: the plank ends", Vector3(0.35, 1.05, 1.15), Vector3(0.0, 0.96, 0.52)],
-	["The hangar's corner", Vector3(-1.05, 1.55, 0.45), Vector3(-0.55, 1.22, -0.22)],
+	["The hangar's corner: its slatted opening", Vector3(1.05, 1.55, 0.45), Vector3(0.55, 1.22, -0.22)],
 	["The rail's end", Vector3(1.2, 1.12, 0.8), Vector3(0.8, 1.03, 0.5)],
 	["Bearers and braces, from below", Vector3(0.55, 0.45, 1.0), Vector3(0.15, 0.9, 0.1)],
 	["As the concept: over the deck to the hangar", Vector3(0.75, 2.05, 1.55), Vector3(-0.3, 1.05, -0.15)],
-	["The roundel side", Vector3(-1.45, 1.4, 0.15), Vector3(-0.74, 1.24, -0.25)],
+	["The roundel, on the hangar's front", Vector3(0.35, 1.38, 0.9), Vector3(0.53, 1.26, -0.03)],
 ]
 const COLS := 3
 const W := 800

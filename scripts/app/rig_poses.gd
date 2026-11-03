@@ -52,8 +52,9 @@ static func apply(r: BirdRig, pose: String, time: float, neck := -1.0, fluff := 
 			# (the branch's top under the hips at POSE.stance of the leg's reach, as a perched Bird stands)
 			var hips := r.transform * ((r._hip[0] + r._hip[1]) * 0.5)
 			var top := hips.y - (r.body.femur + r._tib + r._tars) * float(sit.stance)
+			var side := Vector3(r.basis.x.x, 0.0, r.basis.x.z).normalized()   # (the bird's own left-right, level: it may face any way)
 			for i in 2:
-				var grip_world := Vector3(r.position.x + BirdRig.SIDES[i] * r._L * 0.04, top, r.position.z)
+				var grip_world: Vector3 = Vector3(r.position.x, top, r.position.z) + side * BirdRig.SIDES[i] * r._L * 0.04
 				r.foot_targets[i] = r.transform.affine_inverse() * grip_world
 		"flare":
 			r.flap = deg_to_rad(25.0)

@@ -10,7 +10,7 @@ extends RefCounted
 ##   SAPLINGS   young pines on the floor: a slalom under ~6 m.
 ##   OUTPOSTS   timber decks bolted to trunks between the stubs and the crown (and to the oaks between their
 ##              limbs), facing open air: the outer edge is a rounded landing rail -- the perch -- with a nest-box
-##              hangar and crates on the deck. Supplied from the air (no ladders, no hoists).
+##              hangar and crates on the deck. Supplied from the air (no hoists, no ladders).
 ##   STRUCTURE  an old stand isn't even: the pines grow in clumps with gaps between (where one fell, or none
 ##              took), and young pines come up in the gaps' light. The clearing in the middle (40 m across) has the
 ##              biggest oak; a sunlit glade as big lies off to one side; a few smaller gaps between.
@@ -123,6 +123,7 @@ static func generate(s: int) -> ArenaLayout:
 			_grow_sapling(a, t, rng)
 			placed += 1
 	_outposts(a, rng)
+	a.add_posts()
 	return a
 
 
@@ -292,11 +293,18 @@ static func _limb(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, d: Vec
 		if collar:
 			r *= 1.0 + 0.75 * exp(-maxf(x - trunk_r, 0.0) / (2.2 * r0))
 		return r
+	# The perch starts where the collar has died away to 5% (6 r0 past the trunk; nearer, the wood swells over a
+	# straight line), and the drawn tube has a ring there, so the wood as drawn and the grip line meet.
+	var xp := maxf(xb, trunk_r + 6.0 * r0)
 	var xs := PackedFloat32Array()
 	for i in 6:
 		xs.append(xb * i / 6.0)
 	for i in 4:
-		xs.append(lerpf(xb, xt, i / 4.0))
+		var x := lerpf(xb, xt, i / 4.0)
+		var x_next := lerpf(xb, xt, (i + 1) / 4.0)
+		xs.append(x)
+		if perch and xp > x + 0.05 and xp < x_next - 0.05:
+			xs.append(xp)
 	for i in 7:
 		xs.append(lerpf(xt, length, i / 6.0))
 	var pts := PackedVector3Array()
@@ -310,11 +318,31 @@ static func _limb(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, d: Vec
 	for ci in chords.size():
 		var x0: float = chords[ci][0]
 		var x1: float = chords[ci][1]
-		var br := _branch(a, t, at.call(x0), at.call(x1), (rad.call(x0, false) + rad.call(x1, false)) * 0.5, perch and ci == 2)
+		var br := _branch(a, t, at.call(x0), at.call(x1), (rad.call(x0, false) + rad.call(x1, false)) * 0.5, false)
 		br.solid = solid
 		if ci == 2:
 			mid = br
+			if perch:
+				_limb_perch(a, t, br, at, rad, xp, xt - ArenaLayout.GRIP_TIP_GAP)
 	return {"pts": pts, "mid": mid, "tip": pts[pts.size() - 1], "at": at}
+
+
+## The perch along a limb's straight stretch, from `x0` to `x1` m out: its grip line on the drawn limb's top (the
+## radius as drawn there, tapering, with what's left of the collar's flare) -- not at the solid chord's mean
+## radius, which put the line inside a thick limb near the trunk and above it toward the tip.
+static func _limb_perch(a: ArenaLayout, t: ArenaLayout.TreeData, br: ArenaLayout.BranchData, at: Callable, rad: Callable, x0: float, x1: float) -> void:
+	if x1 - x0 < 0.15:
+		return
+	var p0: Vector3 = at.call(x0)
+	var p1: Vector3 = at.call(x1)
+	var flat := Vector3(p1.x - p0.x, 0.0, p1.z - p0.z)
+	if flat.length() < 0.1:
+		return
+	var r0: float = rad.call(x0, true)
+	var r1: float = rad.call(x1, true)
+	var pr := Perch.branch(a.perches.size(), p0 + Vector3.UP * r0, p1 + Vector3.UP * r1, flat.normalized().rotated(Vector3.UP, PI * 0.5), t.id, (r0 + r1) * 0.5)
+	br.perch_id = pr.id
+	a._add_perch(pr)
 
 
 ## A thin drawn-only twig (no solid, no perch): a gentle arc from `root` along `d`, `length` m, rising `rise` per

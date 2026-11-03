@@ -1471,7 +1471,7 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\twidths.append(prng.randf_range(0.82, 1.18))",
+    "find": "\t\twidths.append(prng.randf_range(0.84, 1.16))",
     "replace": "\t\twidths.append(1.0)"
    }
   ]
@@ -2716,6 +2716,170 @@
     "file": "scripts/combat/ai/combat_brain.gd",
     "find": "\tsense.record(dt)\n\tif picture != null and posmod(f + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n",
     "replace": "\tif picture != null and posmod(f + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n\tsense.record(_unthought)\n"
+   }
+  ]
+ },
+ {
+  "id": "brace-feet-off-the-bark",
+  "bug": "The braces' feet (and their trunk plates) were placed for a nominal trunk, not the one the outpost is bolted to, so on a thicker or thinner pine they floated off the bark or sank into it (2026-11-03).",
+  "tests": [
+   "test_outpost_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tif t.id == o.tree_id:\n",
+    "replace": "\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "planks-proud-of-the-deck",
+  "bug": "Thicker planks centred where the thin ones were stood proud of the deck's collision top, so feet and landings met an invisible floor below the drawn one (2026-11-03).",
+  "tests": [
+   "test_planks"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tmi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -PLANK_T * 0.5, 0.0))",
+    "replace": "\t\tmi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -o.thickness * 0.3, 0.0))"
+   }
+  ]
+ },
+ {
+  "id": "perched-legs-crossed",
+  "bug": "The perched pose (RigPoses folded) put each foot to the world's left or right, not the bird's: a bird turned round on its perch (the menu's, facing the camera) stood with its legs crossed (2026-11-03).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/rig_poses.gd",
+    "find": "\t\t\t\tvar grip_world: Vector3 = Vector3(r.position.x, top, r.position.z) + side * BirdRig.SIDES[i] * r._L * 0.04",
+    "replace": "\t\t\t\tvar grip_world: Vector3 = Vector3(r.position.x, top, r.position.z) + Vector3.RIGHT * BirdRig.SIDES[i] * r._L * 0.04"
+   }
+  ]
+ },
+ {
+  "id": "trunk-tops-open",
+  "bug": "Trunks and limbs were open tubes: a treetop seen from above was a hollow ring, the top circle missing (2026-11-03).",
+  "tests": [
+   "test_tree_tops"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "rings := [], cap := true) -> void:",
+    "replace": "rings := [], cap := false) -> void:"
+   }
+  ]
+ },
+ {
+  "id": "settled-on-wood-drawn-on-ground",
+  "bug": "A bird falling slowly onto a branch (after a bonk) went GROUNDED with the ground at the arena's floor: its drawn rig stood on the ground metres below (the bird vanished) and the HUD said ON THE GROUND (2026-11-03).",
+  "tests": [
+   "test_settle_on_wood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\treturn {\"kind\": \"ground\", \"centre\": Vector3(global_position.x, stand_y, global_position.z)}",
+    "replace": "\t\treturn {\"kind\": \"ground\", \"centre\": Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)}"
+   },
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\treturn Vector3(global_position.x, stand_y, global_position.z)",
+    "replace": "\t\t\treturn Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)"
+   }
+  ]
+ },
+ {
+  "id": "settled-on-perch-not-taken",
+  "bug": "A bird settling slowly onto a perch's branch stood on it as if on the ground instead of perching (2026-11-03).",
+  "tests": [
+   "test_settle_on_wood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tvar under := _perch_under(at)",
+    "replace": "\t\tvar under: Perch = null"
+   }
+  ]
+ },
+ {
+  "id": "limb-perch-inside-thick-limb",
+  "bug": "A limb's perch sat at its solid chord's mean radius from where the straight stretch began: on a thick oak limb the grip line ran up to 18 cm inside the drawn wood near the trunk (the collar, the taper) and above it toward the tip (2026-11-03).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\t\t_limb_perch(a, t, br, at, rad, xp, xt - ArenaLayout.GRIP_TIP_GAP)",
+    "replace": "\t\t\t\t_limb_perch(a, t, br, at, func(_x: float, _c: bool) -> float: return br.radius, xb, xt - ArenaLayout.GRIP_TIP_GAP)"
+   }
+  ]
+ },
+ {
+  "id": "edge-posts-not-perches",
+  "bug": "The arena's edge posts had nothing to perch on: no perch on their tops (2026-11-03).",
+  "tests": [
+   "test_edge_posts"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\ttop.fallback = true\n\t\t_add_perch(top)",
+    "replace": "\t\ttop.fallback = true"
+   }
+  ]
+ },
+ {
+  "id": "edge-posts-not-solid",
+  "bug": "The edge posts were drawn only: a bird flew through them (2026-11-03).",
+  "tests": [
+   "test_edge_posts"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tbody.add_child(_post_mesh(t))",
+    "replace": "\t\t\tbody.add_child(_post_mesh(t))\n\t\t\tcs.disabled = true"
+   }
+  ]
+ },
+ {
+  "id": "camera-stuck-facing-away",
+  "bug": "The chase camera couldn't turn round to a bird facing exactly the other way (slerp between opposites has no axis): it stayed looking away, or threw axis errors (2026-11-03).",
+  "tests": [
+   "test_chase_camera_turn"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/chase_camera.gd",
+    "find": "\tif _look.dot(want_look) < -0.98:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "wood-grain-flat",
+  "bug": "The outposts' wood had no relief: the planks scan's normals at their own depth, no height, its roughness flat, so a sun never caught the grain -- smooth, evenly lit boards beside the bark's deep fissures (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "uniform float normal_depth = 2.6;",
+    "replace": "uniform float normal_depth = 1.0;"
+   },
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);",
+    "replace": ""
    }
   ]
  }

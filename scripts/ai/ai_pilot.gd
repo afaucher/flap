@@ -166,6 +166,8 @@ func _best_perch(bird: Bird, climb_budget: float, floor_y: float) -> Perch:
 		var climb := cand.position.y - pos.y
 		# ... and perches up in the trees over ones near the ground (safer, and more interesting).
 		var score := -absf(d - 32.0) * 0.1 - maxf(0.0, climb) * 0.4 + minf(cand.position.y, 15.0) * 0.15 + rng.randf() * 3.0
+		if cand.fallback:
+			score -= 1000.0   # (an edge post: only when nothing else is in reach)
 		if score > best_score:
 			best_score = score
 			best = cand

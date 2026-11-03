@@ -5,7 +5,9 @@ extends TestCase
 ## outer edge that is a perch, facing open air (wood and leaves clear for several metres out), left and right
 ## of the rail alike, with a way in every bird's planner takes (the final swoop onto the rail, the outposts being the
 ## bases birds rearm on); the AI's clearance queries see the decks; and the crowns leave sightlines. The stand has
-## structure: clumps and open ground, a clearing and a glade, and the young pines out in the light.
+## structure: clumps and open ground, a clearing and a glade, and the young pines out in the light. Every limb's
+## perch lies on the limb as drawn (its top surface, thick oak limbs and thin pine ones alike: not inside the wood
+## near the trunk, not above it toward the tip).
 
 
 func _init() -> void:
@@ -24,9 +26,61 @@ func setup() -> void:
 	for other in [3, 11, 21, 5]:   # (outposts face whatever open air a layout leaves: try several)
 		_outposts(Pinewood.generate(other))
 	_young_pines(a)
+	_perches_on_the_wood(a)
 	_structure(a)
 	_sightlines(a)
 	finish()
+
+
+## Each limb perch's grip line, sampled along it, lies on its tree's drawn limbs' top: its height above the nearest
+## drawn axis equals the drawn radius there, within 2 cm.
+func _perches_on_the_wood(a: ArenaLayout) -> void:
+	var rails := {}
+	for o in a.outposts:
+		rails[o.rail_perch_id] = true
+	var worst := {"oak_limb": 0.0, "limb": 0.0}
+	var where := {}
+	var n := 0
+	for p in a.perches:
+		if p.kind != Perch.Kind.BRANCH or rails.has(p.id) or p.tree_id < 0:
+			continue
+		var t: ArenaLayout.TreeData = a.trees[p.tree_id]
+		# Its own limb: the drawn limb whose axis passes nearest the perch's axis (under its middle) -- not a twig
+		# that happens to pass close by.
+		var own: Array = []
+		var own_d := INF
+		var mid_axis: Vector3 = p.position - Vector3.UP * p.thickness
+		for lb in t.limbs:
+			var pts: PackedVector3Array = lb[0]
+			for i in pts.size() - 1:
+				var d := mid_axis.distance_to(Geometry3D.get_closest_point_to_segment(mid_axis, pts[i], pts[i + 1]))
+				if d < own_d:
+					own_d = d
+					own = lb
+		for k in 5:
+			var g: Vector3 = p.a.lerp(p.b, k / 4.0)
+			var best := INF
+			var off := 0.0
+			var key := ""
+			for lb in [own]:
+				var pts: PackedVector3Array = lb[0]
+				var radii: PackedFloat32Array = lb[1]
+				for i in pts.size() - 1:
+					var q := Geometry3D.get_closest_point_to_segment(g, pts[i], pts[i + 1])
+					var d := g.distance_to(q)
+					if d < best:
+						var u := q.distance_to(pts[i]) / maxf(pts[i].distance_to(pts[i + 1]), 1e-5)
+						best = d
+						off = d - lerpf(radii[i], radii[i + 1], u)
+						key = lb[2]
+			if worst.has(key):
+				n += 1
+				if absf(off) > absf(worst[key]):
+					worst[key] = off
+					where[key] = "perch %d" % p.id
+	check(n > 100, "limb perches sampled (%d)" % n)
+	for key in worst:
+		check(absf(worst[key]) < 0.02, "%s perches lie on the drawn wood (worst %+.3f m, %s: + above it, - inside)" % [key, worst[key], where.get(key, "-")])
 
 
 ## Clumps and open ground: the openings (the clearing, a glade, gaps) have no standing pine inside their edges;
