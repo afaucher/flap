@@ -5,6 +5,8 @@ extends RefCounted
 ##   needles   a Scots pine spray: a shoot forking twice, needles in pairs all along it pointing forward,
 ##             blue-green, densest toward the tips (a card is ~0.7 m across)
 ##   oak       a twig with clusters of lobed oak leaves (~0.8 m)
+##   grass     a tussock of heath grass: blades from a tight root fanning up and out, curving over, olive at the
+##             root, straw at the tips (~0.8 m; v runs base 1 -> tip 0)
 ##   fern      a bracken frond: a stem up the middle, pinnae left and right shortening to the tip, each lobed
 ##             (~0.9 m long; the card's v runs base 1 -> tip 0)
 ## Pixels are painted as anti-aliased strokes into float buffers (coverage, then colour over), then mipmapped.
@@ -18,6 +20,7 @@ static func get_tex(kind: String) -> ImageTexture:
 			"needles": _cache[kind] = _needles(1024, 11)
 			"oak": _cache[kind] = _oak(512, 23)
 			"fern": _cache[kind] = _fern(512, 37)
+			"grass": _cache[kind] = _grass(512, 53)
 	return _cache[kind]
 
 
@@ -248,4 +251,27 @@ static func _fern(size: int, s: int) -> ImageTexture:
 				var lc := Color(0.3, 0.44, 0.15).lerp(Color(0.42, 0.52, 0.2), rng.randf())
 				for s3 in [-1.0, 1.0]:
 					cv.leaf(pp, d.rotated(s3 * 1.2 - s2 * 0.15), w, w * 0.62, 0, lc)
+	return ImageTexture.create_from_image(cv.image())
+
+
+static func _grass(size: int, s: int) -> ImageTexture:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = s
+	var cv := Canvas.new(size)
+	var root := Vector2(size * 0.5, size * 0.99)
+	for i in 70:
+		var lean := rng.randf_range(-1.0, 1.0)
+		var tall := size * rng.randf_range(0.45, 0.97) * (1.0 - absf(lean) * 0.3)
+		var p := root + Vector2(rng.randf_range(-size * 0.06, size * 0.06), 0.0)
+		var dir := Vector2(lean * 0.55, -1.0).normalized()
+		var segs := 7
+		var w := rng.randf_range(4.0, 7.5)
+		var col := Color(0.36, 0.38, 0.18).lerp(Color(0.5, 0.48, 0.24), rng.randf())
+		var tip_col := Color(0.78, 0.7, 0.42).lerp(Color(0.6, 0.62, 0.32), rng.randf())
+		for k in segs:
+			var f := float(k + 1) / segs
+			var q := p + dir * tall / segs
+			dir = dir.rotated(lean * 0.09 * f).normalized()   # (curving over, more toward the tip)
+			cv.stroke(p, q, w * lerpf(1.0, 0.25, f), col.lerp(tip_col, f), 0.85)
+			p = q
 	return ImageTexture.create_from_image(cv.image())

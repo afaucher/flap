@@ -2883,5 +2883,19 @@
     "replace": "\tif false:"
    }
   ]
+ },
+ {
+  "id": "floor-plane-over-mounds",
+  "bug": "The big ground plane drew under the wood too, flat at GROUND_Y through the fine floor mesh: z-fighting with it where its mounds are low, the mounds' feet cut off (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tsm.set_shader_parameter(\"hole_r\", layout.boundary + 11.0)\n",
+    "replace": ""
+   }
+  ]
  }
 ]

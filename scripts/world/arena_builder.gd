@@ -81,9 +81,38 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
+		var ops := PackedVector4Array()
+		for o in layout.openings:
+			ops.append(Vector4(o.centre.x, o.centre.y, float(o.r), float(o.ph)))
+		ops.resize(16)
+		sm.set_shader_parameter("openings", ops)
+		sm.set_shader_parameter("opening_count", mini(layout.openings.size(), 16))
+		sm.set_shader_parameter("fade_r", layout.boundary + 8.0)
+		# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart); the big plane draws only
+		# round it. Drawn only: the ground's collision stays flat at GROUND_Y (the mounds are a hand high).
+		var fine := MeshInstance3D.new()
+		fine.name = "FloorMounds"
+		var grid := PlaneMesh.new()
+		var side := (layout.boundary + 12.0) * 2.0
+		grid.size = Vector2(side, side)
+		grid.subdivide_width = int(side / FLOOR_STEP)
+		grid.subdivide_depth = int(side / FLOOR_STEP)
+		fine.mesh = grid
+		fine.custom_aabb = AABB(Vector3(-side * 0.5, -0.1, -side * 0.5), Vector3(side, 0.6, side))   # (the mounds rise in the shader)
+		var fm := sm.duplicate() as ShaderMaterial
+		fm.set_shader_parameter("displace", 1.0)
+		fm.set_shader_parameter("mound_h", MOUND_H)
+		fine.material_override = fm
+		body.add_child(fine)
+		sm.set_shader_parameter("hole_r", layout.boundary + 11.0)
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
+
+
+const GRASS_PER_M2 := 3.5   ## grass tussocks sown to the square metre over the openings (_grass)
+const MOUND_H := 0.22      ## m: the needle litter's mounds at their highest (drawn only)
+const FLOOR_STEP := 0.4   ## m between the fine floor mesh's vertices (where the litter's mounds are drawn)
 
 
 ## Pale strips on the ground under the clearing, avenues and ring: the flight paths, readable from the air.
@@ -628,6 +657,58 @@ func _floor() -> void:
 			cus.append(Color(base.x, base.y + size * 0.4, base.z, phase))
 	var mi := _batch("ferns", frond, Color.WHITE, xfs, cols, cus)
 	mi.material_override = _foliage_mat("ferns", {"tex": "fern", "tint": Color(1, 1, 1)}, {"bend": 0.35, "clump_normal": 0.45, "sway": 0.015, "flutter": 0.01, "backlight": 0.7})
+	_grass(rng)
+
+
+## Grass in the open: tussocks thick in the openings (the clearing, the glade, the gaps: the floor's sward there,
+## forest_floor.gdshader) and thinning out from their edges, a few in the brightest spots under the trees; FoliageTex's
+## grass on three crossed cards each. Drawn only.
+func _grass(rng: RandomNumberGenerator) -> void:
+	var tx := []
+	var tc := []
+	var tcu := []
+	var spots := PackedVector2Array()   # (sown over each opening and a margin round it, GRASS_PER_M2; and thinly everywhere)
+	for o in layout.openings:
+		var reach := float(o.r) * 1.25 + 4.0
+		for i in int(PI * reach * reach * GRASS_PER_M2):
+			spots.append(o.centre + Vector2.from_angle(rng.randf() * TAU) * reach * sqrt(rng.randf()))
+	for i in 9000:
+		spots.append(Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary)
+	for p in spots:
+		if p.length() > layout.boundary:
+			continue
+		var inside := 0.0   # (how far into an opening: 1 well in, falling to 0 four metres out past its edge)
+		for o in layout.openings:
+			var e := Pinewood.edge(o, p)
+			inside = maxf(inside, 1.0 - smoothstep(e - 2.0, e + 4.0, p.distance_to(o.centre)))
+		var want := inside * 0.9 + (1.0 - inside) * 0.15 * smoothstep(0.85, 1.0, Pinewood.light(layout, p))
+		if rng.randf() > want:
+			continue
+		var size := rng.randf_range(0.35, 0.75) * lerpf(0.75, 1.0, inside)
+		var at := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
+		tx.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size * 1.2, size * rng.randf_range(0.8, 1.2), size * 1.2)), at))
+		tc.append(Color(1.0, 0.95, 0.82).lerp(Color(0.8, 0.9, 0.62), rng.randf()) * rng.randf_range(0.7, 1.0))
+		tcu.append(Color(at.x, at.y + size * 0.3, at.z, rng.randf()))
+	var mi := _batch("grass", _tussock_mesh(), Color.WHITE, tx, tc, tcu)
+	mi.material_override = _foliage_mat("grass", {"tex": "grass", "tint": Color(1, 1, 1)}, {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6})
+
+
+## A grass tussock as drawn: three cards crossed at 60 deg, standing on the origin (unit size), lit as the sward
+## (normals mostly up).
+static func _tussock_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in 3:
+		var a := PI * i / 3.0
+		var side := Vector3(cos(a), 0.0, sin(a)) * 0.5
+		var face := Vector3(-sin(a), 0.0, cos(a))
+		var n := (face * 0.3 + Vector3.UP).normalized()
+		var q := [[-side, Vector2(0, 1)], [side, Vector2(1, 1)], [side + Vector3.UP, Vector2(1, 0)], [-side + Vector3.UP, Vector2(0, 0)]]
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.set_normal(n)
+			st.set_uv(q[k][1])
+			st.add_vertex(q[k][0])
+	return st.commit()
 
 
 ## An outpost (docs/images/concepts/r4_aces_outpost.jpg): a deck of hand-sawn planks nailed across two heavy
