@@ -2,6 +2,7 @@
 
     python tools/cliff_edges.py model <probe json> <out dir>      # our cliff, exactly (tests/probe_cliff_edges.gd)
     python tools/cliff_edges.py image <png/jpg> <out dir> [name]  # any picture of a cliff: its line segments
+    python tools/cliff_edges.py structure <png/jpg> <out dir> [name]   # a straight-on picture: its structure
 
 model: draws the front elevation (along the cliff x height: how far back the face stands, shaded; the beds' feet,
 the joints, the lips, the ledges, the skyline, the clefts drawn over it) and the top view (along the cliff x out
@@ -30,9 +31,10 @@ def stats(xs):
     xs = np.asarray(xs, dtype=float)
     if xs.size == 0:
         return {"n": 0}
-    return {"n": int(xs.size), "median": round(float(np.median(xs)), 2), "mean": round(float(xs.mean()), 2),
-            "cv": round(float(xs.std() / max(xs.mean(), 1e-6)), 2), "p10": round(float(np.percentile(xs, 10)), 2),
-            "p90": round(float(np.percentile(xs, 90)), 2)}
+    def rd(v):   # (three significant figures: small shares stay readable)
+        return float(f"{v:.3g}")
+    return {"n": int(xs.size), "median": rd(np.median(xs)), "mean": rd(xs.mean()),
+            "cv": rd(xs.std() / max(xs.mean(), 1e-9)), "p10": rd(np.percentile(xs, 10)), "p90": rd(np.percentile(xs, 90))}
 
 
 def segments(gray, min_len=12):
@@ -83,6 +85,120 @@ def image_mode(src, out, name):
     st = segment_stats(segs)
     draw_segments(Image.open(src), segs, os.path.join(out, name + "_segments.png"))
     return st
+
+
+def peaks(profile, min_gap):
+    """Indices of local maxima of a 1-D profile at least min_gap apart, above its mean (strongest first kept)."""
+    order = np.argsort(profile)[::-1]
+    out = []
+    thr = profile.mean() + 0.5 * profile.std()
+    for i in order:
+        if profile[i] < thr:
+            break
+        if all(abs(i - j) >= min_gap for j in out):
+            out.append(int(i))
+    return sorted(out)
+
+
+def structure_mode(src, out, name):
+    """A cliff picture's structure, every length as a share of the cliff's height (sky top to image bottom): the
+    skyline's roughness; where horizontal edges bunch (beds, ledges) up the height and vertical ones (joints) along
+    the width, and their spacings; block and facet sizes (regions); the shadows' sizes and shapes; where the scree
+    takes over from the faces."""
+    from skimage.segmentation import felzenszwalb
+    from skimage.measure import label, regionprops
+    im = Image.open(src).convert("RGB")
+    rgb = np.asarray(im, dtype=float) / 255.0
+    g = rgb.mean(axis=2)
+    H, W = g.shape
+    # (the sky: grown down from the top edge through pixels near the top rows' own colour)
+    ref = np.median(rgb[:3].reshape(-1, 3), axis=0)
+    near = np.linalg.norm(rgb - ref, axis=2) < 0.07
+    lab_s, _ = ndimage.label(near)
+    ids = np.unique(lab_s[0][near[0]])
+    sky = np.isin(lab_s, ids[ids > 0])
+    sky = ndimage.binary_opening(sky, iterations=2)
+    # Skyline: the first rock pixel from the top in each column.
+    top = np.array([np.argmax(~sky[:, x]) for x in range(W)], dtype=float)
+    top_y = float(np.median(top))
+    cliff_h = H - top_y
+    rep = {"cliff_height_px": round(cliff_h, 1)}
+    detr = top - ndimage.uniform_filter1d(top, size=max(W // 6, 3))
+    jumps = np.abs(np.diff(ndimage.median_filter(top, size=5)))
+    rep["skyline"] = {"rough": round(float(detr.std() / cliff_h), 3),
+                      "range": round(float((top.max() - top.min()) / cliff_h), 3),
+                      "steps_over_2pct": int((jumps > 0.02 * cliff_h).sum())}
+    rock = ~sky
+    # Edges by direction, from the line segments: where they bunch.
+    segs = segments((g * 255).astype(np.uint8))
+    hrow = np.zeros(H)
+    vcol = np.zeros(W)
+    for x0, y0, x1, y1, length, ang in segs:
+        if min(ang, 180 - ang) < 15:
+            hrow[int(np.clip((y0 + y1) / 2, 0, H - 1))] += length
+        elif abs(ang - 90) < 15:
+            vcol[int(np.clip((x0 + x1) / 2, 0, W - 1))] += length
+    hs = ndimage.gaussian_filter1d(hrow, cliff_h * 0.01)
+    vs = ndimage.gaussian_filter1d(vcol, cliff_h * 0.01)
+    hp = peaks(hs, int(cliff_h * 0.04))
+    vp = peaks(vs, int(cliff_h * 0.03))
+    rep["bands_up_height"] = {"n": len(hp), "spacing": stats(np.diff(hp) / cliff_h) if len(hp) > 1 else {"n": 0}}
+    rep["joints_along"] = {"n_per_cliff_width": round(len(vp) / (W / cliff_h), 2),
+                           "spacing": stats(np.diff(vp) / cliff_h) if len(vp) > 1 else {"n": 0}}
+    long_thr = 0.08 * cliff_h
+    rep["long_edges_per_cliff_area"] = round(sum(1 for s in segs if s[4] > long_thr) / max(rock.sum() / cliff_h ** 2, 1e-6), 2)
+    # Regions: block faces and facets (Felzenszwalb on the rock), their sizes as shares of cliff height squared.
+    k = max(int(cliff_h * 0.5), 50)
+    seg = felzenszwalb(rgb, scale=k, sigma=1.0, min_size=int((cliff_h * 0.02) ** 2))
+    areas = []
+    small_rows = np.zeros(H)
+    all_rows = np.zeros(H)
+    for r in regionprops(seg + 1):
+        cy, cx = r.centroid
+        if sky[int(cy), int(cx)]:
+            continue
+        a = r.area / cliff_h ** 2
+        areas.append(a)
+        all_rows[int(cy)] += 1
+        if a < 0.004:
+            small_rows[int(cy)] += 1
+    rep["regions"] = {"n_per_cliff_area": round(len(areas) / max(rock.sum() / cliff_h ** 2, 1e-6), 1), "area": stats(areas)}
+    # Scree: from the bottom up, where regions crowd (many small fragments) -- more than twice as many to a row as
+    # on the upper half of the cliff.
+    dens = ndimage.uniform_filter1d(all_rows, int(cliff_h * 0.08))
+    upper = dens[int(top_y):int(top_y + cliff_h * 0.5)]
+    base = float(np.median(upper)) if upper.size else 0.0
+    y = H - 1
+    while y > top_y + cliff_h * 0.3 and dens[y] > 2.0 * base:
+        y -= 1
+    rep["scree_share_of_height"] = round(float((H - 1 - y) / cliff_h), 2)
+    rep["region_rows_lower_v_upper"] = round(float(dens[int(H - cliff_h * 0.3):].mean() / max(base, 1e-6)), 2)
+    # Shadows: dark connected areas, their sizes and shapes.
+    dark = (g < 0.3) & rock
+    lab = label(dark)
+    shapes = []
+    for r in regionprops(lab):
+        if r.area < (cliff_h * 0.01) ** 2:
+            continue
+        h0, w0, h1, w1 = r.bbox
+        shapes.append(((w1 - w0) / max(h1 - h0, 1), r.area / cliff_h ** 2))
+    rep["shadows"] = {"share_of_rock": round(float(dark.sum() / rock.sum()), 3), "n_per_cliff_area": round(len(shapes) / max(rock.sum() / cliff_h ** 2, 1e-6), 1),
+                      "wide_bars": round(sum(1 for s in shapes if s[0] > 3) / max(len(shapes), 1), 2),
+                      "tall_slots": round(sum(1 for s in shapes if s[0] < 0.33) / max(len(shapes), 1), 2),
+                      "area": stats([s[1] for s in shapes])}
+    rep["tone"] = {"mean": round(float(g[rock].mean()), 3), "spread": round(float(g[rock].std()), 3)}
+    # Pictures: the regions, the band and joint profiles.
+    from skimage.color import label2rgb
+    vis = (label2rgb(seg, rgb, kind="avg", bg_label=-1) * 255).astype(np.uint8)
+    vim = Image.fromarray(vis)
+    dd = ImageDraw.Draw(vim)
+    for yy in hp:
+        dd.line([(0, yy), (W, yy)], fill=(40, 90, 230), width=2)
+    for xx in vp:
+        dd.line([(xx, top_y), (xx, H)], fill=(230, 40, 40), width=1)
+    dd.line([(0, y), (W, y)], fill=(255, 150, 0), width=3)
+    vim.save(os.path.join(out, name + "_structure.png"))
+    return rep
 
 
 def model_mode(src, out):
@@ -209,6 +325,8 @@ def main():
     os.makedirs(out, exist_ok=True)
     if mode == "model":
         rep = model_mode(src, out)
+    elif mode == "structure":
+        rep = structure_mode(src, out, sys.argv[4] if len(sys.argv) > 4 else "image")
     else:
         rep = image_mode(src, out, sys.argv[4] if len(sys.argv) > 4 else "image")
     print(json.dumps(rep, indent=1))
