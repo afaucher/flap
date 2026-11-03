@@ -86,8 +86,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   beside the concept art).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
-  back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a
-  SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code.
+  back. The script applies each in a scratch tree and requires the named tests to fail (KILLED); a
+  SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code. Entries run in
+  parallel (`-Jobs`, 12 test processes by default), each stopped at its first failing line, the test (shard)
+  that killed it last time first (`test_logs\mutation_kills.csv`); `-Changed` checks only the entries the branch
+  could affect; tests `test_runner.ps1` just passed on the same tree (`test_logs\passed.txt`) skip the baseline.
+  Shared process handling and the pass rule: `test_lib.ps1`.
 
 ## Rules
 - Profile numbers: set the readable ones (mass, span, area, e, glide ratio, CL max) and let `derive()` compute
@@ -99,7 +103,14 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   runner starts N processes), and hide a bird's rig (`b.rig.visible = false`) where only its flight is checked.
 - Fixing a bug: add an entry to `tests/regressions/mutations.json` that reintroduces it, and run
   `.\mutation_check.ps1 -Only <id>` -- it must come back KILLED. A test that passes with the bug back in
-  proves nothing. Run the whole check (a few minutes) before committing rig, flight-model or AI changes.
+  proves nothing.
+- **Before merging to master** (the gate, about 3 min on an idle machine): `.\test_runner.ps1 -TestAll`, then
+  `.\mutation_check.ps1` -- the whole check, all KILLED (about 1.5 min: the tests `-TestAll` just passed on the
+  same tree skip its baseline, so run them in that order with nothing edited in between). While iterating,
+  `.\mutation_check.ps1 -Changed` checks only the entries the branch could affect (the edited files, the
+  named tests, new or changed entries; 20-40 s); it can miss a change that blunts a test against a bug in
+  another file, which is why the gate runs them all. If the gate outgrows 5 minutes (each entry adds about
+  0.6 s), make `-TestAll` + `-Changed` the gate and run the whole check once a day on master instead.
 - Tests measure what is drawn or simulated (the feather mesh's outline, the body mesh), not copies of the
   constants that build it, and check behaviour both ways (left and right, pull and push).
 - The test runner fails on any engine `ERROR:`/`WARNING:` line, not just failed checks.
