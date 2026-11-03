@@ -47,8 +47,11 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   know of threats; `--return-fire` has the target shoot back.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
-- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
-  rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
+- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: a screen
+  to pick your bird, rockets or seekers, the 3 v 3 match (at recruit | pilot | ace) or target practice, with the
+  mode's rules; `Menu.fight_options()`; Lab), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+  with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
+  `Boot.args()` (the command line plus the menu's choice).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
   smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
   and flutter to the ground; down; ruffled coverts; shedding.
