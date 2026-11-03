@@ -1542,6 +1542,34 @@
   ]
  },
  {
+  "id": "warned-of-own-rounds",
+  "bug": "A bird is warned of rounds coming at it, never its own (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif p.shooter == b or not p.alive:",
+    "replace": "\t\tif not p.alive:"
+   }
+  ]
+ },
+ {
+  "id": "warning-wrong-side",
+  "bug": "The HUD puts a warning on the side the threat comes from (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\tvar d := Vector2(local.x, -local.y)\n\treturn d.normalized() if d.length() > 1e-4 else Vector2(0, 1)",
+    "replace": "\tvar d := Vector2(-local.x, -local.y)\n\treturn d.normalized() if d.length() > 1e-4 else Vector2(0, 1)"
+   }
+  ]
+ },
+ {
   "id": "ai-predict-instant-roll",
   "bug": "AI avoidance assumed the bird could roll and turn at once (straight whiskers, escapes it couldn't fly): fast, wide-turning birds saw a trunk their turn curved into too late and clipped trunks about once per perch (2026-11-02).",
   "tests": [
@@ -1751,6 +1779,81 @@
     "file": "scripts/ai/ai_pilot.gd",
     "find": "\t\t_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "feathers-fall-like-stones",
+  "bug": "Knocked-out feathers drift down slowly, slipping side to side; they mustn't drop like stones (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "const FALL_SPEED := 1.0 ",
+    "replace": "const FALL_SPEED := 30.0 "
+   }
+  ]
+ },
+ {
+  "id": "ruffle-missing",
+  "bug": "The coverts over a lost flight feather stand up out of the wing (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tif not lost.is_empty() and _ruffled(i, f):",
+    "replace": "\t\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "burst-light-lingers",
+  "bug": "A burst's light dies within LIGHT_TIME; it mustn't stay lit (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "\t\tvar e := clampf(1.0 - age / LIGHT_TIME, 0.0, 1.0)\n\t\tl.light_energy",
+    "replace": "\t\tvar e := 1.0\n\t\tl.light_energy"
+   },
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "\t\tif age >= LIGHT_TIME:\n\t\t\tl.visible = false",
+    "replace": "\t\tif age >= LIGHT_TIME * 50.0:\n\t\t\tl.visible = false"
+   }
+  ]
+ },
+ {
+  "id": "whole-bird-sheds",
+  "bug": "Only a badly damaged bird sheds coverts in flight (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "const SHED_HEALTH := 0.5",
+    "replace": "const SHED_HEALTH := 1.0"
+   }
+  ]
+ },
+ {
+  "id": "covert-keys-collide",
+  "bug": "The hand's and the forearm's greater coverts need their own keys (they share indices) (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tfi += 50\n",
+    "replace": "\t\tfi += 0\n"
    }
   ]
  },

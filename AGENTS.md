@@ -42,12 +42,16 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   HUD: enemies warm (`CombatHud.ENEMY`), teammates a teal caret (`FRIEND`), a teal cross over the gunsight while a
   teammate is in the line of fire; trails in team colour. Bases per team (`CombatWorld.bases`, `respawn()`:
   a downed bird comes back on its base, mended and rearmed), `score` (enemies downed, shown top right). The
-  range: you and a wingman v the target, your base by the clearing and theirs the farthest outpost.
+  range: you and a wingman v the target, your base by the clearing and theirs the farthest outpost. Warnings:
+  `CombatWorld.warnings_for(bird)` (rounds coming at it, locks on it) -- what the HUD shows and all an AI may
+  know of threats; `--return-fire` has the target shoot back.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, speed on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
   rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
-- `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
+- `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
+  smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
+  and flutter to the ground; down; ruffled coverts; shedding.
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
