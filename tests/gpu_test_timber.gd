@@ -67,7 +67,7 @@ func setup() -> void:
 
 	# End grain: the flat-sawn planks' ends (by their pith, which the mesh carries), at the rail's edge.
 	var flat := 0
-	for i in 9:
+	for i in ArenaBuilder.PLANKS:
 		var pl: MeshInstance3D = b.get_node("Outpost0_Plank%d" % i)
 		var c1: PackedFloat32Array = pl.mesh.surface_get_arrays(0)[Mesh.ARRAY_CUSTOM1]
 		var pith := Vector2(c1[0], c1[1])
@@ -136,23 +136,28 @@ func setup() -> void:
 	var face_n: Vector3 = axes[face_i]
 	var face_c := pxf.origin + face_n * sz[face_i] * 0.5
 	var bw_px := int(sz[3 - long_i - face_i] * 0.6 / 0.3 * PX)
-	_grain_along(await _shot(face_c, face_n, long_dir, 0.3), true, bw_px, "the brace")
-	_grain_along(await _shot(face_c, face_n, face_n.cross(long_dir), 0.3), false, bw_px, "the brace, turned")
-	for i in [2, 6]:
+	_grain_along(await _shot(face_c, face_n, long_dir, 0.3), true, bw_px, "the brace", 0.1)
+	_grain_along(await _shot(face_c, face_n, face_n.cross(long_dir), 0.3), false, bw_px, "the brace, turned", 0.1)
+	# Every plank's top, toward the rail (clear of the boxes): on none does the grain run across (a board of the scan
+	# here and there is blotchy -- a knot -- and alike both ways), and along them clearly on the whole deck.
+	var lead := 0.0
+	for i in ArenaBuilder.PLANKS:
 		var pl: MeshInstance3D = b.get_node("Outpost0_Plank%d" % i)
 		var box := pl.mesh.get_aabb()
 		var gt := pl.global_transform
-		var top_c := gt * Vector3(box.get_center().x, box.end.y, box.get_center().z + 0.1)
+		var top_c := gt * Vector3(box.get_center().x, box.end.y, -0.28)
 		var along := (gt.basis * Vector3(0, 0, 1)).normalized()
-		var pw_px := int(box.size.x * 0.6 / 0.3 * PX)
-		_grain_along(await _shot(top_c, Vector3.UP, along, 0.3, 0.03), true, pw_px, "plank %d's top" % i)
-		_grain_along(await _shot(top_c, Vector3.UP, along.cross(Vector3.UP), 0.3, 0.03), false, pw_px, "plank %d's top, turned" % i)
+		var pw_px := int(box.size.x * 0.6 / 0.24 * PX)
+		lead += _grain_along(await _shot(top_c, Vector3.UP, along, 0.24, 0.03), true, pw_px, "plank %d's top" % i, -0.1)
+		lead += _grain_along(await _shot(top_c, Vector3.UP, along.cross(Vector3.UP), 0.24, 0.03), false, pw_px, "plank %d's top, turned" % i, -0.1)
+	lead /= ArenaBuilder.PLANKS * 2
+	check(lead > 0.12, "the planks' grain runs along them (more alike along by %.2f on average)" % lead)
 	# Every plank's top: one scan board, no dark gap line down its middle.
-	for i in 9:
+	for i in ArenaBuilder.PLANKS:
 		var pl: MeshInstance3D = b.get_node("Outpost0_Plank%d" % i)
 		var box := pl.mesh.get_aabb()
 		var gt := pl.global_transform
-		var top_c := gt * Vector3(box.get_center().x, box.end.y, box.get_center().z + 0.1)
+		var top_c := gt * Vector3(box.get_center().x, box.end.y, -0.28)
 		var along := (gt.basis * Vector3(0, 0, 1)).normalized()
 		var size := box.size.x * 1.0
 		var img := await _shot(top_c, Vector3.UP, along, size, 0.03)
@@ -271,7 +276,7 @@ func _boards(img: Image, r: Rect2i, what: String, gaps: int) -> void:
 ## The grain along the piece, up the screen (`up`) or across it, in the piece's middle (`width_px` across it): the
 ## picture stays alike a few mm along the grain and changes a few mm across it -- the correlation of each pixel
 ## with its neighbour `d` px away is the higher along.
-func _grain_along(img: Image, up: bool, width_px: int, what: String) -> void:
+func _grain_along(img: Image, up: bool, width_px: int, what: String, margin: float) -> float:
 	var half := maxi(width_px / 2, 4)
 	var r := Rect2i(PX / 2 - half, 8, half * 2, PX - 16) if up else Rect2i(8, PX / 2 - half, PX - 16, half * 2)
 	var d := 4
@@ -280,7 +285,8 @@ func _grain_along(img: Image, up: bool, width_px: int, what: String) -> void:
 	var along: float = c_up if up else c_across
 	var across: float = c_across if up else c_up
 	print("%s: alike %d px along %.2f, across %.2f" % [what, d, along, across])
-	check(along > across + 0.1, "%s: the grain runs along it (alike %d px along: %.2f, across: %.2f)" % [what, d, along, across])
+	check(along > across + margin, "%s: the grain runs along it (alike %d px along: %.2f, across: %.2f)" % [what, d, along, across])
+	return along - across
 
 
 ## Pearson correlation of the luminance in r with itself shifted by `o`.

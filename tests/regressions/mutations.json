@@ -1471,7 +1471,7 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\twidths.append(prng.randf_range(0.82, 1.18))",
+    "find": "\t\twidths.append(prng.randf_range(0.84, 1.16))",
     "replace": "\t\twidths.append(1.0)"
    }
   ]
@@ -2630,6 +2630,34 @@
     "file": "scripts/world/planks.gdshader",
     "find": "const float SCAN_GAP0 = 0.0605;",
     "replace": "const float SCAN_GAP0 = 0.0;"
+   }
+  ]
+ },
+ {
+  "id": "brace-feet-off-the-bark",
+  "bug": "The braces' feet (and their trunk plates) were placed for a nominal trunk, not the one the outpost is bolted to, so on a thicker or thinner pine they floated off the bark or sank into it (2026-11-03).",
+  "tests": [
+   "test_outpost_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tif t.id == o.tree_id:\n",
+    "replace": "\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "planks-proud-of-the-deck",
+  "bug": "Thicker planks centred where the thin ones were stood proud of the deck's collision top, so feet and landings met an invisible floor below the drawn one (2026-11-03).",
+  "tests": [
+   "test_planks"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tmi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -PLANK_T * 0.5, 0.0))",
+    "replace": "\t\tmi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -o.thickness * 0.3, 0.0))"
    }
   ]
  }

@@ -1,8 +1,10 @@
 extends TestCase
-## The outpost deck's planks, as drawn (ArenaBuilder._outpost): hand-sawn, not machined -- each plank's edges waver
-## along its length (left and right), its ends run a little out of square, and no two are the same width -- but
-## only by millimetres (every vertex within PLANK_DEV of the plank's box), laid edge to edge with no overlaps
-## and no gap wider than 2.5 cm, the top facing up and the sides out (left and right), the same seed the same deck.
+## The outpost deck's planks, as drawn (ArenaBuilder._outpost): ArenaBuilder.PLANKS of them, PLANK_T thick, their tops
+## where the deck's collision top is; hand-sawn, not machined -- each plank's edges waver along its length (left
+## and right), its ends run a little out of square, and no two are the same width -- but only by millimetres
+## (every vertex within PLANK_DEV of the plank's box), laid edge to edge with no overlaps, gaps between that the
+## eye sees (at least 5 mm) and none wider than 2.5 cm, the top facing up and the sides out (left and right), the
+## same seed the same deck.
 
 
 func setup() -> void:
@@ -21,7 +23,8 @@ func setup() -> void:
 		b.queue_free()
 	var planks: Array = decks[0]
 	var o_w := ArenaLayout.OutpostData.new().width
-	eq(planks.size(), 9, "nine planks")
+	eq(planks.size(), ArenaBuilder.PLANKS, "%d planks" % ArenaBuilder.PLANKS)
+	var narrowest_gap := INF
 	var widths := []
 	var prev_right := -INF
 	var widest_gap := 0.0
@@ -44,7 +47,7 @@ func setup() -> void:
 			var spread: float = xs.max() - xs.min()
 			check(spread > 0.001 and spread < 2.0 * ArenaBuilder.PLANK_DEV, "plank %d: its %s edge wavers by %.1f mm" % [i, "left" if side < 0 else "right", spread * 1000.0])
 		# The box it stays inside: the nominal plank (its middle width, thickness and length) give or take PLANK_DEV.
-		var t := ArenaLayout.OutpostData.new().thickness * 0.6
+		var t := ArenaBuilder.PLANK_T
 		var L := ArenaLayout.OutpostData.new().depth
 		check(box.size.y < t + 2.0 * 0.001 and box.size.y > t - 0.002, "plank %d: %.1f mm thick" % [i, box.size.y * 1000.0])
 		check(absf(box.size.z - L) < 2.0 * ArenaBuilder.PLANK_DEV, "plank %d: %.0f mm long (deck %.0f)" % [i, box.size.z * 1000.0, L * 1000.0])
@@ -83,13 +86,19 @@ func setup() -> void:
 		var xs_world := []
 		for p in v:
 			xs_world.append((mi.global_transform * p).x)
+		var top_y := -INF
+		for p in v:
+			top_y = maxf(top_y, (mi.global_transform * p).y)
+		check(absf(top_y - 10.0) < 0.0012, "plank %d: its top at the deck's collision top (%.1f mm off)" % [i, (top_y - 10.0) * 1000.0])
 		var lo: float = xs_world.min()
 		var hi: float = xs_world.max()
 		if i > 0:
 			check(lo > prev_right, "planks %d and %d don't overlap (%.1f mm apart)" % [i - 1, i, (lo - prev_right) * 1000.0])
 			widest_gap = maxf(widest_gap, lo - prev_right)
+			narrowest_gap = minf(narrowest_gap, lo - prev_right)
 		prev_right = hi
 	check(widest_gap < 0.025, "no gap wider than 2.5 cm (widest %.1f mm)" % (widest_gap * 1000.0))
+	check(narrowest_gap > 0.005, "gaps between them the eye sees (narrowest %.1f mm)" % (narrowest_gap * 1000.0))
 	check(widths.max() - widths.min() > 0.015, "the planks vary in width (%.0f .. %.0f mm)" % [widths.min() * 1000.0, widths.max() * 1000.0])
 	check(absf(prev_right - (planks[0] as MeshInstance3D).global_position.x) > o_w * 0.8, "they cover the deck's width")
 	# The same seed lays the same deck.
@@ -104,7 +113,7 @@ func setup() -> void:
 
 func _planks(b: ArenaBuilder, o: ArenaLayout.OutpostData) -> Array:
 	var out := []
-	for i in 9:
+	for i in ArenaBuilder.PLANKS + 2:   # (and none beyond)
 		var n := b.get_node_or_null("Outpost%d_Plank%d" % [o.id, i])
 		if n != null:
 			out.append(n)

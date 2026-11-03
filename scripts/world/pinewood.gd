@@ -10,7 +10,7 @@ extends RefCounted
 ##   SAPLINGS   young pines on the floor: a slalom under ~6 m.
 ##   OUTPOSTS   timber decks bolted to trunks between the stubs and the crown (and to the oaks between their
 ##              limbs), facing open air: the outer edge is a rounded landing rail -- the perch -- with a nest-box
-##              hangar and crates on the deck. Supplied from the air (no ladders, no hoists).
+##              hangar and crates on the deck. Supplied from the air (no hoists; a rope ladder for the crew).
 ##   STRUCTURE  an old stand isn't even: the pines grow in clumps with gaps between (where one fell, or none
 ##              took), and young pines come up in the gaps' light. The clearing in the middle (40 m across) has the
 ##              biggest oak; a sunlit glade as big lies off to one side; a few smaller gaps between.
