@@ -55,7 +55,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/combat/ai/`: the combat AI (`docs/design/combat_ai.md`, section 11 for what's built): `CombatSense` (what a
   bird can see) -> `CombatBrain` (a Beehave tree, `CombatTree`, built in code; `addons/beehave`) -> an `Intent` that
   `CombatPilot` flies through `AIPilot.steer()` and `AICombat` fires by (`FireControl` flies the real `Projectile`).
-  `Duel` (`scripts/test_support/`) runs headless matches; `tests/probe_duels.gd` prints duel traces and cost.
+  `Duel` (`scripts/test_support/`) runs headless matches; `tests/probe_duels.gd` prints duel traces and cost
+  (`DUEL=hawk,crow DUEL_TARGET=circuit DUEL_TRACE=1`). Teams share a `TeamBoard`; `.\range.ps1 -Match` is a 3 v 3.
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).

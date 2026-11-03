@@ -32,8 +32,23 @@ func setup() -> void:
 		d.add_ai(ids[1], 1, Vector3(20, 22, 8), Vector3.LEFT, skill, 12)
 	Perf.on = true
 	Perf._acc.clear()
+	var trace := OS.get_environment("DUEL_TRACE") != ""   # (every half second: the first bird's mode and geometry)
 	for k in int(secs / 5.0):
-		var out := await d.run(5.0)
+		var out: Dictionary
+		if trace:
+			for h in 10:
+				out = await d.run(0.5)
+				var e0: Dictionary = d.entries[0]
+				var br0: CombatBrain = e0.brain
+				var me: Bird = e0.bird
+				var tb: Bird = d.entries[1].bird
+				var ata := rad_to_deg(Engagement.ata(me.global_position, me.model.flight_dir(), tb.global_position))
+				var l0: Launcher = e0.launcher
+				var miss := FireControl.miss(Projectile.Kind.ROCKET, l0.muzzle(), me.model.velocity, l0.aim(), tb.global_position, tb.model.velocity) if l0.weapon == Launcher.Weapon.ROCKETS else -1.0
+				var lead_off := rad_to_deg(l0.aim().angle_to(br0.intent.aim - l0.muzzle()))
+				print("  %5.1f %s/%s above %5.1f range %5.1f ata %4.0f v %4.1f gamma %4.0f shots %d miss %.1f off-aim %.0f avoiding %s" % [k * 5.0 + (h + 1) * 0.5, br0.intent.mode, br0.bz_phase, me.global_position.y - tb.global_position.y, me.global_position.distance_to(tb.global_position), ata, me.model.speed, rad_to_deg(me.model.path_angle), l0.shots, miss, lead_off, br0.pilot.avoiding > 0.0])
+		else:
+			out = await d.run(5.0)
 		var line := "t %3.0f" % ((k + 1) * 5.0)
 		for e in d.entries:
 			var b: Bird = e.bird

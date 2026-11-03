@@ -3,7 +3,8 @@ extends TestCase
 ##   - a bird it can see is tracked where it is now: what it saw a reaction time ago, carried on along the velocity
 ##     it saw then (crossing left and right);
 ##   - one straight behind, in the blind cone, isn't seen until it checks six; one ahead is;
-##   - a trunk between them hides it, and it is remembered (carried on) for a while, then dropped.
+##   - a trunk between them hides it, and it is remembered (carried on) for a while, then dropped;
+##   - a bird in a steady banked turn is seen turning at the rate it really turns, to its right or its left.
 
 
 func _init() -> void:
@@ -15,7 +16,37 @@ func setup() -> void:
 		await _dead_reckoning(side)
 	await _blind_cone()
 	await _behind_a_trunk()
+	for side in [1.0, -1.0]:
+		await _turn_rate(side)
 	finish()
+
+
+## A crow ahead holding a bank: after it settles into the turn, the track's turn rate is what its heading really
+## does (within 25%), the right sign.
+func _turn_rate(side: float) -> void:
+	var d: Duel = await _world(ArenaLayout.new())
+	var me: Dictionary = d.add_bird("crow", 0, ScriptedInput.new(), null, Vector3(0, 30, 0), Vector3.FORWARD)
+	var stick := ScriptedInput.new()
+	stick.stick = Vector2(side * 0.5, 0.0)
+	var them: Dictionary = d.add_bird("crow", 1, stick, null, Vector3(0, 30, -20), Vector3.FORWARD)
+	var sense := CombatSense.new(me.bird, d.world, CombatSkill.preset("pilot"))
+	var tb: Bird = them.bird
+	var t: CombatSense.Track
+	var h0 := Vector3.ZERO
+	var measured := 0.0
+	for f in 90:
+		await get_tree().physics_frame
+		t = sense.update(1.0 / 60.0).track_of(tb)
+		var v := Vector3(tb.model.velocity.x, 0.0, tb.model.velocity.z)
+		if f == 59:
+			h0 = v
+		elif f == 89:
+			measured = -h0.signed_angle_to(v, Vector3.UP) / 0.5   # (+ = to its right, as the track's)
+	var what := "a crow banked to its %s" % ("right" if side > 0 else "left")
+	var seen := t.turn if t != null else 0.0
+	print("%s: turning %.2f rad/s, seen turning %.2f" % [what, measured, seen])
+	check(absf(measured) > 0.3 and signf(seen) == signf(measured) and absf(seen - measured) < absf(measured) * 0.25, "%s: seen turning at its rate (%.2f vs %.2f rad/s)" % [what, seen, measured])
+	await _drop(d)
 
 
 func _world(layout: ArenaLayout) -> Duel:

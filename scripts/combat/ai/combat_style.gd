@@ -60,9 +60,10 @@ static func from(p: BirdProfile) -> CombatStyle:
 	return s
 
 
-## The steepest bank it can hold level at speed v, with a 15% lift margin (rad, within its bank limit).
-func lift_bank(v: float) -> float:
-	var n := 0.85 * pow(maxf(v, 0.1) / v_stall, 2.0)
+## The steepest bank it can hold at speed v, with a 15% lift margin, leaving `pull` g for pulling the nose up (rad,
+## within its bank limit; 15 deg at least).
+func lift_bank(v: float, pull := 0.0) -> float:
+	var n := 0.85 * pow(maxf(v, 0.1) / v_stall, 2.0) - pull
 	return clampf(acos(clampf(1.0 / maxf(n, 1.0), 0.0, 1.0)), deg_to_rad(15.0), max_bank)
 
 

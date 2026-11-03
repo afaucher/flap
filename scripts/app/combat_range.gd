@@ -16,6 +16,9 @@ extends Node3D
 ## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
 ## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
 ## --demo flies your bird for you (chasing the target and firing), for screenshots and the test.
+## --match: a team match instead of the target (docs/design/combat_ai.md, 4.8): you and two combat-AI wingmen
+## (--team crow,hawk) against three combat-AI birds (--enemy falcon,owl,crow) out from the far base, at --skill
+## recruit | pilot (default) | ace. Each AI bird carries its species' round (CombatStyle). The score is the match.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
 ## T target evasion on/off, R restart, Esc release the mouse.
 
@@ -51,6 +54,11 @@ var wingman: Bird            ## your side's other bird (null: --no-wingman)
 var wingman_pilot: CircuitPilot
 var with_wingman := true
 var return_fire := false     ## the target fires back at you (AICombat), for the HUD's warnings
+var match_mode := false      ## --match: 3 v 3 against combat-AI birds instead of the target
+var match_skill := "pilot"
+var match_team: Array = ["crow", "hawk"]               ## your two AI wingmen
+var match_enemy: Array = ["falcon", "owl", "crow"]     ## the other side
+var match_birds: Array = []  ## the AI birds of a match (yours and theirs)
 
 
 func _ready() -> void:
@@ -64,6 +72,15 @@ func _ready() -> void:
 	evade = not args.has("--no-evade")
 	with_wingman = not args.has("--no-wingman")
 	return_fire = args.has("--return-fire")
+	match_mode = args.has("--match")
+	if Boot.arg_value(args, "--skill") in ["recruit", "pilot", "ace"]:
+		match_skill = Boot.arg_value(args, "--skill")
+	var team_ids := _ids(Boot.arg_value(args, "--team"), 2)
+	if not team_ids.is_empty():
+		match_team = team_ids
+	var enemy_ids := _ids(Boot.arg_value(args, "--enemy"), 3)
+	if not enemy_ids.is_empty():
+		match_enemy = enemy_ids
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
@@ -113,7 +130,7 @@ func _ready() -> void:
 
 func restart() -> void:
 	tacks.clear()
-	for b in [bird, target, wingman]:
+	for b in [bird, target, wingman] + match_birds:
 		if b != null and is_instance_valid(b):
 			world.remove_bird(b)
 			trails.untrack(b)
@@ -123,6 +140,48 @@ func restart() -> void:
 	home = _home()
 	their_base = CombatWorld.far_base(layout, home.position)
 	world.bases = {YOUR_TEAM: home, THEIR_TEAM: their_base}
+	match_birds.clear()
+	target = null
+	target_pilot = null
+	wingman = null
+	if match_mode:
+		_start_match()
+	else:
+		_start_target()
+	# You: coming into the clearing from the south, a little above the target (in a match, out from your base).
+	var flight: Object = player_ctl
+	var weapons: Object = PlayerCombat.new()
+	if demo and target != null:
+		var chase := CircuitPilot.new()
+		chase.mode = CircuitPilot.Mode.CHASE
+		chase.quarry = target
+		chase.cruise = 1.1
+		flight = chase
+		weapons = AICombat.new()
+		(weapons as AICombat).prefer = Launcher.Weapon.SEEKERS if start_seekers else Launcher.Weapon.ROCKETS
+	bird = _spawn(bird_id, flight, "Player")
+	audio.player = bird
+	if target_pilot != null:
+		var w: Array = target_pilot.waypoints   # come in behind the target's first straight, a little high
+		var along := ((w[1] as Vector3) - (w[0] as Vector3)).normalized()
+		bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
+	else:
+		var out := Vector3(their_base.position.x - home.position.x, 0.0, their_base.position.z - home.position.z).normalized()
+		bird.fly_from(home.position + out * 10.0 + Vector3.UP * 4.0, out, bird.profile.v_best)
+	world.player = world.add_bird(bird, weapons, YOUR_TEAM)
+	_arm(bird, world.player)
+	world.player.rearm_perch = home.id
+	combat_hud.home = home.position
+	if start_seekers:
+		world.player.weapon = Launcher.Weapon.SEEKERS
+	camera.bird = bird
+	camera.snap()
+	combat_hud.launcher = world.player
+	combat_hud.world = world
+
+
+## The racetrack target, and your circuit wingman above it.
+func _start_target() -> void:
 	# The target: a figure-eight through the clearing.
 	target_pilot = CircuitPilot.new()
 	target_pilot.waypoints = CircuitPilot.clear_racetrack(layout, CIRCUIT_CENTRE, CIRCUIT_LENGTH, CIRCUIT_R)
@@ -146,40 +205,60 @@ func restart() -> void:
 		_arm(wingman, wl)
 		trails.track(wingman, CombatHud.FRIEND)
 		_launch_wingman()
-	# You: coming into the clearing from the south, a little above the target.
-	var flight: Object = player_ctl
-	var weapons: Object = PlayerCombat.new()
-	if demo:
-		var chase := CircuitPilot.new()
-		chase.mode = CircuitPilot.Mode.CHASE
-		chase.quarry = target
-		chase.cruise = 1.1
-		flight = chase
-		weapons = AICombat.new()
-		(weapons as AICombat).prefer = Launcher.Weapon.SEEKERS if start_seekers else Launcher.Weapon.ROCKETS
-	bird = _spawn(bird_id, flight, "Player")
-	audio.player = bird
-	var w: Array = target_pilot.waypoints   # come in behind the target's first straight, a little high
-	var along := ((w[1] as Vector3) - (w[0] as Vector3)).normalized()
-	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
-	world.player = world.add_bird(bird, weapons, YOUR_TEAM)
-	_arm(bird, world.player)
-	world.player.rearm_perch = home.id
-	combat_hud.home = home.position
-	if start_seekers:
-		world.player.weapon = Launcher.Weapon.SEEKERS
-	camera.bird = bird
-	camera.snap()
-	combat_hud.launcher = world.player
-	combat_hud.world = world
 
 
-## Saddle up a bird that can carry the tack, and arm its launcher from the mounts: the rounds they hold, each
-## fired from its own tube.
-func _arm(b: Bird, l: Launcher) -> void:
+## A team match: two combat-AI wingmen out from your base, three combat-AI birds out from theirs, each team sharing
+## a TeamBoard.
+func _start_match() -> void:
+	var skill := CombatSkill.preset(match_skill)
+	var n := 0
+	for side in [[YOUR_TEAM, home, their_base, match_team], [THEIR_TEAM, their_base, home, match_enemy]]:
+		var team: int = side[0]
+		var base: Perch = side[1]
+		var other: Perch = side[2]
+		var ids: Array = side[3]
+		var board := TeamBoard.new(team)
+		var out := Vector3(other.position.x - base.position.x, 0.0, other.position.z - base.position.z).normalized()
+		var across := Vector3(-out.z, 0.0, out.x)
+		for i in ids.size():
+			var id: String = ids[i]
+			var b := _spawn(id, null, "%s %d (%s)" % ["Wingman" if team == YOUR_TEAM else "Enemy", i + 1, id])
+			var l := world.add_bird(b, null, team)
+			var brain := CombatBrain.new(b, world, l, skill, 100 + n)
+			brain.board = board
+			var kind := "seekers" if brain.style.weapon == Launcher.Weapon.SEEKERS else "rockets"
+			_arm(b, l, [kind, kind])
+			if not tacks.has(b):
+				CombatBrain.arm(l, brain.style)
+			l.weapon = brain.style.weapon
+			var weapons := AICombat.new()
+			weapons.brain = brain
+			l.controller = weapons
+			b.controller = CombatPilot.new(brain)
+			l.rearm_perch = base.id
+			var off := (float(i) - (ids.size() - 1) * 0.5) * 6.0 + (4.0 if team == YOUR_TEAM else 0.0)   # (yours beside you)
+			b.fly_from(base.position + out * 12.0 + across * off + Vector3.UP * (5.0 + i), out, b.profile.v_best)
+			trails.track(b, CombatHud.FRIEND if team == YOUR_TEAM else CombatHud.ENEMY)
+			match_birds.append(b)
+			n += 1
+
+
+## Up to `n` species ids from a comma list ("crow,hawk"), the last repeated to fill; [] if none given.
+static func _ids(list: String, n: int) -> Array:
+	var ids := Array(list.split(",", false)).filter(func(i): return BirdProfile.IDS.has(i))
+	if ids.is_empty():
+		return []
+	while ids.size() < n:
+		ids.append(ids[-1])
+	return ids.slice(0, n)
+
+
+## Saddle up a bird that can carry the tack, and arm its launcher from the mounts (`pods`: the range's loadout
+## unless given): the rounds they hold, each fired from its own tube.
+func _arm(b: Bird, l: Launcher, pods: Array = []) -> void:
 	if not Tack.RIDDEN.has(b.profile.id):
 		return
-	var t := Tack.fit(b.rig, b, loadout)
+	var t := Tack.fit(b.rig, b, pods if not pods.is_empty() else loadout)
 	tacks[b] = t
 	var kinds := {Launcher.Weapon.ROCKETS: "rockets", Launcher.Weapon.SEEKERS: "seekers"}
 	l.set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(kinds[w], i))
@@ -233,7 +312,8 @@ func _on_downed(b: Bird) -> void:
 	if base == null:
 		return
 	if b == target:
-		target_pilot.rejoin(b.global_position, base.facing)
+		if target_pilot != null:
+			target_pilot.rejoin(b.global_position, base.facing)
 	elif b == wingman:
 		wingman_pilot.rejoin(b.global_position, base.facing)
 	elif b == bird:
@@ -255,7 +335,7 @@ func _process(_dt: float) -> void:
 		flight_hud.set_state(t)
 		audio.set_state(t)
 	camera.look_input = player_ctl.look
-	combat_hud.note = "target evades (T)" if evade else "target flies straight (T)"
+	combat_hud.note = ("match, %s skill" % match_skill) if match_mode else ("target evades (T)" if evade else "target flies straight (T)")
 	# The pods show the rounds left.
 	for l in world.launchers:
 		if tacks.has(l.bird) and is_instance_valid(l.bird):
@@ -274,4 +354,5 @@ func _unhandled_input(e: InputEvent) -> void:
 		restart()
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_T:
 		evade = not evade
-		target_pilot.evade = evade
+		if target_pilot != null:
+			target_pilot.evade = evade

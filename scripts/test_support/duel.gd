@@ -9,6 +9,7 @@ var layout: ArenaLayout
 var arena: ArenaBuilder
 var world: CombatWorld
 var entries: Array = []          ## {bird, launcher, brain (or null), team, downs, bonks0}
+var boards := {}                 ## team -> TeamBoard, shared by its combat-AI birds
 var _respawn := {}               ## Bird -> physics ticks left until it comes back
 
 
@@ -29,6 +30,9 @@ func add_ai(id: String, team: int, at: Vector3, dir: Vector3, skill: CombatSkill
 	var b := _bird(id)
 	var l := world.add_bird(b, null, team)
 	var brain := CombatBrain.new(b, world, l, skill, seed)
+	if not boards.has(team):
+		boards[team] = TeamBoard.new(team)
+	brain.board = boards[team]
 	CombatBrain.arm(l, brain.style)
 	var weapons := AICombat.new()
 	weapons.brain = brain
@@ -76,19 +80,24 @@ func run(seconds: float) -> Dictionary:
 	var t0 := Time.get_ticks_usec()
 	var ticks := int(seconds * 60.0)
 	for f in ticks:
-		await get_tree().physics_frame
-		for b in _respawn.keys():
-			_respawn[b] = int(_respawn[b]) - 1
-			if int(_respawn[b]) <= 0:
-				_respawn.erase(b)
-				if is_instance_valid(b):
-					for e in entries:
-						if e.bird == b:
-							e.downs += 1
-					world.respawn(b)
+		await step()
 	var out := outcome()
 	out["ms_per_tick"] = float(Time.get_ticks_usec() - t0) / 1000.0 / maxf(ticks, 1)
 	return out
+
+
+## One physics tick (and the respawns due in it).
+func step() -> void:
+	await get_tree().physics_frame
+	for b in _respawn.keys():
+		_respawn[b] = int(_respawn[b]) - 1
+		if int(_respawn[b]) <= 0:
+			_respawn.erase(b)
+			if is_instance_valid(b):
+				for e in entries:
+					if e.bird == b:
+						e.downs += 1
+				world.respawn(b)
 
 
 ## Per bird: hits taken, shots fired, times downed, bonks, health, ammo, its brain's time in each mode; per team:

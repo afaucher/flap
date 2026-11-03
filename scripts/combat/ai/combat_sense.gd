@@ -4,8 +4,8 @@ extends RefCounted
 ## simulation's. Each tick it builds the Picture:
 ##   tracks   other birds it can see -- inside its field of view (the rest a blind cone it looks into every
 ##            `scan_every` s), within VIEW_RANGE, line of sight clear of the trunks -- each as it was `reaction` s
-##            ago, carried on to now along the velocity it had then; one it loses is remembered for MEMORY s,
-##            carried on along its last velocity.
+##            ago, carried on to now along the velocity it had then, with the turn rate it was seen turning at;
+##            one it loses is remembered for MEMORY s, carried on along its last velocity.
 ##   threats  rounds coming at it, as the HUD warns the player (CombatWorld.warnings_for): time to closest approach
 ##            and miss distance from a rocket's straight line; a seeker taken as guided at it, a hit at its time to go.
 ##   locked   a lock on it above half (the HUD's lock warning), and where from.
@@ -14,13 +14,16 @@ extends RefCounted
 const VIEW_RANGE := 90.0
 const MEMORY := 3.0
 const LOS_EVERY := 0.15
-const HISTORY := 0.6        ## s of past states kept per bird (the reaction delay reads back into it)
+const HISTORY := 0.9        ## s of past states kept per bird (the reaction delay reads back into it)
+const TURN_SPAN := 0.2      ## s over which a bird's turn rate is read from its velocity
+const RECKON_STEPS := 4     ## steps along its turn when carrying a seen bird on to now
 
 
 class Track:
 	var bird: Bird
 	var pos := Vector3.ZERO
 	var vel := Vector3.ZERO
+	var turn := 0.0           ## rad/s it is turning about the vertical, as seen (+ = to its right)
 	var seen_at := -INF       ## clock when last actually seen
 	var visible := false
 	var enemy := true
@@ -99,10 +102,20 @@ func update(dt: float) -> Picture:
 		var in_view := to.length() < VIEW_RANGE and (_scanning > 0.0 or fd.angle_to(to) <= half)
 		var seen: bool = in_view and _clear(b, my_pos, pos) and not b.is_down()
 		if seen or not tr.enemy:   # (teammates call out where they are: always known)
-			# What it saw a reaction time ago, carried on to now along that velocity (a pilot leads for the delay;
-			# what the bird did in that moment it can't know).
-			tr.vel = past[2]
-			tr.pos = pos + tr.vel * minf(skill.reaction, clock - float(past[0]))
+			# What it saw a reaction time ago -- where, how fast, turning how hard -- carried on to now along that turn
+			# (a pilot leads for the delay; what the bird did in that moment it can't know).
+			var seen_vel: Vector3 = past[2]
+			var before: Array = _at(h, float(past[0]) - TURN_SPAN)
+			var span := float(past[0]) - float(before[0])
+			var v0 := Vector3((before[2] as Vector3).x, 0.0, (before[2] as Vector3).z)
+			var v1 := Vector3(seen_vel.x, 0.0, seen_vel.z)
+			tr.turn = clampf(-v0.signed_angle_to(v1, Vector3.UP) / span, -6.0, 6.0) if span > 0.05 and v0.length() > 1.0 and v1.length() > 1.0 else 0.0
+			var lag := minf(skill.reaction, clock - float(past[0]))
+			tr.pos = pos
+			tr.vel = seen_vel
+			for k in RECKON_STEPS:
+				tr.vel = tr.vel.rotated(Vector3.UP, -tr.turn * lag / RECKON_STEPS)
+				tr.pos += tr.vel * lag / RECKON_STEPS
 			tr.seen_at = clock
 			tr.visible = seen
 		else:
@@ -133,7 +146,8 @@ func update(dt: float) -> Picture:
 func _clear(b: Bird, from: Vector3, to: Vector3) -> bool:
 	var c: Array = _los.get(b, [-INF, false])
 	if clock - float(c[0]) >= LOS_EVERY:
-		c = [clock, world.layout == null or world.layout.segment_clear(from, to, 0.0, -1)]
+		var own := me.perch.tree_id if me.state == Bird.State.PERCHED and me.perch != null else -1   # (not through the branch it sits on)
+		c = [clock, world.layout == null or world.layout.segment_clear(from, to, 0.0, own)]
 		_los[b] = c
 	return c[1]
 

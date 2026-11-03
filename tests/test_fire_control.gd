@@ -8,7 +8,9 @@ extends TestCase
 ##   - a target that breaks only as the round arrives is still hit; one that broke from the launch is missed (the
 ##     solution breaks the target when it would see the round coming, not before);
 ##   - seekers: fired at a crow tail-on or a sparrow crossing (no level break beats one here), held for a bird off
-##     the seeker's gimbal or beyond its reach.
+##     the seeker's gimbal or beyond its reach;
+##   - a bird in a banked turn, as the AI sees it: a rocket at the brain's lead (which follows the turn it sees) hits
+##     it, turning right or left; one at the lead for flying straight misses.
 
 
 func _init() -> void:
@@ -23,8 +25,45 @@ func setup() -> void:
 	for side in [1.0, -1.0]:
 		await _outside_fuse(side)
 		_late_break(side)
+		await _turning_shot(side, true)
+		await _turning_shot(side, false)
 	_seekers()
 	finish()
+
+
+## A crow 28 m ahead, crossing and banked hard into a turn to its `side`; an AI sparrow watches it for 3/4 s (its
+## brain ticked by hand, flying straight), then a rocket goes off from its muzzle at the brain's lead (a hit), or
+## (`turn` false) at the lead for flying straight on (a miss).
+func _turning_shot(side: float, turn: bool) -> void:
+	var d := Duel.new()
+	add_child(d)
+	d.setup(ArenaLayout.new())
+	await frames(1)
+	var bank := ScriptedInput.new()
+	bank.stick = Vector2(side * 0.8, 0.0)
+	var them: Dictionary = d.add_bird("crow", 1, bank, null, Vector3(-side * 8.0, 20, -28), Vector3(side, 0, 0))
+	var me: Dictionary = d.add_ai("sparrow", 0, Vector3(0, 20, 0), Vector3.FORWARD)
+	var b: Bird = me.bird
+	var l: Launcher = me.launcher
+	var br: CombatBrain = me.brain
+	b.controller = ScriptedInput.new()   # (flies straight: the brain only watches)
+	l.controller = null
+	for f in 45:
+		await get_tree().physics_frame
+		br.tick(1.0 / 60.0)
+	var tr := br.picture.track_of(them.bird)
+	var lead := br.rocket_lead(tr)
+	var straight := FireControl.lead(l.muzzle(), b.model.velocity, tr.pos, tr.vel)
+	d.world.spawn(Projectile.launch(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, (lead if turn else straight) - l.muzzle(), b))
+	for f in 70:
+		await get_tree().physics_frame
+	var what := "a crow turning to its %s (seen at %.1f rad/s; the turn's lead %.1f m from the straight one)" % ["right" if side > 0 else "left", tr.turn, lead.distance_to(straight)]
+	var hit := int(d.world.hits.get(them.bird, 0)) > 0
+	print("%s, aimed at the %s lead: hit %s" % [what, "turning" if turn else "straight", hit])
+	check(hit == turn, "%s: a rocket at the %s lead %s" % [what, "brain's (turning)" if turn else "straight", "hits" if turn else "misses"])
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
 
 
 ## A crossing target, a rocket from 22 m out: at fire control's lead it hits, at the bird it misses.

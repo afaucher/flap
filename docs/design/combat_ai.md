@@ -542,6 +542,38 @@ birds in a 3 v 3 (`docs/design/performance.md`).
   spiral), `test_combat_defense`, `test_combat_tree_spike`. Nine `combat-*` entries in
   `tests/regressions/mutations.json`, each KILLED.
 
+**Built since** (stages 4-5):
+- **Seen turn rate.** `CombatSense` reads how hard each bird is turning from its velocity over 0.2 s and carries it on
+  through the reaction delay *along that turn*; the rocket lead (`FireControl.lead`) and fire control use it. Against
+  a bird in a hard break this is the difference between a hit and a miss (`test_fire_control`); in a 3 v 3 it took
+  the hits from 4 to 16 in 90 s.
+- **Boom and zoom** (hawk, falcon: `CombatStyle.prefers_height`): the Fight branch's `BoomZoom` -- climb (run out to
+  30 m from the target, climbing at 16 deg while above v*, then back at a point 9 m above it), stoop (with 5+ m of
+  height, the target ahead within 45 deg and 8-32 m: dive on the rocket lead, unflapped, weapons free, aiming past the
+  lead by how far the gunsight trails it), zoom (pull up 30 deg along the heading while faster than v*). Against the
+  racetrack target the hawk lands 4 hits and the falcon 3 in 40 s (before: none).
+- **Ambush** (owl: `CombatStyle.ambusher`): a perch 4-15 m above where it has seen the enemies fly
+  (`CombatBrain.fight_area`, a slow average), 15-45 m out from there; sit (resting) until one passes below within
+  30 m not flying straight at it, then drop off and fight; give up after `skill.ambush_patience` or when spotted.
+- **Rest on a safe perch**: a tired bird picks, of the perches it can reach with height in hand, one far from the
+  enemies and out of their sight (from where each is, where it's heading, and where they've been flying); with none in
+  reach it glides down and rests on the ground. **Known weakness:** a tired crow in the test fails two perch approaches
+  in a row (a bonk on an outpost, then short of a low perch) and rests on the ground; AIPilot's approach with almost
+  no stamina needs a look.
+- **Lift for the pull-out**: the bank cap also leaves lift for pulling out of a dive, and a defensive break never
+  commands more than 12 deg above the bird's path (the hawk stalled pulling out of a stoop into a break).
+- Perched birds don't break from an enemy whose nose swings past (the ambusher drops off when spotted); a bird making
+  a head-on pass on its own target doesn't break from it; a perched bird's line of sight leaves out its own branch.
+- **Teams**: `TeamBoard` (each member's target and mode, as called out; no enemy positions): a target already taken by
+  teammates scores 2.5 less each, unless it's after me (the plan's 1.5 left two on one target 37% of the time).
+  `Duel` gives each team a board; `CombatWorld.friendly_hits` counts teamkill hits. `test_combat_team`: 3 v 3 (crow,
+  sparrow, hawk a side), 90 s: both teams land hits and birds are downed, downed birds respawn and fly again, two on
+  one target ~12% of fighting time, no friendly hits.
+- **Range `--match`** (`.\range.ps1 -Match [-Skill pilot] [-Team crow,hawk] [-Enemy falcon,owl,crow]`): you and two
+  combat-AI wingmen against three, from the two bases; each AI bird carries its species' round.
+- Not built yet: pairs (leader / wingman slots), rearming in turns, base watch, yo-yos beyond the high yo-yo in
+  Attack, the duel matrix and skill tuning (stage 6), the game (stage 7).
+
 **Findings:**
 - **Seekers can't be out-turned.** No level break at any timing beats a locked seeker (4.6); only denying the lock and
   trunks do. Balance is the user's call (seeker turn rate, gimbal, fuse); nothing was changed.
@@ -549,7 +581,9 @@ birds in a 3 v 3 (`docs/design/performance.md`).
   gone off near it.
 - **The bank has to be lift-limited** in a sustained combat turn (`CombatStyle.lift_bank`, 15% margin): turning at
   the skill's share of the bank limit at any speed bled a hawk into stalls and a sparrow into a spiral.
-- **Falcon and hawk** get few shots turning (the falcon's 10 m turn at 14 m/s): they need stage 4's boom-and-zoom.
+- **Falcon and hawk** got no hits turning (the falcon's 10 m turn at 14 m/s); boom-and-zoom gives them theirs.
+- **Defence outweighed attack** between AI birds until the attackers read the turn: a 3 v 3 of pilots landed 4 hits
+  in 90 s, most of each bird's time spent breaking. Stage 6 (the duel matrix) is where that balance gets tuned.
 
 **Cost, flagged:** ~0.6-0.7 ms per AI bird per physics tick, nearly all `ai.avoid` (AIPilot's tree avoidance run
 every tick in combat), against section 8's 0.1 ms budget; the brain (tree, target choice) is ~0.07 ms, sense ~0.02 ms,

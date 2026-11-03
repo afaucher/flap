@@ -38,6 +38,7 @@ var hits := {}              ## Bird -> hits taken
 var teams := {}             ## Bird -> team id
 var bases := {}             ## team id -> Perch: where its birds rearm, mend and respawn
 var score := {}             ## team id -> enemy birds it has downed
+var friendly_hits := 0      ## bursts that hurt a teammate of the shooter (friendly fire is on)
 var _next_team := 100       ## (the teams of birds added without one)
 const WARN_RANGE := 25.0    ## m: rounds closer than this, heading at a bird, are warned of
 const LANE := 1.3           ## m off the line of fire within which a teammate is in the way (a burst's reach)
@@ -283,6 +284,8 @@ func feathers_for(strength: float) -> int:
 ## Apply a hit to `b` from a burst at `at` (strength 0..1).
 func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	hits[b] = int(hits.get(b, 0)) + 1
+	if is_instance_valid(by) and by != b and teams.has(by) and friends(by, b):
+		friendly_hits += 1
 	var was_up := not b.is_down()
 	var by_player: bool = player != null and is_instance_valid(by) and by == player.bird
 	if by_player:

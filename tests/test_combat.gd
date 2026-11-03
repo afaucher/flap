@@ -27,7 +27,7 @@ class Dummy extends Node3D:
 
 
 func _init() -> void:
-	timeout_sec = 120.0
+	timeout_sec = 240.0
 
 
 func setup() -> void:
@@ -44,6 +44,7 @@ func setup() -> void:
 	_far_base()
 	await _warnings()
 	await _range()
+	await _range_match()
 	finish()
 
 
@@ -543,5 +544,31 @@ func _range() -> void:
 		rails.append((o as ArenaLayout.OutpostData).rail_perch_id)
 	check(r.layout.outposts.is_empty() or rails.has(home.id), "your base is an outpost's rail (%d outposts)" % r.layout.outposts.size())
 	check(r.target_pilot.breaks >= 1, "the target breaks when threatened")
+	r.queue_free()
+	await frames(2)
+
+
+## The range's --match: you and two combat-AI wingmen against three combat-AI birds from the far base; within 30 s
+## the AI birds are fighting (rounds fired), each carrying its species' round.
+func _range_match() -> void:
+	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
+	add_child(r)
+	await frames(2)
+	r.match_mode = true
+	r.restart()
+	var ai: Array = r.match_birds
+	var mine := ai.filter(func(b): return r.world.friends(b, r.bird))
+	check(ai.size() == 5 and mine.size() == 2, "a match: two AI wingmen and three AI enemies (%d, %d yours)" % [ai.size(), mine.size()])
+	check(r.target == null, "and no racetrack target")
+	await frames(60 * 30)
+	var shots := 0
+	var kinds_ok := true
+	for l in r.world.launchers:
+		if ai.has(l.bird):
+			shots += l.shots
+			var st := CombatStyle.of(l.bird.profile)
+			kinds_ok = kinds_ok and int(l.capacity[st.weapon]) > 0 and l.weapon == st.weapon
+	check(shots >= 2, "the AI birds fight: %d rounds fired in 30 s" % shots)
+	check(kinds_ok, "each AI bird carries its species' round")
 	r.queue_free()
 	await frames(2)

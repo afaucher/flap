@@ -5,7 +5,7 @@ extends RefCounted
 ## With a `brain` (the combat AI, docs/design/combat_ai.md 4.5): fires only when the brain has weapons free on a
 ## target, the flight isn't dodging a tree, the bird isn't stunned, no teammate is in the line of fire, and fire
 ## control says the round would hit -- flown forward with the real Projectile code (FireControl) against the
-## target as seen (CombatSense: delayed, its own velocity, never its inputs). Rockets: the predicted pass inside
+## target as seen (CombatSense: delayed, its own velocity and turn, never its inputs). Rockets: the predicted pass inside
 ## the fuse (times the skill's min_quality; a rocket that passes further off doesn't go off near it), and no trunk
 ## between. Seekers: locked, and the solution hits whether the
 ## target flies on or breaks either way at its corner rate (a sparrow that can beat it by breaking isn't shot at
@@ -73,7 +73,7 @@ func _would_hit(l: Launcher, t: CombatSense.Track) -> bool:
 	if l.weapon == Launcher.Weapon.ROCKETS:
 		if layout != null and not layout.segment_clear(l.muzzle(), t.pos, 0.2):
 			return false   # a trunk in the way
-		return FireControl.miss(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel) < Projectile.fuse * quality
+		return FireControl.miss(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, t.turn) < Projectile.fuse * quality
 	if not l.locked() or l.lock_target != t.bird:
 		return false
 	# Its best break, at the speed it's seen at, left and right, timed as well as it could be.

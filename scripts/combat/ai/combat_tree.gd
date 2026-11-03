@@ -10,8 +10,10 @@ extends RefCounted
 ##   |- Recover   [Stunned?]     -> HoldLevel
 ##   |- Rearm     [OutOfAmmo?]   -> GoRearm        home to the base: the only place rounds restock
 ##   |- Rest      [NeedsRest?]   -> GoRest         tired: a perch; hurt: the base (feathers grow back there)
+##   |- Ambush                                     (an ambusher) sit high on a perch, drop on a bird passing below
 ##   |- Fight     [HasTarget?]   -> Selector
 ##   |    |- Extend    [Outmatched?] -> Extend
+##   |    |- BoomZoom  [EnergyFighter?] -> BoomAndZoom   climb above it, stoop through with rockets, zoom back up
 ##   |    |- Attack    [InEnvelope?] -> Attack     pursuit for the weapon, weapons free
 ##   |    '- Reposition                            behind and (by style) above it
 ##   '- Patrol                                     loiter near the base at the style's height
@@ -27,8 +29,10 @@ static func build(brain: CombatBrain) -> BeehaveTree:
 	root.add_child(_seq("Recover", [Stunned.new(), HoldLevel.new()]))
 	root.add_child(_seq("Rearm", [OutOfAmmo.new(), GoRearm.new()]))
 	root.add_child(_seq("Rest", [NeedsRest.new(), GoRest.new()]))
+	root.add_child(Ambush.new())
 	var fight := SelectorComposite.new()
 	fight.add_child(_seq("Extend", [Outmatched.new(), Extend.new()]))
+	fight.add_child(_seq("BoomZoom", [EnergyFighter.new(), BoomAndZoom.new()]))
 	fight.add_child(_seq("Attack", [InEnvelope.new(), Attack.new()]))
 	fight.add_child(Reposition.new())
 	root.add_child(_seq("Fight", [HasTarget.new(), fight]))
@@ -139,6 +143,14 @@ class Outmatched extends ConditionLeaf:
 		return FAILURE
 
 
+## A style that fights on its energy (hawk, falcon: slow to roll or a high stall), against a target it can see.
+class EnergyFighter extends ConditionLeaf:
+	func tick(_actor: Node, bb: Blackboard) -> int:
+		var br := CombatTree._brain(bb)
+		var t := br.picture.track_of(br.target)
+		return SUCCESS if br.style.prefers_height and t != null and t.visible else FAILURE
+
+
 ## The target close enough and near enough my nose to fly a shot at it.
 class InEnvelope extends ConditionLeaf:
 	func tick(actor: Node, bb: Blackboard) -> int:
@@ -188,6 +200,7 @@ class Defend extends ActionLeaf:
 		if br.clock < br.defend_until:
 			i.aim = CombatTree._toward(b, br.defend_dir)
 			i.opts.gamma = br.defend_gamma
+			i.opts.lift_cap = br.jink_side != 0.0
 			return SUCCESS
 		if worst != null:
 			br.jink_side = 0.0
@@ -226,6 +239,10 @@ class Defend extends ActionLeaf:
 		br.defend_gamma = deg_to_rad(br.rng.randf_range(4.0, 12.0)) * (1.0 if br.rng.randf() < 0.5 else -1.0)
 		if pos.y < br.style.height_band.x:
 			br.defend_gamma = absf(br.defend_gamma)   # (low down: never jink toward the ground)
+		elif b.model.speed < br.style.v_best:
+			br.defend_gamma = -absf(br.defend_gamma)   # (slow: never climb in a break, or it stalls)
+		br.defend_gamma = clampf(br.defend_gamma, b.model.path_angle - deg_to_rad(12.0), b.model.path_angle + deg_to_rad(12.0))   # (nor pull out of a dive into one)
+		i.opts.lift_cap = true   # (breaks one after another are a sustained turn: within what the lift holds)
 		br.defend_until = br.clock + br.rng.randf_range(0.35, 0.7)
 		i.aim = CombatTree._toward(b, br.defend_dir)
 		i.opts.gamma = br.defend_gamma
@@ -301,7 +318,8 @@ class GoRearm extends ActionLeaf:
 		return SUCCESS if br.intent.perch != null else FAILURE
 
 
-## Rest: hurt, to the base (feathers grow back only there); tired, the base if near, else a perch in reach.
+## Rest: hurt, to the base (feathers grow back only there); tired, the base if near, else a perch in reach -- or, with
+## none in reach, the ground.
 class GoRest extends ActionLeaf:
 	func tick(actor: Node, bb: Blackboard) -> int:
 		var br := CombatTree._brain(bb)
@@ -314,15 +332,141 @@ class GoRest extends ActionLeaf:
 			br.intent.perch = b.perch
 		else:
 			br.intent.perch = CombatTree._nearest_perch(br)
-		return SUCCESS if br.intent.perch != null else FAILURE
+		if br.intent.perch == null:
+			# No perch in reach on what it has left: glide down and rest on the ground (CombatPilot sits there).
+			var fd := b.model.flight_dir()
+			br.intent.aim = CombatTree._toward(b, Vector3(fd.x, -0.3, fd.z))
+			br.intent.opts.flap = "none"
+		return SUCCESS
 
 
-## A perch the flight AI can reach from here (its own choice, kept while it flies there).
+## A perch to rest on, kept while it flies there: one the flight AI can reach (AIPilot's rule), the safest -- far from
+## the enemies it knows of, not toward them, out of their sight behind the trunks -- of a comfortable hop.
 static func _nearest_perch(br: CombatBrain) -> Perch:
 	if br.pilot.target != null and br.intent.mode in ["rest", "rearm"]:
 		return br.pilot.target
-	var budget: float = 6.0 * br.bird.model.energy.stamina
-	return br.pilot._best_perch(br.bird, budget, 2.0 + br.style.v_stall * 0.35)
+	var pos := br.bird.global_position
+	# Where they'll look from: each enemy now and a couple of seconds on, and where it has seen them fly.
+	var eyes := []
+	for t in br.picture.enemies():
+		eyes.append(t.pos)
+		eyes.append(t.pos + t.vel * 2.0)
+	if br.fight_seen >= 0.0:
+		eyes.append(br.fight_area)
+	var layout := br.world.layout
+	var glide := br.bird.profile.glide_ratio
+	return _pick_perch(br, func(c: Perch, d: float) -> float:
+		# (AIPilot's own taste: a 25-40 m hop, a little downhill, up in the trees; a tired bird can't climb to one.)
+		var score := -absf(d - 32.0) * 0.1 - maxf(0.0, c.position.y - pos.y + 2.0) * 0.6 + minf(c.position.y, 15.0) * 0.15
+		score += minf(pos.y - d / (glide * 0.75) - c.position.y, 6.0) * 0.4   # (height in hand to get there: a break on the way mustn't leave it short)
+		for e in eyes:
+			score += minf(c.position.distance_to(e), 50.0) / 25.0
+			if (c.position - pos).dot(e - pos) > 0.0:
+				score -= 0.5   # (toward them)
+			if layout != null and layout.segment_clear(e, c.position + Vector3.UP * 0.3, 0.0, c.tree_id):
+				score -= 3.0   # (in sight)
+		return score)
+
+
+## The best-scoring perch the flight AI can reach from here (AIPilot._best_perch's reach rule: a hop of 12-70 m, high
+## enough to approach, low enough to glide or climb to on the stamina it has: `climb` m at full stamina), by
+## `score(perch, distance)`.
+static func _pick_perch(br: CombatBrain, score: Callable, climb := 6.0) -> Perch:
+	var b := br.bird
+	var pos := b.global_position
+	var p := b.profile
+	var budget: float = climb * b.model.energy.stamina
+	var floor_y := 2.0 + br.style.v_stall * 0.35
+	var best: Perch = null
+	var best_score := -INF
+	for c in b.layout.perches:
+		if c.tree_id == br.pilot._last_tree or br.pilot.clock < float(br.pilot._given_up.get(c.id, -1.0)):
+			continue
+		var d := Vector2(c.position.x - pos.x, c.position.z - pos.z).length()
+		if d < 12.0 or d > 70.0 or c.position.y < floor_y or c.position.y > pos.y - d / (p.glide_ratio * 0.75) + budget:
+			continue
+		var sc: float = score.call(c, d)
+		if sc > best_score:
+			best_score = sc
+			best = c
+	return best
+
+
+## Ambush (docs/design/combat_ai.md, 4.7), for an ambusher with rounds: fly to a perch high above where the enemies
+## fly, sit and watch (resting meanwhile), and drop off -- leaving the fight to the Fight branch -- when one passes
+## below within 30 m, not flying straight at me; or when one has its nose on me inside 25 m (spotted), or after
+## skill.ambush_patience.
+## Then it fights a while (AMBUSH_AGAIN s) before it looks for another. FAILURE whenever it isn't ambushing, so the
+## branches below take over: an enemy close enough to fight now is fought.
+class Ambush extends ActionLeaf:
+	func tick(actor: Node, bb: Blackboard) -> int:
+		var br := CombatTree._brain(bb)
+		var b := actor as Bird
+		if not br.style.ambusher or br.ammo_left() == 0 or br.clock < br.amb_again:
+			return FAILURE
+		var pos := b.global_position
+		var enemies := br.picture.enemies()
+		if br.fight_seen < 0.0:
+			return FAILURE   # (no idea yet where they fly)
+		if br.amb_perch != null and br.amb_perch.position.y < br.fight_area.y + 3.0:
+			br.amb_perch = null   # (they've been flying higher than it: pick again)
+		if br.amb_perch != null and b.state == Bird.State.PERCHED and b.perch == br.amb_perch:
+			if br.amb_since < 0.0:
+				br.amb_since = br.clock
+			for t in enemies:
+				if not t.visible:
+					continue
+				var its_ata: float = Engagement.ata(t.pos, t.vel.normalized(), pos) if t.vel.length() > 1.0 else PI
+				var spotted: bool = its_ata < deg_to_rad(15.0) and t.pos.distance_to(pos) < 25.0   # (its nose on my perch)
+				var under: bool = pos.y - t.pos.y > 3.0 and Vector2(t.pos.x - pos.x, t.pos.z - pos.z).length() < 30.0 and its_ata > deg_to_rad(25.0)
+				if spotted or under:
+					if under:
+						br.target = t.bird
+						br.stats.ambushes = int(br.stats.get("ambushes", 0)) + 1
+					CombatTree._end_ambush(br)
+					return FAILURE
+			if br.clock - br.amb_since > br.skill.ambush_patience:
+				CombatTree._end_ambush(br)
+				return FAILURE
+		else:
+			for t in enemies:
+				if t.visible and t.pos.distance_to(pos) < 30.0:
+					return FAILURE   # (one close enough to fight now)
+			if br.amb_perch == null:
+				br.amb_perch = CombatTree._ambush_perch(br)
+				br.amb_since = -1.0
+				if br.amb_perch == null:
+					br.amb_again = br.clock + 3.0
+					return FAILURE
+		br.intent.mode = "ambush"
+		br.intent.perch = br.amb_perch
+		return SUCCESS
+
+
+const AMBUSH_AGAIN := 12.0
+
+
+static func _end_ambush(br: CombatBrain) -> void:
+	br.amb_perch = null
+	br.amb_again = br.clock + AMBUSH_AGAIN
+
+
+## A perch for an ambush: 4-15 m above where it has seen the enemies fly (CombatBrain.fight_area), 15-45 m from
+## there, not under a known enemy's nose; it may climb a little more to it than to a rest perch.
+static func _ambush_perch(br: CombatBrain) -> Perch:
+	var enemies := br.picture.enemies()
+	var area := br.fight_area
+	var score := func(c: Perch, d: float) -> float:
+		var up := c.position.y - area.y
+		if up < 4.0:
+			return -INF
+		var flat := Vector2(c.position.x - area.x, c.position.z - area.z).length()
+		var sc := minf(up, 15.0) * 0.3 - absf(flat - 28.0) * 0.08 - d * 0.02
+		for t in enemies:
+			if t.vel.length() > 1.0 and Engagement.ata(t.pos, t.vel.normalized(), c.position) < deg_to_rad(30.0):
+				sc -= 2.0   # (under its nose)
+		return sc
+	return _pick_perch(br, score, 12.0)
 
 
 ## Run along the clearest line away from the enemies, flapping, a little downhill for speed.
@@ -374,6 +518,85 @@ class Attack extends ActionLeaf:
 		aim = pos + to.rotated(Vector3.UP, br.rng.randf_range(-err, err))
 		i.aim = CombatTree._floor(br, aim)
 		return SUCCESS
+
+
+## Boom and zoom (docs/design/combat_ai.md, 4.4 and 5), for the birds that can't turn with their targets:
+##   climb  -- run out to ROOM m from it, climbing, then turn back at a point STOOP_HEIGHT above it;
+##   stoop  -- with the height and it ahead within reach (any aspect: a head-on pass too), dive on its rocket lead,
+##             wings unflapped, weapons free, until past it (close, behind me, or below it) or out of reach;
+##   zoom   -- pull up and climb away along my heading, trading the dive's speed for height, then climb again.
+class BoomAndZoom extends ActionLeaf:
+	const STOOP_HEIGHT := 9.0
+	const ROOM := 30.0   ## m out from it before turning back for the next pass
+	const CLIMB_DEG := 16.0
+
+	func tick(actor: Node, bb: Blackboard) -> int:
+		var br := CombatTree._brain(bb)
+		var b := actor as Bird
+		var t := br.picture.track_of(br.target)
+		var i := br.intent
+		i.target = br.target
+		var pos := b.global_position
+		var fd := b.model.flight_dir()
+		var fh := Vector3(fd.x, 0.0, fd.z).normalized()
+		var to := t.pos - pos
+		var flat := Vector2(to.x, to.z).length()
+		var above := pos.y - t.pos.y
+		if br.bz_phase == "stoop":
+			var passed := to.length() < 4.0 or Engagement.ata(pos, fd, t.pos) > deg_to_rad(100.0) or above < -2.0 or flat > 40.0
+			if passed or br.clock > br.bz_until:
+				br.bz_phase = "zoom"
+				br.bz_until = br.clock + 1.4
+			else:
+				i.mode = "attack"
+				i.fire = true
+				var aim := CombatTree._overlead(br, br.rocket_lead(t))
+				i.aim = aim
+				i.opts.gamma = clampf(atan2(aim.y - pos.y, maxf(Vector2(aim.x - pos.x, aim.z - pos.z).length(), 1.0)), deg_to_rad(-60.0), deg_to_rad(10.0))
+				i.opts.flap = "none"
+				return SUCCESS
+		if br.bz_phase == "zoom":
+			if br.clock < br.bz_until and b.model.speed > br.style.v_best:
+				i.mode = "zoom"
+				i.aim = pos + fh * 30.0 + Vector3.UP * 15.0
+				i.opts.gamma = deg_to_rad(30.0)
+				i.opts.flap = "none"
+				return SUCCESS
+			br.bz_phase = "climb"
+		# Climb: run out to room for a pass, then back at a point above it.
+		br.bz_phase = "climb"
+		i.mode = "engage"
+		var ata := Engagement.ata(pos, fd, t.pos)
+		if above >= STOOP_HEIGHT * 0.6 and flat > 8.0 and flat < 32.0 and ata < deg_to_rad(45.0):
+			br.bz_phase = "stoop"
+			br.bz_until = br.clock + 3.0
+			br.stats.stoops = int(br.stats.get("stoops", 0)) + 1
+			i.mode = "attack"
+			i.fire = true
+			i.aim = br.rocket_lead(t)
+			i.opts.flap = "none"
+			return SUCCESS
+		if flat < ROOM and ata > deg_to_rad(60.0):
+			i.aim = CombatTree._floor(br, pos + fh * 30.0 + Vector3.UP * 6.0)   # (too close to turn on it: run out, climbing)
+		else:
+			i.aim = CombatTree._floor(br, t.pos + Vector3.UP * STOOP_HEIGHT)
+		if above < STOOP_HEIGHT and b.model.speed > br.style.v_best * 0.95:
+			i.opts.gamma = deg_to_rad(CLIMB_DEG)   # (height first: it's what the dive spends; not below v*, or it stalls)
+		i.opts.flap = "hold"
+		i.opts.speed = br.style.v_best
+		return SUCCESS
+
+
+## Aim past `lead` by how far the gunsight trails it (where my nose points at that range): the guidance lags a
+## moving lead by a few degrees, which is a metre or two at 20 m -- outside the fuse.
+static func _overlead(br: CombatBrain, lead: Vector3) -> Vector3:
+	var l := br.launcher
+	var m := l.muzzle()
+	var nose := m + l.aim() * m.distance_to(lead)
+	return lead + (lead - nose) * OVERLEAD
+
+
+const OVERLEAD := 0.8
 
 
 ## Get into a shooting position: behind it, and above by the style's energy wanted.
