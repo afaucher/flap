@@ -11,6 +11,7 @@
 param([string]$Bird = "crow", [int]$Ai = 3, [double]$Seconds = 15, [string]$Out = "", [string[]]$Extra = @(), [string[]]$Engine = @())
 . "$PSScriptRoot\godot_env.ps1"
 $godot = Resolve-FlapGodot
+Update-FlapImport $godot
 if ($Out -eq "") { $Out = Join-Path $PSScriptRoot ("test_logs\perf_" + (Get-Date -Format "yyyyMMdd_HHmmss")) }
 New-Item -ItemType Directory -Force -Path (Split-Path $Out) | Out-Null
 $others = @(Get-Process | Where-Object { $_.ProcessName -like "Godot*" }).Count

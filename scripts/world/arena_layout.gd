@@ -45,6 +45,21 @@ class TreeData:
 	func top() -> Vector3:
 		return Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)
 
+	## How far any solid wood reaches from the trunk's axis (the farthest end of a solid branch, plus its radius;
+	## a limb in two pieces starts its outer piece off the axis).
+	var _reach := -1.0
+	var _reach_n := -1              ## (branches.size() when _reach was measured)
+	func reach() -> float:
+		if _reach_n != branches.size():
+			_reach_n = branches.size()
+			_reach = radius
+			var lo := Vector3(base.x, ArenaLayout.GROUND_Y - 1.0, base.y)
+			for br in branches:
+				if br.solid:
+					for q in [br.root, br.tip]:
+						_reach = maxf(_reach, q.distance_to(Geometry3D.get_closest_point_to_segment(q, lo, top())) + br.radius)
+		return _reach
+
 
 class BranchData:
 	var tree_id := 0
@@ -76,6 +91,9 @@ var boundary := 85.0                ## the arena is this circle: trees inside it
 var ceiling := 60.0                 ## soft ceiling
 var clearing_radius := 16.0
 var avenues: Array = []             ## of [Vector2 a, Vector2 b, float half_width]
+## Open ground in the wood (Pinewood): {centre: Vector2, r: float, ph: float, kind: "clearing" | "glade" | "gap"}
+## -- no standing pine inside its edge (Pinewood.edge: irregular, about r out).
+var openings: Array = []
 var ring_radius := 56.0
 var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData
@@ -259,29 +277,70 @@ func trees_near_segment(a: Vector3, b: Vector3, radius: float) -> Array:
 ## Is the straight flight from a to b clear of trunks, branches and the ground by `clearance` metres?
 ## (`ignore_tree`: a tree to skip, e.g. the one being perched on or departed from.)
 func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) -> bool:
+	return segment_clear_among(trees_near_segment(a, b, clearance), a, b, clearance, ignore_tree)
+
+
+## segment_clear against `near` (trees_near_segment of an area the segment lies in), for many checks in one
+## place (the AI's predicted paths); `ignore_also`: a second tree to skip.
+func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, ignore_tree := -1, ignore_also := -1) -> bool:
 	if a.y < GROUND_Y + clearance or b.y < GROUND_Y + clearance:
 		return false
-	for t in trees_near_segment(a, b, clearance):
-		if t.id == ignore_tree:
+	var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance
+	var hi := Vector2(maxf(a.x, b.x), maxf(a.z, b.z)) + Vector2.ONE * clearance
+	for t in near:
+		if t.id == ignore_tree or t.id == ignore_also:
 			continue
-		var base := Vector3(t.base.x, GROUND_Y - 1.0, t.base.y)
-		var top: Vector3 = t.top()
-		var pts := Geometry3D.get_closest_points_between_segments(a, b, base, top)
-		if pts[0].distance_to(pts[1]) < t.radius + clearance:
+		var r: float = t.reach()   # (nothing of the tree reaches further from its axis: skip it if the box can't meet it)
+		if t.base.x < lo.x - r or t.base.x > hi.x + r or t.base.y < lo.y - r or t.base.y > hi.y + r:
+			continue
+		if not _tree_clear(t, a, b, clearance, -1):
 			return false
-		for br in t.branches:
-			if not br.solid:
-				continue
-			var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
-			if bp[0].distance_to(bp[1]) < br.radius + clearance:
-				return false
 	for o in outposts:
-		if o.tree_id == ignore_tree:
+		if o.tree_id == ignore_tree or o.tree_id == ignore_also:
+			continue
+		var od: float = o.width + o.depth   # (the deck lies well within this of its centre)
+		if o.centre.x < lo.x - od or o.centre.x > hi.x + od or o.centre.z < lo.y - od or o.centre.z > hi.y + od:
 			continue
 		for seg in deck_lines(o):
 			var dp := Geometry3D.get_closest_points_between_segments(a, b, seg[0], seg[1])
 			if dp[0].distance_to(dp[1]) < float(seg[2]) + clearance:
 				return false
+	return true
+
+
+## Is the straight flight from a to b clear of one tree's trunk, branches and outposts by `clearance`, leaving
+## out the branch that carries perch `skip_perch`? (Taking off or coming in to land: the rest of the perch's own
+## tree still counts.)
+func tree_clear(tree_id: int, a: Vector3, b: Vector3, clearance: float, skip_perch := -1) -> bool:
+	if not _tree_clear(trees[tree_id], a, b, clearance, skip_perch):
+		return false
+	for o in outposts:
+		if o.tree_id == tree_id:
+			for seg in deck_lines(o):
+				var dp := Geometry3D.get_closest_points_between_segments(a, b, seg[0], seg[1])
+				if dp[0].distance_to(dp[1]) < float(seg[2]) + clearance:
+					return false
+	return true
+
+
+func _tree_clear(t: TreeData, a: Vector3, b: Vector3, clearance: float, skip_perch: int) -> bool:
+	var base := Vector3(t.base.x, GROUND_Y - 1.0, t.base.y)
+	var pts := Geometry3D.get_closest_points_between_segments(a, b, base, t.top())
+	var d := pts[0].distance_to(pts[1])
+	if d < t.radius + clearance:
+		return false
+	if d >= t.reach() + clearance:
+		return true   # (every branch leaves the trunk's axis, so none comes nearer than this)
+	var y0 := minf(a.y, b.y) - clearance
+	var y1 := maxf(a.y, b.y) + clearance
+	for br in t.branches:
+		if not br.solid or (skip_perch >= 0 and br.perch_id == skip_perch):
+			continue
+		if br.root.y - br.radius > y1 and br.tip.y - br.radius > y1 or br.root.y + br.radius < y0 and br.tip.y + br.radius < y0:
+			continue   # (wholly above or below the segment)
+		var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
+		if bp[0].distance_to(bp[1]) < br.radius + clearance:
+			return false
 	return true
 
 

@@ -5,5 +5,6 @@
 # F4 toggles HDR in game, to compare.
 . "$PSScriptRoot\godot_env.ps1"
 $godot = Resolve-FlapGodot
+Update-FlapImport $godot
 & $godot --path $PSScriptRoot --rendering-driver d3d12 -- @args
 exit $LASTEXITCODE

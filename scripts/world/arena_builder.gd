@@ -2,15 +2,13 @@ class_name ArenaBuilder
 extends Node3D
 ## Greybox meshes and collision for an ArenaLayout: a gridded ground, trunks and branches (static bodies on
 ## layer 1), a perch marker on every grip point, pale ground strips under the open lanes, boundary posts,
-## and one highlight ring that shows the perch the bird could catch.
+## and the landing mark: a short bar on the perch where the bird would land, green or red (show_candidate).
 
 const WORLD_LAYER := 1
 
 var layout: ArenaLayout
 var tree_bodies: Array[StaticBody3D] = []   ## by tree id
-var highlight: MeshInstance3D
-var _hl_line: MeshInstance3D
-var _hl_perch: Perch
+var highlight: MeshInstance3D      ## the landing mark (show_candidate)
 var _hl_mat: StandardMaterial3D
 var _mats := {}
 
@@ -210,45 +208,62 @@ func _grip_mesh(p: Perch, lift: float) -> MeshInstance3D:
 	return mi
 
 
+## The landing mark's colours: slow enough to catch, or too fast.
+const MARK_OK := Color(0.3, 1.0, 0.4)
+const MARK_FAST := Color(1.0, 0.3, 0.25)
+const MARK_THICK := 0.08     ## m, a treetop disc's thickness
+const MARK_WRAP := 0.012     ## m the band stands proud of the branch, all round
+const MARK_HALF := 0.5       ## of the catch radius each side of the landing point: the bar's half length
+
+
 func _highlight() -> void:
 	highlight = MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.42
-	torus.outer_radius = 0.5
-	highlight.mesh = torus
+	var bar := CylinderMesh.new()   # (unit height and diameter, sized each frame)
+	bar.top_radius = 0.5
+	bar.bottom_radius = 0.5
+	bar.height = 1.0
+	bar.radial_segments = 12
+	bar.rings = 1
+	highlight.mesh = bar
 	_hl_mat = StandardMaterial3D.new()
 	_hl_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_hl_mat.albedo_color = Color.WHITE
-	_hl_mat.no_depth_test = true
+	_hl_mat.albedo_color = MARK_OK
 	highlight.material_override = _hl_mat
 	highlight.visible = false
 	add_child(highlight)
 
 
-## Show the catchable perch: its whole grip line lit, and a ring (the catch reach) at the grip point nearest
-## the bird -- where it would land. White = approaching, green = catch now, red = in reach but too fast.
-func show_candidate(p: Perch, status: int, grab_radius: float, grip := Vector3.ZERO) -> void:
+## Mark where the bird would land on `p`: a band round the branch itself, centred on `grip` and as long as the catch
+## reach either side (cut at the branch's ends) -- or a small disc on a treetop. Depth-tested like the wood, so the
+## needles in front of the branch hide it as they hide the branch. Green while the bird is slow enough to catch it,
+## red while too fast (it can only be too fast). Null hides it.
+func show_candidate(p: Perch, too_fast: bool, grab_radius: float, grip := Vector3.ZERO) -> void:
 	if p == null:
 		highlight.visible = false
-		if _hl_line != null:
-			_hl_line.visible = false
 		return
 	highlight.visible = true
-	highlight.position = grip if grip != Vector3.ZERO else p.position
-	var s := grab_radius / 0.5 if status != Perch.Catch.OUT_OF_RANGE else 0.6
-	highlight.scale = Vector3(s, 1.0, s)
-	match status:
-		Perch.Catch.OK: _hl_mat.albedo_color = Color(0.3, 1.0, 0.4)
-		Perch.Catch.TOO_FAST: _hl_mat.albedo_color = Color(1.0, 0.35, 0.3)
-		_: _hl_mat.albedo_color = Color(1, 1, 1, 0.8)
-	if p != _hl_perch:
-		if _hl_line != null:
-			_hl_line.queue_free()
-		_hl_line = _grip_mesh(p, 0.03)
-		_hl_line.material_override = _hl_mat
-		add_child(_hl_line)
-		_hl_perch = p
-	_hl_line.visible = true
+	_hl_mat.albedo_color = MARK_FAST if too_fast else MARK_OK
+	var at := grip if grip != Vector3.ZERO else p.position
+	if p.kind == Perch.Kind.TREETOP:
+		var r := minf(p.disc, grab_radius * MARK_HALF)
+		highlight.basis = Basis.from_scale(Vector3(r * 2.0, MARK_THICK * 0.5, r * 2.0))
+		highlight.position = at + Vector3.UP * MARK_THICK * 0.5
+		return
+	var along := p.b - p.a
+	var n := along.length()
+	var dir := along / maxf(n, 1e-4)
+	var u := clampf((at - p.a).dot(dir), 0.0, n)
+	var half := grab_radius * MARK_HALF
+	var u0 := maxf(u - half, 0.0)
+	var u1 := minf(u + half, n)
+	var mid := p.a + dir * (u0 + u1) * 0.5 - Vector3.UP * p.thickness   # (the grip line is the branch's top; thickness its radius)
+	var y_axis := dir
+	var x_axis := y_axis.cross(Vector3.UP)
+	x_axis = x_axis.normalized() if x_axis.length() > 1e-3 else Vector3.RIGHT
+	var z_axis := x_axis.cross(y_axis).normalized()
+	var d := 2.0 * (p.thickness + MARK_WRAP)
+	highlight.basis = Basis(x_axis * d, y_axis * maxf(u1 - u0, d), z_axis * d)
+	highlight.position = mid
 
 
 # --- Pine wood (Pinewood) ---------------------------------------------------------------------------------
@@ -524,12 +539,16 @@ func _floor() -> void:
 	var xfs := []
 	var cols := []
 	var cus := []
-	for i in 5200:
+	# (bracken grows where the light gets in: thick in the gaps and glades, thin under the clumps)
+	for i in 6400:
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary
 		if p.length() > layout.boundary:
 			continue
+		var lit := Pinewood.light(layout, p)
+		if rng.randf() > lerpf(0.4, 1.0, lit):
+			continue
 		var base := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
-		var size := rng.randf_range(0.6, 1.4)
+		var size := rng.randf_range(0.6, 1.4) * lerpf(0.8, 1.2, lit)
 		var phase := rng.randf()
 		var tint := Color(1, 1, 1).lerp(Color(1.1, 1.0, 0.75), rng.randf()) * rng.randf_range(0.85, 1.05)
 		var fronds := rng.randi_range(4, 7)

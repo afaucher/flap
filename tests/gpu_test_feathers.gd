@@ -3,7 +3,8 @@ extends TestCase
 ## placement (feather_place.gdshaderinc, the same file the feather shader draws with) is read back from the GPU and
 ## compared, feather by feather, with BirdRig's -- every species; spread, half-folded with the hand lifted and the
 ## alula out, folded; flapped, twisted, swept, the primaries slotted; the tail fanned, pitched and twisted; feathers
-## lost. Their angles change with the fold and the slot each pose; their definitions are written once.
+## lost, and the coverts over them ruffled. A knocked-out feather's copy (feather_copy) is where the rig puts it.
+## Their angles change with the fold and the slot each pose; their definitions are written once.
 ## A GPU test: runs windowed (.\test_runner.ps1 -Gpu), since the headless renderer runs no shaders.
 
 const CAPTURE := """
@@ -79,7 +80,7 @@ func setup() -> void:
 			rig.tail_pitch = q[7]
 			rig.tail_twist = q[8]
 			rig.slot = q[9]
-			rig.lost = {} if k < 2 else {BirdRig.feather_key(0, WingShape.Kind.PRIMARY, 3): true, 3005: true}
+			rig.lost = {} if k < 2 else {BirdRig.feather_key(0, WingShape.Kind.PRIMARY, 3): true, BirdRig.feather_key(1, WingShape.Kind.SECONDARY, 4): true, 3005: true}
 			rig._cpu_feathers = true   # (the rig's own placement as well, to compare with)
 			rig.apply_pose()
 			rig._cpu_feathers = false
@@ -103,6 +104,24 @@ func setup() -> void:
 			print("%s pose %d: worst %.8f m (%s)" % [p.id, k, worst, worst_at])
 			check(worst < 2e-5, "%s pose %d: every feather where the rig puts it (worst %.7f m, %s)" % [p.id, k, worst, worst_at])
 			eq(shrunk, rig.lost.size(), "%s pose %d: lost feathers shrunk to nothing" % [p.id, k])
+			if k >= 2:
+				var ruffled := 0
+				var defs := rig._defs_tex.get_image()
+				for x in defs.get_width():
+					var r := defs.get_pixel(x, 2).g
+					if r != 0.0 and absf(r) < 0.5:
+						ruffled += 1
+				check(ruffled >= 2, "%s pose %d: the coverts over the lost feathers ruffled on the GPU (%d)" % [p.id, k, ruffled])
+			# A knocked-out feather's copy, from a pose placed only on the GPU: where the rig puts that feather.
+			var ck := BirdRig.feather_key(1, WingShape.Kind.PRIMARY, 6)
+			var want_copy: Transform3D = rig.global_transform * rig.feather_xforms[rig.feather_keys.find(ck)]
+			rig.apply_pose()
+			check(rig.feather_xforms.is_empty(), "%s pose %d: a GPU pose places nothing here" % [p.id, k])
+			var cp := rig.feather_copy(ck)
+			check(cp != null and cp.transform.origin.distance_to(want_copy.origin) < 1e-6 and cp.transform.basis.z.distance_to(want_copy.basis.z) < 1e-6,
+				"%s pose %d: a knocked-out feather's copy where the rig puts it" % [p.id, k])
+			if cp != null:
+				cp.free()
 		rig.queue_free()
 	BirdRig.gpu_feathers = false
 	finish()

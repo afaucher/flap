@@ -105,6 +105,13 @@ func _views() -> Array:
 	v.append(["Young pines, low over the floor", yc + sun_side * 9.0 - side * 3.0 + Vector3.UP * 1.2, yc + Vector3.UP * 1.0])
 	var oc := Vector3(oak.base.x, 0.0, oak.base.y)
 	v.append(["Oak bark from 2.5 m", oc + sun_side * (oak.radius + 2.5) + Vector3.UP * 3.0, oc + Vector3.UP * 3.2])
+	# The stand's structure: from straight above; the glade from its edge; the clearing from the trees.
+	v.append(["From above at 150 m", Vector3(0.0, 150.0, 0.01), Vector3.ZERO])
+	var glade: Dictionary = layout.openings[1]
+	var gc := Vector3(glade.centre.x, 0.0, glade.centre.y)
+	var g_in := -gc.normalized()   # (from the glade's far side, looking in toward the middle of the wood)
+	v.append(["The glade from its edge at 7 m", gc - g_in * float(glade.r) * 1.05 + Vector3.UP * 7.0, gc + Vector3.UP * 1.0])
+	v.append(["The clearing from the trees at 12 m", sun_h.rotated(Vector3.UP, 0.9) * 27.0 + Vector3.UP * 12.0, Vector3.UP * 6.0])
 	return v
 
 

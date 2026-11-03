@@ -5,7 +5,7 @@
 //
 // defs (RGBA32F, x = the feather's slot: plain feathers first, then the slotted primaries):
 //   y0: bone, t, rel (deg; its term at no fold and slot), kind      y1: length, width, layer (m), index
-//   y2: side, lost, rel's terms in fold and in slot x (1 - fold)
+//   y2: side, lost (1) or a ruffled covert's twist (rad, signed; BirdRig._ruffle), rel's terms in fold and in slot x (1 - fold)
 //   (tail feathers, kind 6: y0.y its place across the fan, y1.z the tuck over its inner neighbour (m), y2.w the
 //   base's sideways offset (m))
 // pose (RGBA32F; rows 0, 1 the wings, row 2 the tail):
@@ -124,6 +124,11 @@ mat4 feather_place(int slot) {
 			float unit = fp_pose(i, 6).w;
 			base = root + n * mix(p7.w * 0.45 + (0.0025 + 2.0 * FOLD_STEP_G * fi) * unit, d1.z, ik_w);
 			d = normalize(d + n * 0.35 * alula);
+		}
+		if (d2.y != 0.0 && abs(d2.y) < 0.5) {   // a covert over a lost flight feather: stands up and twists
+			float tw = d2.y * 0.5;   // (Vector3.rotated about n)
+			d = normalize(d + n * tan(abs(d2.y)));
+			d = d * cos(tw) + cross(n, d) * sin(tw) + n * dot(n, d) * (1.0 - cos(tw));
 		}
 		float sz = 1.0;
 		if (kind == K_LESSER && bone != B_HAND) {

@@ -2,7 +2,8 @@
 
 A plan for an AI that fights: picks a target, flies for a shot, fires when the shot is good, defends against
 rockets and seekers, and breaks off to rest on a perch or fly home to its base to rearm. It builds on the combat range
-(`scripts/combat/`, `.\range.ps1`) and on the flight AI (`scripts/ai/`). Nothing here is built yet.
+(`scripts/combat/`, `.\range.ps1`) and on the flight AI (`scripts/ai/`). Stages 1-3 of the build order are built
+(section 11 says what, and what the flight model taught us on the way); section 1 describes the range before them.
 
 Read first: `docs/design/flight_model.md` (sections 2, 6 and 8), `docs/design/combat_concepts.html`
 ("Ranged") and `docs/design/concept_briefs.html` (Hedgerow Aces).
@@ -260,7 +261,9 @@ cone. `AICombat._solution(launcher, target)` launches a scratch `Projectile` (`P
 both pure) against a dummy that moves with the target's seen velocity and turn rate, for the round's life
 (60 steps at 60 Hz; only run when the target is inside a coarse envelope, so it costs a handful of
 simulations a second). It returns the predicted miss distance.
-- **Rockets**: fire when the predicted miss < `fuse + blast` (2.3 m) and the lane is clear
+- **Rockets**: fire when the predicted miss < `fuse` (1.0 m, times the skill's `min_quality`; **not** `fuse + blast`:
+  a rocket that passes outside the proximity fuse never goes off near the bird, so the blast's reach doesn't help it)
+  and the lane is clear
   (`segment_clear(muzzle, lead point, 0.2)`, no trunk in the way). Ripple: hold fire for 2 rounds when the
   target is steady (a 0.25 s pair covers its jink), single rounds when it is jinking. Skill adds aim error
   and a minimum quality before firing.
@@ -276,6 +279,28 @@ simulations a second). It returns the predicted miss distance.
 ### 4.6 Defence
 
 Each threat has its own answer; all are flown through `steer()`, so the trees are still avoided.
+
+**Built and measured (2026-11-02): defend before the round is in the air.** In this flight model no level break,
+at any timing, beats a locked seeker (`tests/probe_seeker_break.gd`: the worst miss of a sparrow, crow or hawk breaking
+either way, from launch or at its break time, 12-36 m, any aspect, is under 0.15 m against a 1.0 m fuse), and a rocket
+fired from inside ~15 m arrives before a crow can roll to 90 deg (0.28 s). So the late breaks below matter little;
+what works is earlier:
+- **Deny the lock / break into a bird in firing position** (its nose within 25 deg of me inside 30 m, or, carrying
+  seekers, from behind me out to lock range; one seen there is remembered 1 s between looks into the blind cone):
+  hard breaks *toward its side*, re-picked every 0.35-0.7 s with a random climb or dive. Its nose has to come across
+  mine, so it neither holds the 15 deg cone for the 1 s a lock needs nor a rocket lead. Jinking back and forth across
+  its line was tried and is worse: the attacker locks as the bird swings back across its nose. A rocket bird further
+  than 30 m back is left alone (turning into it only closes the range).
+- **Tree drag** (`skill.tree_drag`, ace): a seeker coming and a trunk it can pass before the seeker catches it: close
+  past its edge on the side it's already heading for, hook in behind it, then on along the seeker's line; the seeker's
+  lead pursuit cuts the corner into the wood. A sparrow does it from a 25 m warning; a crow's ~4 m turn can't hook in
+  behind in that second (it would need the trunk picked while still only locked, before launch: not built).
+- `test_combat_defense`: a pilot combat-AI attacker hunting from five starts; defending takes 2/15 and 4/15 hits
+  against seekers, 0/15 and 1/12 against rockets, where flying straight takes all of them, both sides. Hits that remain
+  come from a seeker attacker starting at ~32 m dead astern: the lock completes before any turn can take the defender
+  out of the 25 deg keep cone at that range.
+
+The original plan, for reference:
 - **Incoming rocket** (unguided, seen by its smoke): it only has to miss by `fuse + blast`. At time-to-go
   under ~0.5 s, sidestep across its line: full roll and pull perpendicular to the rocket's velocity. Earlier
   is wasted (a shooter can re-aim); later doesn't move the bird far enough.
@@ -390,12 +415,16 @@ Every knob degrades a perfect pilot; 0 / the "off" value is the honest maximum. 
 | `tactics` | which manoeuvres it knows (yo-yos, tree drag, scissors) | pursuit only / + yo-yos, gimbal drag / all |
 | `aggression` | risk taken (energy deficit it accepts, hits before REARM) | low / mid / high |
 | `rest_at` | stamina at which it goes to rest | 0.4 / 0.3 / 0.2 |
+| `ambush_patience` | s an ambusher waits on its perch | 12 / 25 / 40 |
+| `watch_range` | m out to which it reads a bird lining up on it and breaks before any warning (built) | 20 / 42 / 42 |
 
 ## 7. Prerequisites outside the AI
 
 1. **Avoidance branch on master** (`claude/ai-tree-avoidance-0f8387`), then the `AIPilot.steer()` refactor
    (3.1). `_fly` must still pass `test_ai_flight` unchanged.
-2. **Player-visible warnings**: a lock warning (an attacker's lock on you above 50%) and an incoming-round
+2. **Player-visible warnings** (**done 2026-11-02**: `CombatWorld.warnings_for(bird)` -> {rounds (tgo, kind),
+   locks}; `threat_to()` wraps it; the HUD's red chevron / arrowhead round the aim ring and LOCK / INCOMING;
+   the range's `--return-fire` makes the target shoot back): a lock warning (an attacker's lock on you above 50%) and an incoming-round
    cue on `CombatHud`, from a new `CombatWorld.warnings_for(bird)`. `CombatSense` reads the same call, and
    `threat_to()` (which `CircuitPilot` uses) becomes a thin wrapper over it. Without this the AI knows about
    locks the player can't see.
@@ -491,3 +520,80 @@ birds in a 3 v 3 (`docs/design/performance.md`).
   kills only?
 - **Your AI wingmen**: should they take simple orders (attack my target, cover me) later, or always fly on
   their own?
+
+## 11. Status (2026-11-02)
+
+**Built** (stages 1-3; `scripts/combat/ai/`, all headless-tested):
+- Groundwork: Beehave 2.9.2 vendored (`addons/beehave`, `FLAP_PATCHES.md`: three headless guards; the spike passes
+  the strict runner); `AIPilot.steer(bird, aim, dt, opts)` and `go_to_perch()` (`_fly` calls `steer`;
+  `test_ai_flight` unchanged); the `Duel` harness; `tests/probe_duels.gd` (`DUEL=crow,hawk`, `DUEL_TARGET=circuit`,
+  `DUEL_SECONDS`, `DUEL_SKILL`: traces and per-section cost).
+- `Engagement`, `CombatStyle` (`of()` / `from()`: turn rates, roll time, lift-limited bank, break time, the style
+  flags from roll time and stall speed), `CombatSkill` presets, `CombatSense` (reaction delay with dead-reckoning to
+  now, view cone with checks of six, line of sight through the trunks, memory, the HUD's `warnings_for`, which pods a
+  bird carries), `FireControl` (`miss()` flies the real `Projectile` against a dummy; `lead()` corrects the quick lead
+  by where a real rocket passes; seekers judged against a break at the target's break time), `CombatBrain` (target
+  score, `Intent`, the launcher held by `WeakRef`: the launcher holds `AICombat`, which holds the brain), `CombatTree`
+  (Defend / Recover / Rearm / Rest / Fight {Extend, Attack, Reposition} / Patrol; every action returns SUCCESS and
+  manoeuvres that last are the brain's timers; the blackboard is seeded through its exported dictionary, because
+  `Blackboard._ready` wipes anything `set_value()` put there before the tree entered the scene), `CombatPilot`,
+  `AICombat` with a brain (fire control) or without (the range's `--demo` trigger finger).
+- Defence before the round flies (4.6): breaks into a bird in firing position, tree drag.
+- Tests: `test_combat_geometry`, `test_combat_sense`, `test_fire_control`, `test_combat_ai` (downs the racetrack
+  target, beats the old demo shooter on the evading one, rearms at its base, a 40 s turning fight without a stall or a
+  spiral), `test_combat_defense`, `test_combat_tree_spike`. Nine `combat-*` entries in
+  `tests/regressions/mutations.json`, each KILLED.
+
+**Built since** (stages 4-5):
+- **Seen turn rate.** `CombatSense` reads how hard each bird is turning from its velocity over 0.2 s and carries it on
+  through the reaction delay *along that turn*; the rocket lead (`FireControl.lead`) and fire control use it. Against
+  a bird in a hard break this is the difference between a hit and a miss (`test_fire_control`); in a 3 v 3 it took
+  the hits from 4 to 16 in 90 s.
+- **Boom and zoom** (hawk, falcon: `CombatStyle.prefers_height`): the Fight branch's `BoomZoom` -- climb (run out to
+  30 m from the target, climbing at 16 deg while above v*, then back at a point 9 m above it), stoop (with 5+ m of
+  height, the target ahead within 45 deg and 8-32 m: dive on the rocket lead, unflapped, weapons free, aiming past the
+  lead by 1.4x how far the gunsight trails it -- without that, in the clumped wood, they never fired), zoom (pull up
+  30 deg along the heading while faster than v*). `test_combat_boom_zoom`: against the racetrack target, 40 s in each
+  of three woods, the hawk stoops 7 times and lands 4 hits, the falcon 9 and 3 (before: no hits). Their hit rate is
+  the weakest of the five (avoidance cuts many stoops short among the clumps): stage 6 material.
+- **Range control** in Attack: seekers hold 12-28 m behind the target, rockets 8-22 m, by speed. The seeker crow had
+  been closing to 5-10 m, inside the lock's 6 m minimum and too close to keep a jinking bird in the cone; with it the
+  combat AI beats the old demo shooter on the evading target in the clumped wood, 13 hits to 11 over four woods
+  (`test_combat_vs_demo`, which replaces test_combat_ai's one-seed comparison).
+- **Ambush** (owl: `CombatStyle.ambusher`): a perch 4-15 m above where it has seen the enemies fly
+  (`CombatBrain.fight_area`, a slow average), 15-45 m out from there; sit (resting) until one passes below within
+  30 m not flying straight at it, then drop off and fight; give up after `skill.ambush_patience` or when spotted.
+- **Rest on a safe perch**: a tired bird picks, of the perches it can reach with height in hand, one far from the
+  enemies and out of their sight (from where each is, where it's heading, and where they've been flying); with none in
+  reach it glides down and rests on the ground. **Known weakness:** a tired crow in the test fails two perch approaches
+  in a row (a bonk on an outpost, then short of a low perch) and rests on the ground; AIPilot's approach with almost
+  no stamina needs a look.
+- **Lift for the pull-out**: the bank cap also leaves lift for pulling out of a dive, and a defensive break never
+  commands more than 12 deg above the bird's path (the hawk stalled pulling out of a stoop into a break).
+- Perched birds don't break from an enemy whose nose swings past (the ambusher drops off when spotted); a bird making
+  a head-on pass on its own target doesn't break from it; a perched bird's line of sight leaves out its own branch.
+- **Teams**: `TeamBoard` (each member's target and mode, as called out; no enemy positions): a target already taken by
+  teammates scores 2.5 less each, unless it's after me (the plan's 1.5 left two on one target 37% of the time).
+  `Duel` gives each team a board; `CombatWorld.friendly_hits` counts teamkill hits. `test_combat_team`: 3 v 3 (crow,
+  sparrow, hawk a side), 90 s: both teams land hits and birds are downed, downed birds respawn and fly again, two on
+  one target ~12% of fighting time, no friendly hits.
+- **Range `--match`** (`.\range.ps1 -Match [-Skill pilot] [-Team crow,hawk] [-Enemy falcon,owl,crow]`): you and two
+  combat-AI wingmen against three, from the two bases; each AI bird carries its species' round.
+- Not built yet: pairs (leader / wingman slots), rearming in turns, base watch, yo-yos beyond the high yo-yo in
+  Attack, the duel matrix and skill tuning (stage 6), the game (stage 7).
+
+**Findings:**
+- **Seekers can't be out-turned.** No level break at any timing beats a locked seeker (4.6); only denying the lock and
+  trunks do. Balance is the user's call (seeker turn rate, gimbal, fuse); nothing was changed.
+- **Rockets need a pass inside the fuse** (1.0 m), not `fuse + blast`: the blast only reaches a bird when the fuse has
+  gone off near it.
+- **The bank has to be lift-limited** in a sustained combat turn (`CombatStyle.lift_bank`, 15% margin): turning at
+  the skill's share of the bank limit at any speed bled a hawk into stalls and a sparrow into a spiral.
+- **Falcon and hawk** got no hits turning (the falcon's 10 m turn at 14 m/s); boom-and-zoom gives them theirs.
+- **Defence outweighed attack** between AI birds until the attackers read the turn: a 3 v 3 of pilots landed 4 hits
+  in 90 s, most of each bird's time spent breaking. Stage 6 (the duel matrix) is where that balance gets tuned.
+
+**Cost, flagged:** ~0.6-0.7 ms per AI bird per physics tick, nearly all `ai.avoid` (AIPilot's tree avoidance run
+every tick in combat), against section 8's 0.1 ms budget; the brain (tree, target choice) is ~0.07 ms, sense ~0.02 ms,
+fire control ~0.003 ms. Not cut: lowering it (throttling avoidance, a cheaper predict) changes behaviour, so it waits
+for the user's go-ahead.

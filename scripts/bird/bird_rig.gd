@@ -121,6 +121,8 @@ var feather_xforms: Array[Transform3D] = []
 var feather_codes: PackedFloat32Array = []    ## plumage level 6: each feather_xforms entry's atlas code (INSTANCE_CUSTOM.b); tests
 var feather_keys: PackedInt32Array = []       ## feather_key() per feather_xforms entry (battle damage)
 var lost := {}                                ## feather_key -> true: knocked out (Bird.lost_feathers), left out of the drawing
+var _slots := {}                              ## feather_key -> [MultiMesh, its underside or null, instance]: where it's drawn
+const RUFFLE_DEG := 16.0                      ## a covert over a lost flight feather stands up and twists this much
 ## Battle damage: the flight feathers a hit can knock out (primaries, secondaries, tertials, the tail), and the
 ## share of the wing's area each carries (feather_area).
 const FLIGHT_KINDS := [WingShape.Kind.PRIMARY, WingShape.Kind.SECONDARY, WingShape.Kind.TERTIAL]
@@ -842,8 +844,11 @@ func _build_feathers() -> void:
 				mmi.set_instance_shader_parameter("def_offset", _plain_count if mmi.multimesh == _emarg or mmi.multimesh == _emarg_u else 0)
 
 
-## A feather's identity through every pose: its wing (1000 left, 2000 right; 3000 the tail), kind and index.
-static func feather_key(side_i: int, kind: int, fi: int) -> int:
+## A feather's identity through every pose: its wing (1000 left, 2000 right; 3000 the tail), kind and index. (The
+## hand's greater coverts number from 50: their indices are the primaries', which the forearm's coverts share.)
+static func feather_key(side_i: int, kind: int, fi: int, bone := -1) -> int:
+	if kind == WingShape.Kind.GREATER_COVERT and bone == WingShape.Bone.HAND:
+		fi += 50
 	return (1000 if side_i == 0 else 2000) + kind * 100 + fi
 
 
@@ -873,10 +878,7 @@ func _measure_feathers() -> void:
 
 ## The flight feathers as last drawn: [{key, mid (rig space, the feather's middle)}] (lost ones included).
 func flight_feathers() -> Array:
-	if gpu_place and feather_xforms.is_empty():   # (placed by the shader: work them out here, for this pose)
-		_cpu_feathers = true
-		apply_pose()
-		_cpu_feathers = false
+	_need_feather_xforms()
 	var out := []
 	for n in feather_xforms.size():
 		var key := feather_keys[n]
@@ -884,6 +886,74 @@ func flight_feathers() -> Array:
 			var xf := feather_xforms[n]
 			out.append({"key": key, "mid": xf.origin + xf.basis.z * 0.5})
 	return out
+
+
+## (GPU placement) feather_xforms for this pose: the shader places the feathers, so they're worked out here only when
+## something reads them (a hit, a knocked-out feather's copy).
+func _need_feather_xforms() -> void:
+	if gpu_place and feather_xforms.is_empty():
+		_cpu_feathers = true
+		apply_pose()
+		_cpu_feathers = false
+
+
+## A ruffled covert's twist (BirdRig.RUFFLE_DEG; radians, signed by the way it turns), 0 if `f` isn't ruffled.
+func _ruffle(i: int, f: Dictionary, key: int) -> float:
+	if lost.is_empty() or not _ruffled(i, f):
+		return 0.0
+	return deg_to_rad(RUFFLE_DEG) * (0.6 + 0.4 * sin(float(key) * 1.7)) * signf(sin(float(key)))
+
+
+## Is `f` (wing `i`) a greater covert over a lost flight feather (the hand's over its primary, the forearm's over its
+## secondary)?
+func _ruffled(i: int, f: Dictionary) -> bool:
+	if int(f.kind) != WingShape.Kind.GREATER_COVERT:
+		return false
+	var under := WingShape.Kind.PRIMARY if int(f.bone) == WingShape.Bone.HAND else WingShape.Kind.SECONDARY
+	return lost.has(feather_key(i, under, int(f.i)))
+
+
+## A copy of feather `key` as it's drawn now -- the same card, material, colour and atlas cell, upper side and under --
+## for an effect to carry off (CombatFx: a feather knocked out, falling). Placed at the feather's world transform; null
+## if the rig hasn't drawn it.
+func feather_copy(key: int) -> Node3D:
+	_need_feather_xforms()
+	if not _slots.has(key):
+		return null
+	var slot: Array = _slots[key]
+	var n := feather_keys.find(key)
+	if n < 0:
+		return null
+	var node := Node3D.new()
+	for mm_v in [slot[0], slot[1]]:
+		if mm_v == null:
+			continue
+		var src := mm_v as MultiMesh
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.use_custom_data = true
+		mm.mesh = src.mesh
+		mm.instance_count = 1
+		mm.set_instance_transform(0, Transform3D.IDENTITY)
+		mm.set_instance_color(0, src.get_instance_color(int(slot[2])))
+		mm.set_instance_custom_data(0, src.get_instance_custom_data(int(slot[2])))
+		var mi := MultiMeshInstance3D.new()
+		mi.multimesh = mm
+		var owner_mi := _multimesh_node(src)
+		mi.material_override = owner_mi.material_override if owner_mi != null else null
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		node.add_child(mi)
+	var xf := feather_xforms[n]
+	node.transform = global_transform * xf if is_inside_tree() else transform * xf
+	return node
+
+
+func _multimesh_node(mm: MultiMesh) -> MultiMeshInstance3D:
+	for c in get_children():
+		if c is MultiMeshInstance3D and (c as MultiMeshInstance3D).multimesh == mm:
+			return c
+	return null
 
 
 ## A lost feather: shrunk to nothing at its root.
@@ -1501,11 +1571,12 @@ func _def_px(slot: int, r: int, a: float, b: float, c: float, d: float) -> void:
 	_defs_buf[o + 3] = d
 
 
-func _def_wing(slot: int, i: int, f: Dictionary, j: int, gone: bool, unit: float) -> void:
+func _def_wing(slot: int, i: int, f: Dictionary, j: int, unit: float) -> void:
 	var rc: Vector3 = _gpu_rel[j]
+	var key := feather_key(i, int(f.kind), int(f.i), int(f.bone))
 	_def_px(slot, 0, float(f.bone), float(f.t), rc.x, float(f.kind))
 	_def_px(slot, 1, float(f.len), float(f.w), _stack_layer(f) * unit, float(f.i))
-	_def_px(slot, 2, float(i), 1.0 if gone else 0.0, rc.y, rc.z)
+	_def_px(slot, 2, float(i), 1.0 if lost.has(key) else _ruffle(i, f, key), rc.y, rc.z)   # (lost, or a ruffle's twist)
 
 
 static func _stack_layer(f: Dictionary) -> float:
@@ -2017,7 +2088,7 @@ func apply_pose() -> void:
 			if not cpu_place:   # (the shader places it: only its definition, when that changes)
 				var gslot := _plain_count + emarg_i if f.emarg else plain_i
 				if gpu_defs:
-					_def_wing(gslot, i, f, fj, lost.has(feather_key(i, int(f.kind), int(f.i))), unit)
+					_def_wing(gslot, i, f, fj, unit)
 				if _custom_dirty or _paint_dirty:
 					if f.emarg:
 						_place(_emarg, _emarg_u, emarg_i, Transform3D.IDENTITY, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
@@ -2065,8 +2136,13 @@ func apply_pose() -> void:
 			var sz := 1.0
 			if f.kind == WingShape.Kind.LESSER_COVERT and int(f.bone) != WingShape.Bone.HAND:
 				sz = maxf(smoothstep(0.3, 0.9, fold), 0.001)   # (spread, the arm's surface is these coverts; they come out as it slackens)
+			var key := feather_key(i, int(f.kind), int(f.i), int(f.bone))
+			if not lost.is_empty() and _ruffled(i, f):
+				# Battle damage: the covert over a lost flight feather has lost what it lay on -- it stands up off the
+				# wing and twists (each its own way).
+				var tw := deg_to_rad(RUFFLE_DEG) * (0.6 + 0.4 * sin(float(key) * 1.7))
+				d = (d + n * tan(tw)).normalized().rotated(n, tw * 0.5 * signf(sin(float(key))))
 			var xf := _feather_xform(base, d, n, f.len * sz, f.w * sz, maxf(1.0 - ik_w, 0.02))
-			var key := feather_key(i, int(f.kind), int(f.i))
 			if lost.has(key):
 				xf = _gone(xf)
 			feather_xforms.append(xf)
@@ -2074,13 +2150,15 @@ func apply_pose() -> void:
 			feather_keys.append(key)
 			feather_slots.append(_plain_count + emarg_i if f.emarg else plain_i)
 			if gpu_place and gpu_defs:
-				_def_wing(_plain_count + emarg_i if f.emarg else plain_i, i, f, fj, lost.has(key), unit)
+				_def_wing(_plain_count + emarg_i if f.emarg else plain_i, i, f, fj, unit)
 			var mxf := Transform3D.IDENTITY if gpu_place else xf   # (GPU placement: the shader places it)
 			if f.emarg:
+				_slots[key] = [_emarg, _emarg_u, emarg_i]
 				if not gpu_place or _custom_dirty or _paint_dirty:
 					_place(_emarg, _emarg_u, emarg_i, mxf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
 				emarg_i += 1
 			else:
+				_slots[key] = [_plain, _plain_u, plain_i]
 				if not gpu_place or _custom_dirty or _paint_dirty:
 					_place(_plain, _plain_u, plain_i, mxf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), _flex_share(f), s)
 				plain_i += 1
@@ -2142,6 +2220,7 @@ func apply_pose() -> void:
 		feather_kinds.append(6)
 		feather_keys.append(3000 + k)
 		feather_slots.append(plain_i)
+		_slots[3000 + k] = [_plain, _plain_u, plain_i]
 		if not gpu_place or _custom_dirty or _paint_dirty:
 			_place(_plain, _plain_u, plain_i, Transform3D.IDENTITY if gpu_place else txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
 		plain_i += 1

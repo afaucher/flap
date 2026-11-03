@@ -3,11 +3,12 @@ extends TestCase
 ## but for short dead stubs, their limbs and needles up in the crown; the oaks -- one in the clearing -- carry
 ## long, nearly level limbs to perch on; every outpost is bolted to its trunk with a landing rail along its
 ## outer edge that is a perch, facing open air (wood and leaves clear for several metres out), left and right
-## of the rail alike; the AI's clearance queries see the decks; and the crowns leave sightlines.
+## of the rail alike; the AI's clearance queries see the decks; and the crowns leave sightlines. The stand has
+## structure: clumps and open ground, a clearing and a glade, and the young pines out in the light.
 
 
 func _init() -> void:
-	timeout_sec = 60.0
+	timeout_sec = 120.0
 
 
 func setup() -> void:
@@ -19,9 +20,83 @@ func setup() -> void:
 	_pines(a)
 	_oaks(a)
 	_outposts(a)
+	for other in [3, 11, 21, 5]:   # (outposts face whatever open air a layout leaves: try several)
+		_outposts(Pinewood.generate(other))
 	_young_pines(a)
+	_structure(a)
 	_sightlines(a)
 	finish()
+
+
+## Clumps and open ground: the openings (the clearing, a glade, gaps) have no standing pine inside their edges;
+## the pines are clumped, not evenly spread; much of the floor lies far from any trunk; and the young pines grow
+## out in the light.
+func _structure(a: ArenaLayout) -> void:
+	var kinds := {}
+	for o in a.openings:
+		kinds[o.kind] = kinds.get(o.kind, 0) + 1
+	eq(kinds.get("clearing", 0), 1, "a clearing")
+	eq(kinds.get("glade", 0), 1, "a glade")
+	check(kinds.get("gap", 0) >= 5, "gaps (%d)" % kinds.get("gap", 0))
+	var inside := 0
+	for t in a.trees:
+		if t.kind == ArenaLayout.Kind.PINE and Pinewood.in_opening(a, t.base):
+			inside += 1
+	eq(inside, 0, "no standing pine in an opening")
+	for o in a.openings:
+		if o.kind != "gap":
+			check(float(o.r) >= 16.0, "the %s is over 30 m across (%.0f m)" % [o.kind, float(o.r) * 2.0])
+	# Clumped: pine counts in 16 m squares vary more than a random scatter's (variance over mean above 1; the
+	# old even stand's was under).
+	var counts := {}
+	for t in a.trees:
+		if t.kind == ArenaLayout.Kind.PINE:
+			var c := Vector2i(floori(t.base.x / 16.0), floori(t.base.y / 16.0))
+			counts[c] = counts.get(c, 0) + 1
+	var cells: Array[float] = []
+	for cx in range(-5, 5):
+		for cz in range(-5, 5):
+			if Vector2(cx + 0.5, cz + 0.5).length() * 16.0 < a.boundary - 10.0:
+				cells.append(float(counts.get(Vector2i(cx, cz), 0)))
+	var mean := 0.0
+	for c in cells:
+		mean += c
+	mean /= cells.size()
+	var v := 0.0
+	for c in cells:
+		v += (c - mean) * (c - mean)
+	v /= cells.size() - 1
+	print("STRUCTURE pines in 16 m squares: mean %.2f, variance %.2f, ratio %.2f" % [mean, v, v / mean])
+	check(v / mean > 1.15, "the pines are clumped (variance over mean %.2f)" % (v / mean))
+	var open := 0
+	var total := 0
+	var lit_floor := 0.0
+	for x in range(-80, 81, 4):
+		for z in range(-80, 81, 4):
+			var p := Vector2(x, z)
+			if p.length() > a.boundary - 6.0:
+				continue
+			total += 1
+			lit_floor += Pinewood.light(a, p)
+			var d := INF
+			for t in a.trees:
+				if t.kind == ArenaLayout.Kind.PINE:
+					d = minf(d, p.distance_to(t.base))
+				elif t.kind == ArenaLayout.Kind.BROADLEAF:
+					d = minf(d, p.distance_to(t.base) - 9.0)
+			if d > 9.0:
+				open += 1
+	check(open > total * 0.03, "open ground: %.0f%% of the floor more than 9 m from a trunk" % (open * 100.0 / total))
+	var lit_young := 0.0
+	var young := 0
+	var shaded := 0
+	for t in a.trees:
+		if t.kind == ArenaLayout.Kind.SAPLING:
+			young += 1
+			lit_young += Pinewood.light(a, t.base)
+			shaded += int(Pinewood.light(a, t.base) < 0.6)
+	print("STRUCTURE open sky over the young pines %.2f, over the floor %.2f; %d of %d young pines in shade" % [lit_young / young, lit_floor / total, shaded, young])
+	check(lit_young / young > lit_floor / total + 0.15 and shaded < young * 0.2, "young pines grow in the light (%.2f open sky over them, %.2f over the floor; %d of %d in shade)" % [lit_young / young, lit_floor / total, shaded, young])
 
 
 ## The crowns leave sightlines: at every height from the floor to above the crowns, at least a third of

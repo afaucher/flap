@@ -90,4 +90,71 @@ func setup() -> void:
 		check(near_list[i - 1].distance_to(probe) <= near_list[i].distance_to(probe), "nearest grip first")
 	var sp := a.start_perch()
 	check(sp != null and sp.kind == Perch.Kind.TREETOP and sp.position.y > 15.0, "start on a tall treetop")
+	_clearance_matches_brute_force(a)
+	_clearance_matches_brute_force(Pinewood.generate(7))   # (oak limbs in two pieces, outposts)
 	finish()
+
+
+## segment_clear (which skips trees by hash cell and by how far their wood reaches from the trunk) agrees with
+## checking every trunk, branch and deck, for segments thrown around trees at every height.
+func _clearance_matches_brute_force(a: ArenaLayout) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var wrong := 0
+	var blocked := 0
+	var n := 3000
+	var wide := a.trees.duplicate()
+	wide.sort_custom(func(x, y): return _tip_reach(x) > _tip_reach(y))
+	wide = wide.slice(0, 8)
+	for i in n:
+		var t: ArenaLayout.TreeData = a.trees[rng.randi() % a.trees.size()]
+		var r := rng.randf_range(0.0, 10.0)
+		var ang := rng.randf() * TAU
+		var p := Vector3(t.base.x + cos(ang) * r, rng.randf_range(0.5, t.height + 2.0), t.base.y + sin(ang) * r)
+		if i % 3 == 0:   # (a third start near a branch tip of the widest trees: the edge of a tree's reach)
+			t = wide[rng.randi() % wide.size()]
+			var br: ArenaLayout.BranchData = t.branches[rng.randi() % t.branches.size()]
+			p = br.tip + Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * 1.5
+		var q := p + Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-0.4, 0.4), rng.randf_range(-1.0, 1.0)).normalized() * rng.randf_range(0.3, 8.0)
+		var c: float = [0.0, 0.3, 0.6, 1.2][rng.randi() % 4]
+		var ignore := t.id if rng.randf() < 0.3 else -1
+		var fast := a.segment_clear(p, q, c, ignore)
+		if fast != _brute_clear(a, p, q, c, ignore):
+			wrong += 1
+		if not fast:
+			blocked += 1
+	print("%s: segment_clear vs brute force: %d of %d differ (%d blocked)" % [a.style, wrong, n, blocked])
+	eq(wrong, 0, "%s: segment_clear agrees with checking all the wood" % a.style)
+	check(blocked > n / 10 and blocked < n * 9 / 10, "%s: the segments test both ways (%d of %d blocked)" % [a.style, blocked, n])
+
+
+## The farthest a branch tip gets from its trunk, sideways.
+static func _tip_reach(t: ArenaLayout.TreeData) -> float:
+	var r := 0.0
+	for br in t.branches:
+		r = maxf(r, Vector2(br.tip.x - t.base.x, br.tip.z - t.base.y).length())
+	return r
+
+
+static func _brute_clear(a: ArenaLayout, p: Vector3, q: Vector3, c: float, ignore: int) -> bool:
+	if p.y < ArenaLayout.GROUND_Y + c or q.y < ArenaLayout.GROUND_Y + c:
+		return false
+	for t in a.trees:
+		if t.id == ignore:
+			continue
+		var s := Geometry3D.get_closest_points_between_segments(p, q, Vector3(t.base.x, ArenaLayout.GROUND_Y - 1.0, t.base.y), t.top())
+		if s[0].distance_to(s[1]) < t.radius + c:
+			return false
+		for br in t.branches:
+			if br.solid:
+				var bs := Geometry3D.get_closest_points_between_segments(p, q, br.root, br.tip)
+				if bs[0].distance_to(bs[1]) < br.radius + c:
+					return false
+	for o in a.outposts:
+		if o.tree_id == ignore:
+			continue
+		for seg in a.deck_lines(o):
+			var ds := Geometry3D.get_closest_points_between_segments(p, q, seg[0], seg[1])
+			if ds[0].distance_to(ds[1]) < float(seg[2]) + c:
+				return false
+	return true

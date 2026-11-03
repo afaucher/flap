@@ -11,9 +11,18 @@ extends RefCounted
 ##   OUTPOSTS   timber decks bolted to trunks between the stubs and the crown (and to the oaks between their
 ##              limbs), facing open air: the outer edge is a rounded landing rail -- the perch -- with a nest-box
 ##              hangar and crates on the deck. Supplied from the air (no ladders, no hoists).
-## The clearing in the middle has the biggest oak; the AI plans through it with the same queries as ever.
+##   STRUCTURE  an old stand isn't even: the pines grow in clumps with gaps between (where one fell, or none
+##              took), and young pines come up in the gaps' light. The clearing in the middle (40 m across) has the
+##              biggest oak; a sunlit glade as big lies off to one side; a few smaller gaps between.
+## The AI plans through all of it with the same queries as ever.
 
 const PINE := {"count": 260, "h": Vector2(24.0, 32.0), "r": Vector2(0.22, 0.34), "spacing": 9.0, "clear": Vector2(0.6, 0.72)}
+## Clumps: a noise field over the wood (features about `scale` m), the pines thick where it's high (`spacing.x`
+## apart) and thin where it's low (`spacing.y`, and only a `sparse` share of the tries taken).
+const STAND := {"scale": 34.0, "spacing": Vector2(5.5, 13.0), "sparse": 0.1}
+const CLEARING := 20.0   ## m, the clearing round the big oak (to its nearest pines)
+const GLADE := {"r": Vector2(16.0, 18.0), "at": Vector2(42.0, 56.0)}
+const GAPS := {"count": 7, "r": Vector2(6.0, 10.0)}
 const OAK := {"count": 4, "h": Vector2(17.0, 22.0), "r": Vector2(0.65, 0.9), "limb": Vector2(6.0, 9.5), "glade": 11.0}
 const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08), "spacing": 3.2}
 const OUTPOSTS := 9
@@ -36,13 +45,18 @@ static func generate(s: int) -> ArenaLayout:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = s
 	var e := a.half_extent
-	# Oaks first: the biggest in the clearing, the others in glades round it.
+	a.clearing_radius = CLEARING
+	# The clearing and the sunlit glade first, then the oaks (the biggest in the clearing, the others in
+	# glades of their own round it), then the gaps between.
+	a.openings.append({"centre": Vector2.ZERO, "r": CLEARING, "ph": rng.randf() * TAU, "kind": "clearing"})
+	var g_at := Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(GLADE.at.x, GLADE.at.y)
+	a.openings.append({"centre": g_at, "r": rng.randf_range(GLADE.r.x, GLADE.r.y), "ph": rng.randf() * TAU, "kind": "glade"})
 	var oak_sites: Array[Vector2] = [Vector2.ZERO]
 	var tries := 0
 	while oak_sites.size() < OAK.count and tries < 400:
 		tries += 1
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * (a.boundary - 22.0)
-		if p.length() < 34.0 or p.length() > a.boundary - 18.0:
+		if p.length() < 34.0 or p.length() > a.boundary - 18.0 or p.distance_to(g_at) < GLADE.r.y + OAK.glade + 8.0:
 			continue
 		var ok := true
 		for q in oak_sites:
@@ -53,30 +67,81 @@ static func generate(s: int) -> ArenaLayout:
 	for i in oak_sites.size():
 		var t := _tree(a, ArenaLayout.Kind.BROADLEAF, oak_sites[i], rng.randf_range(OAK.h.x, OAK.h.y) + (3.0 if i == 0 else 0.0), rng.randf_range(OAK.r.x, OAK.r.y) * (1.15 if i == 0 else 1.0))
 		_grow_oak(a, t, rng, i == 0)
-	# Pines, kept out of the glades and the clearing.
+	tries = 0
+	while a.openings.size() < 2 + GAPS.count and tries < 600:
+		tries += 1
+		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * (a.boundary - 12.0)
+		var r := rng.randf_range(GAPS.r.x, GAPS.r.y)
+		var ok := p.length() < a.boundary - r - 6.0
+		for o in a.openings:
+			ok = ok and p.distance_to(o.centre) > float(o.r) + r + 12.0
+		for q in oak_sites:
+			ok = ok and p.distance_to(q) > OAK.glade + OAK.limb.y * 0.6 + r + 6.0
+		if ok:
+			a.openings.append({"centre": p, "r": r, "ph": rng.randf() * TAU, "kind": "gap"})
+	# Pines in clumps, out of the openings and the oaks' glades.
+	var field := FastNoiseLite.new()
+	field.seed = s
+	field.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	field.frequency = 1.0 / STAND.scale
+	field.fractal_octaves = 2
 	tries = 0
 	var placed := 0
-	while placed < PINE.count and tries < PINE.count * 60:
+	while placed < PINE.count and tries < PINE.count * 80:
 		tries += 1
 		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
-		if p.length() > a.boundary - 3.0 or not _clear_of(a, p, PINE.spacing, OAK.glade + OAK.limb.y * 0.6):
+		if p.length() > a.boundary - 3.0 or in_opening(a, p):
+			continue
+		var f := smoothstep(-0.05, 0.3, field.get_noise_2dv(p))
+		if rng.randf() > lerpf(STAND.sparse, 1.0, f) or not _clear_of(a, p, lerpf(STAND.spacing.y, STAND.spacing.x, f), OAK.glade + OAK.limb.y * 0.6):
 			continue
 		var t := _tree(a, ArenaLayout.Kind.PINE, p, rng.randf_range(PINE.h.x, PINE.h.y), rng.randf_range(PINE.r.x, PINE.r.y))
 		_grow_pine(a, t, rng)
 		placed += 1
-	# Saplings in the gaps.
+	# Young pines in the light -- the gaps, the glade, the clearings' edges, few under the clumps -- in little
+	# groups, as they seed in.
 	tries = 0
 	placed = 0
-	while placed < SAPLING.count and tries < SAPLING.count * 40:
+	while placed < SAPLING.count and tries < SAPLING.count * 60:
 		tries += 1
 		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
-		if p.length() > a.boundary - 3.0 or p.length() < a.clearing_radius or not _clear_of(a, p, SAPLING.spacing, OAK.glade):
+		var lit := light(a, p)
+		if rng.randf() > 0.05 + 0.95 * lit * lit:
 			continue
-		var t := _tree(a, ArenaLayout.Kind.SAPLING, p, rng.randf_range(SAPLING.h.x, SAPLING.h.y), rng.randf_range(SAPLING.r.x, SAPLING.r.y))
-		_grow_sapling(a, t, rng)
-		placed += 1
+		for g in rng.randi_range(1, 5):
+			var q := p + Vector2.from_angle(rng.randf() * TAU) * (0.0 if g == 0 else rng.randf_range(2.5, 5.0))
+			if placed >= SAPLING.count or q.length() > a.boundary - 3.0 or q.length() < a.clearing_radius - 3.0 or not _clear_of(a, q, SAPLING.spacing, OAK.glade):
+				continue
+			var t := _tree(a, ArenaLayout.Kind.SAPLING, q, lerpf(SAPLING.h.x, SAPLING.h.y, rng.randf() * lerpf(0.4, 1.0, light(a, q))), rng.randf_range(SAPLING.r.x, SAPLING.r.y))
+			_grow_sapling(a, t, rng)
+			placed += 1
 	_outposts(a, rng)
 	return a
+
+
+## How far opening `o`'s edge lies from its centre toward `p` (irregular: no opening in a wood is round).
+static func edge(o: Dictionary, p: Vector2) -> float:
+	var ang := (p - (o.centre as Vector2)).angle()
+	return float(o.r) * (1.0 + 0.14 * sin(3.0 * ang + float(o.ph)) + 0.08 * sin(5.0 * ang + float(o.ph) * 2.3))
+
+
+## Is `p` inside an opening (by `margin` m more)?
+static func in_opening(a: ArenaLayout, p: Vector2, margin := 0.0) -> bool:
+	for o in a.openings:
+		if p.distance_to(o.centre) < edge(o, p) + margin:
+			return true
+	return false
+
+
+## How open the sky is over `p`: 0 under a clump's crowns, 1 well out in the open -- by the nearest standing
+## pine's crown (about 2.5 m round its trunk) or oak's (9 m).
+static func light(a: ArenaLayout, p: Vector2) -> float:
+	var near := 99.0
+	for t in a.trees_near_segment(Vector3(p.x, 0.0, p.y), Vector3(p.x, 0.0, p.y), 8.0):
+		match t.kind:
+			ArenaLayout.Kind.PINE: near = minf(near, p.distance_to(t.base) - 2.5)
+			ArenaLayout.Kind.BROADLEAF: near = minf(near, p.distance_to(t.base) - 9.0)
+	return smoothstep(0.0, 6.0, near)
 
 
 static func _tree(a: ArenaLayout, kind: int, p: Vector2, h: float, r: float) -> ArenaLayout.TreeData:

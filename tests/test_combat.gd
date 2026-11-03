@@ -11,7 +11,9 @@ extends TestCase
 ## target is never a teammate, a teammate in the line of fire is reported (left and right of it, not wide of
 ## it), a burst still hurts a teammate, and trails take their team's colour; the other side's base is the
 ## outpost farthest from yours; downing an enemy scores for your side, downing a teammate doesn't; a downed bird
-## respawns on its side's base, mended and rearmed; the range scene's demo shooter lands hits on an evading
+## respawns on its side's base, mended and rearmed; warnings: a round coming at a bird and an enemy's lock on it
+## are reported (not its own rounds, not one going away), nearest first, and the HUD puts each on the side
+## it comes from (left and right); the range scene's demo shooter lands hits on an evading
 ## target, with a wingman on its side and the target on the other, and the downed target comes back at its
 ## base and flies out again.
 
@@ -24,12 +26,23 @@ class Dummy extends Node3D:
 	var model := FakeModel.new()
 
 
+const SHARDS := 3   ## (the range scene and its match, the longest parts, each in a process of its own)
+
+
 func _init() -> void:
-	timeout_sec = 120.0
+	timeout_sec = 240.0
 
 
 func setup() -> void:
+	if not in_shard(0):
+		if in_shard(1):
+			await _range()
+		if in_shard(2):
+			await _range_match()
+		finish()
+		return
 	_rockets()
+	_surfaces()
 	await _fuses()
 	await _seekers()
 	await _launcher()
@@ -39,7 +52,12 @@ func setup() -> void:
 	_wing_loss_flight()
 	await _teams()
 	_far_base()
-	await _range()
+	await _warnings()
+	await _perched_aim()
+	if in_shard(1):
+		await _range()
+	if in_shard(2):
+		await _range_match()
 	finish()
 
 
@@ -414,6 +432,115 @@ func _teams() -> void:
 	await frames(1)
 
 
+func _warnings() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var a := Bird.new()
+	var e := Bird.new()
+	for b in [a, e]:
+		add_child(b)
+		(b as Bird).setup(BirdProfile.crow(), layout, null)
+	a.fly_from(Vector3(0, 40, 0), Vector3(0, 0, 1), 9.0)
+	e.fly_from(Vector3(0, 40, -20), Vector3(0, 0, 1), 9.0)   # (behind a, flying the same way: on its tail)
+	var la := world.add_bird(a, null, 0)
+	var le := world.add_bird(e, null, 1)
+	await frames(2)
+	eq((world.warnings_for(a).rounds as Array).size() + (world.warnings_for(a).locks as Array).size(), 0, "nothing to warn of at first")
+	# A round at it, one of its own, one going away: only the first is a warning.
+	var at_a := Projectile.launch(Projectile.Kind.ROCKET, a.global_position + Vector3(0, 0, -15), Vector3.ZERO, Vector3(0, 0, 1), e)
+	var own := Projectile.launch(Projectile.Kind.ROCKET, a.global_position + Vector3(0, 0, -10), Vector3.ZERO, Vector3(0, 0, 1), a)
+	var away := Projectile.launch(Projectile.Kind.ROCKET, a.global_position + Vector3(0, 0, -8), Vector3.ZERO, Vector3(0, 0, -1), e)
+	world.projectiles = [own, away, at_a]
+	var w := world.warnings_for(a)
+	eq((w.rounds as Array).size(), 1, "a round coming at it is warned of, not its own or one going away")
+	if not (w.rounds as Array).is_empty():
+		check(float(w.rounds[0].tgo) > 0.1 and float(w.rounds[0].tgo) < 1.0, "with its time to go (%.2f s)" % float(w.rounds[0].tgo))
+	check(world.threat_to(a) == at_a.pos, "threat_to is the nearest warning")
+	# A lock on it.
+	world.projectiles = []
+	le.lock_target = a
+	le.lock = 0.8
+	w = world.warnings_for(a)
+	check((w.locks as Array).size() == 1 and not w.locks[0].locked, "a lock building on it is warned of")
+	le.lock = 1.0
+	check(world.warnings_for(a).locks[0].locked, "and once it's locked")
+	# The HUD puts the warning on the side it comes from.
+	var cam := Camera3D.new()
+	add_child(cam)
+	cam.look_at_from_position(a.global_position + Vector3(0, 0.5, -3), a.global_position + Vector3(0, 0, 10))
+	cam.current = true
+	var hud := CombatHud.new()
+	add_child(hud)
+	hud.world = world
+	await frames(1)   # (full-rect: its size is the viewport's)
+	le.lock = 0.0
+	le.lock_target = null
+	for side: float in [-1.0, 1.0]:
+		var from := a.global_position + cam.global_basis.x * side * 15.0 + Vector3(0, 0, 8)
+		world.projectiles = [Projectile.launch(Projectile.Kind.ROCKET, from, Vector3.ZERO, (a.global_position - from).normalized(), e)]
+		var marks := hud.warning_marks(cam, la)
+		var centre := FlightHud.ring_centre if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else hud.size * 0.5
+		check(marks.size() == 1 and signf((marks[0][0] as Vector2).x - centre.x) == side, "a round from the %s is marked on the %s" % ["left" if side < 0 else "right", "left" if side < 0 else "right"])
+	world.projectiles = []
+	for n in [hud, cam, a, e]:
+		n.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
+## Perched, a bird can't aim: no lock builds on a bird ahead, and the HUD draws no lead mark; flying at the same bird,
+## it does both.
+func _perched_aim() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var a := Bird.new()
+	var e := Bird.new()
+	for b in [a, e]:
+		add_child(b)
+		(b as Bird).setup(BirdProfile.crow(), layout, null)
+	var perch: Perch = layout.perches[0]
+	a.perch_at(perch)
+	var ahead := a.global_position + a.facing * 15.0
+	e.fly_from(ahead, a.facing, 9.0)   # (held in place each frame below)
+	var l := world.add_bird(a, null, 0)
+	world.add_bird(e, null, 1)
+	var cam := Camera3D.new()
+	add_child(cam)
+	cam.current = true
+	var hud := CombatHud.new()
+	add_child(hud)
+	hud.world = world
+	hud.launcher = l
+	var drew := [false, false]
+	for flying in [false, true]:
+		if flying:
+			a.fly_from(ahead - a.facing * 15.0 + Vector3.UP * 0.0, (e.global_position - (ahead - a.facing * 15.0)).normalized(), 9.0)
+		for w in [Launcher.Weapon.SEEKERS, Launcher.Weapon.ROCKETS]:
+			l.weapon = w
+			for f in 75:
+				e.global_position = a.global_position + a.model.flight_dir() * 15.0 if flying else l.muzzle() + l.aim() * 15.0   # (perched: right where it would aim)
+				e.model.position = e.global_position
+				var d := Vector3(e.global_position.x - a.global_position.x, 0.0, e.global_position.z - a.global_position.z)
+				d = d.normalized() if d.length() > 0.1 else Vector3(a.facing.x, 0.0, a.facing.z).normalized()
+				cam.look_at_from_position(a.global_position - d * 3.0 + Vector3.UP * 0.5, a.global_position + d * 10.0)
+				await frames(1)
+				if w == Launcher.Weapon.ROCKETS:
+					drew[int(flying)] = drew[int(flying)] or hud.drew_lead
+			if w == Launcher.Weapon.SEEKERS:
+				if flying:
+					check(l.lock > 0.5, "flying at it, a lock builds (%.2f)" % l.lock)
+				else:
+					check(l.lock == 0.0 and l.lock_target == null, "perched, no lock builds on a bird ahead")
+	check(not drew[0], "perched, the HUD draws no lead mark")
+	check(drew[1], "flying, it does")
+	for n in [hud, cam, a, e]:
+		n.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
 ## The other side's base: the outpost farthest from yours (the pine wood has several).
 func _far_base() -> void:
 	var pw := Pinewood.generate(7)
@@ -428,6 +555,24 @@ func _far_base() -> void:
 	check(far != null and rails.has(far.id) and far != home, "the other base is an outpost's rail, not yours")
 	var d := Vector2(far.position.x - home.position.x, far.position.z - home.position.z).length()
 	check(d > best - 2.0, "and the farthest one (%.0f m of %.0f)" % [d, best])
+
+
+## A round says what it burst on: a rocket into the ground, "ground"; into a trunk, "trunk"; one that runs out, "air".
+func _surfaces() -> void:
+	var layout := ArenaLayout.lab()
+	var t: ArenaLayout.TreeData = layout.trees[0]
+	var trunk := Vector3(t.base.x, ArenaLayout.GROUND_Y + minf(t.height * 0.4, 3.0), t.base.y)
+	var cases := [["ground", Vector3(0, 3, 0) + Vector3(40, 0, 40), Vector3(0.2, -1, 0)],
+		["trunk", trunk + Vector3(-6, 0, 0), Vector3(1, 0, 0)],
+		["air", Vector3(0, 50, 0), Vector3(1, 0.3, 0)]]
+	for c in cases:
+		var p := Projectile.launch(Projectile.Kind.ROCKET, c[1], Vector3.ZERO, (c[2] as Vector3).normalized(), null)
+		var ev := {}
+		for i in 200:
+			ev = p.step(1.0 / 60.0, layout, [])
+			if not ev.is_empty():
+				break
+		eq(String(ev.get("surface", "?")), c[0], "a rocket %s bursts on %s" % [{"ground": "fired down", "trunk": "fired at a trunk", "air": "fired into the open"}[c[0]], c[0]])
 
 
 func _range() -> void:
@@ -464,5 +609,36 @@ func _range() -> void:
 		rails.append((o as ArenaLayout.OutpostData).rail_perch_id)
 	check(r.layout.outposts.is_empty() or rails.has(home.id), "your base is an outpost's rail (%d outposts)" % r.layout.outposts.size())
 	check(r.target_pilot.breaks >= 1, "the target breaks when threatened")
+	r.queue_free()
+	await frames(2)
+
+
+## The range's --match: you and two combat-AI wingmen against three combat-AI birds from the far base; within 30 s
+## the AI birds are fighting (rounds fired), each carrying its species' round.
+func _range_match() -> void:
+	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
+	add_child(r)
+	await frames(2)
+	r.match_mode = true
+	r.restart()
+	var ai: Array = r.match_birds
+	var mine := ai.filter(func(b): return r.world.friends(b, r.bird))
+	check(ai.size() == 5 and mine.size() == 2, "a match: two AI wingmen and three AI enemies (%d, %d yours)" % [ai.size(), mine.size()])
+	check(r.target == null, "and no racetrack target")
+	await frames(60 * 30)
+	var shots := 0
+	var kinds_ok := true
+	for l in r.world.launchers:
+		if ai.has(l.bird):
+			shots += l.shots
+			var st := CombatStyle.of(l.bird.profile)
+			kinds_ok = kinds_ok and int(l.capacity[st.weapon]) > 0 and l.weapon == st.weapon
+	var modes := {}
+	for b in ai:
+		var m: String = (b.controller as CombatPilot).brain.intent.mode
+		modes[m] = int(modes.get(m, 0)) + 1
+	print("range match after 30 s: %d rounds fired, modes %s, score %s" % [shots, modes, r.world.score])
+	check(shots >= 2, "the AI birds fight: %d rounds fired in 30 s" % shots)
+	check(kinds_ok, "each AI bird carries its species' round")
 	r.queue_free()
 	await frames(2)

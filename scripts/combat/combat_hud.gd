@@ -13,6 +13,9 @@ extends Control
 ##   teams      enemies in ENEMY (the target's bracket; a small mark on the others), teammates a FRIEND caret above
 ##              them with no range, both as arrows at the screen's edge when off it; a FRIEND cross on the
 ##              gunsight while a teammate is in the line of fire (CombatWorld.friend_in_line)
+##   warnings   round the aim ring, toward the threat: a red chevron for a lock building on you (solid once
+##              locked), a red arrowhead for a round coming at you, pulsing faster as it closes, and "LOCK" /
+##              "INCOMING" under the ring (CombatWorld.warnings_for: what any AI is told, too)
 ##   score      top right: your side's downed enemies (FRIEND) against theirs (ENEMY), when there are teams
 ##   tally      top right: shots, hits, downed (dev)
 ##   home       out of rounds or hurt: a marker on your base (where you rearm and mend), or an arrow at the edge
@@ -26,6 +29,7 @@ const FRIEND := Color(0.35, 0.92, 0.85)  ## cool: your side
 
 var launcher: Launcher
 var world: CombatWorld
+var drew_lead := false     ## (tests) whether the last frame drew a lead mark
 var note := ""             ## a line under the tally (the range shows target evasion on/off)
 var home: Variant = null   ## your base's perch (world), for the way home
 var _font: Font
@@ -42,6 +46,7 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
+	drew_lead = false
 	if FlightHud.style != "dev":
 		_draw_styled()
 		return
@@ -50,7 +55,7 @@ func _draw() -> void:
 		return
 	var l := launcher
 	var sight := l.muzzle() + l.aim() * 25.0
-	var sight_ok := not cam.is_position_behind(sight)
+	var sight_ok := l.can_aim() and not cam.is_position_behind(sight)   # (perched: no aiming, so no sight, lead or lock)
 	var sp := cam.unproject_position(sight)
 	if sight_ok:
 		draw_arc(sp, 12.0, 0, TAU, 32, INK, 2.0)
@@ -74,7 +79,10 @@ func _draw() -> void:
 			_bar(Rect2(tp.x - r, tp.y + r + 5, r * 2.0, 4), float(t.telemetry().health), 0)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_text(tp + Vector2(r + 6, -r + 30), "%+.0f" % closing, DIM, 13)
-			if l.weapon == Launcher.Weapon.ROCKETS:
+			if not l.can_aim():
+				pass
+			elif l.weapon == Launcher.Weapon.ROCKETS:
+				drew_lead = true
 				var lead := l.lead_point(t)
 				if not cam.is_position_behind(lead):
 					var lp := cam.unproject_position(lead)
@@ -83,6 +91,7 @@ func _draw() -> void:
 			elif l.lock_target == t:
 				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
 	_teams(cam, l, t, sp if sight_ok else Vector2.INF)
+	_warnings(cam, l)
 	_rack(l)
 	if home != null and l.bird.state != Bird.State.PERCHED and (_empty(l) or l.bird.health() < 1.0):
 		_home_marker(cam, home, l.bird.global_position.distance_to(home))
@@ -115,6 +124,62 @@ func _diamond(c: Vector2, r: float, col: Color, fill: bool) -> void:
 	if fill:
 		draw_colored_polygon(pts.slice(0, 4), Color(col, 0.35))
 	draw_polyline(pts, col, 2.0)
+
+
+## Where the warnings go: [[screen point, "lock" | "locked" | "round", strength 0..1]], each on a circle round
+## the aim ring (the screen's middle in the dev HUD) in the direction the threat is, seen from the camera.
+func warning_marks(cam: Camera3D, l: Launcher) -> Array:
+	if world == null or l == null or not is_instance_valid(l.bird):
+		return []
+	var w := world.warnings_for(l.bird)
+	var c := FlightHud.ring_centre if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else size * 0.5
+	var r := (FlightHud.ring_r if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else minf(size.x, size.y) * 0.3) + 34.0
+	var out := []
+	for k in w.locks:
+		out.append([c + _screen_dir(cam, k.from) * r, "locked" if k.locked else "lock", float(k.lock)])
+	for q in w.rounds:
+		out.append([c + _screen_dir(cam, q.pos) * r, "round", clampf(1.0 - float(q.tgo) / 1.5, 0.0, 1.0)])
+	return out
+
+
+## The direction of `at` on screen from the view's middle (behind the camera too), unit.
+static func _screen_dir(cam: Camera3D, at: Vector3) -> Vector2:
+	var local := cam.global_transform.affine_inverse() * at
+	var d := Vector2(local.x, -local.y)
+	return d.normalized() if d.length() > 1e-4 else Vector2(0, 1)
+
+
+func _warnings(cam: Camera3D, l: Launcher) -> void:
+	var marks := warning_marks(cam, l)
+	if marks.is_empty():
+		return
+	var clock := Time.get_ticks_msec() / 1000.0
+	var words := {}
+	for m in marks:
+		var p: Vector2 = m[0]
+		var kind: String = m[1]
+		var k: float = m[2]
+		var c := FlightHud.ring_centre if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else size * 0.5
+		var dir := (c - p).normalized()   # (pointing in, toward you)
+		var n := Vector2(-dir.y, dir.x)
+		if kind == "round":
+			var pulse := 0.55 + 0.45 * sin(clock * lerpf(8.0, 30.0, k))
+			var s := lerpf(15.0, 24.0, k)
+			var tri := func(sz: float) -> PackedVector2Array:
+				return PackedVector2Array([p + dir * sz, p - dir * sz * 0.6 + n * sz * 0.8, p - dir * sz * 0.6 - n * sz * 0.8])
+			draw_colored_polygon(tri.call(s + 4.0), Color(1, 0.93, 0.85, 0.85))   # (a light rim: it reads on dark bark and on sky)
+			draw_colored_polygon(tri.call(s), Color(LOCKED.r, LOCKED.g, LOCKED.b, 0.6 + 0.4 * pulse))
+			words["INCOMING"] = true
+		else:
+			var locked := kind == "locked"
+			var pts := PackedVector2Array([p - dir * 9.0 + n * 16.0, p + dir * 7.0, p - dir * 9.0 - n * 16.0])
+			draw_polyline(pts, Color(1, 0.93, 0.85, 0.85), 9.0)
+			draw_polyline(pts, Color(LOCKED, 1.0 if locked else 0.6 + 0.4 * sin(clock * 10.0)), 5.0)
+			words["LOCKED" if locked else "LOCK"] = true
+	var c2 := FlightHud.ring_centre if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else size * 0.5
+	var r2 := (FlightHud.ring_r if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else minf(size.x, size.y) * 0.3) + 64.0
+	var label := "INCOMING" if words.has("INCOMING") else ("LOCKED" if words.has("LOCKED") else "LOCK")
+	_text(c2 + Vector2(0, r2) - Vector2(_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x * 0.5, 0), label, LOCKED, 20)
 
 
 ## Friend and foe on the other birds (`t`, the bracketed target, has its own mark): a FRIEND caret over each
@@ -187,7 +252,7 @@ func _draw_styled() -> void:
 		return
 	var l := launcher
 	var sight := l.muzzle() + l.aim() * 25.0
-	var sight_ok := not cam.is_position_behind(sight)
+	var sight_ok := l.can_aim() and not cam.is_position_behind(sight)   # (perched: no aiming, so no sight, lead or lock)
 	var sp := cam.unproject_position(sight)
 	if sight_ok:
 		for pass_i in 2:
@@ -212,7 +277,10 @@ func _draw_styled() -> void:
 			_bracket(tp, r, LOCKED if l.locked() else ENEMY, 2.5)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)
-			if l.weapon == Launcher.Weapon.ROCKETS:
+			if not l.can_aim():
+				pass
+			elif l.weapon == Launcher.Weapon.ROCKETS:
+				drew_lead = true
 				var lead := l.lead_point(t)
 				if not cam.is_position_behind(lead):
 					var lp := cam.unproject_position(lead)
@@ -221,6 +289,7 @@ func _draw_styled() -> void:
 			elif l.lock_target == t:
 				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
 	_teams(cam, l, t, sp if sight_ok else Vector2.INF)
+	_warnings(cam, l)
 	# Your health and rounds.
 	var kind := Launcher.Weapon.ROCKETS if int(l.capacity[Launcher.Weapon.ROCKETS]) > 0 else Launcher.Weapon.SEEKERS
 	var n := int(l.capacity[kind])

@@ -5,6 +5,9 @@ extends Node
 ## Override setup() (may await). Assert with check/eq/near, then call finish().
 
 var timeout_sec := 60.0
+## A long test can declare `const SHARDS := N`: the runner then starts it as N processes, each with `--shard i`, and
+## each runs only its part (`if in_shard(i):`). Run by hand without `--shard`, it runs every part (-1).
+var shard := -1
 var _failures := 0
 var _done := false
 
@@ -20,7 +23,10 @@ func _ready() -> void:
 	t.start()
 	if DisplayServer.get_name() != "headless":   # (GPU tests run windowed: as fast as they can, not at the display's rate)
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	print("Running test: ", name)
+	var args := OS.get_cmdline_user_args()
+	if args.has("--shard"):
+		shard = int(Boot.arg_value(args, "--shard"))
+	print("Running test: ", name, "" if shard < 0 else " (shard %d)" % shard)
 	await setup()
 
 
@@ -53,6 +59,11 @@ func _fail(msg: String) -> void:
 	_failures += 1
 	push_error("ASSERT FAILED [%s]: %s" % [name, msg])
 	printerr("ASSERT FAILED [%s]: %s" % [name, msg])
+
+
+## Whether this process runs part `i` of a sharded test.
+func in_shard(i: int) -> bool:
+	return shard < 0 or shard == i
 
 
 ## Wait n physics frames.
