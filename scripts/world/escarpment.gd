@@ -38,10 +38,11 @@ const LOSS := Vector2(0.11, 2.4)    ## the chance a panel's block is gone, and h
 const PANEL_TILT := 0.14            ## the most a panel's face turns from the cliff's line (m per m along it)
 const LEAN := 0.045                 ## m the wall leans back per m up
 const BENCHES := [[9.0, 4.4], [17.0, 3.0]]   ## [height m, width m]: the beds nearest these heights are ledges
-const ROW_F := [0.03, 0.27, 0.5, 0.73, 0.97]   ## the sheet's rows up each bed (fractions, foot to top)
+const ROW_F := [0.03, 0.18, 0.34, 0.5, 0.66, 0.82, 0.97]   ## the sheet's rows up each bed (fractions, foot to top)
 const BULGE := Vector2(0.4, 0.15)   ## m: a face's gentle swell over a few metres, and its roughness over one
-const FRACTURE := Vector3(1.4, 0.13, 0.1)   ## a face broken into planar facets: m across, the most one stands back,
-                                             ## and the most it tilts (m per m)
+## A panel's face broken into planar facets -- the rock's own fracturing, not a texture: [m across, the most one
+## stands back, the most it tilts (m per m)], big ones that break up the whole face, small ones over them.
+const FRACTURES := [Vector3(3.4, 0.75, 0.32), Vector3(1.3, 0.14, 0.12)]
 const SKYLINE := Vector3(24.0, 30.0, 44.0)    ## the top: m per stretch, its height (least, most)
 const GULLY := Vector3(28.0, 4.5, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const PLATEAU := 30.0               ## m past the top's edge it rises (the hills take over beyond)
@@ -54,7 +55,7 @@ const PERCH_EVERY := [11.0, 26.0]   ## m along the cliff between perches on each
                                                 ## (none on the top tier: nothing up there to settle on)
 const PERCH_DISC := 0.45            ## m: a ledge perch's footing (Perch.treetop's disc)
 const LEDGE_BANDS := [Vector2(SCREE_H + 1.0, 13.5), Vector2(13.5, 26.0)]   ## m: the heights each tier's perches are sought at
-const COLUMN_STEP := 0.0005         ## rad: columns are cached to this (5 cm at the foot)
+const COLUMN_STEP := 0.002          ## rad: columns are cached to this (20 cm at the foot)
 
 var at := 0.0      ## the sector's middle, as an angle round the ring (x = sin, z = cos)
 var foot := 97.0   ## m from the middle: the mean foot
@@ -66,6 +67,9 @@ var _hard := PackedFloat32Array()   ## each bed's hardness, 0..1
 var _joints := []   ## per bed, the joints crossing it: PackedFloat32Array of m along the cliff, sorted
 var _bench := []    ## per bed, how wide a bench it carries on its top (0: none)
 var _cache := {}    ## column(), by angle in COLUMN_STEPs
+var _facets := []   ## per FRACTURES size: each cell's [jitter along, jitter up, set back, tilt along, tilt up], flat
+var _facet_n := []  ## and how many cells along and up (Vector2i)
+var _span := 0.0    ## m either side of the middle the tables reach
 
 
 ## The escarpment of arena `a` (none for an arena without one).
@@ -135,6 +139,22 @@ func _lay() -> void:
 		var arr: Array = _joints[b]
 		arr.sort()
 		_joints[b] = PackedFloat32Array(arr)
+	_span = HALF * foot + 12.0
+	for f in FRACTURES.size():   # (the facet tables: one cell's point and plane per entry)
+		var spec: Vector3 = FRACTURES[f]
+		var nx := ceili(_span * 2.0 / spec.x) + 3
+		var nz := ceili((SKYLINE.z + 20.0) / spec.x) + 3
+		var t := PackedFloat32Array()
+		t.resize(nx * nz * 5)
+		for i in nx * nz:
+			var id := float(i) * 1.618 + f * 977.0
+			t[i * 5] = _h(id + 0.1)
+			t[i * 5 + 1] = _h(id + 0.6)
+			t[i * 5 + 2] = _h(id + 4.1)
+			t[i * 5 + 3] = _h(id + 1.3) * 2.0 - 1.0
+			t[i * 5 + 4] = _h(id + 2.9) * 2.0 - 1.0
+		_facets.append(t)
+		_facet_n.append(Vector2i(nx, nz))
 	for spec in BENCHES:   # (the bed whose top lies nearest each bench height carries it)
 		var best := 0
 		for b in n:
@@ -170,26 +190,31 @@ func _panel(b: int, arc: float) -> float:
 
 
 ## How far the face stands back for its fracture facet at (`arc` m along, `z` m up) in bed `b`: the face split into
-## cells FRACTURE.x across (the nearest of jittered points: Voronoi), each a plane of its own -- set back by its own
-## amount and tilted its own way -- so the surface is faceted and stepped, as broken rock is, not smooth.
-func _facet(arc: float, z: float, b: int) -> float:
-	var s := FRACTURE.x
-	var cx := floorf(arc / s)
-	var cz := floorf(z / s)
+## cells FRACTURES[k].x across (the nearest of jittered points: Voronoi), each a plane of its own -- set back by its
+## own amount and tilted its own way -- so the surface is faceted and stepped, sharp where two facets meet, as broken
+## rock is, not smooth. (From the tables _lay made: each cell's point and plane; a bed reads them shifted along.)
+func _facet(arc: float, z: float, b: int, k: int) -> float:
+	var spec: Vector3 = FRACTURES[k]
+	var t: PackedFloat32Array = _facets[k]
+	var nx: int = _facet_n[k].x
+	var nz: int = _facet_n[k].y
+	var s := spec.x
+	var u := (arc + _span) / s
+	var v := (z + 8.0) / s
+	var cx := floori(u)
+	var cz := floori(v)
 	var best := INF
 	var out := 0.0
-	for ix in 3:
-		for iz in 3:
-			var gx := cx + float(ix - 1)
-			var gz := cz + float(iz - 1)
-			var id := gx * 92.7 + gz * 37.3 + b * 11.9
-			var px := (gx + _h(id + 0.1)) * s
-			var pz := (gz + _h(id + 0.6)) * s
-			var d := (arc - px) * (arc - px) + (z - pz) * (z - pz)
+	for ix in range(cx - 1, cx + 2):
+		var row := posmod(ix + b * 13, nx) * nz
+		for iz in range(maxi(cz - 1, 0), mini(cz + 2, nz)):
+			var o := (row + iz) * 5
+			var du := u - (ix + t[o])
+			var dv := v - (iz + t[o + 1])
+			var d := du * du + dv * dv
 			if d < best:
 				best = d
-				var tilt := Vector2(_h(id + 1.3) * 2.0 - 1.0, _h(id + 2.9) * 2.0 - 1.0) * FRACTURE.z
-				out = FRACTURE.y * _h(id + 4.1) + tilt.dot(Vector2(arc - px, z - pz))
+				out = spec.y * t[o + 2] + (t[o + 3] * du + t[o + 4] * dv) * s * spec.z
 	return out
 
 
@@ -239,7 +264,7 @@ func _column(theta: float) -> PackedFloat32Array:
 			var z := lerpf(z0, z1, f)
 			# (a face isn't a plane: it swells and hollows gently over a few metres, rougher over one)
 			var swell := BULGE.x * (_n1(arc / 2.6 + z / 2.1 + b * 3.1) - 0.5) * 2.0 + BULGE.y * (_n1(arc * 1.1 + z * 0.9 + b * 7.0) - 0.5) * 2.0
-			var r := r0 + maxf(back + LEAN * z + swell + _facet(arc, z, b), -0.8)
+			var r := r0 + maxf(back + LEAN * z + swell + _facet(arc, z, b, 0) + _facet(arc, z, b, 1), -0.8)
 			if z > top:   # (above the top: none -- the rows close up on the top's edge)
 				z = top
 				r = last_r

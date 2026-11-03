@@ -249,13 +249,21 @@ func _sheet(edge: EdgeBuilder) -> void:
 			mid = j
 	for j in [mid, mid + per * 2]:   # (a bed and the one two above it: a joint seldom runs through three)
 		var at := []
+		var bed0: int = (int(j) / per) * per
 		for i in range(1, nt):
-			var a := verts[(i - 1) * nr + j]
 			var b := verts[i * nr + j]
 			var arc := esc.off(atan2(b.x, b.z)) * esc.foot
 			if esc.gully(arc) > 0.0 or esc.gully(arc - 0.5) > 0.0:   # (the clefts cut every bed: not joints)
 				continue
-			if absf(arc) / (Escarpment.HALF * esc.foot) < 0.6 and absf(_r(b) - _r(a)) > 0.6:   # (a joint, not a fracture facet)
+			if absf(arc) / (Escarpment.HALF * esc.foot) >= 0.6:
+				continue
+			# (a joint cuts its bed top to bottom at one place: most of the bed's rows step there; a fracture facet's
+			# edge runs aslant, so it doesn't)
+			var stepped := 0
+			for q in per:
+				if absf(_r(verts[i * nr + bed0 + q]) - _r(verts[(i - 1) * nr + bed0 + q])) > 0.4:
+					stepped += 1
+			if stepped >= per - 2:
 				at.append(i)
 		steps.append(at)
 	var gaps := []
