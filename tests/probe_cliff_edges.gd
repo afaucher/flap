@@ -38,12 +38,14 @@ func setup() -> void:
 	var lips := []
 	var ledges := []
 	var clefts := []
+	var r0s := []   # (each column's foot radius: the front image is m back from it)
 	front.resize(nz * arcs.size())
 	plan.resize(nrr * arcs.size())
 	for ci in arcs.size():
 		var arc: float = arcs[ci]
 		var theta := esc.at + arc / esc.foot
 		var col := esc.column(theta)
+		r0s.append(col[1] if not col.is_empty() else esc.foot)
 		if col.is_empty():
 			for zi in nz:
 				front[zi * arcs.size() + ci] = NAN
@@ -99,7 +101,7 @@ func setup() -> void:
 	var data := {
 		"step": STEP, "arcs": arcs.size(), "arc0": -half, "nz": nz, "nr": nrr, "r0": r_lo - esc.foot,
 		"front": Array(front), "plan": Array(plan), "beds": Array(esc._beds), "hard": Array(esc._hard),
-		"feet": feet, "joints": joints, "lips": lips, "ledges": ledges, "skyline": skyline, "clefts": clefts,
+		"feet": feet, "joints": joints, "lips": lips, "ledges": ledges, "skyline": skyline, "clefts": clefts, "r0s": r0s, "foot": esc.foot,
 	}
 	var f := FileAccess.open(out, FileAccess.WRITE)
 	f.store_string(JSON.stringify(data))
