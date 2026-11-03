@@ -31,7 +31,7 @@ uniform vec3 roundel_c = vec3(0.0);      // model space: the roundel's centre, i
 uniform vec3 roundel_n = vec3(1.0, 0.0, 0.0);
 uniform float roundel_r = 0.13;
 uniform vec3 paint_ring : source_color = vec3(0.66, 0.48, 0.15);
-uniform vec3 paint_blue : source_color = vec3(0.1, 0.16, 0.42);
+uniform vec3 paint_blue : source_color = vec3(0.07, 0.13, 0.4);
 uniform vec3 crate_paint : source_color = vec3(0.68, 0.53, 0.2);
 
 // The scan's boards: nine across, the first gap at u = SCAN_GAP0, one board every SCAN_PITCH; its two rows of
@@ -383,7 +383,7 @@ void fragment() {
 				// Faded evenly by the sun, softly patchy, thinner where it's faded most; a few small chips, and
 				// worn off along the boards' arrises.
 				float fade = vnoise(L.xy * vec2(8.0, 6.0) + s * 5.0) * 0.6 + vnoise(L.xy * 26.0 + 3.0) * 0.4;
-				pc = mix(pc, vec3(lum(pc)) * 1.15 + 0.05, 0.18 + 0.3 * smoothstep(0.3, 0.85, fade));
+				pc = mix(pc, vec3(lum(pc)) * 1.15 + 0.04, 0.1 + 0.22 * smoothstep(0.3, 0.85, fade));
 				cover *= mix(0.95, 0.72, smoothstep(0.35, 0.9, fade));
 				float chip = smoothstep(0.8, 0.84, vnoise(L.xy * 110.0 + s * 21.0) * 0.8 + vnoise(L.xy * 520.0) * 0.2);
 				chip = max(chip, smoothstep(cw - 0.004, cw, abs(c)) * 0.8);
