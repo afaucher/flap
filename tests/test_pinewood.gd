@@ -3,7 +3,8 @@ extends TestCase
 ## but for short dead stubs, their limbs and needles up in the crown; the oaks -- one in the clearing -- carry
 ## long, nearly level limbs to perch on; every outpost is bolted to its trunk with a landing rail along its
 ## outer edge that is a perch, facing open air (wood and leaves clear for several metres out), left and right
-## of the rail alike; the AI's clearance queries see the decks; and the crowns leave sightlines. The stand has
+## of the rail alike, with a way in every bird's planner takes (the final swoop onto the rail, the outposts being the
+## bases birds rearm on); the AI's clearance queries see the decks; and the crowns leave sightlines. The stand has
 ## structure: clumps and open ground, a clearing and a glade, and the young pines out in the light.
 
 
@@ -201,5 +202,9 @@ func _outposts(a: ArenaLayout) -> void:
 				if not Pinewood._leaf_free(a, near.lerp(far, u / 8.0), 0.3):
 					leafy += 1
 			eq(leafy, 0, "outpost %d: the approach is clear of leaves (side %d)" % [o.id, int(e)])
+		# Every species can plan its final swoop onto the rail (a base it can't land on, it can't rearm on).
+		for id in ["crow", "sparrow", "hawk", "falcon", "owl"]:
+			var prof := BirdProfile.by_id(id)
+			check(FlightPlanner.new(a, AIPilot.plan_clearance(prof)).swoop_clear(p, prof), "outpost %d (wood %d): a %s can swoop onto the rail" % [o.id, a.seed, id])
 		# The AI sees the deck: a line straight through it is not clear.
 		check(not a.segment_clear(o.centre - side * o.width + Vector3.DOWN * 0.03, o.centre + side * o.width + Vector3.DOWN * 0.03, 0.05), "outpost %d: the deck blocks a path through it" % o.id)

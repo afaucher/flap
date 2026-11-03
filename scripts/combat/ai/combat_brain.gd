@@ -39,6 +39,8 @@ var tree: BeehaveTree
 var clock := 0.0
 var rng := RandomNumberGenerator.new()
 var _frame := -1
+var _phase := 0                 ## which of the THINK_EVERY ticks it thinks on (birds take turns)
+var _unthought := 0.0           ## s since it last thought
 var _next_decide := 0.0
 var _mode_since := 0.0
 ## Extend / defend timers the tree's actions keep between ticks.
@@ -68,16 +70,28 @@ func _init(b: Bird, w: CombatWorld, l: Launcher, sk: CombatSkill = null, seed :=
 	sense = CombatSense.new(b, w, skill)
 	pilot = AIPilot.new(w.layout, seed)
 	rng.seed = seed
+	_phase = posmod(seed, THINK_EVERY)
 	tree = CombatTree.build(self)
 	b.add_child(tree)
 
 
-## Sense and decide, once per physics tick (both controllers call it; the second call is a no-op).
+## Ticks between looks and decisions: 30 a second, well inside every skill's reaction time (0.12 s at best). Between
+## them it flies the intent it has (the pilot steers and fire control checks every shot each tick regardless).
+const THINK_EVERY := 2
+
+
+## Sense and decide, every THINK_EVERY physics ticks (both controllers call it each tick; only the first call in a tick
+## counts).
 func tick(dt: float) -> void:
 	var f := Engine.get_physics_frames()
 	if f == _frame or launcher == null:   # (no launcher: taken out of the fight)
 		return
 	_frame = f
+	_unthought += dt
+	if picture != null and posmod(f + _phase, THINK_EVERY) != 0:
+		return
+	dt = _unthought
+	_unthought = 0.0
 	clock += dt
 	var p0 := Perf.t()
 	picture = sense.update(dt)

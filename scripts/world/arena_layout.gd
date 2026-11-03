@@ -16,6 +16,8 @@ const GROUND_Y := 0.0
 const HASH_CELL := 8.0
 const GRIP_TRUNK_GAP := 0.12   ## m, the grip line starts this far out from the trunk's surface
 const GRIP_TIP_GAP := 0.08     ## m, and stops this far short of the tip
+const BOX_MARGIN := 1e-3       ## m, the slack in a clearance query's box test (rounding in the distance test)
+const BAND := 2.0              ## m, the height bands a tree's branches are filed under for clearance queries
 
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 ## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest).
@@ -60,6 +62,24 @@ class TreeData:
 						_reach = maxf(_reach, q.distance_to(Geometry3D.get_closest_point_to_segment(q, lo, top())) + br.radius)
 		return _reach
 
+	## The solid branches filed under the height bands (ArenaLayout.BAND m) they reach into: band -> Array of
+	## BranchData. A clearance query visits only the bands its segment spans.
+	var _bands := {}
+	var _bands_n := -1              ## (branches.size() when they were filed)
+	func bands() -> Dictionary:
+		if _bands_n != branches.size():
+			_bands_n = branches.size()
+			_bands = {}
+			for br in branches:
+				if br.solid:
+					var k0 := floori((minf(br.root.y, br.tip.y) - br.radius) / ArenaLayout.BAND)
+					var k1 := floori((maxf(br.root.y, br.tip.y) + br.radius) / ArenaLayout.BAND)
+					for k in range(k0, k1 + 1):
+						if not _bands.has(k):
+							_bands[k] = []
+						_bands[k].append(br)
+		return _bands
+
 
 class BranchData:
 	var tree_id := 0
@@ -83,6 +103,7 @@ class OutpostData:
 	var thickness := 0.07
 	var rail_radius := 0.045
 	var rail_perch_id := -1
+	var lines := []                 ## deck_lines(), once asked for
 
 
 var seed := 0
@@ -281,8 +302,9 @@ func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) 
 
 
 ## segment_clear against `near` (trees_near_segment of an area the segment lies in), for many checks in one
-## place (the AI's predicted paths); `ignore_also`: a second tree to skip.
-func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, ignore_tree := -1, ignore_also := -1) -> bool:
+## place (the AI's predicted paths); `ignore_also`: a second tree to skip; `decks`: the outposts that could be
+## near (null: all of them).
+func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, ignore_tree := -1, ignore_also := -1, decks: Variant = null) -> bool:
 	if a.y < GROUND_Y + clearance or b.y < GROUND_Y + clearance:
 		return false
 	var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance
@@ -295,7 +317,7 @@ func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, 
 			continue
 		if not _tree_clear(t, a, b, clearance, -1):
 			return false
-	for o in outposts:
+	for o in (outposts if decks == null else decks):
 		if o.tree_id == ignore_tree or o.tree_id == ignore_also:
 			continue
 		var od: float = o.width + o.depth   # (the deck lies well within this of its centre)
@@ -306,6 +328,47 @@ func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, 
 			if dp[0].distance_to(dp[1]) < float(seg[2]) + clearance:
 				return false
 	return true
+
+
+## segment_clear_among for each chord of the polyline `pts` in turn, in one call (an AI's predicted path): the index
+## of the first chord that isn't clear, or -1 if none.
+func path_blocked_at(near: Array, pts: PackedVector3Array, clearance: float, ignore_tree := -1, ignore_also := -1, decks: Variant = null) -> int:
+	var ts := []
+	var rs := []
+	for t in near:
+		if t.id != ignore_tree and t.id != ignore_also:
+			ts.append(t)
+			rs.append(t.reach())
+	var os := []
+	for o in (outposts if decks == null else decks):
+		if o.tree_id != ignore_tree and o.tree_id != ignore_also:
+			os.append(o)
+	var floor_y := GROUND_Y + clearance
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		if a.y < floor_y or b.y < floor_y:
+			return i
+		if ts.is_empty() and os.is_empty():
+			continue
+		var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance
+		var hi := Vector2(maxf(a.x, b.x), maxf(a.z, b.z)) + Vector2.ONE * clearance
+		for j in ts.size():
+			var t: TreeData = ts[j]
+			var r: float = rs[j]
+			if t.base.x < lo.x - r or t.base.x > hi.x + r or t.base.y < lo.y - r or t.base.y > hi.y + r:
+				continue
+			if not _tree_clear(t, a, b, clearance, -1):
+				return i
+		for o in os:
+			var od: float = o.width + o.depth
+			if o.centre.x < lo.x - od or o.centre.x > hi.x + od or o.centre.z < lo.y - od or o.centre.z > hi.y + od:
+				continue
+			for seg in deck_lines(o):
+				var dp := Geometry3D.get_closest_points_between_segments(a, b, seg[0], seg[1])
+				if dp[0].distance_to(dp[1]) < float(seg[2]) + clearance:
+					return i
+	return -1
 
 
 ## Is the straight flight from a to b clear of one tree's trunk, branches and outposts by `clearance`, leaving
@@ -333,19 +396,37 @@ func _tree_clear(t: TreeData, a: Vector3, b: Vector3, clearance: float, skip_per
 		return true   # (every branch leaves the trunk's axis, so none comes nearer than this)
 	var y0 := minf(a.y, b.y) - clearance
 	var y1 := maxf(a.y, b.y) + clearance
-	for br in t.branches:
-		if not br.solid or (skip_perch >= 0 and br.perch_id == skip_perch):
-			continue
-		if br.root.y - br.radius > y1 and br.tip.y - br.radius > y1 or br.root.y + br.radius < y0 and br.tip.y + br.radius < y0:
-			continue   # (wholly above or below the segment)
-		var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
-		if bp[0].distance_to(bp[1]) < br.radius + clearance:
-			return false
+	# (Across, a branch whose box is farther than this from the segment's can't come within the clearance; the
+	# margin keeps the skip on the safe side of the distance test's rounding.)
+	var x0 := minf(a.x, b.x) - clearance - BOX_MARGIN
+	var x1 := maxf(a.x, b.x) + clearance + BOX_MARGIN
+	var z0 := minf(a.z, b.z) - clearance - BOX_MARGIN
+	var z1 := maxf(a.z, b.z) + clearance + BOX_MARGIN
+	var bands := t.bands()   # (the solid branches at the segment's height; one reaching across bands may come twice)
+	for k in range(floori(y0 / BAND), floori(y1 / BAND) + 1):
+		for br in bands.get(k, []):
+			if skip_perch >= 0 and br.perch_id == skip_perch:
+				continue
+			if br.root.y - br.radius > y1 and br.tip.y - br.radius > y1 or br.root.y + br.radius < y0 and br.tip.y + br.radius < y0:
+				continue   # (wholly above or below the segment)
+			if minf(br.root.x, br.tip.x) - br.radius > x1 or maxf(br.root.x, br.tip.x) + br.radius < x0 \
+					or minf(br.root.z, br.tip.z) - br.radius > z1 or maxf(br.root.z, br.tip.z) + br.radius < z0:
+				continue   # (wholly to one side)
+			var bp := Geometry3D.get_closest_points_between_segments(a, b, br.root, br.tip)
+			if bp[0].distance_to(bp[1]) < br.radius + clearance:
+				return false
 	return true
 
 
-## An outpost's deck as capsules for clearance queries: [a, b, radius] lines across it, near edge to rail.
+## An outpost's deck as capsules for clearance queries: [a, b, radius] lines across it, near edge to rail
+## (worked out on the first query, once the outpost is built).
 func deck_lines(o: OutpostData) -> Array:
+	if o.lines.is_empty():
+		o.lines = _deck_lines(o)
+	return o.lines
+
+
+func _deck_lines(o: OutpostData) -> Array:
 	var side := o.out.cross(Vector3.UP).normalized()
 	var out := []
 	var r := o.depth * 0.25
@@ -355,14 +436,51 @@ func deck_lines(o: OutpostData) -> Array:
 	return out
 
 
+## Is `pos` farther than `d` from every trunk, branch and deck: obstacle_distance(pos, search) > d, answered at the
+## first piece of wood within d (and without measuring any tree that can't reach that close).
+func clear_by(pos: Vector3, d: float, search := 12.0) -> bool:
+	for t in trees_near_segment(pos, pos, search):
+		if Vector2(pos.x, pos.z).distance_to(t.base) - t.reach() - BOX_MARGIN > d:
+			continue
+		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.top())
+		if pos.distance_to(axis) - t.radius <= d:
+			return false
+		for br in t.branches:
+			if not br.solid:
+				continue
+			if maxf(minf(br.root.y, br.tip.y) - pos.y, pos.y - maxf(br.root.y, br.tip.y)) - br.radius - BOX_MARGIN > d:
+				continue
+			var q := Geometry3D.get_closest_point_to_segment(pos, br.root, br.tip)
+			if pos.distance_to(q) - br.radius <= d:
+				return false
+	for o in outposts:
+		if Vector2(o.centre.x - pos.x, o.centre.z - pos.z).length() < search:
+			for seg in deck_lines(o):
+				var q := Geometry3D.get_closest_point_to_segment(pos, seg[0], seg[1])
+				if pos.distance_to(q) - float(seg[2]) <= d:
+					return false
+	return true
+
+
 ## Distance from `pos` to the nearest trunk or branch surface (inf if none nearby).
 func obstacle_distance(pos: Vector3, search := 12.0) -> float:
 	var best := INF
+	# Nearest trunk first, and none whose wood can't come nearer than the best so far: everything of a tree lies within
+	# reach() of its axis, so its distance - reach() bounds all of it from below (likewise a branch's height).
+	var order := []
 	for t in trees_near_segment(pos, pos, search):
+		order.append([Vector2(pos.x, pos.z).distance_to(t.base) - t.reach(), t])
+	order.sort_custom(func(x, y): return x[0] < y[0])
+	for e in order:
+		if float(e[0]) - BOX_MARGIN >= best:
+			break
+		var t: TreeData = e[1]
 		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.top())
 		best = minf(best, pos.distance_to(axis) - t.radius)
 		for br in t.branches:
 			if not br.solid:
+				continue
+			if maxf(minf(br.root.y, br.tip.y) - pos.y, pos.y - maxf(br.root.y, br.tip.y)) - br.radius - BOX_MARGIN >= best:
 				continue
 			var q := Geometry3D.get_closest_point_to_segment(pos, br.root, br.tip)
 			best = minf(best, pos.distance_to(q) - br.radius)

@@ -57,11 +57,10 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 	var pre := pre_approach_point(p, profile)
 	pre.y = maxf(pre.y, clearance + 0.5)
 	var none: Array[Vector3] = []
+	if not swoop_clear(p, profile):
+		return none
 	_a_perch = from_perch
 	_b_perch = p.id
-	# The swoop from the approach point onto the branch: none if its own tree is in the way.
-	if not _leg_ok(app, p.approach_anchor(), -1, p.tree_id):
-		return none
 	# Line up through the pre-approach point when that leg is open; otherwise straight to the approach point.
 	var lined_up := _leg_ok(pre, app, -1, p.tree_id)
 	var route := plan(start, pre if lined_up else app, from_tree, p.tree_id, from_perch, p.id)
@@ -71,6 +70,15 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 		route.append(app)
 	route.append(p.approach_anchor())
 	return route
+
+
+## Is the final swoop from the approach point onto perch `p` clear (the wood by `clearance`, its own tree closer)?
+## Without it, there's no route to the perch.
+func swoop_clear(p: Perch, profile: BirdProfile) -> bool:
+	var app := approach_point(p, profile)
+	app.y = maxf(app.y, clearance + 0.5)
+	_b_perch = p.id
+	return _leg_ok(app, p.approach_anchor(), -1, p.tree_id)
 
 
 ## Waypoints from `a` to `b` through free air (both included), or [] if none found. `a_tree` is ignored on
@@ -200,7 +208,7 @@ func _usable(k: Vector3i) -> bool:
 	if _node_ok.has(k):
 		return _node_ok[k]
 	var p := _pos(k)
-	var ok := Vector2(p.x, p.z).length() < layout.boundary - 2.0 and p.y < layout.ceiling and layout.obstacle_distance(p) > clearance + 0.3
+	var ok := Vector2(p.x, p.z).length() < layout.boundary - 2.0 and p.y < layout.ceiling and layout.clear_by(p, clearance + 0.3)
 	_node_ok[k] = ok
 	return ok
 

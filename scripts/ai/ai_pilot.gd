@@ -56,11 +56,21 @@ func _init(l: ArenaLayout, s := 1) -> void:
 ## pick perches above the understory.
 func _fit(bird: Bird) -> void:
 	var p := bird.profile
-	turn_radius = p.v_best * p.v_best / (BirdProfile.G * tan(deg_to_rad(p.max_bank_deg * 0.85)))
-	planner.clearance = 0.9 + 0.15 * turn_radius
+	turn_radius = cruise_turn_radius(p)
+	planner.clearance = plan_clearance(p)
 	min_perch_height = 2.0 + p.v_stall * 0.35
 	if turn_radius > 4.5:
 		min_perch_height = maxf(min_perch_height, ArenaLayout.TIERS[0].h.y + 1.0)
+
+
+## m, the turning circle at cruise (v* at 85% of the bank limit).
+static func cruise_turn_radius(p: BirdProfile) -> float:
+	return p.v_best * p.v_best / (BirdProfile.G * tan(deg_to_rad(p.max_bank_deg * 0.85)))
+
+
+## m, how far its planned routes keep from the wood.
+static func plan_clearance(p: BirdProfile) -> float:
+	return 0.9 + 0.15 * cruise_turn_radius(p)
 
 
 func sample(bird: Bird, dt: float) -> FlightInput:
@@ -100,8 +110,7 @@ func _perched(bird: Bird) -> FlightInput:
 	if absf(err) > deg_to_rad(20.0) and clock < rest_until + 3.0:
 		return FlightInput.new(Vector2(clampf(err * 1.5, -1.0, 1.0), 0.0))
 	mode = Mode.CRUISE
-	_left_perch = bird.perch.id
-	_takeoff_pos = bird.global_position
+	leaving(bird)
 	return FlightInput.new(Vector2.ZERO, true, false)
 
 
@@ -170,6 +179,19 @@ func go_to_perch(bird: Bird, perch: Perch) -> void:
 	if bird.state == Bird.State.FLYING:
 		mode = Mode.CRUISE
 	_replan(bird)
+
+
+## It's letting go of its perch: the tree it leaves is passed closer for a while (DEPARTURE_RANGE), and not at all in
+## the first PUSH_OFF metres, which it passes through as it lets go.
+func leaving(bird: Bird) -> void:
+	_last_tree = bird.perch.tree_id
+	_left_perch = bird.perch.id
+	_takeoff_pos = bird.global_position
+
+
+## Has it given `perch` up for now (no route in, or an approach that failed)?
+func gave_up_on(perch: Perch) -> bool:
+	return clock < float(_given_up.get(perch.id, -1.0))
 
 
 func _replan(bird: Bird) -> void:
@@ -388,7 +410,10 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 	for climb in [gamma, deg_to_rad(18.0), deg_to_rad(-12.0), deg_to_rad(30.0)]:
 		for yaw_deg in [0.0, 25.0, -25.0, 50.0, -50.0, 80.0, -80.0, 115.0, -115.0, 150.0, -150.0]:
 			var d := ahead.rotated(Vector3.UP, deg_to_rad(yaw_deg))
-			var r := _predict(bird, near, d, false, climb, horizon, frac)
+			# (Once one is clear, a heading that couldn't beat it even clear isn't checked against the wood.)
+			var r := _predict(bird, near, d, false, climb, horizon, frac, true, want_h, best_score if best_score >= horizon else INF)
+			if r[0] < 0.0:
+				continue
 			var end_dir: Vector3 = r[1]
 			var score: float = r[0] + (2.0 + end_dir.dot(want_h) if r[0] >= horizon else 0.0)
 			if score > best_score:
@@ -422,8 +447,10 @@ static func _bank_room(p: BirdProfile, y: float, frac := 0.85) -> float:
 ## Returns [seconds clear (`horizon` if all of it), final heading]. Coming in to land, the perch's own tree counts
 ## too, closer (OWN_TREE_CLEARANCE) and without the perch's branch, and the path ends where it passes closest to
 ## the perch if that's in the feet's reach (the catch). Just after take-off, so does the tree it left (past the
-## first PUSH_OFF metres, which it passes through as it lets go).
-func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: float, horizon: float, frac := 0.85, follow_route := true) -> Array:
+## first PUSH_OFF metres, which it passes through as it lets go). With `to_beat` (the fan's best score so far, a clear
+## one): [-1, final heading] if the path couldn't score more even clear (horizon + 2 + its end heading . `want_h`),
+## without checking it against the wood.
+func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: float, horizon: float, frac := 0.85, follow_route := true, want_h := Vector3.ZERO, to_beat := INF) -> Array:
 	var m := bird.model
 	var layout := bird.layout
 	var v := maxf(m.speed, 2.0)
@@ -465,20 +492,30 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 		hi = hi.max(Vector2(nxt.x, nxt.z))
 		pos = nxt
 		t += PREDICT_STEP
+	if to_beat < INF and horizon + (2.0 + dir.dot(want_h)) <= to_beat:
+		return [-1.0, dir]
 	var close := []
 	for tr in near:
 		var rr: float = tr.reach() + WHISKER_CLEARANCE
 		if tr.base.x > lo.x - rr and tr.base.x < hi.x + rr and tr.base.y > lo.y - rr and tr.base.y < hi.y + rr:
 			close.append(tr)
-	for i in pts.size() - 1:
+	var decks := []   # (the outposts whose decks could reach the path; a chord's own check skips the rest anyway)
+	for o in layout.outposts:
+		var od: float = o.width + o.depth + WHISKER_CLEARANCE + 0.01
+		if o.centre.x >= lo.x - od and o.centre.x <= hi.x + od and o.centre.z >= lo.y - od and o.centre.z <= hi.y + od:
+			decks.append(o)
+	var blocked := layout.path_blocked_at(close, pts, WHISKER_CLEARANCE, own, left, decks)
+	# The trees it is leaving and landing on, closer, up to the first chord the rest of the wood blocks.
+	var upto := (pts.size() - 1 if blocked < 0 else blocked) if left >= 0 or own >= 0 else 0
+	for i in upto:
 		var a := pts[i]
 		var b := pts[i + 1]
-		if not layout.segment_clear_among(close, a, b, WHISKER_CLEARANCE, own, left):
-			return [i * PREDICT_STEP, dir]
 		if left >= 0 and a.distance_to(_takeoff_pos) > FlightPlanner.PUSH_OFF and not layout.tree_clear(left, a, b, OWN_TREE_CLEARANCE, _left_perch):
 			return [i * PREDICT_STEP, dir]
 		if own >= 0 and not layout.tree_clear(own, a, b, OWN_TREE_CLEARANCE, target.id):
 			return [i * PREDICT_STEP, dir]
+	if blocked >= 0:
+		return [blocked * PREDICT_STEP, dir]
 	return [horizon, dir]
 
 

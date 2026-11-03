@@ -3,7 +3,9 @@ extends TestCase
 ##   - against the range's racetrack target flying straight on, a rocket bird and a seeker bird each land hits
 ##     and down it within 40 s (the hawk and the falcon, boom and zoom: test_combat_boom_zoom);
 ##   - (against the target breaking when shot at, it beats the range's old demo shooter: test_combat_vs_demo);
-##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this;
+##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this; a base
+##     it finds no way in to, it heads for without planning a route again every tick (or wandering off to plan one to
+##     some other perch);
 ##   - in a long turning fight with a sparrow that breaks and turns (an AI with nothing to shoot), it banks no
 ##     harder than its lift holds at the speed it has: it never stalls, nor spirals down (a hawk and a sparrow,
 ##     the target turning either way);
@@ -36,6 +38,7 @@ func setup() -> void:
 	if in_shard(1):
 		await _ambush()
 		await _rests_out_of_sight()
+		await _no_way_in()
 	if in_shard(2):
 		await _rearms_at_base()
 		for id in ["hawk", "sparrow"]:
@@ -114,6 +117,50 @@ func _rearms_at_base() -> void:
 	check(landed_at == home, "out of rounds: it lands on its own base")
 	check(rearmed_at > 0.0, "and rearms there")
 	check(took_off_full, "then goes back up")
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
+
+
+## Empty, with a base it can't plan the final swoop onto (a branch perch with the wood in the way): it heads that way
+## and tries again now and then, rather than planning routes every tick -- to its base, then to any other perch.
+func _no_way_in() -> void:
+	var layout := Pinewood.generate(ARENA_SEED)
+	var prof := BirdProfile.by_id("crow")
+	var planner := FlightPlanner.new(layout, AIPilot.plan_clearance(prof))
+	var base: Perch = null
+	var start := Vector3.ZERO
+	for p in layout.perches:
+		if p.position.y < 8.0 or p.position.y > 20.0 or Vector2(p.position.x, p.position.z).length() > 50.0 or planner.swoop_clear(p, prof):
+			continue
+		start = p.position + p.facing * 20.0 + Vector3.UP * 6.0
+		if layout.obstacle_distance(start) > 3.0:
+			base = p
+			break
+	check(base != null, "a perch with no way in for a crow")
+	if base == null:
+		return
+	var d := Duel.new()
+	add_child(d)
+	d.setup(layout, {0: base})
+	await frames(1)
+	var me: Dictionary = d.add_ai("crow", 0, start, -base.facing, CombatSkill.preset("pilot"), 5)
+	var l: Launcher = me.launcher
+	l.ammo[l.weapon] = 0
+	var b: Bird = me.bird
+	var pilot: AIPilot = (me.brain as CombatBrain).pilot
+	var plans := 0
+	var last := pilot.replans
+	var nearest := INF
+	for f in 60 * 12:
+		await get_tree().physics_frame
+		plans += maxi(0, pilot.replans - last)
+		last = pilot.replans
+		if f > 60 * 6:
+			nearest = minf(nearest, b.global_position.distance_to(base.position))
+	print("base %d with no way in: %d route plans in 12 s, within %.1f m of it after 6 s, %d bonks" % [base.id, plans, nearest, b.bonks])
+	check(plans <= 3, "no way in to its base: it doesn't plan a route every tick (%d plans)" % plans)
+	check(nearest < 25.0, "and keeps to its base rather than flying off to another perch (%.1f m)" % nearest)
 	d.cleanup()
 	d.queue_free()
 	await frames(2)

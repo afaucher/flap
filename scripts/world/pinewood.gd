@@ -26,6 +26,13 @@ const GAPS := {"count": 7, "r": Vector2(6.0, 10.0)}
 const OAK := {"count": 4, "h": Vector2(17.0, 22.0), "r": Vector2(0.65, 0.9), "limb": Vector2(6.0, 9.5), "glade": 11.0}
 const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08), "spacing": 3.2}
 const OUTPOSTS := 9
+## An outpost's way in: the final swoop onto the rail comes up from out in front and a little below, so it faces only
+## where that corridor is clear -- APPROACH m out from the rail, sinking APPROACH_DROP m, clear of every other tree by
+## APPROACH_BERTH m (the AI's widest: the falcon starts its swoop 10 m out, the hawk keeps 1.9 m from the wood). A
+## tree with no such side doesn't get one; the next does.
+const APPROACH := 11.0
+const APPROACH_DROP := 1.2
+const APPROACH_BERTH := 2.0
 ## How full the crowns are, 0..1: 1 a dense pine crown (whorls of pads at each limb's end and middle), lower
 ## airier (fewer whorls, pads only at the tips, smaller, some limbs bare) -- the crown layer's sightlines.
 ## 0.5: in the crown band (about 22 m) almost half of level looks reach 40 m, against a fifth at 1 (probe_sightlines).
@@ -442,20 +449,23 @@ static func _outposts(a: ArenaLayout, rng: RandomNumberGenerator) -> void:
 		var tmp = pines[i]
 		pines[i] = pines[j]
 		pines[j] = tmp
+	var built := []
+	for t in hosts:
+		if _outpost(a, t, rng):
+			built.append(t)
 	for t in pines:
-		if hosts.size() >= OUTPOSTS:
+		if built.size() >= OUTPOSTS:
 			break
 		var far := true
-		for h in hosts:
+		for h in built:
 			if Vector2(t.base).distance_to(h.base) < 24.0:
 				far = false
-		if far:
-			hosts.append(t)
-	for t in hosts:
-		_outpost(a, t, rng)
+		if far and _outpost(a, t, rng):
+			built.append(t)
 
 
-static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
+## An outpost on `t`, facing its most open side with a way in (false, and nothing built, if it has none).
+static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> bool:
 	var o := ArenaLayout.OutpostData.new()
 	o.id = a.outposts.size()
 	o.tree_id = t.id
@@ -483,21 +493,52 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 			var from := c + Vector3.UP * (float(yy) + 0.3) + d * (r + 1.4)
 			var run := 0.0
 			var across := d.cross(Vector3.UP).normalized() * 0.6   # (both ends of the rail, as well as its middle)
+			if not _way_in(a, t, o, c, float(yy), d):
+				continue
 			while run < 30.0 and a.segment_clear(from, from + d * (run + 2.0), 0.6, -1) and a.segment_clear(from + across, from + across + d * (run + 2.0), 0.5, -1) and a.segment_clear(from - across, from - across + d * (run + 2.0), 0.5, -1) and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6) and _leaf_free(a, from + across + d * (run + 1.5), 0.4) and _leaf_free(a, from - across + d * (run + 1.5), 0.4):
 				run += 2.0
 			if run > best:
 				best = run
 				o.out = d
 				y = yy
-	r = _r_at(t, y) if not oak else t.radius
-	o.centre = c + Vector3.UP * y + o.out * (r + o.depth * 0.5 - 0.15)
+	if best < 0.0:
+		return false   # (no side with a way in)
+	_place(t, o, c, y)
 	var side := o.out.cross(Vector3.UP).normalized()
-	var rail := o.centre + o.out * (o.depth * 0.5 - o.rail_radius) + Vector3.UP * (o.rail_radius - o.thickness * 0.2)
+	var rail := _rail(o)
 	var half := o.width * 0.5 - 0.06
 	var p := Perch.branch(a.perches.size(), rail - side * half + Vector3.UP * o.rail_radius, rail + side * half + Vector3.UP * o.rail_radius, o.out, t.id, o.rail_radius)
 	o.rail_perch_id = p.id
 	a._add_perch(p)
 	a.outposts.append(o)
+	return true
+
+
+## The deck's centre for an outpost on `t` (trunk foot `c`) at height y, facing o.out.
+static func _place(t: ArenaLayout.TreeData, o: ArenaLayout.OutpostData, c: Vector3, y: float) -> void:
+	var r := _r_at(t, y) if t.kind != ArenaLayout.Kind.BROADLEAF else t.radius
+	o.centre = c + Vector3.UP * y + o.out * (r + o.depth * 0.5 - 0.15)
+
+
+## The middle of the landing rail, on top of the deck's outer edge.
+static func _rail(o: ArenaLayout.OutpostData) -> Vector3:
+	return o.centre + o.out * (o.depth * 0.5 - o.rail_radius) + Vector3.UP * (o.rail_radius - o.thickness * 0.2)
+
+
+## Would an outpost on `t` at height y facing `d` have a way in (APPROACH)? The swoop lines from APPROACH_DROP below
+## and 6 to APPROACH m out up to each end of the rail, clear of every other tree by APPROACH_BERTH.
+static func _way_in(a: ArenaLayout, t: ArenaLayout.TreeData, o: ArenaLayout.OutpostData, c: Vector3, y: float, d: Vector3) -> bool:
+	var trial := ArenaLayout.OutpostData.new()
+	trial.out = d
+	_place(t, trial, c, y)
+	var rail := _rail(trial)
+	var side := d.cross(Vector3.UP).normalized() * (o.width * 0.5)
+	for end in [rail - side, rail + side]:
+		for out in [6.0, 8.0, 10.0, APPROACH]:
+			var from: Vector3 = end + d * out + Vector3.DOWN * APPROACH_DROP
+			if not a.segment_clear(from, end + d * 0.5, APPROACH_BERTH, t.id):
+				return false
+	return true
 
 
 ## How far one can see from `from` along `dir` (unit) before wood -- or, with `leaves`, foliage -- blocks the
