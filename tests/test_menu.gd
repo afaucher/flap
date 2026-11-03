@@ -1,14 +1,16 @@
 extends TestCase
-## The start menu and what its choices open: the menu lists Flight, the two Fights and the Lab; Flight (its
-## options in Boot.extra) is the game with no tack on any bird, and without them the riders are back; Fight
-## carries one kind of round, six rockets or four seekers, with nothing to switch to.
+## The start menu and what its choices open: the menu lists Flight, Fight and the Lab; Flight (its options in
+## Boot.extra) is the game with no tack on any bird, and without them the riders are back. Fight opens its own
+## screen (Esc back): your bird, your weapon, the mode and, for a match, the AI's skill, each shown with what it
+## means; Start opens the range as chosen -- that species, one kind of round (six rockets or four seekers, nothing
+## to switch to), the 3 v 3 match at that skill, or target practice with no match.
 
 
 const SHARDS := 2   ## (the menu and the game in one process, the range in another)
 
 
 func _init() -> void:
-	timeout_sec = 90.0
+	timeout_sec = 120.0
 
 
 func setup() -> void:
@@ -27,13 +29,49 @@ func _menu_and_flight() -> void:
 	var labels := []
 	for c in Menu.CHOICES:
 		labels.append(c[0])
-	for want in ["Flight", "Fight: six rockets", "Fight: four seekers", "Lab"]:
+	for want in ["Flight", "Fight", "Lab"]:
 		check(labels.has(want), "the menu offers " + want)
 	eq(menu.find_children("Choice*", "Button", true, false).size(), Menu.CHOICES.size(), "a button per choice")
+	# The Fight screen.
+	(menu.find_child("Choice1", true, false) as Button).pressed.emit()
+	await frames(2)
+	var start := menu.find_child("Start", true, false) as Button
+	var flight := menu.find_child("Choice0", true, false) as Button
+	check(start.is_visible_in_tree() and not flight.is_visible_in_tree(), "Fight opens its own screen")
+	eq(menu.find_children("Bird*", "Button", true, false).size(), BirdProfile.IDS.size(), "a button per bird")
+	var text := _text(menu)
+	for id in BirdProfile.IDS:
+		var b := menu.find_child("Bird%d" % BirdProfile.IDS.find(id), true, false) as Button
+		b.pressed.emit()
+		await frames(1)
+		check(_text(menu).contains(BirdProfile.by_id(id).blurb), "picking the %s shows what it's like" % id)
+	(menu.find_child("Bird3", true, false) as Button).pressed.emit()        # falcon
+	(menu.find_child("Weapon1", true, false) as Button).pressed.emit()      # seekers
+	(menu.find_child("Skill2", true, false) as Button).pressed.emit()       # ace
+	await frames(1)
+	text = _text(menu)
+	check(text.contains(Menu.WEAPONS[1][1]) and text.contains(Menu.SKILLS[2][2]) and text.contains("lose eight"), "what the seekers, the ace and the match's rules mean are on screen")
+	var o := Menu.fight_options()
+	check(Array(o) == ["--bird", BirdProfile.IDS[3], "--seekers", "--match", "--skill", "ace"], "and Start asks for just that (%s)" % str(o))
+	var skill_row := menu.find_child("Skill0", true, false) as Button
+	check(skill_row.is_visible_in_tree(), "a match offers the AI's skill")
+	(menu.find_child("Mode1", true, false) as Button).pressed.emit()        # target practice
+	await frames(1)
+	check(not skill_row.is_visible_in_tree() and _text(menu).contains("racetrack"), "target practice doesn't, and shows its own rules")
+	o = Menu.fight_options()
+	check(not o.has("--match") and not o.has("--skill"), "and asks for no match (%s)" % str(o))
+	(menu.find_child("Weapon0", true, false) as Button).pressed.emit()
+	check(not Menu.fight_options().has("--seekers"), "rockets ask for no seekers")
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	menu._unhandled_input(esc)
+	await frames(1)
+	check(flight.is_visible_in_tree() and not start.is_visible_in_tree(), "Esc goes back")
 	menu.queue_free()
 
-	for flight in [true, false]:
-		Boot.extra = PackedStringArray(Menu.CHOICES[0][2] if flight else [])
+	for no_tack in [true, false]:
+		Boot.extra = PackedStringArray(Menu.CHOICES[0][2] if no_tack else [])
 		var game: Game = load("res://scenes/game.tscn").instantiate()
 		add_child(game)
 		await frames(3)
@@ -41,7 +79,7 @@ func _menu_and_flight() -> void:
 		for b in game.ai_birds + [game.bird]:
 			for c in (b as Bird).rig.get_children():
 				tacks += int(c is Tack)
-		if flight:
+		if no_tack:
 			eq(tacks, 0, "Flight: no rider or weapons on any bird")
 		else:
 			check(tacks >= 1, "the game's riders are there without Flight's options (%d)" % tacks)
@@ -50,23 +88,47 @@ func _menu_and_flight() -> void:
 
 
 func _fights() -> void:
-	for seekers in [false, true]:
-		Boot.extra = PackedStringArray(Menu.CHOICES[2][2] if seekers else Menu.CHOICES[1][2])
+	# [bird, seekers, match, skill]
+	for f in [["hawk", false, true, "ace"], ["sparrow", true, true, "recruit"], ["owl", false, false, "pilot"]]:
+		Menu.fight_bird = f[0]
+		Menu.fight_seekers = f[1]
+		Menu.fight_match = f[2]
+		Menu.fight_skill = f[3]
+		Boot.extra = Menu.fight_options()
 		var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 		add_child(r)
 		await frames(3)
+		var what := "%s, %s, %s" % [f[0], "seekers" if f[1] else "rockets", ("match at " + f[3]) if f[2] else "practice"]
+		eq((r.bird as Bird).profile.id, f[0], what + ": you fly the bird picked")
 		var l: Launcher = r.world.player
 		var R := Launcher.Weapon.ROCKETS
 		var S := Launcher.Weapon.SEEKERS
-		var want := {R: 0, S: 4} if seekers else {R: 6, S: 0}
-		check(int(l.capacity[R]) == want[R] and int(l.capacity[S]) == want[S], "Fight carries %s (%s)" % ["four seekers" if seekers else "six rockets", str(l.capacity)])
-		eq(l.weapon, S if seekers else R, "with that weapon selected")
+		var want := {R: 0, S: 4} if f[1] else {R: 6, S: 0}
+		check(int(l.capacity[R]) == want[R] and int(l.capacity[S]) == want[S], "%s: you carry %s (%s)" % [what, "four seekers" if f[1] else "six rockets", str(l.capacity)])
+		eq(l.weapon, S if f[1] else R, what + ": with that weapon selected")
 		var w := l.weapon
 		l.controller = _Switch.new()
 		await frames(2)
-		eq(l.weapon, w, "and nothing to switch to")
+		eq(l.weapon, w, what + ": and nothing to switch to")
+		if f[2]:
+			check(r.target == null and r.match_birds.size() == 5, "%s: the 3 v 3 match (%d AI birds)" % [what, r.match_birds.size()])
+			var skills := {}
+			for b in r.match_birds:
+				skills[((b as Bird).controller as CombatPilot).brain.skill.name] = true
+			eq(skills.keys(), [f[3]], what + ": every AI bird flies at that skill")
+		else:
+			check(r.target != null and r.match_birds.is_empty(), what + ": the racetrack target, no match")
 		r.queue_free()
 		await frames(2)
+
+
+## All the text on the menu's visible labels.
+static func _text(menu: Node) -> String:
+	var out := ""
+	for l in menu.find_children("*", "Label", true, false):
+		if (l as Label).is_visible_in_tree():
+			out += (l as Label).text + "\n"
+	return out
 
 
 class _Switch:
