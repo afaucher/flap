@@ -91,7 +91,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   parallel (`-Jobs`, 12 test processes by default), each stopped at its first failing line, the test (shard)
   that killed it last time first (`test_logs\mutation_kills.csv`); `-Changed` checks only the entries the branch
   could affect; tests `test_runner.ps1` just passed on the same tree (`test_logs\passed.txt`) skip the baseline.
-  Shared process handling and the pass rule: `test_lib.ps1`.
+  Shared process handling and the pass rule: `test_lib.ps1`. Each run writes every verdict and the line that
+  decided it to `test_logs\mutation_results.csv`; `-AllChecks` (~10 min) runs every named test to the end and
+  records every failing line, to audit that each entry is caught by a check about its bug (not a parse error, a
+  crash, or a check that happens to fail first).
 
 ## Rules
 - Profile numbers: set the readable ones (mass, span, area, e, glide ratio, CL max) and let `derive()` compute

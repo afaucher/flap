@@ -6,6 +6,8 @@
 #   .\mutation_check.ps1 -Jobs 8                         # test processes at a time (default 12)
 #   .\mutation_check.ps1 -Baseline                       # run the baseline even where test_runner just passed it
 #   .\mutation_check.ps1 -Keep                           # leave the scratch trees for inspection
+#   .\mutation_check.ps1 -AllChecks                      # an audit (~10 min): every named test to the end, every failing
+#                                                        # line in test_logs\mutation_results.csv (is each caught for its bug?)
 #
 # Each entry reintroduces one bug we have had (exact find/replace edits; an empty find prepends) in a scratch copy
 # of the current working tree (committed or not, untracked files included), then runs only the tests it names. At
@@ -39,6 +41,7 @@ param(
     [int]$Jobs = 0,
     [int]$TimeoutSec = 120,
     [switch]$Baseline,
+    [switch]$AllChecks,
     [switch]$Keep
 )
 $ErrorActionPreference = "Continue"   # (git writes progress to stderr; check exit codes instead)
@@ -88,8 +91,8 @@ function Get-Mutant($m) {
 }
 
 $results = @()
-function Write-Result($Id, $Result, $Detail) {
-    $script:results += [PSCustomObject]@{ Id = $Id; Result = $Result; Detail = $Detail }
+function Write-Result($Id, $Result, $Detail, $Run = "", $Line = "") {
+    $script:results += [PSCustomObject]@{ Id = $Id; Result = $Result; Detail = $Detail; Run = $Run; Line = $Line }
     $color = @{ KILLED = "Green"; SURVIVED = "Red"; STALE = "Yellow" }[$Result]
     Write-Host ("  {0,-9} {1,-30} {2}" -f $Result, $Id, $Detail) -ForegroundColor $color
 }
@@ -187,15 +190,15 @@ try {
             $first = @(if ($k) { $runs | Where-Object { $_.Label -eq $k.Label } })   # (inside @(): PowerShell 5.1's lone object has no Count)
             if ($first.Count) { $runs = @($first) + @($runs | Where-Object { $_.Label -ne $k.Label }) }
             $est = if ($first.Count) { $k.Sec } else { ($runs | ForEach-Object { Get-Dur $_.Label } | Measure-Object -Maximum).Maximum }
-            [void]$queue.Add([PSCustomObject]@{ Id = $m.id; Mutant = $m; Files = $byId[$m.id].Files; Runs = $runs; Released = $(if ($first.Count) { 1 } else { $runs.Count })
-                Next = 0; Ended = 0; Procs = @(); Tree = $null; Saved = @{}; Failed = $null; Est = $est; Watch = $null })
+            [void]$queue.Add([PSCustomObject]@{ Id = $m.id; Mutant = $m; Files = $byId[$m.id].Files; Runs = $runs; Released = $(if ($first.Count -and -not $AllChecks) { 1 } else { $runs.Count })
+                Next = 0; Ended = 0; Procs = @(); Tree = $null; Saved = @{}; Failed = $null; Est = $est; Watch = $null; Lines = @() })
         }
         $sorted = @($queue | Sort-Object -Property @{ Expression = { $_.Est }; Descending = $true })
         $queue = New-Object System.Collections.ArrayList
         if ($baseNames.Count) {
             $runs = @(Get-TestRuns $t0 $baseNames | Sort-Object -Property @{ Expression = { Get-Dur $_.Label }; Descending = $true })
             [void]$queue.Add([PSCustomObject]@{ Id = "(baseline)"; Mutant = $null; Files = @{}; Runs = $runs; Released = $runs.Count
-                Next = 0; Ended = 0; Procs = @(); Tree = $null; Saved = @{}; Failed = $null; Est = 0; Watch = $null })
+                Next = 0; Ended = 0; Procs = @(); Tree = $null; Saved = @{}; Failed = $null; Est = 0; Watch = $null; Lines = @() })
         }
         foreach ($j in $sorted) { [void]$queue.Add($j) }
         $base = if ($baseNames.Count) { "baseline $($baseNames.Count) tests" } else { "no baseline to run" }
@@ -218,16 +221,17 @@ try {
             foreach ($j in @($active)) {
                 foreach ($p in @($j.Procs)) {
                     $tp = $p.Proc
-                    if (-not ($tp.FirstFail -or $tp.HasExited -or $tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec)) { continue }
+                    if (-not (($tp.FirstFail -and -not $AllChecks) -or $tp.HasExited -or $tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec)) { continue }
                     $tp.Kill(); $tp.Wait(); Add-RunLog $j $p
                     $j.Procs = @($j.Procs | Where-Object { $_ -ne $p }); $j.Ended += 1; $running -= 1; $busy = $true
                     $ok = (-not $tp.FirstFail) -and (Test-RunPassed $p.Run.Name $tp.Proc.ExitCode $tp.Out $tp.Err)
+                    if ($AllChecks) { $lbl = $p.Run.Label; $j.Lines += @((($tp.Out + "`n" + $tp.Err) -split "`n") | Where-Object { [FlapTestProc]::FailLine.IsMatch($_) } | ForEach-Object { "${lbl}: $($_.Trim())" }) }
                     if (-not $ok -and -not $j.Failed) {
                         $why = if ($tp.FirstFail) { $tp.FirstFail.Trim() } elseif ($tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec) { "timed out" } else { "exit $($tp.Proc.ExitCode)" }
                         $j.Failed = [PSCustomObject]@{ Label = $p.Run.Label; Why = $why; Sec = $tp.Watch.Elapsed.TotalSeconds; Out = $tp.Out + "`n" + $tp.Err }
                     }
                 }
-                if ($j.Failed) {
+                if ($j.Failed -and -not $AllChecks) {
                     foreach ($p in $j.Procs) { $p.Proc.Kill(); $p.Proc.Wait(); $running -= 1; Add-RunLog $j $p }
                     $j.Procs = @()
                 } elseif ($j.Ended -eq $j.Released -and $j.Released -lt $j.Runs.Count) {
@@ -247,9 +251,9 @@ try {
                     }
                     Write-Host ("  baseline passed ({0:F0} s)" -f $j.Watch.Elapsed.TotalSeconds) -ForegroundColor DarkGray
                 } elseif ($j.Failed) {
-                    $newKills[$j.Id] = "{0},{1:F1}" -f $j.Failed.Label, $j.Failed.Sec
+                    if (-not $AllChecks) { $newKills[$j.Id] = "{0},{1:F1}" -f $j.Failed.Label, $j.Failed.Sec }
                     $why = $j.Failed.Why; if ($why.Length -gt 70) { $why = $why.Substring(0, 70) + "..." }
-                    Write-Result $j.Id "KILLED" ("failed: {0} at {1:F1} s ({2})" -f $j.Failed.Label, $j.Failed.Sec, $why)
+                    Write-Result $j.Id "KILLED" ("failed: {0} at {1:F1} s ({2})" -f $j.Failed.Label, $j.Failed.Sec, $why) $j.Failed.Label $(if ($AllChecks) { $j.Lines -join " || " } else { $j.Failed.Why })
                 } else {
                     Write-Result $j.Id "SURVIVED" ("passed: " + ($j.Mutant.tests -join ", "))
                 }
@@ -303,6 +307,11 @@ try {
     }
 }
 
+# Every verdict with the whole line that decided it (what each test caught: is it still the bug the entry describes?).
+if ($results.Count) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $root "test_logs") | Out-Null
+    $results | Select-Object Id, Result, Run, Line, Detail | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $root "test_logs\mutation_results.csv")
+}
 $bad = @($results | Where-Object { $_.Result -ne "KILLED" })
 $killed = $results.Count - $bad.Count
 $secs = $clock.Elapsed.TotalSeconds.ToString("F0")
