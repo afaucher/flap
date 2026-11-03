@@ -275,7 +275,9 @@ func _prompts(c: Vector2, fs := 22) -> void:
 		Bird.State.PERCHED:
 			msg = "PERCHED  -  %s take off  |  %s let go  |  stick to look around" % [_key("flap"), _key("catch")]
 		Bird.State.GROUNDED:
-			msg = "ON THE GROUND  -  %s to jump up and fly" % _key("flap")
+			# (standing on something above the ground -- a deck, a roof -- isn't "on the ground")
+			var where := "ON THE GROUND" if float(t.get("stand_height", 0.0)) < 0.5 else "STANDING"
+			msg = "%s  -  %s to jump up and fly" % [where, _key("flap")]
 		Bird.State.LANDING:
 			msg = "CAUGHT"
 			col = GOOD
