@@ -27,3 +27,21 @@ function Resolve-FlapGodot {
 function Invoke-FlapImport([string]$Godot) {
     & $Godot --path $PSScriptRoot --headless --import 2>&1 | Out-Null
 }
+
+
+# Import only when something changed since the last import: a script, scene or asset newer than the class cache
+# (a pull, a merge or another session's landing). Without it a new class_name is unknown ("Could not find type").
+function Update-FlapImport([string]$Godot) {
+    $cache = Join-Path $PSScriptRoot ".godot\global_script_class_cache.cfg"
+    $stale = -not (Test-Path $cache)
+    if (-not $stale) {
+        $since = (Get-Item $cache).LastWriteTime
+        $stale = [bool](Get-ChildItem -Recurse -File -Path (Join-Path $PSScriptRoot "scripts"), (Join-Path $PSScriptRoot "scenes"),
+                (Join-Path $PSScriptRoot "assets"), (Join-Path $PSScriptRoot "tools") -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt $since -and $_.Extension -ne ".import" } | Select-Object -First 1)
+    }
+    if ($stale) {
+        Write-Host "Importing (scripts or assets changed since the last import)..."
+        Invoke-FlapImport $Godot
+    }
+}

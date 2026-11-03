@@ -3,5 +3,6 @@
 #   .\run.ps1 --seed 7 --shot C:\shots\arena.png     # save a screenshot after --shot-after seconds (default 2) and quit
 . "$PSScriptRoot\godot_env.ps1"
 $godot = Resolve-FlapGodot
+Update-FlapImport $godot
 & $godot --path $PSScriptRoot -- @args
 exit $LASTEXITCODE
