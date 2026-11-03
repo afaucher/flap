@@ -32,7 +32,7 @@ uniform vec3 roundel_n = vec3(1.0, 0.0, 0.0);
 uniform float roundel_r = 0.13;
 uniform vec3 paint_ring : source_color = vec3(0.66, 0.48, 0.15);
 uniform vec3 paint_blue : source_color = vec3(0.1, 0.16, 0.42);
-uniform vec3 crate_paint : source_color = vec3(0.42, 0.34, 0.13);
+uniform vec3 crate_paint : source_color = vec3(0.6, 0.47, 0.17);
 
 // The scan's boards: nine across, the first gap at u = SCAN_GAP0, one board every SCAN_PITCH; its two rows of
 // nails at v = 0.293 and 0.70 (stepped over: our nails are where our bearers are).
@@ -111,6 +111,7 @@ void fragment() {
 		nl = normalize(vec3(L.x, 0.0, L.z));
 	}
 	bool end_face = abs(nl.y) > 0.6;
+	bool wood = kind == K_BOARD || kind == K_BEAM || kind == K_ROUND;
 	float up = clamp(normalize(mn).y, 0.0, 1.0);
 	vec3 col = vec3(0.5);
 	float rough = 0.85;
@@ -148,13 +149,13 @@ void fragment() {
 		float strand = fract(cf * 2.0 + th * 3.0 / PI);
 		float sh = sin(PI * strand);
 		float fibre = vnoise(vec2(coil * 6.0, th * rr * 900.0 + s * 9.0));
-		col = vec3(0.21, 0.13, 0.055) * (0.45 + 0.45 * hump + 0.2 * sh) * (0.75 + 0.5 * fibre);
+		col = vec3(0.22, 0.15, 0.08) * (0.45 + 0.45 * hump + 0.2 * sh) * (0.75 + 0.5 * fibre);
 		col = mix(col, vec3(lum(col)) * vec3(1.1, 1.0, 0.85), weather * 0.3 * up);
 		rough = 0.95;
 		spec = 0.2;
 		float aa = 1.0 - smoothstep(0.3, 0.8, fwidth(coil));
 		nrm = bump(N, dpx, dpy, (hump * 0.0018 + sh * 0.0005) * aa);
-	} else if (end_face) {
+	} else if (end_face && wood) {
 		// End grain: rings round the pith, in the face's section (across, through).
 		vec2 q = vec2(L.x, L.z);
 		vec2 P = round_piece ? vec2(0.0) : c1.xy;
@@ -194,11 +195,11 @@ void fragment() {
 			float r0 = kind == K_BOARD ? length(P) - 0.2 * length(H.xz) : 0.004;
 			float r1 = kind == K_BOARD ? length(P) + 0.3 * length(H.xz) : rmax * mix(0.4, 0.95, hash12(vec2(s, float(i))));
 			float t = clamp((al - r0) / max(r1 - r0, 1e-4), 0.0, 1.0);
-			float wdt = 0.0009 * (1.0 - t) + 0.0002;
+			float wdt = 0.0007 * (1.0 - t) + 0.00015;
 			float on = step(r0, al) * step(al, r1) * step(0.35 + 0.3 * float(i), hash12(vec2(s * 5.0, float(i) + 0.5)) + 0.35);
 			chk = max(chk, (1.0 - smoothstep(wdt * 0.4, wdt, off)) * on);
 		}
-		col = mix(col, base * 0.18, chk * 0.9);
+		col = mix(col, base * 0.25, chk * 0.85);
 		// Saw marks: faint parallel kerfs, slightly curved (a big circular blade).
 		float sa = hash12(vec2(s, 9.1)) * PI;
 		vec2 sd = vec2(cos(sa), sin(sa));
@@ -219,6 +220,7 @@ void fragment() {
 		float c;
 		float cw;
 		float fid;
+		float al = L.y;   // (along the scan's boards)
 		if (round_piece) {
 			float rr = length(L.xz);
 			float arc = atan(L.z, L.x) * rr;
@@ -226,6 +228,11 @@ void fragment() {
 			c = abs(fract(arc / (2.0 * per) + 0.5) - 0.5) * 2.0 * per - per * 0.5;   // (a triangle wave: no seam)
 			cw = per * 0.5;
 			fid = 0.0;
+		} else if (end_face) {   // (the ends of a painted box: no end grain under the paint)
+			c = L.x;
+			cw = H.x;
+			fid = 2.0;
+			al = L.z;
 		} else if (abs(nl.z) >= abs(nl.x)) {
 			c = L.x;
 			cw = H.x;
@@ -249,7 +256,7 @@ void fragment() {
 		float m = oseed > 0.5 ? -1.0 : 1.0;                       // (the board turned over)
 		float vdir = hash12(vec2(oseed, 4.0)) > 0.5 ? -1.0 : 1.0;  // (and end for end)
 		float slack = max(0.0, 0.2825 - H.y / scan_tile);
-		vec2 f = vec2(cc * m, L.y * vdir);
+		vec2 f = vec2(cc * m, al * vdir);
 		vec2 uv = vec2(SCAN_GAP0 + (board + 0.5) * SCAN_PITCH, 0.9965 + (hash12(vec2(oseed, 8.0)) - 0.5) * 2.0 * slack) + f / scan_tile;
 		vec2 gx = dFdx(f) / scan_tile;
 		vec2 gy = dFdy(f) / scan_tile;
@@ -262,9 +269,11 @@ void fragment() {
 			alb *= beam_tint;
 		}
 		// The weather: silver-grey where the sky reaches, streaked along the grain.
-		float wst = vnoise(vec2(L.y * 3.0, c * 60.0 + s * 17.0));
+		float wst = vnoise(vec2(al * 3.0, c * 60.0 + s * 17.0));
 		float grey = clamp(weather * (0.5 + 0.6 * wst) * (0.45 + 0.55 * up) + (s - 0.5) * 0.3, 0.0, 1.0);
 		col = mix(alb, vec3(lum(alb)) * silver / max(lum(silver), 0.01) * 1.12, grey * 0.7);
+		col = max(mix(vec3(lum(col)), col, 1.1), vec3(0.0));   // (a touch more colour)
+		col *= mix(1.0, smoothstep(0.0, 0.25, lum(alb)) * 0.35 + 0.75, 0.6);   // (the grain's dark lines deeper)
 		// Worn arrises: the bevels pale where hands and feet and sun have been.
 		float arris = smoothstep(0.3, 0.45, min(abs(nl.x), abs(nl.z))) * (round_piece ? 0.0 : 1.0);
 		col = mix(col, col * 1.3 + 0.015, arris * 0.6);
@@ -309,7 +318,8 @@ void fragment() {
 			float near_edge = max(smoothstep(H.x - 0.006, H.x, abs(L.x)), max(smoothstep(H.y - 0.006, H.y, abs(L.y)), smoothstep(H.z - 0.006, H.z, abs(L.z))));
 			vec3 pc = crate_paint * (0.75 + 0.5 * lum(alb) / 0.3) * (0.9 + 0.2 * wst);
 			col = mix(pc, alb, max(chips, near_edge * 0.6));
-			rough = mix(0.55, rough, chips);
+			rough = mix(0.42, rough, chips);
+			metal = mix(0.4, 0.0, chips);   // (painted sheet over the box: a little of the metal's sheen)
 			nrm = normalize(mix(N, nrm, 0.35 + 0.65 * chips));
 		}
 		// The roundel, painted on the boards: rings, faded, chipped along the grain, the grain showing through.
@@ -326,7 +336,7 @@ void fragment() {
 				pc *= 0.72 + 0.32 * wl;                                       // (the grain through thin paint)
 				pc = mix(pc, vec3(lum(pc)) * 1.2 + 0.03, 0.1 + 0.12 * wst);  // (faded, chalky)
 				float peel = vnoise(vec2(L.y * 14.0, c * 170.0) + s * 9.0) * 0.7 + vnoise(L.xy * 400.0) * 0.3;
-				float chip = smoothstep(0.66, 0.72, peel + 0.25 * smoothstep(cw - 0.012, cw, abs(c)));
+				float chip = smoothstep(0.7, 0.76, peel + 0.25 * smoothstep(cw - 0.01, cw, abs(c)));
 				cover *= 1.0 - chip;
 				col = mix(col, pc, cover * 0.92);
 				rough = mix(rough, 0.7, cover);

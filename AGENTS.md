@@ -22,7 +22,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/flight/`: `BirdProfile` (species numbers, derived polar), `FlightModel` (pure, headless-testable),
   `EnergyModel` (burst + stamina), `FlightInput`.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision).
+  collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): hand-sawn planks + one `TimberMesh` each
+  (framing, ironwork, rail, hangar, ammo boxes; every vertex carries its piece's grain frame, so `planks.gdshader`
+  draws end grain on end faces and maps the planks scan at its true scale). Look with `tests/probe_timber.gd`
+  (close-ups, `--warm`) and `tests/probe_outpost_concept.gd` (the menu's outpost framed like the concept).
 - `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.

@@ -647,7 +647,7 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 
 const HANGAR_SIZE := Vector3(0.42, 0.5, 0.44)   ## the hangar's box (its collision), deck frame
 const ROUNDEL_Y := 0.27
-const ROUNDEL_R := 0.13
+const ROUNDEL_R := 0.15
 
 static func _hangar_x(o: ArenaLayout.OutpostData) -> float:
 	return o.width * 0.5 - 0.27
@@ -714,7 +714,7 @@ func _outpost_frame(o: ArenaLayout.OutpostData) -> Array:
 	var bs := 0.06
 	for e: float in [-1.0, 1.0]:
 		var top: Vector3 = d.call(e * o.width * 0.36, by - bh * 0.5 + 0.02, _bearer_z(o, true))
-		var foot: Vector3 = d.call(e * o.width * 0.12, -0.9, -o.depth * 0.5 + 0.1)
+		var foot: Vector3 = d.call(e * o.width * 0.12, -0.9, -o.depth * 0.5 - 0.06)   # (its foot let into the trunk)
 		var xf := TimberMesh.frame_along(foot, top, X)
 		var ln := foot.distance_to(top)
 		tm.box("brace_r" if e > 0.0 else "brace_l", xf, Vector3(bs, ln, bs), TimberMesh.Kind.BEAM, rng.randf(), heart.call())
@@ -858,8 +858,8 @@ func _hangar_frame(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumber
 func _crates(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenerator, d: Callable) -> void:
 	var hx := _hangar_x(o)
 	var hz := _hangar_z(o)
-	var cs := Vector3(0.13, 0.065, 0.075)   # (x long, y tall, z deep)
-	var places := [[hx - 0.37, 0.0, hz + 0.02, 0.0], [hx - 0.365, cs.y, hz + 0.025, 3.0], [hx - 0.36, 0.0, hz + 0.115, -4.0], [hx - 0.15, 0.0, hz + 0.3, 18.0]]
+	var cs := Vector3(0.15, 0.075, 0.085)   # (x long, y tall, z deep)
+	var places := [[hx - 0.38, 0.0, hz + 0.02, 0.0], [hx - 0.375, cs.y, hz + 0.025, 3.0], [hx - 0.37, 0.0, hz + 0.125, -4.0], [hx - 0.13, 0.0, hz + 0.31, 18.0]]
 	for p in places:
 		var b := Basis(Vector3.UP, deg_to_rad(p[3]))   # (mesh frame: b.x along the box, b.y up, b.z deep)
 		var c: Vector3 = d.call(p[0], p[1] + cs.y * 0.5, p[2])
