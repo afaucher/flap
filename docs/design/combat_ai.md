@@ -582,6 +582,16 @@ birds in a 3 v 3 (`docs/design/performance.md`).
 - Not built yet: pairs (leader / wingman slots), rearming in turns, base watch, yo-yos beyond the high yo-yo in
   Attack, the duel matrix and skill tuning (stage 6), the game (stage 7).
 
+**Stage 6, first duel matrix (2026-11-03, `tests/probe_duel_matrix.gd`, pilot v pilot, 45 s, two starts each way
+round, the clumped wood):** far from section 8's targets.
+- Most mirror duels end 0-0 (crow, hawk, falcon, sparrow): two pilots that break into each other deny every shot.
+- **Seekers beat the energy fighters outright**: crow and owl took every duel against hawk and falcon (owl v hawk 16
+  hits to 0). A hawk or falcon can't break a lock it's already in, can't out-turn the seeker, and its stoops start
+  from inside the seeker bird's lock range.
+- The falcon won nothing; the sparrow beat hawk and falcon and drew the seeker birds.
+Closing this is partly tactics (energy fighters keeping out of lock range until they stoop, a seeker bird's lock
+denied by the stoop's speed) and partly balance (seeker turn rate, gimbal, lock time), which is the user's call.
+
 **Findings:**
 - **Seekers can't be out-turned.** No level break at any timing beats a locked seeker (4.6); only denying the lock and
   trunks do. Balance is the user's call (seeker turn rate, gimbal, fuse); nothing was changed.
