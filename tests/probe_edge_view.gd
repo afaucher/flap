@@ -2,7 +2,7 @@ extends TestCase
 ## The arena's edge as it is today, from inside the pine wood looking out across the boundary: reference shots for
 ## designing what lies beyond it (a cliff, a river and a rival wood, a balloon line, heath). A falcon with its rider
 ## and tack in the chase camera's place in most of them. Windowed:
-##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff] [--look <name>] [--no-fog] [--tag <suffix>]
+##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence] [--look <name>] [--no-fog] [--tag <suffix>]
 ## Views: chase_canopy (at crown height, the edge 40 m ahead), chase_above (over the canopy), low_trunks (among the
 ## trunks at 6 m), overview (60 m up from the far side, the whole wood to its far edge).
 
@@ -66,12 +66,25 @@ func setup() -> void:
 		["low_trunks", null, d * (edge - 30.0) + Vector3.UP * 6.0, d * (edge + 40.0) + Vector3.UP * 8.0],
 		["overview", null, -d * 40.0 + Vector3.UP * 60.0, d * edge * 0.7],
 	]
+	if heading == "fence":   # (as the heath concept is framed: low, just inside the posts, looking along them, the
+		# wood on the left and the heath on the right, the falcon flying ahead low over the fence line; on the far
+		# side of the ring from the escarpment)
+		var ca := float(layout.escarpment.at) + PI * 0.8
+		d = Vector3(sin(ca), 0.0, cos(ca))
+		var fwd := Vector3.UP.cross(d).normalized().rotated(Vector3.UP, deg_to_rad(-14.0))
+		var cam_at := d * (edge - 1.8) + Vector3.UP * 3.8
+		var at := cam_at + fwd * 6.0 + Vector3.UP * -0.9
+		views = [["along_fence", null, cam_at, cam_at + fwd * 60.0 + Vector3.UP * -2.0, at, fwd]]
 	for v in views:
 		var bird_at = v[1]
 		if bird_at != null:
 			bird_at = _clear_line(layout, bird_at, d)
-		rig.visible = bird_at != null
-		if bird_at != null:
+		rig.visible = bird_at != null or v.size() > 4
+		if v.size() > 4:   # (a set view with the bird in it: [name, null, camera, looking at, bird at, its heading])
+			rig.global_transform = Transform3D(Basis.looking_at(v[5], Vector3.UP), v[4])
+			tack.update(0.0)
+			cam.look_at_from_position(v[2], v[3], Vector3.UP)
+		elif bird_at != null:
 			rig.global_transform = Transform3D(Basis.looking_at(d, Vector3.UP), bird_at)
 			tack.update(0.0)
 			cam.look_at_from_position(bird_at - d * 2.2 + Vector3.UP * 0.65, bird_at + d * 30.0 + Vector3.UP * -1.5, Vector3.UP)

@@ -7,6 +7,7 @@ extends Node3D
 ## and heather thinning with distance, low rolling hills out to the horizon with stands of pines on them), and a
 ## two-strand wire fence along the edge posts. All outside the boundary; only the rock is solid.
 
+const GRASS_IN := 5.0       ## m inside the posts the heath's grass reaches (to the last trees; drawn only)
 const HILLS_FROM := 130.0    ## m: where the hills mesh takes over from the ground plane and the escarpment's grid
 const HILLS_TO := 1100.0
 const WIRES := [1.5, 2.7]    ## m: the fence's two strands, up the posts
@@ -68,9 +69,9 @@ func hill(x: float, z: float) -> float:
 	var r := Vector2(x, z).length()
 	if r < HILLS_FROM:
 		return 0.0
-	var k := smoothstep(HILLS_FROM, 420.0, r)
-	var n := _fbm(Vector2(x, z) * 0.006) * 0.75 + _fbm(Vector2(x, z) * 0.02 + Vector2(5.0, 9.0)) * 0.25
-	return k * (4.0 + 70.0 * n * n) + smoothstep(500.0, HILLS_TO, r) * 45.0
+	var k := smoothstep(HILLS_FROM, 320.0, r)
+	var n := _fbm(Vector2(x, z) * 0.005) * 0.75 + _fbm(Vector2(x, z) * 0.018 + Vector2(5.0, 9.0)) * 0.25
+	return k * (6.0 + 85.0 * n * n) + smoothstep(450.0, HILLS_TO, r) * 55.0
 
 
 # --- The escarpment -------------------------------------------------------------------------
@@ -224,6 +225,7 @@ func _rock_dressing() -> void:
 				var size := _rng.randf_range(0.5, 1.4)
 				hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size * 0.45, size)), at))
 				hc.append(_heather_colour())
+	_ledge_growth(hx, hc)
 	ledge_pines = _batch("ledge_pines", _rock_pine_mesh(), px, pc)
 	_batch("top_pines", _rock_pine_mesh(), tx_top, tc_top)
 	_heather_batch(hx, hc, "ledge_heather")
@@ -254,7 +256,8 @@ const COURSE := Vector2(1.2, 3.6)      ## m: a course's height on the faces
 const FACE_BLOCK := Vector2(4.5, 14.0) ## m: a face block's length along the cliff (beds longer than they're high)
 const MASS := 1.1                      ## m: how far a mass of blocks (tens of metres along) stands out or back
 const PROUD := Vector2(-0.08, 0.16)    ## m: and each block on its own, out of its mass's face (less than 0: set back)
-const LIP := Vector3(0.3, 0.35, 0.75)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
+const BED := 0.45                      ## m: whole beds (a course's height, all along) standing out or back together
+const LIP := Vector3(0.5, 0.35, 0.8)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
 
 
 ## Courses of blocks up every face of every tier: each column of blocks FACE_BLOCK long along the cliff, each block
@@ -283,7 +286,8 @@ func _face_blocks(sets: Array) -> void:
 				var ch := minf(_rng.randf_range(COURSE.x, COURSE.y), face_h - y)
 				var t := (y + ch * 0.5) / face_h   # (where the face stands at this height)
 				var r := col[1] + e + face * t
-				var proud := MASS * (_mass(arc, i) - 0.5) * 2.0 + _rng.randf_range(PROUD.x, PROUD.y)
+				var bed := BED * (esc._n1((h0 + y + ch * 0.5) / 3.2 + 11.0) - 0.5) * 2.0   # (beds run on along the cliff)
+				var proud := MASS * (_mass(arc, i) - 0.5) * 2.0 + bed + _rng.randf_range(PROUD.x, PROUD.y)
 				var depth := 2.2 + MASS * 2.0
 				var top_gap := 0.04 if y + ch >= face_h - 0.01 else 0.0   # (the top course: just under the ledge)
 				var centre := out * (r - proud + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + h0 + y + (ch - top_gap) * 0.5)
@@ -359,6 +363,37 @@ func _scree_blocks(sets: Array) -> void:
 ## How far the mass of blocks at `arc` m along tier `i` stands out, 0..1: masses tens of metres long.
 func _mass(arc: float, i: int) -> float:
 	return esc._n1(arc / 23.0 + i * 3.7) * 0.7 + esc._n1(arc / 9.0 + i * 1.9 + 4.0) * 0.3
+
+
+## Heather and grass along every ledge, thick, as in the concept's green and purple bands: along each tier's ledge
+## every half metre or so, a mound or a tuft somewhere across it.
+func _ledge_growth(hx: Array, hc: Array) -> void:
+	var tx := []
+	var tc := []
+	var arc := -Escarpment.HALF * esc.foot
+	while arc < Escarpment.HALF * esc.foot:
+		arc += _rng.randf_range(0.35, 0.8)
+		var theta := esc.at + arc / esc.foot
+		var col := _column_near(theta)
+		if col.is_empty() or col[0] < 0.15:
+			continue
+		for i in Escarpment.TIERS.size() - 1:
+			var b := 3 + i * 6
+			var ledge: float = col[b + 3]
+			if ledge < 0.8 or _rng.randf() < 0.25:
+				continue
+			var r: float = col[1] + col[b] + col[b + 1] + _rng.randf_range(0.2, ledge - 0.2)
+			var at := Vector3(sin(theta) * r, ArenaLayout.GROUND_Y + esc.height_in(col, r), cos(theta) * r)
+			if _rng.randf() < 0.55:
+				var size := _rng.randf_range(0.6, 1.7)
+				hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size * 0.5, size)), at))
+				hc.append(_heather_colour())
+			else:
+				var size := _rng.randf_range(0.5, 1.0)
+				tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size, size)), at))
+				tc.append(Color(0.3, 0.3, 0.13).lerp(Color(0.15, 0.2, 0.07), _rng.randf()))
+	var mi := _batch("ledge_tufts", _tuft_cards(), tx, tc)
+	mi.material_override = _grass_mat()
 
 
 func _stone_colour() -> Color:
@@ -460,26 +495,29 @@ func _heath_cover() -> void:
 	var tc := []
 	var hx := []
 	var hc := []
-	for k in 60000:
+	for k in 140000:
 		var theta := _rng.randf() * TAU
-		var r := layout.boundary + 0.5 + pow(_rng.randf(), 1.7) * (HILLS_FROM + 20.0 - layout.boundary)
+		var r := layout.boundary - GRASS_IN + pow(_rng.randf(), 1.5) * (HILLS_FROM + 20.0 - layout.boundary + GRASS_IN)
 		var x := sin(theta) * r
 		var z := cos(theta) * r
 		if esc != null and esc.height_in(_column_near(theta), r) > 0.05:   # (on the rock)
 			continue
 		var h := hill(x, z)
 		var at := Vector3(x, ArenaLayout.GROUND_Y + h, z)
-		if _rng.randf() < 0.82:
-			var size := _rng.randf_range(0.6, 1.3)
-			tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size * _rng.randf_range(0.8, 1.3), size)), at))
-			tc.append(Color(0.34, 0.3, 0.13).lerp(Color(0.16, 0.21, 0.07), _rng.randf()) * _rng.randf_range(0.8, 1.1))
+		# (heather grows in patches: where a slow noise is high, low purple-brown tussocks instead of grass)
+		var patch := _fbm(Vector2(x, z) * 0.07 + Vector2(3.0, 1.0))
+		if patch < 0.56 or _rng.randf() < 0.15:
+			var size := _rng.randf_range(0.65, 1.35)
+			tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.2, size * _rng.randf_range(0.75, 1.15), size * 1.2)), at))
+			tc.append(Color(1.0, 0.95, 0.85).lerp(Color(0.75, 0.85, 0.62), _rng.randf()) * _rng.randf_range(0.7, 1.05))
 		else:
-			var size := _rng.randf_range(0.5, 1.3)
-			hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size * 0.45, size)), at))
-			hc.append(_heather_colour())
-	tufts = _batch("tufts", _tuft_mesh(), tx, tc)
-	(tufts.material_override as StandardMaterial3D).cull_mode = BaseMaterial3D.CULL_DISABLED
-	heather = _heather_batch(hx, hc, "heather")
+			var size := _rng.randf_range(0.6, 1.2)
+			hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.4, size * 0.5, size * 1.4)), at))
+			hc.append(Color(0.62, 0.36, 0.5).lerp(Color(0.45, 0.4, 0.35), _rng.randf()) * _rng.randf_range(0.6, 0.95))
+	tufts = _batch("tufts", _tuft_cards(), tx, tc)
+	tufts.material_override = _grass_mat()
+	heather = _batch("heather", _tuft_cards(), hx, hc)
+	heather.material_override = _grass_mat()
 
 
 ## Stands of pines out on the hills (and along the escarpment's top, behind it).
@@ -629,22 +667,55 @@ func _rock_mat_instanced() -> Material:
 	return m
 
 
-## A grass tuft: blades fanning up and out from a point (unit size, vertex colour darker at the root).
+## A grass tussock as drawn: three cards of FoliageTex's grass crossed at 60 deg, standing on the origin (unit
+## size), lit as the sward (normals mostly up).
+func _tuft_cards() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in 3:
+		var a := PI * i / 3.0
+		var side := Vector3(cos(a), 0.0, sin(a)) * 0.5
+		var face := Vector3(-sin(a), 0.0, cos(a))
+		var n := (face * 0.3 + Vector3.UP).normalized()
+		var q := [[-side, Vector2(0, 1)], [side, Vector2(1, 1)], [side + Vector3.UP, Vector2(1, 0)], [-side + Vector3.UP, Vector2(0, 0)]]
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.set_normal(n)
+			st.set_uv(q[k][1])
+			st.add_vertex(q[k][0])
+	return st.commit()
+
+
+## The grass cards' material: the foliage shader on FoliageTex's grass (the arena builder's, as the bracken's).
+func _grass_mat() -> Material:
+	return ArenaBuilder._foliage_mat("grass", {"tex": "grass", "tint": Color(1, 1, 1)}, {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6})
+
+
+## A grass tuft as geometry: blades fanning up and out from a point (unit size, vertex colour darker at the root).
 func _tuft_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
-	for i in 9:
-		var az := TAU * i / 9.0 + rng.randf_range(-0.3, 0.3)
+	for i in 18:   # (blades: each a tapering strip in two pieces, bending out, darker and greener at the root)
+		var az := TAU * i / 18.0 + rng.randf_range(-0.3, 0.3)
 		var out := Vector3(sin(az), 0.0, cos(az))
-		var tip := out * rng.randf_range(0.2, 0.45) + Vector3.UP * rng.randf_range(0.6, 1.0)
-		var side := out.cross(Vector3.UP).normalized() * 0.04
-		var n := (out * 0.3 + Vector3.UP).normalized()
-		for p in [-side, side, tip]:
+		var tall := rng.randf_range(0.55, 1.1)
+		var lean := rng.randf_range(0.12, 0.45)
+		var base := out * rng.randf_range(0.0, 0.12)
+		var mid := base + out * lean * 0.35 + Vector3.UP * tall * 0.55
+		var tip := base + out * lean + Vector3.UP * tall
+		var side := out.cross(Vector3.UP).normalized()
+		var w0 := side * rng.randf_range(0.035, 0.06)
+		var w1 := w0 * 0.6
+		var n := (out * 0.25 + Vector3.UP).normalized()   # (lit as the sward, not blade by blade)
+		var root := Color(0.45, 0.5, 0.35)
+		var mc := Color(0.8, 0.8, 0.62)
+		var tc := Color(1.05, 0.98, 0.78)
+		for q in [[base - w0, root], [base + w0, root], [mid + w1, mc], [base - w0, root], [mid + w1, mc], [mid - w1, mc],
+				[mid - w1, mc], [mid + w1, mc], [tip, tc]]:
 			st.set_normal(n)
-			st.set_color(Color(0.7, 0.72, 0.6) if p != tip else Color(1.0, 1.0, 0.92))
-			st.add_vertex(p)
+			st.set_color(q[1])
+			st.add_vertex(q[0])
 	return st.commit()
 
 
@@ -655,9 +726,12 @@ func _pine_mesh() -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var trunk := Color(0.3, 0.17, 0.1)
 	var crown := Color(0.06, 0.1, 0.05)
-	_cone(st, Vector3.ZERO, 0.018, 0.008, 0.9, 6, trunk)
-	var lobes := [[Vector3(0.0, 0.84, 0.0), Vector3(0.2, 0.09, 0.2)], [Vector3(0.07, 0.74, 0.03), Vector3(0.15, 0.08, 0.14)],
-			[Vector3(-0.06, 0.68, -0.05), Vector3(0.14, 0.07, 0.13)], [Vector3(0.02, 0.93, 0.05), Vector3(0.12, 0.06, 0.12)]]
+	_cone(st, Vector3.ZERO, 0.02, 0.008, 0.85, 6, trunk)
+	# (a Scots pine's crown seen from far off: rounded masses over the top half, wider than they're tall, one a
+	# little off to the side)
+	var lobes := [[Vector3(0.0, 0.86, 0.0), Vector3(0.2, 0.12, 0.2)], [Vector3(0.08, 0.76, 0.04), Vector3(0.17, 0.11, 0.16)],
+			[Vector3(-0.07, 0.68, -0.05), Vector3(0.16, 0.1, 0.15)], [Vector3(0.03, 0.95, 0.04), Vector3(0.14, 0.08, 0.14)],
+			[Vector3(-0.1, 0.84, 0.08), Vector3(0.13, 0.1, 0.13)], [Vector3(0.05, 0.6, -0.08), Vector3(0.12, 0.08, 0.11)]]
 	for l in lobes:
 		_blob(st, l[0], l[1], crown)
 	st.generate_normals()

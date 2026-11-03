@@ -97,8 +97,9 @@ func column(theta: float) -> PackedFloat32Array:
 		var cell := floorf(arc / (BLOCK.x + BLOCK.y * i) + 0.37 * i + 0.35 * sin(arc * 0.21 + i * 1.7))
 		var b1 := _h(cell * 7.13 + i * 13.7 + 0.5)
 		var b2 := _h(cell * 3.71 + i * 5.3 + 0.25)
-		var last := i == TIERS.size() - 1   # (the top tier's blocks stand more nearly level: a skyline, not teeth)
-		var face_h := float(tier[0]) * w * ((0.85 + 0.3 * b2) if last else (0.7 + 0.6 * b2)) * (0.85 + 0.3 * _n1(theta * (13.0 + i * 5.0) + i * 11.0))
+		var last := i == TIERS.size() - 1   # (the top tier's blocks stand more nearly level: a skyline, not teeth,
+		# but stepping up and down by whole masses along it, as the concept's top does)
+		var face_h := float(tier[0]) * w * ((0.85 + 0.3 * b2) * (0.72 + 0.56 * _n1(arc / 31.0 + 17.0)) if last else (0.7 + 0.6 * b2)) * (0.85 + 0.3 * _n1(theta * (13.0 + i * 5.0) + i * 11.0))
 		e += RECESS * b1 * w + (cleft if i == 0 else 0.0)
 		var face := FACE * (0.7 + 0.6 * b2)
 		var ledge := float(tier[1]) * (0.5 + _n1(theta * (17.0 + i * 3.0) + i * 5.0)) * (1.0 - 0.6 * b1)

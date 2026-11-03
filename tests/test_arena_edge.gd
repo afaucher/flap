@@ -54,7 +54,7 @@ func _outside(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 			closest = minf(closest, _r(v))
 	print("EDGE the rock's nearest raised point: %.1f m out (boundary %.0f)" % [closest, b])
 	check(closest >= b + 2.0, "no rock within 2 m of the boundary (nearest %.1f m)" % closest)
-	for pair in [["blocks_0", b + 1.0], ["blocks_1", b + 1.0], ["blocks_2", b + 1.0], ["blocks_3", b + 1.0], ["tufts", b], ["heather", b], ["ledge_heather", b + 2.0], ["ledge_pines", b + 5.0], ["far_pines", 140.0]]:
+	for pair in [["blocks_0", b + 1.0], ["blocks_1", b + 1.0], ["blocks_2", b + 1.0], ["blocks_3", b + 1.0], ["tufts", b - EdgeBuilder.GRASS_IN], ["heather", b - EdgeBuilder.GRASS_IN], ["ledge_heather", b + 2.0], ["ledge_pines", b + 5.0], ["far_pines", 140.0]]:
 		var at: PackedVector3Array = edge.placed[pair[0]]
 		var near := INF
 		for p in at:

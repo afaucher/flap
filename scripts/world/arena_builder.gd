@@ -65,8 +65,8 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
 		sm.set_shader_parameter("heath_on", true)
-		sm.set_shader_parameter("heath_from", layout.boundary - 1.0)
-		sm.set_shader_parameter("heath_to", layout.boundary + 12.0)
+		sm.set_shader_parameter("heath_from", layout.boundary - 7.0)   # (grass between the last trees and the fence,
+		sm.set_shader_parameter("heath_to", layout.boundary + 4.0)     # as in the heath concept)
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
@@ -110,6 +110,7 @@ func _strip(a: Vector3, b: Vector3, width: float, m: Material) -> MeshInstance3D
 
 
 const POST_COLOR := Color(0.62, 0.36, 0.30)
+const FENCE_POST_COLOR := Color(0.34, 0.3, 0.26)   ## the pine wood's: weathered, unpainted (as the heath concept's)
 
 
 ## An edge post as drawn: a straight painted post (its body is the tree's: a cylinder of its radius and height).
@@ -121,7 +122,7 @@ func _post_mesh(t: ArenaLayout.TreeData) -> MeshInstance3D:
 	cyl.height = t.height
 	cyl.radial_segments = 16
 	mi.mesh = cyl
-	mi.material_override = _mat("post", POST_COLOR)
+	mi.material_override = _mat("fence_post", FENCE_POST_COLOR) if layout.style == "pinewood" else _mat("post", POST_COLOR)
 	mi.position.y = t.height * 0.5
 	return mi
 
@@ -549,7 +550,7 @@ func _crowns() -> void:
 		mi.material_override = _foliage_mat(k, _CARDS[k])
 
 
-func _foliage_mat(key: String, spec: Dictionary, extra := {}) -> ShaderMaterial:
+static func _foliage_mat(key: String, spec: Dictionary, extra := {}) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = FOLIAGE_SHADER
 	m.set_shader_parameter("tex", FoliageTex.get_tex(spec.tex))
