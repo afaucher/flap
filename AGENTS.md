@@ -101,7 +101,14 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   runner starts N processes), and hide a bird's rig (`b.rig.visible = false`) where only its flight is checked.
 - Fixing a bug: add an entry to `tests/regressions/mutations.json` that reintroduces it, and run
   `.\mutation_check.ps1 -Only <id>` -- it must come back KILLED. A test that passes with the bug back in
-  proves nothing. Run the whole check (a few minutes) before committing rig, flight-model or AI changes.
+  proves nothing.
+- **Before merging to master** (the gate, about 3 min on an idle machine): `.\test_runner.ps1 -TestAll`, then
+  `.\mutation_check.ps1` -- the whole check, all KILLED (about 1.5 min: the tests `-TestAll` just passed on the
+  same tree skip its baseline, so run them in that order with nothing edited in between). While iterating,
+  `.\mutation_check.ps1 -Changed` checks only the entries the branch could affect (the edited files, the
+  named tests, new or changed entries; 20-40 s); it can miss a change that blunts a test against a bug in
+  another file, which is why the gate runs them all. If the gate outgrows 5 minutes (each entry adds about
+  0.6 s), make `-TestAll` + `-Changed` the gate and run the whole check once a day on master instead.
 - Tests measure what is drawn or simulated (the feather mesh's outline, the body mesh), not copies of the
   constants that build it, and check behaviour both ways (left and right, pull and push).
 - The test runner fails on any engine `ERROR:`/`WARNING:` line, not just failed checks.

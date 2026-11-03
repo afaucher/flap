@@ -1,7 +1,7 @@
 # mutation_check.ps1 - replay past bugs and prove the tests still catch them.
 #
-#   .\mutation_check.ps1 -Changed                        # the merge gate: the entries this branch could affect
-#   .\mutation_check.ps1                                 # every entry in tests\regressions\mutations.json
+#   .\mutation_check.ps1                                 # every entry (the merge gate, after -TestAll: ~1.5 min)
+#   .\mutation_check.ps1 -Changed                        # while iterating: the entries this branch could affect
 #   .\mutation_check.ps1 -Only fold-elbow-raised,bom-in-doc
 #   .\mutation_check.ps1 -Jobs 8                         # test processes at a time (default 12)
 #   .\mutation_check.ps1 -Baseline                       # run the baseline even where test_runner just passed it
