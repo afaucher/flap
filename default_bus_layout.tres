@@ -1,4 +1,4 @@
-[gd_resource type="AudioBusLayout" load_steps=6 format=3]
+[gd_resource type="AudioBusLayout" format=3 uid="uid://dfy3wsgn562oq"]
 
 [sub_resource type="AudioEffectHardLimiter" id="AudioEffectHardLimiter_master"]
 resource_name = "HardLimiter"
@@ -7,7 +7,6 @@ ceiling_db = -0.5
 [sub_resource type="AudioEffectCompressor" id="AudioEffectCompressor_flight"]
 resource_name = "DuckUnderBursts"
 threshold = -24.0
-ratio = 4.0
 attack_us = 2000.0
 release_ms = 350.0
 sidechain = &"SFX"
@@ -24,13 +23,11 @@ resource_name = "ForestReverb"
 room_size = 0.55
 damping = 0.65
 spread = 0.9
-dry = 1.0
 wet = 0.18
 
 [sub_resource type="AudioEffectCompressor" id="AudioEffectCompressor_ambience"]
 resource_name = "DuckUnderBursts"
 threshold = -24.0
-ratio = 4.0
 attack_us = 2000.0
 release_ms = 500.0
 sidechain = &"SFX"

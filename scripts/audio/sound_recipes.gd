@@ -4,14 +4,18 @@ extends RefCounted
 ## each into assets/audio/sfx/<file>.wav, where Sfx plays it. A cue with `takes` > 1 is baked as <name>_1.wav ...
 ## <name>_N.wav, each from its own seed, and Sfx picks among them (never the same one twice running).
 ##
-## Synthesized except the bursts, which are built on one CC0 recording: the bang of Rudmer_Rotteveel's "Whistle and
-## Explosion Single_Firework" (Freesound 336008, the one ..\cast uses for its goblin fireworks), pitched up and
-## shortened to the war tack's pencil-sized rockets, with a synthesized crack and debris over it.
-## Stand-ins, until a recording replaces them: perch_catch (the user is recording claws on a cat tree), and the five
-## species' calls (synthesized after their real calls, squirrel-racer style).
+## Synthesized except two, built on recordings:
+## - the bursts: the bang of Rudmer_Rotteveel's "Whistle and Explosion Single_Firework" (Freesound 336008, CC0, the one
+##   ..\cast uses for its goblin fireworks), pitched up and shortened to the war tack's pencil-sized rockets, with a
+##   synthesized crack and debris over it;
+## - the perch catch: the user's claws on a cat tree (CLAWS), one scratch a take.
+## Stand-ins, until recordings replace them: the five species' calls (synthesized after their real calls,
+## squirrel-racer style).
 
 const D = preload("res://scripts/audio/sound_dsp.gd")
 const FIREWORK := "res://assets/audio/third_party/freesound/336008__rudmer_rotteveel__whistle-and-explosion-single_firework.wav"
+## The user's recording (2026-11-02): nails scratching a cat tree, a dozen separate scratches.
+const CLAWS := "res://assets/audio/recordings/claws_on_cat_tree.wav"
 const SOURCE_PATH := "res://scripts/audio/sound_recipes.gd"
 const DSP_PATH := "res://scripts/audio/sound_dsp.gd"
 const STAMP_PATH := "res://assets/audio/sfx/baked_from.md5"
@@ -28,7 +32,7 @@ const SOUNDS := {
 	# the base
 	"rearm_tick": {"takes": 3}, "rearmed": {},
 	# your bird and the world
-	"perch_catch": {"takes": 3}, "takeoff_push": {"takes": 2}, "ground_land": {"takes": 2}, "bonk": {"takes": 3},
+	"perch_catch": {"takes": 6}, "takeoff_push": {"takes": 2}, "ground_land": {"takes": 2}, "bonk": {"takes": 3},
 	# calls: a contact call and an alarm for each species
 	"call_crow": {"takes": 3}, "alarm_crow": {"takes": 2}, "call_owl": {"takes": 2}, "alarm_owl": {"takes": 2},
 	"call_hawk": {"takes": 2}, "alarm_hawk": {"takes": 2}, "call_falcon": {"takes": 3}, "alarm_falcon": {"takes": 2},
@@ -67,11 +71,13 @@ static func render(name: String, take := 0) -> PackedFloat32Array:
 	return D.normalize(s, -1.0)
 
 
-## The MD5 of the recipes and SoundDsp together: tools/bake_sounds.gd stamps the baked set with it.
+## The MD5 of the recipes, SoundDsp and the recordings together: tools/bake_sounds.gd stamps the baked set with it.
 static func source_md5() -> String:
 	var src := ""
 	for p: String in [SOURCE_PATH, DSP_PATH]:
 		src += FileAccess.get_file_as_string(p).replace("\r\n", "\n")
+	for p: String in [FIREWORK, CLAWS]:
+		src += FileAccess.get_md5(p)
 	return src.md5_text()
 
 
@@ -280,12 +286,18 @@ func _rearmed(_rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
 
 # ---------------------------------------------------------------- your bird
 
-## STAND-IN until the user's recording (claws on a cat tree): talons on bark, a scratch and a small knock.
-func _perch_catch(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	var s := D.gain(_knock(rng.randf_range(200.0, 260.0), 0.025, 0.12), -6.0)
-	var scratch := D.svf(D.white(rng, 0.09), D.sweep(3500.0, 2200.0), 1.5, 1)
-	s = D.mix(s, D.shape(scratch, func(k: float) -> float: return (0.6 + 0.4 * sin(TAU * 4.0 * k)) * pow(1.0 - k, 1.5)), 0.005, -2.0)
-	return D.mix(s, _grains(rng, 4, 0.08, 2000.0, 5000.0, 0.4), 0.0)
+## Talons catching the bark: one scratch of the user's recording (CLAWS) a take, the six loudest of its dozen, in the
+## order recorded; rumble cut, the hiss between the scratch's strokes gated out.
+func _perch_catch(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	var s := D.load_wav(CLAWS)
+	var evs := D.events(s)
+	var loud := evs.duplicate()
+	loud.sort_custom(func(a: Array, b: Array) -> bool: return D.peak(D.cut(s, a[0], a[1])) > D.peak(D.cut(s, b[0], b[1])))
+	var pick := loud.slice(0, 6)
+	pick.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var ev: Array = pick[mini(take, pick.size() - 1)]
+	var c := D.highpass(D.cut(s, ev[0], ev[1]), 150.0)
+	return D.fade(D.gate(c), 0.003, 0.05)
 
 
 ## Pushing off a branch: the branch's spring creak, then air.

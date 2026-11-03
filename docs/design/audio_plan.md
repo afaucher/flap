@@ -221,7 +221,7 @@ changes.
 ## Decisions
 
 Settled (user, 2026-11-02):
-- **Synthesize what the plan proposed.** The user will record claws on a cat tree for the perch catch.
+- **Synthesize what the plan proposed.** The perch catch is the user's own recording of nails on a cat tree.
 - **Fireworks:** use ..\cast's firework recording for the bursts.
 
 Still open:
@@ -257,14 +257,16 @@ Still open:
 - UI is dry.
 
 **Sounds:**
-- `SoundRecipes` holds 46 sounds (89 takes), built on `SoundDsp` (filters, noise, tones, note lists, loops).
+- `SoundRecipes` holds 46 sounds (92 takes), built on `SoundDsp` (filters, noise, tones, note lists, loops).
 - `tools/bake_sounds.gd` bakes them into `assets/audio/sfx/` in about 4 s.
-- Everything is synthesized except the bursts, which are built on the bang of the CC0 firework recording that ..\cast
-  uses (Freesound 336008), pitched up 3-7 semitones.
+- Everything is synthesized except two sounds:
+  - the bursts, built on the bang of the CC0 firework recording that ..\cast uses (Freesound 336008), pitched up
+    3-7 semitones;
+  - the perch catch: the user's recording of nails on a cat tree (`assets/audio/recordings/`). The bake finds its
+    dozen scratches (`SoundDsp.events`) and keeps the six loudest as takes, with the rumble cut and the hiss between
+    strokes gated out.
 - The pinewood birdsong is squirrel racer's recipes, ported.
-- **Stand-ins:**
-  - `perch_catch`, until the cat-tree recording;
-  - the five species' calls, synthesized after their real calls.
+- **Stand-ins:** the five species' calls, synthesized after their real calls.
 
 **Not built yet:**
 - the near-miss whizz;

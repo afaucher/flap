@@ -122,6 +122,63 @@ static func onset(s: PackedFloat32Array, after: float = 0.0, db: float = 15.0) -
 	return -1.0
 
 
+## The separate events in a recording (scratches, taps): [start, end] s for each stretch whose 10 ms level is within
+## `below` dB of the loudest window, padded by `pre` before and `post` after, at least `min_len` s long; stretches
+## closer than `join` s are one event.
+static func events(s: PackedFloat32Array, below := 25.0, pre := 0.015, post := 0.08, min_len := 0.06,
+		join := 0.06) -> Array:
+	var w := n_of(0.01)
+	var lv := PackedFloat32Array()
+	var top := 0.0
+	for i in range(0, s.size() - w, w):
+		var e := 0.0
+		for j in w:
+			e += s[i + j] * s[i + j]
+		lv.append(sqrt(e / w))
+		top = maxf(top, lv[-1])
+	var th := top * db_to_linear(-below)
+	var out := []
+	var a := -1
+	var last := -1
+	for k in lv.size():
+		if lv[k] >= th:
+			if a < 0 or (k - last) * 0.01 > join:
+				if a >= 0:
+					out.append([a, last])
+				a = k
+			last = k
+	if a >= 0:
+		out.append([a, last])
+	var secs := []
+	for ev: Array in out:
+		var t0 := maxf(0.0, ev[0] * 0.01 - pre)
+		var t1 := minf(s.size() / float(RATE), (ev[1] + 1) * 0.01 + post)
+		if t1 - t0 >= min_len:
+			secs.append([t0, t1])
+	return secs
+
+
+## Quietens the hiss between the loud parts: a downward expander, full gain within `range_db` of the sound's loudest
+## 10 ms, falling to silence `range_db + knee` below it.
+static func gate(s: PackedFloat32Array, range_db := 30.0, knee := 12.0) -> PackedFloat32Array:
+	var out := s.duplicate()
+	var env := 0.0
+	var top := 0.0
+	var a := exp(-1.0 / (0.002 * RATE))
+	var r := exp(-1.0 / (0.03 * RATE))
+	var envs := PackedFloat32Array()
+	envs.resize(s.size())
+	for i in s.size():
+		var x := absf(s[i])
+		env = (a if x > env else r) * env + (1.0 - (a if x > env else r)) * x
+		envs[i] = env
+		top = maxf(top, env)
+	for i in s.size():
+		var d := linear_to_db(maxf(envs[i], 1e-9) / maxf(top, 1e-9)) + range_db
+		out[i] *= clampf(1.0 + d / knee, 0.0, 1.0)
+	return out
+
+
 static func fade(s: PackedFloat32Array, fade_in: float, fade_out: float, curve: float = 1.0) -> PackedFloat32Array:
 	var out := s.duplicate()
 	var ni := mini(n_of(fade_in), out.size())

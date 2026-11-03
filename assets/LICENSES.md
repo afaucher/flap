@@ -9,7 +9,8 @@ source URL, author and licence here.
 |---|---|---|
 | `assets/feathers/` | Feather textures | Baked by `tools/bake_feathers.gd` from the project's own procedural feather shader |
 | `assets/legs/` | Leg scale tiles | Baked by `ScaleTile` (`scripts/bird/scale_tile.gd`) |
-| `assets/audio/sfx/` | Every game sound | Baked by `tools/bake_sounds.gd` from `SoundRecipes` (`scripts/audio/sound_recipes.gd`); the bursts are built on the Freesound recording below |
+| `assets/audio/recordings/claws_on_cat_tree.wav` | Nails scratching a cat tree (the perch catch) | Recorded by the user, 2026-11-02 (an .m4a, converted to 44.1 kHz mono WAV) |
+| `assets/audio/sfx/` | Every game sound | Baked by `tools/bake_sounds.gd` from `SoundRecipes` (`scripts/audio/sound_recipes.gd`); the bursts are built on the Freesound recording below, the perch catch on the user's recording above |
 
 ## Downloaded
 
