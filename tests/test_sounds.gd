@@ -96,6 +96,13 @@ func _recipes() -> void:
 		check(SoundDsp.onset(c, 0.0, 12.0) < 0.03, "perch catch %d starts on its scratch" % (take + 1))
 		check(SoundDsp.rms(c, c.size() / float(SoundDsp.RATE) - 0.02) < SoundDsp.rms(c) * 0.2, "perch catch %d ends quiet" % (take + 1))
 	check(lengths.size() >= 4, "the perch catch takes are different scratches of the recording")
+	for sp: String in SoundRecipes.CALLS:
+		for kind in ["call", "alarm"]:
+			var name := "%s_%s" % [kind, sp]
+			for take in SoundRecipes.files_of(name).size():
+				var c := SoundRecipes.render(name, take)
+				check(SoundDsp.onset(c, 0.0, 12.0) < 0.06, "%s %d starts on the call" % [name, take + 1])
+				check(SoundDsp.rms(c, c.size() / float(SoundDsp.RATE) - 0.02) < SoundDsp.rms(c) * 0.25, "%s %d ends quiet" % [name, take + 1])
 	var owl := SoundRecipes.render("call_owl")
 	var hawk := SoundRecipes.render("call_hawk")
 	check(owl.size() > SoundDsp.n_of(0.5) and hawk.size() > SoundDsp.n_of(0.5), "the owl's screech and the hawk's scream are long calls")

@@ -1982,5 +1982,19 @@
     "replace": "\tvar knock := D.hit(D.tone(0.3, D.sweep(rng.randf_range(100.0, 125.0), 85.0)), 0.002, 0.05)"
    }
   ]
+ },
+ {
+  "id": "alarm-call-chopped",
+  "bug": "An alarm take ended by cutting its last call off mid-screech (a window shorter than the call) (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/sound_recipes.gd",
+    "find": "[[OWL, 84.73, 85.6], [OWL, 46.74, 47.65]]",
+    "replace": "[[OWL, 84.73, 85.6], [OWL, 46.74, 47.2]]"
+   }
+  ]
  }
 ]

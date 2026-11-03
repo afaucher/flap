@@ -4,13 +4,12 @@ extends RefCounted
 ## each into assets/audio/sfx/<file>.wav, where Sfx plays it. A cue with `takes` > 1 is baked as <name>_1.wav ...
 ## <name>_N.wav, each from its own seed, and Sfx picks among them (never the same one twice running).
 ##
-## Synthesized except two, built on recordings:
+## Synthesized except these, built on recordings:
 ## - the bursts: the bang of Rudmer_Rotteveel's "Whistle and Explosion Single_Firework" (Freesound 336008, CC0, the one
 ##   ..\cast uses for its goblin fireworks), pitched up and shortened to the war tack's pencil-sized rockets, with a
 ##   synthesized crack and debris over it;
-## - the perch catch: the user's claws on a cat tree (CLAWS), one scratch a take.
-## Stand-ins, until recordings replace them: the five species' calls (synthesized after their real calls,
-## squirrel-racer style).
+## - the perch catch: the user's claws on a cat tree (CLAWS), one scratch a take;
+## - the five species' calls and alarms: cut from Freesound recordings (CALLS).
 
 const D = preload("res://scripts/audio/sound_dsp.gd")
 const FIREWORK := "res://assets/audio/third_party/freesound/336008__rudmer_rotteveel__whistle-and-explosion-single_firework.wav"
@@ -76,7 +75,7 @@ static func source_md5() -> String:
 	var src := ""
 	for p: String in [SOURCE_PATH, DSP_PATH]:
 		src += FileAccess.get_file_as_string(p).replace("\r\n", "\n")
-	for p: String in [FIREWORK, CLAWS]:
+	for p: String in [FIREWORK, CLAWS] + CALL_SOURCES:
 		src += FileAccess.get_md5(p)
 	return src.md5_text()
 
@@ -326,88 +325,114 @@ func _bonk(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
 	return D.mix(s, _grains(rng, 20, 0.7, 3000.0, 7000.0, 0.08), 0.15)
 
 
-# ---------------------------------------------------------------- calls (stand-ins after the real calls)
+# ---------------------------------------------------------------- calls (Freesound recordings)
 
-## "Caw": a harsh, falling, nasal note (a saw through a formant at about 1.3 kHz with rasp), in twos and threes.
-func _caw(rng: RandomNumberGenerator, n: int, gap: float, len_s: float) -> PackedFloat32Array:
-	var s := D.silence(0.0)
-	for i in n:
-		var f := rng.randf_range(560.0, 640.0)
-		var v := D.tone(len_s, D.sweep(f, f * 0.78), "saw")
-		v = D.mix(D.bandpass(v, 1300.0, 1.6), D.bandpass(v, 2600.0, 3.0), 0.0, -6.0)
-		v = D.mix(v, D.bandpass(D.white(rng, len_s), 1500.0, 1.0), 0.0, -12.0)
-		v = D.shape(v, func(k: float) -> float: return minf(1.0, k * 10.0) * pow(1.0 - k, 0.7) * (0.75 + 0.25 * sin(TAU * 38.0 * k * len_s)))
-		s = D.mix(s, v, i * gap)
-	return s
-
-
-func _call_crow(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	return _caw(rng, rng.randi_range(2, 3), 0.42, 0.3)
-
-
-func _alarm_crow(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	return _caw(rng, 5, 0.2, 0.17)   # (mobbing: harsh and fast)
-
-
-## A barn owl's screech: a long, hoarse, falling hiss-scream (barn owls don't hoot).
-func _screech(rng: RandomNumberGenerator, sec: float) -> PackedFloat32Array:
-	var s := D.svf(D.white(rng, sec), D.sweep(rng.randf_range(4200.0, 4800.0), 3000.0), 2.5, 1)
-	s = D.mix(s, D.svf(D.white(rng, sec), D.sweep(2400.0, 1800.0), 3.0, 1), 0.0, -6.0)
-	return D.shape(s, func(k: float) -> float: return minf(1.0, k * 6.0) * pow(1.0 - k, 0.8) * (0.8 + 0.2 * sin(TAU * 23.0 * k * sec)))
-
-
-func _call_owl(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	return _screech(rng, rng.randf_range(0.9, 1.2))
-
-
-func _alarm_owl(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	var s := _screech(rng, 0.45)
-	return D.mix(s, D.gain(D.highpass(D.white(rng, 0.35), 3000.0), -14.0), 0.5)   # and a hiss
-
-
-## The red-tailed hawk's scream, "kee-eeer": a long, rasping, falling whistle.
-func _scream(rng: RandomNumberGenerator, sec: float) -> PackedFloat32Array:
-	var f := rng.randf_range(2700.0, 3000.0)
-	var s := D.tone(sec, func(k: float) -> float: return f * (1.0 + 0.06 * sin(PI * minf(1.0, k * 3.0))) * pow(0.68, k))
-	s = D.mix(s, D.svf(D.white(rng, sec), D.sweep(f, f * 0.68), 6.0, 1), 0.0, -4.0)
-	return D.shape(s, func(k: float) -> float: return minf(1.0, k * 8.0) * pow(1.0 - k, 0.6) * (0.65 + 0.35 * sin(TAU * 45.0 * k * sec)))
+## The species' calls, cut from Freesound recordings (HQ previews, in assets/audio/sources/freesound/, .gdignore'd so
+## they're read raw and never exported; sources and licences in assets/LICENSES.md). All CC0 but the kestrel (CC BY
+## 4.0, credited). Each take is a window of a recording [from, to] s, or a run of windows strung together (the alarms:
+## several calls tighter and a little higher than the contact call).
+const CALL_SRC := "res://assets/audio/sources/freesound/"
+const CROW := CALL_SRC + "75162__nigelcoop__crow.mp3"
+const CROW_2 := CALL_SRC + "361470__jofae__crow-caw.mp3"
+const OWL := CALL_SRC + "101344__raoul_slayer__barnowl.mp3"
+const HAWK := CALL_SRC + "616995__trp__red-tailed-hawk-call.mp3"
+const HAWK_2 := CALL_SRC + "616926__trp__red-tailed-hawk-isolated-calls.mp3"
+const KESTREL := CALL_SRC + "352263__ylearkisto__kestrel-warning.mp3"
+const SPARROW := CALL_SRC + "404663__straget__house-sparrow.mp3"
+## The recordings the calls are cut from, for the bake stamp.
+const CALL_SOURCES := [CROW, CROW_2, OWL, HAWK, HAWK_2, KESTREL, SPARROW]
+## Per species: the low cut (Hz; below the call, it takes off wind, traffic and the trees' hum), and for each take of
+## its call and its alarm the windows [path, from s, to s], and for an alarm the gap between them (s) and its speed.
+const CALLS := {
+	"crow": {"hp": 300.0,
+		"call": [[[CROW, 0.05, 1.85]], [[CROW, 1.9, 3.35]], [[CROW, 0.05, 2.45]]],
+		"alarm": [[[CROW, 1.13, 1.8], [CROW_2, 0.0, 0.43], [CROW, 1.9, 2.42]],
+				[[CROW, 2.74, 3.3], [CROW_2, 0.0, 0.43], [CROW, 1.13, 1.8]]],
+		"gap": 0.07, "speed": 1.06},
+	"owl": {"hp": 800.0,
+		"call": [[[OWL, 17.82, 18.85]], [[OWL, 40.52, 41.52]]],
+		"alarm": [[[OWL, 84.73, 85.6], [OWL, 46.74, 47.65]], [[OWL, 48.62, 49.55], [OWL, 101.6, 102.45]]],
+		"gap": 0.05, "speed": 1.06},
+	"hawk": {"hp": 1000.0,
+		"call": [[[HAWK, 3.58, 4.3]], [[HAWK, 7.42, 8.1]]],
+		"alarm": [[[HAWK_2, 4.56, 4.98], [HAWK_2, 6.69, 7.1]], [[HAWK_2, 9.25, 9.55], [HAWK_2, 12.3, 12.6], [HAWK_2, 4.56, 4.98]]],
+		"gap": 0.1, "speed": 1.05},
+	"falcon": {"hp": 1500.0,   # (the kestrel)
+		"call": [[[KESTREL, 32.5, 33.2]], [[KESTREL, 68.2, 68.9]], [[KESTREL, 82.86, 83.55]]],
+		"alarm": [[[KESTREL, 65.26, 65.95], [KESTREL, 28.06, 28.55]], [[KESTREL, 79.55, 80.05], [KESTREL, 36.49, 36.95]]],
+		"gap": 0.04, "speed": 1.08},
+	"sparrow": {"hp": 1500.0,
+		"call": [[[SPARROW, 4.82, 5.72]], [[SPARROW, 7.54, 8.68]], [[SPARROW, 10.8, 11.9]]],
+		"alarm": [[[SPARROW, 8.47, 8.66], [SPARROW, 9.73, 9.92], [SPARROW, 11.67, 11.87], [SPARROW, 14.68, 14.87], [SPARROW, 17.83, 18.02]],
+				[[SPARROW, 36.61, 36.8], [SPARROW, 14.68, 14.87], [SPARROW, 9.73, 9.92], [SPARROW, 8.47, 8.66], [SPARROW, 11.67, 11.87]]],
+		"gap": 0.03, "speed": 1.1},
+}
+static var _recs := {}   ## path -> its samples (each recording is decoded once a bake)
 
 
-func _call_hawk(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	return _scream(rng, rng.randf_range(1.0, 1.3))
+static func _rec(path: String) -> PackedFloat32Array:
+	if not _recs.has(path):
+		_recs[path] = D.load_sound(path)
+	return _recs[path]
 
 
-func _alarm_hawk(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	var s := _scream(rng, 0.45)
-	return D.mix(s, _scream(rng, 0.4), 0.55)
+## One window of a recording, cleaned: the low cut, the background between notes gated out, soft ends.
+func _window(w: Array, hp: float) -> PackedFloat32Array:
+	var c := D.cut(_rec(w[0]), w[1], w[2])
+	return D.fade(D.gate(D.highpass(c, hp, 2), 34.0, 12.0), 0.004, 0.04)
 
 
-## A kestrel's "kee-kee-kee": quick, shrill, even notes.
-func _kee(rng: RandomNumberGenerator, n: int, dt: float, f: float) -> PackedFloat32Array:
-	var list := D.rep(n, dt, func(t: float) -> Array: return [[t, f, f * 0.93, dt * 0.62, "triangle", 0.8], [t, f * 2.0, f * 1.86, dt * 0.62, "sine", 0.15]])
-	return D.notes(rng, D.vary(rng, list))
+## Take `take` of `species`' "call" or "alarm": its windows strung together (`gap` s apart for an alarm, at its speed).
+func _recorded(species: String, kind: String, take: int) -> PackedFloat32Array:
+	var sp: Dictionary = CALLS[species]
+	var wins: Array = sp[kind][mini(take, (sp[kind] as Array).size() - 1)]
+	var out := D.silence(0.0)
+	var at := 0.0
+	for w: Array in wins:
+		var piece := _window(w, sp.hp)
+		out = D.mix(out, piece, at)
+		at += piece.size() / float(D.RATE) + (float(sp.gap) if kind == "alarm" else 0.0)
+	return D.resample(out, float(sp.speed)) if kind == "alarm" else out
 
 
-func _call_falcon(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	return _kee(rng, rng.randi_range(4, 6), 0.14, 3100.0)
+func _call_crow(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("crow", "call", take)
 
 
-func _alarm_falcon(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	return _kee(rng, 9, 0.09, 3500.0)
+func _alarm_crow(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("crow", "alarm", take)
 
 
-## A house sparrow's "chirrup": a bright up-down chirp, twice; its alarm a rattling scold.
-func _call_sparrow(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	var list := []
-	for i in rng.randi_range(2, 3):
-		var t := i * rng.randf_range(0.28, 0.36)
-		list.append_array([[t, 3300.0, 4300.0, 0.05, "sine", 0.7], [t + 0.05, 4300.0, 3200.0, 0.07, "sine", 0.7], [t, 6600.0, 8000.0, 0.1, "noise", 0.2, 0.0, 4.0]])
-	return D.notes(rng, D.vary(rng, list))
+func _call_owl(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("owl", "call", take)
 
 
-func _alarm_sparrow(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	var list := D.rep(12, 0.04, func(t: float) -> Array: return [[t, 4200.0, 3600.0, 0.025, "noise", 1.0, 0.0, 3.0]])
-	return D.notes(rng, D.vary(rng, list))
+func _alarm_owl(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("owl", "alarm", take)
+
+
+func _call_hawk(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("hawk", "call", take)
+
+
+func _alarm_hawk(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("hawk", "alarm", take)
+
+
+func _call_falcon(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("falcon", "call", take)
+
+
+func _alarm_falcon(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("falcon", "alarm", take)
+
+
+func _call_sparrow(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("sparrow", "call", take)
+
+
+func _alarm_sparrow(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	return _recorded("sparrow", "alarm", take)
 
 
 # ---------------------------------------------------------------- the forest
