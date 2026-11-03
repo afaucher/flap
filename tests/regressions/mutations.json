@@ -1912,5 +1912,19 @@
     "replace": "\t\t\t_lock_next = _t + 0.25"
    }
   ]
+ },
+ {
+  "id": "incoming-warble-flat",
+  "bug": "The incoming warble kept one pace however close the round was (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "_incoming_next = _t + clampf(tgo * 0.3, 0.07, 0.4)",
+    "replace": "_incoming_next = _t + 0.25"
+   }
+  ]
  }
 ]

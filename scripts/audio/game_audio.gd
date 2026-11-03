@@ -10,8 +10,8 @@ extends Node
 ##     bird, a trunk, the ground, or a fizzle), feather puffs, the downed flutter.
 ##   - Your launcher: the lock building (beeps faster and higher with the lock), the locked tone, the dry click, the
 ##     weapon switch, "hold fire" when you shoot with a teammate in the line, the rack refilling on the base (a clink a
-##     round, then a chime); someone locking you (a low pulse), a seeker coming for you (a warble, faster as it closes);
-##     the score.
+##     round, then a chime); what the HUD warns you of (CombatWorld.warnings_for): a lock on you (a low pulse) and a
+##     round coming at you (a warble, faster as it closes); the score.
 ##   - The forest: the canopy wind (louder with height), insects near the ground, the pinewood's birds singing around you.
 ## `events` records every cue asked for, even headless where nothing plays, so tests check what would be heard.
 
@@ -241,22 +241,19 @@ func _launcher_tick(l: Launcher) -> void:
 		_rack = {}
 
 
-## Someone locking you (a low pulse, quicker once locked) and a seeker coming for you (a warble, quicker as it closes).
+## Someone locking you (a low pulse, quicker once locked) and a round coming at you (a warble, quicker and higher as
+## it closes): what the HUD's LOCK and INCOMING marks show (CombatWorld.warnings_for), heard.
 func _threats_tick(me: Bird) -> void:
-	var lock := 0.0
-	for l: Launcher in world.launchers:
-		if l.bird != me and l.lock_target == me:
-			lock = maxf(lock, l.lock)
-	if lock > 0.2 and _t >= _warn_next:
+	var w := world.warnings_for(me)
+	var locks: Array = w.locks
+	if not locks.is_empty() and _t >= _warn_next:
 		cue("locked_warning")
-		_warn_next = _t + (0.35 if lock >= 1.0 else 0.7)
-	var near := INF
-	for p: Projectile in world.projectiles:
-		if p.alive and p.target == me:
-			near = minf(near, p.pos.distance_to(me.global_position))
-	if near < INF and _t >= _incoming_next:
-		cue("incoming", Vector3.INF, 0.0, lerpf(1.25, 1.0, clampf(near / 40.0, 0.0, 1.0)))
-		_incoming_next = _t + clampf(near / 60.0, 0.07, 0.4)
+		_warn_next = _t + (0.35 if bool(locks[0].locked) else 0.7)
+	var rounds: Array = w.rounds
+	if not rounds.is_empty() and _t >= _incoming_next:
+		var tgo: float = rounds[0].tgo
+		cue("incoming", Vector3.INF, 0.0, lerpf(1.25, 1.0, clampf(tgo / 1.5, 0.0, 1.0)))
+		_incoming_next = _t + clampf(tgo * 0.3, 0.07, 0.4)
 
 
 func _score_tick() -> void:

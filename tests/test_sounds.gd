@@ -4,8 +4,8 @@ extends TestCase
 ## locking you are far apart in pitch; loops wrap without a jump; a burst hits at once; a rocket launch is over in
 ## 0.2 s, so four a second stay apart); the owl's wingbeat is next to silent beside the crow's; and GameAudio asks for
 ## the right cue at the right moment: launches with their motors, each kind of burst, hits with the species' alarm,
-## the lock's beeps rising and quickening then the locked tone (and nothing without a target), someone locking you,
-## a seeker closing on you (the warble quickening), the dry click, the weapon switch, a clink per missing round on
+## the lock's beeps rising and quickening then the locked tone (and nothing without a target), what the HUD warns you
+## of (someone locking you; a seeker closing on you, the warble quickening), the dry click, the weapon switch, a clink per missing round on
 ## the base then the chime (and none off the base), the talons catching on a landing (not on a teleport), and bonks
 ## louder the harder they hit.
 
@@ -189,7 +189,7 @@ func _game_audio() -> void:
 	var lb: Launcher = world.launchers[1]
 	n = ga.events.size()
 	lb.weapon = Launcher.Weapon.SEEKERS
-	await frames(int(Launcher.LOCK_TIME * 60) + 10)
+	await frames(int(Launcher.LOCK_TIME * 60) + 40)
 	check(lb.lock_target == a, "(b locks you)")
 	check(_events_of(ga, "locked_warning", n).size() >= 2, "being locked pulses a warning")
 	n = ga.events.size()
