@@ -142,6 +142,24 @@ static func arm(l: Launcher, st: CombatStyle) -> void:
 	l.weapon = st.weapon
 
 
+var _lead_at := -INF
+var _lead := Vector3.ZERO
+var _lead_for: Bird = null
+
+
+## Where to fly the gunsight for a rocket to meet track `t` (FireControl.lead, refreshed every LEAD_EVERY s and
+## carried along with the target in between).
+func rocket_lead(t: CombatSense.Track) -> Vector3:
+	if clock - _lead_at >= LEAD_EVERY or _lead_for != t.bird:
+		_lead = FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel) - t.pos
+		_lead_at = clock
+		_lead_for = t.bird
+	return t.pos + _lead
+
+
+const LEAD_EVERY := 0.1
+
+
 ## Ammo left / full.
 func ammo_left() -> int:
 	return int(launcher.ammo[launcher.weapon])

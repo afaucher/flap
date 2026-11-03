@@ -76,8 +76,10 @@ func _would_hit(l: Launcher, t: CombatSense.Track) -> bool:
 		return FireControl.miss(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel) < Projectile.fuse * quality
 	if not l.locked() or l.lock_target != t.bird:
 		return false
-	var corner := CombatStyle.of(t.bird.profile).best_turn_rate(t.vel.length())   # (its best break at the speed it's seen at)
+	# Its best break, at the speed it's seen at, left and right, timed as well as it could be.
+	var ts := CombatStyle.of(t.bird.profile)
+	var corner := ts.best_turn_rate(t.vel.length())
 	for turn in [0.0, corner, -corner]:
-		if FireControl.miss(Projectile.Kind.SEEKER, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, turn) > Projectile.fuse * quality:
+		if FireControl.miss(Projectile.Kind.SEEKER, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, turn, null, ts.seeker_break_tgo) > Projectile.fuse * quality:
 			return false
 	return true

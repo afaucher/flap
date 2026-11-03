@@ -285,7 +285,7 @@ class Attack extends ActionLeaf:
 		var close := Engagement.closure(pos, b.model.velocity, t.pos, t.vel)
 		var aim: Vector3
 		if br.launcher.weapon == Launcher.Weapon.ROCKETS:
-			aim = Engagement.lead_point(br.launcher.muzzle(), b.model.speed, t.pos, t.vel)
+			aim = br.rocket_lead(t)
 		else:
 			aim = t.pos
 		if d < 10.0 and close > 4.0:
