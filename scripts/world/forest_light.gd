@@ -13,9 +13,10 @@ extends RefCounted
 ##            so the bird, its rider and the trees you fly among stay sharp); `far_blur` false (--no-far-blur) or
 ##            F5 in the game and the range turns it off
 ## Returns the sun.
-## Looks (LOOKS; `--look <name>`, F6 in the game and the range steps through them): the afternoon above, and others
-## laid over it -- sun, sky, haze and grade -- each a set of property overrides plus an optional per-channel tone
-## curve (`curve`: input level -> output colour, a colourist's split-tone). probe_grade renders them for comparing.
+## Looks (LOOKS; `--look <name>`, F6 in the game and the range steps through them; golden by default): the
+## afternoon above, and others laid over it -- sun, sky, haze and grade -- each a set of property overrides plus an
+## optional per-channel tone curve (`curve`: input level -> output colour, a colourist's split-tone). probe_grade
+## renders them for comparing; docs/design/color_grading.md.
 
 const SUN_ELEVATION := 30.0
 const SUN_AZIMUTH := 205.0     ## deg, round +Y from -Z
@@ -23,7 +24,7 @@ const FAR_BLUR_FROM := 45.0    ## m: nothing nearer is blurred
 const FAR_BLUR_OVER := 45.0    ## m over which it fades in (full by ~90 m: the arena's edge)
 const FAR_BLUR_AMOUNT := 0.035 ## Godot's dof amount (its default 0.1 is a strong photographic blur)
 static var far_blur := true
-static var look := "afternoon"
+static var look := "golden"   ## the default (2026-11-03: the concept art's)
 const LOOKS := {
 	"afternoon": {},
 	# The concept art's (r4_aces_outpost): later, lower and more orange, a hazy sky glowing round the sun, warm

@@ -28,8 +28,8 @@ component of a vector) plus an optional `curve`: [level, colour] stops of a `Gra
 Switching to a look first resets everything every look touches back to the afternoon, so nothing leaks from one
 to the next (`tests/test_forest_light.gd`).
 
-- `afternoon`: the default (ForestLight's own light). A sun 30 deg up, AgX, a mild warm haze.
-- `golden`: toward the concept art. The sun lower (20 deg) and more orange, a hazy Mie sky, warm lit haze (the
+- `afternoon`: ForestLight's own light (the default until 2026-11-03). A sun 30 deg up, AgX, a mild warm haze.
+- `golden`: **the default**, toward the concept art. The sun lower (20 deg) and more orange, a hazy Mie sky, warm lit haze (the
   shafts), exposure 1.2, warm split-tone (brown shadows, cream-gold highlights).
 - `misty_morning`: a pale sun from the other side, low; cool blue mist through the wood; soft contrast; cool
   shadows, warm-white highlights.
