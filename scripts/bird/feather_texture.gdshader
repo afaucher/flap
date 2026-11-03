@@ -54,6 +54,10 @@ varying flat float cell;
 varying flat float lead;
 varying flat float seed;
 varying flat float flen;
+uniform bool gpu_place = false;   // BirdRig.gpu_feathers: the feather placed here, not by its instance transform
+instance uniform int def_offset = -1;   // (its column in `defs`: the slotted primaries follow the plain feathers;
+                                        // -1, the silhouette cards that share this material: placed by their instances)
+#include "res://scripts/bird/feather_place.gdshaderinc"
 
 void vertex() {
 	row = INSTANCE_CUSTOM.r;
@@ -66,6 +70,18 @@ void vertex() {
 	float bend = INSTANCE_CUSTOM.g * flex;   // (.g: this feather's share of the wing's flex)
 	VERTEX.y += bend * VERTEX.z * VERTEX.z;
 	NORMAL = normalize(NORMAL + vec3(0.0, 0.0, -2.0 * bend * VERTEX.z) * NORMAL.y);
+	if (gpu_place && def_offset >= 0) {
+		mat4 fx = feather_place(INSTANCE_ID + def_offset);
+		vec3 X = fx[0].xyz;
+		vec3 Y = fx[1].xyz;
+		vec3 Z = fx[2].xyz;
+		VERTEX = fx[3].xyz + X * VERTEX.x + Y * VERTEX.y + Z * VERTEX.z;
+		// (the frame's columns are orthogonal: its inverse transpose divides each by its squared length)
+		NORMAL = normalize(X / dot(X, X) * NORMAL.x + Y / dot(Y, Y) * NORMAL.y + Z / dot(Z, Z) * NORMAL.z);
+		TANGENT = normalize(X * TANGENT.x + Y * TANGENT.y + Z * TANGENT.z);
+		BINORMAL = normalize(X * BINORMAL.x + Y * BINORMAL.y + Z * BINORMAL.z);
+		flen = length(Z) * length(MODEL_MATRIX[2].xyz);
+	}
 }
 
 vec3 to_linear(vec3 c) {

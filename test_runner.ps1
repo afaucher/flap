@@ -4,6 +4,9 @@
 #   .\test_runner.ps1 -TestAll                    # every tests\test_*.gd, in parallel
 #   .\test_runner.ps1 -TestAll -NoImport          # skip the import pass
 #
+# GPU tests (tests\gpu_test_*.gd: they read back what a shader computed) run windowed, since the headless renderer
+# runs no shaders; -TestAll includes them.
+#
 # Logs: test_logs\<name>.log / .err.log. A test passes only with exit code 0,
 # the ">>> [TEST PASSED] <name> <<<" marker, AND no "SCRIPT ERROR" or engine ERROR:/WARNING: line in its output.
 # Tests run under --fixed-fps 60, so physics is deterministic and runs as fast as the CPU allows.
@@ -28,7 +31,8 @@ if (-not $NoImport) { Invoke-FlapImport $godot }
 function Start-Test([string]$Name) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $godot
-    $psi.Arguments = "--path `"$PSScriptRoot`" --headless --fixed-fps 60 -- --run-test $Name"
+    $mode = if ($Name -like "gpu_test_*") { "" } else { "--headless " }
+    $psi.Arguments = "--path `"$PSScriptRoot`" $mode--fixed-fps 60 -- --run-test $Name"
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -60,7 +64,7 @@ function Finish-Test($r) {
     return $ok
 }
 
-$names = if ($TestAll) { Get-ChildItem "$PSScriptRoot\tests\test_*.gd" | ForEach-Object { $_.BaseName } } else { @($TestName -split '[\s,]+' | Where-Object { $_ -ne "" }) }
+$names = if ($TestAll) { Get-ChildItem "$PSScriptRoot\tests\test_*.gd", "$PSScriptRoot\tests\gpu_test_*.gd" | ForEach-Object { $_.BaseName } } else { @($TestName -split '[\s,]+' | Where-Object { $_ -ne "" }) }
 $max = [Math]::Max(2, [Math]::Min(12, [Environment]::ProcessorCount - 4))
 $running = @(); $failed = @(); $total = 0
 foreach ($n in $names) {

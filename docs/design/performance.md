@@ -70,3 +70,37 @@ feather placement and writes ~0.8 ms, the arm loft ~0.7 ms, the neck ~0.5 ms, le
 together: 10-18 ms frames when several birds' legs swing at once (landings, take-offs). Next: the distant-bird level of
 detail above, and spreading or cheapening those rebuilds; then, if needed, the feather placement in compiled code or a
 vertex shader.
+
+## Proof of concept: feathers placed on the GPU (branch `gpu-poc`, 2026-11-02)
+
+The game's `--gpu-feathers` (`BirdRig.gpu_feathers`) moves the flight and tail feathers' placement from GDScript into
+the feather shader (`feather_place.gdshaderinc`). Each pose writes about 150 numbers (each wing's joints and normals,
+the fold, the tail's frame) into a small float texture. Each feather's own definition goes into another texture
+once: the only part of it that changes with the fold and slot, its angle, is linear in both, so it is stored as
+three terms and worked out in the shader. The instances' transforms stay identity, so their bounds are set by hand
+(`custom_aabb`). The silhouette cards share the material and keep their own transforms (`def_offset` -1).
+
+Measured A/B (game on autopilot, quiet machine, 15 s runs):
+
+| | Feathers placed in GDScript | Placed in the shader |
+|---|---|---|
+| 4 birds: rig per frame | 11.3 ms | 8.4 ms |
+| 4 birds: wings and feathers | 5.4 ms | 2.5 ms (mostly the arm loft) |
+| 20 birds: rig per frame | 58 ms | 45-50 ms |
+| GPU time, 4 birds | 7.35 ms | 7.29 ms |
+
+The pictures match: in the rig gallery (glide, flare, folded, flap from below and the side) at most 15 of 1.44
+million pixels differ, along feather edges.
+
+Tests read back what the GPU computed. `tests/gpu_test_feathers.gd` evaluates the same include in a canvas pass into
+a half-float target (each value split hi + lo, about float precision) and compares every feather with the rig's own
+placement: within 0.2 um, every species, spread to folded, alula, slots, lost feathers. GPU tests are named
+`gpu_test_*` and run windowed (`test_runner.ps1` leaves out `--headless` for them), since the headless renderer runs
+no shaders.
+
+What stays on the CPU: the rig's own placement, for what reads feathers in the game. A perched bird's lean reads
+every feather's tip each pose (`_posture`), so perched birds still place them in GDScript; a hit works out the
+flight feathers for that pose (`flight_feathers`). The CPU copy is also what the GPU test compares against. Moving
+those readers off the feathers (the lean from the wing joints, the hit from the defs) would leave one copy.
+
+![Feathers placed in GDScript and in the shader, and their difference](../images/gpu_feathers_ab.jpg)

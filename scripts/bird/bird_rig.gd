@@ -127,6 +127,24 @@ const FLIGHT_KINDS := [WingShape.Kind.PRIMARY, WingShape.Kind.SECONDARY, WingSha
 const FLIGHT_SHARE := 0.8   ## of each wing's area, the share its flight feathers make (the rest: the arm's web, the coverts)
 var _feather_area := {}
 var feather_kinds: PackedInt32Array = []      ## WingShape.Kind per feather_xforms entry (6 = tail); tests   ## every feather this tick (the MultiMeshes' copy; tests, debug)
+## GPU feather placement (proof of concept; the game's --gpu-feathers): the feather shader places each flight and tail
+## feather from the wing's joints (feather_place.gdshaderinc), so a pose writes ~150 numbers instead of every feather's
+## transform. feather_xforms is then filled only when something reads it (perched: the lean; a hit: flight_feathers).
+static var gpu_feathers := false
+var feather_slots: PackedInt32Array = []      ## per feather_xforms entry: its column in the shader's defs (GPU placement)
+var gpu_place := false                        ## this rig's feathers are placed by the shader
+var _cpu_feathers := false                    ## (GPU placement) fill feather_xforms this pose all the same
+var _defs_tex: ImageTexture
+var _pose_tex: ImageTexture
+var _defs_buf := PackedFloat32Array()
+var _pose_buf := PackedFloat32Array()
+var _defs_lost := -1                          ## (GPU placement) the lost set the defs were written with (hash)
+## (GPU placement) the feather set, in WingShape.feathers' order, and per feather its angle's terms: a feather's rel is
+## linear in the fold and in the slot (spread x (1 - fold)) -- rel = x + y fold + z slot (1 - fold) -- so the defs
+## are written once and the shader works the angle out each pose.
+var _gpu_set: Array = []
+var _gpu_rel: Array[Vector3] = []
+const POSE_W := 12
 
 var _L := 0.45
 var _sh_up := 0.0
@@ -751,6 +769,35 @@ func _build_feathers() -> void:
 		if _emarg_u != null:
 			_emarg_u.visible_instance_count = 0
 	_paint_dirty = true
+	gpu_place = gpu_feathers and marks_material != null and Plumage.level >= 6
+	if gpu_place:
+		var w := _plain_count + maxi(_emarg_count, 1)
+		_defs_buf.resize(w * 3 * 4)
+		_pose_buf.resize(POSE_W * 3 * 4)
+		_defs_tex = ImageTexture.create_from_image(Image.create_from_data(w, 3, false, Image.FORMAT_RGBAF, _defs_buf.to_byte_array()))
+		_pose_tex = ImageTexture.create_from_image(Image.create_from_data(POSE_W, 3, false, Image.FORMAT_RGBAF, _pose_buf.to_byte_array()))
+		marks_material.set_shader_parameter("gpu_place", true)
+		_gpu_set = shape.feathers(0.0, 0.0, _under_row)
+		var f10 := shape.feathers(1.0, 0.0, _under_row)
+		var f01 := shape.feathers(0.0, 1.0, _under_row)
+		_gpu_rel.clear()
+		for j in _gpu_set.size():
+			var r0 := float(_gpu_set[j].rel)
+			_gpu_rel.append(Vector3(r0, float(f10[j].rel) - r0, float(f01[j].rel) - r0))
+		marks_material.set_shader_parameter("defs", _defs_tex)
+		marks_material.set_shader_parameter("pose", _pose_tex)
+		# (the instances' own transforms stay identity: bounds the engine took from them would cull the wing)
+		var reach := shape.half_span() * shape.scale + profile.tail_length + _L
+		for mm in [_plain, _plain_u, _emarg, _emarg_u]:
+			if mm == null:
+				continue
+			for k in mm.instance_count:
+				mm.set_instance_transform(k, Transform3D.IDENTITY)
+		for c in get_children():
+			if c is MultiMeshInstance3D and (c as MultiMeshInstance3D).multimesh in [_plain, _plain_u, _emarg, _emarg_u]:
+				var mmi := c as MultiMeshInstance3D
+				mmi.custom_aabb = AABB(Vector3.ONE * -reach, Vector3.ONE * reach * 2.0)
+				mmi.set_instance_shader_parameter("def_offset", _plain_count if mmi.multimesh == _emarg or mmi.multimesh == _emarg_u else 0)
 
 
 ## A feather's identity through every pose: its wing (1000 left, 2000 right; 3000 the tail), kind and index.
@@ -784,6 +831,10 @@ func _measure_feathers() -> void:
 
 ## The flight feathers as last drawn: [{key, mid (rig space, the feather's middle)}] (lost ones included).
 func flight_feathers() -> Array:
+	if gpu_place and feather_xforms.is_empty():   # (placed by the shader: work them out here, for this pose)
+		_cpu_feathers = true
+		apply_pose()
+		_cpu_feathers = false
 	var out := []
 	for n in feather_xforms.size():
 		var key := feather_keys[n]
@@ -1391,6 +1442,30 @@ func _place_body(mm: MultiMesh, mmu: MultiMesh, idx: int, xf: Transform3D, kind:
 const FOLD_STEP := 0.00015
 
 
+## GPU placement: one texel of the pose (row `r`: 0, 1 the wings, 2 the tail; column `k`) or of a feather's definition.
+func _pose_px(r: int, k: int, v: Vector3, w: float) -> void:
+	var o := (r * POSE_W + k) * 4
+	_pose_buf[o] = v.x
+	_pose_buf[o + 1] = v.y
+	_pose_buf[o + 2] = v.z
+	_pose_buf[o + 3] = w
+
+
+func _def_px(slot: int, r: int, a: float, b: float, c: float, d: float) -> void:
+	var o := (r * _defs_tex.get_width() + slot) * 4
+	_defs_buf[o] = a
+	_defs_buf[o + 1] = b
+	_defs_buf[o + 2] = c
+	_defs_buf[o + 3] = d
+
+
+func _def_wing(slot: int, i: int, f: Dictionary, j: int, gone: bool, unit: float) -> void:
+	var rc: Vector3 = _gpu_rel[j]
+	_def_px(slot, 0, float(f.bone), float(f.t), rc.x, float(f.kind))
+	_def_px(slot, 1, float(f.len), float(f.w), _stack_layer(f) * unit, float(f.i))
+	_def_px(slot, 2, float(i), 1.0 if gone else 0.0, rc.y, rc.z)
+
+
 static func _stack_layer(f: Dictionary) -> float:
 	var i := float(f.i)
 	match int(f.kind):
@@ -1636,6 +1711,7 @@ func animate(t: Dictionary, dt: float) -> void:
 ## Visual only: the rig turns within the Bird's own (unchanged) body.
 func _posture(t: Dictionary, dt: float, sitting: bool) -> void:
 	var srf: Dictionary = t.get("surface", {})
+	_cpu_feathers = sitting and not srf.is_empty()   # (GPU placement: the lean below needs the feathers' tips)
 	if not sitting or srf.is_empty():
 		lean = maxf(lean - dt * 2.0, 0.0)
 	else:
@@ -1796,6 +1872,8 @@ func apply_pose() -> void:
 	feather_xforms.clear()
 	feather_kinds.clear()
 	feather_keys.clear()
+	feather_slots.clear()
+	var cpu_place := not gpu_place or _cpu_feathers
 	# (each feather's instance data only changes with the feather set or the paint: written then, not every pose;
 	# the wing's flex reaches the shader as one uniform)
 	if _custom_dirty or _paint_dirty:
@@ -1804,19 +1882,26 @@ func apply_pose() -> void:
 		_flex_set = flex
 		marks_material.set_shader_parameter("flex", flex)
 	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
-	if _defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01:
+	# (GPU placement: the shader works out the angles that change with them; the set itself is only needed here when
+	# the feathers are placed here too)
+	if cpu_place and (_defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01):
 		var pd := Perf.t()
 		_defs = shape.feathers(fold, slot, _under_row)
-		_custom_dirty = true
-		feather_codes.clear()
+		if not gpu_place:
+			_custom_dirty = true
+			feather_codes.clear()
 		Perf.add("  feather_defs (in wings)", pd)
 		_defs_fold = fold
 		_defs_slot = slot
-	var defs := _defs
+	var defs := _defs if cpu_place else _gpu_set
 	var lengths := shape.bone_lengths()
 	var j2 := shape.joints(fold)
 	var ik_w := smoothstep(0.55, 1.0, fold)
 	var unit := _L / 0.45   # feather layer offsets scale with the bird
+	var gpu_defs := gpu_place and (_defs_lost != lost.hash() or _custom_dirty or _paint_dirty)
+	var gpu_idle := gpu_place and not cpu_place and not gpu_defs   # (nothing about any feather to write this pose)
+	if gpu_defs:
+		_defs_lost = lost.hash()
 	for i in 2:
 		var s: float = SIDES[i]
 		var sh := _to_rig(i, j2[0])
@@ -1861,7 +1946,38 @@ func apply_pose() -> void:
 		var panel := -INF
 		for jp in [sh, elbow, wrist, hand]:
 			panel = maxf(panel, (jp as Vector3).dot(fold_y))
-		for f in defs:
+		if gpu_place:
+			var wp := _wing_plane(i)
+			_pose_px(i, 0, sh, ik_w)
+			_pose_px(i, 1, elbow, panel)
+			_pose_px(i, 2, wrist, s)
+			_pose_px(i, 3, hand, alula)
+			_pose_px(i, 4, arm_n, fold)
+			_pose_px(i, 5, hand_n, sweep if absf(sweep) > 1e-4 else 0.0)
+			_pose_px(i, 6, fold_y, unit)
+			_pose_px(i, 7, folded_dir, shape.root_chord() * float(LIMB[3].t[0]))
+			_pose_px(i, 8, wp.x, slot)
+			_pose_px(i, 9, wp.y, 0.0)
+			_pose_px(i, 10, wp.z, 0.0)
+			_pose_px(i, 11, WingShape.bone_angles(fold), 0.0)
+		var pf := Perf.t()
+		var fj := -1
+		for f in ([] if gpu_idle else defs):
+			fj += 1
+			if not cpu_place:   # (the shader places it: only its definition, when that changes)
+				var gslot := _plain_count + emarg_i if f.emarg else plain_i
+				if gpu_defs:
+					_def_wing(gslot, i, f, fj, lost.has(feather_key(i, int(f.kind), int(f.i))), unit)
+				if _custom_dirty or _paint_dirty:
+					if f.emarg:
+						_place(_emarg, _emarg_u, emarg_i, Transform3D.IDENTITY, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
+					else:
+						_place(_plain, _plain_u, plain_i, Transform3D.IDENTITY, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), _flex_share(f), s)
+				if f.emarg:
+					emarg_i += 1
+				else:
+					plain_i += 1
+				continue
 			var seg: Array = segs[int(f.bone)]
 			var a: Vector3 = seg[0]
 			var b: Vector3 = seg[1]
@@ -1906,12 +2022,21 @@ func apply_pose() -> void:
 			feather_xforms.append(xf)
 			feather_kinds.append(int(f.kind) + (0 if i == 1 else 100))   # (+100: left wing)
 			feather_keys.append(key)
+			feather_slots.append(_plain_count + emarg_i if f.emarg else plain_i)
+			if gpu_place and gpu_defs:
+				_def_wing(_plain_count + emarg_i if f.emarg else plain_i, i, f, fj, lost.has(key), unit)
+			var mxf := Transform3D.IDENTITY if gpu_place else xf   # (GPU placement: the shader places it)
 			if f.emarg:
-				_place(_emarg, _emarg_u, emarg_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
+				if not gpu_place or _custom_dirty or _paint_dirty:
+					_place(_emarg, _emarg_u, emarg_i, mxf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 1.0, 0.0), _flex_share(f), s)
 				emarg_i += 1
 			else:
-				_place(_plain, _plain_u, plain_i, xf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), _flex_share(f), s)
+				if not gpu_place or _custom_dirty or _paint_dirty:
+					_place(_plain, _plain_u, plain_i, mxf, int(f.kind), int(f.i), int(f.bone), Color(float(f.kind), _seed(i, f), 0.0, 0.0), _flex_share(f), s)
 				plain_i += 1
+		Perf.add("  feather_place (in wings)" if cpu_place else "  feather_gpu_defs (in wings)", pf)
+		if cpu_place and gpu_place:
+			Perf.add("    cpu fallback, perched (in wings)", pf)
 		var pl := Perf.t()
 		var fr: Array = _fairings[i]
 		var rc := shape.root_chord()
@@ -1936,9 +2061,24 @@ func apply_pose() -> void:
 	var fan := deg_to_rad(lerpf(shape.tail_fan * 0.3, TAIL_FAN_MAX, tail_spread))
 	var tb := Basis(Vector3.RIGHT, tail_pitch) * Basis(Vector3.BACK, tail_twist)
 	var tn := tb * Vector3.UP
-	for k in TAIL_FEATHERS:
+	if gpu_place:
+		_pose_px(2, 0, _tail_base, fan)
+		_pose_px(2, 1, tb.x, 0.0)
+		_pose_px(2, 2, tb.y, 0.0)
+		_pose_px(2, 3, tb.z, 0.0)
+		_pose_px(2, 4, tn, 0.0)
+	for k in (0 if gpu_idle else TAIL_FEATHERS):
 		var u := (k - 5.5) / 5.5
 		var length := profile.tail_length * _tail_shape(u)
+		if gpu_place and gpu_defs:
+			_def_px(plain_i, 0, 0.0, u, 0.0, 6.0)
+			_def_px(plain_i, 1, length, length * TAIL_WIDTH, 0.0008 * (1.0 - absf(u)) * unit, float(k))
+			_def_px(plain_i, 2, 0.0, 1.0 if lost.has(3000 + k) else 0.0, 1.0, u * _L * 0.05)
+		if not cpu_place:
+			if _custom_dirty or _paint_dirty:
+				_place(_plain, _plain_u, plain_i, Transform3D.IDENTITY, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
+			plain_i += 1
+			continue
 		var d := tb * Vector3(sin(u * fan * 0.5), 0.0, cos(u * fan * 0.5))
 		# Bases spread across the tail stump; the central pair sits on top and each outer feather tucks under
 		# its inner neighbour, so the fan overlaps like a spread deck of cards.
@@ -1949,8 +2089,14 @@ func apply_pose() -> void:
 		feather_xforms.append(txf)
 		feather_kinds.append(6)
 		feather_keys.append(3000 + k)
-		_place(_plain, _plain_u, plain_i, txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
+		feather_slots.append(plain_i)
+		if not gpu_place or _custom_dirty or _paint_dirty:
+			_place(_plain, _plain_u, plain_i, Transform3D.IDENTITY if gpu_place else txf, 6, k, -1, Color(6.0, fmod(k * 0.618, 1.0), 0.0, 0.0), 0.0, signf(u))
 		plain_i += 1
+	if gpu_place:
+		_pose_tex.update(Image.create_from_data(POSE_W, 3, false, Image.FORMAT_RGBAF, _pose_buf.to_byte_array()))
+		if gpu_defs:
+			_defs_tex.update(Image.create_from_data(_defs_tex.get_width(), 3, false, Image.FORMAT_RGBAF, _defs_buf.to_byte_array()))
 	_paint_dirty = false
 	_custom_dirty = false
 	if marks_material != null and Plumage.level >= 6 and absf(fold - _cover_fold) > 0.01:
