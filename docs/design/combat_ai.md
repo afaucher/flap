@@ -395,7 +395,9 @@ Every knob degrades a perfect pilot; 0 / the "off" value is the honest maximum. 
 
 1. **Avoidance branch on master** (`claude/ai-tree-avoidance-0f8387`), then the `AIPilot.steer()` refactor
    (3.1). `_fly` must still pass `test_ai_flight` unchanged.
-2. **Player-visible warnings**: a lock warning (an attacker's lock on you above 50%) and an incoming-round
+2. **Player-visible warnings** (**done 2026-11-02**: `CombatWorld.warnings_for(bird)` -> {rounds (tgo, kind),
+   locks}; `threat_to()` wraps it; the HUD's red chevron / arrowhead round the aim ring and LOCK / INCOMING;
+   the range's `--return-fire` makes the target shoot back): a lock warning (an attacker's lock on you above 50%) and an incoming-round
    cue on `CombatHud`, from a new `CombatWorld.warnings_for(bird)`. `CombatSense` reads the same call, and
    `threat_to()` (which `CircuitPilot` uses) becomes a thin wrapper over it. Without this the AI knows about
    locks the player can't see.

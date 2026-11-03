@@ -36,6 +36,7 @@ var teams := {}             ## Bird -> team id
 var bases := {}             ## team id -> Perch: where its birds rearm, mend and respawn
 var score := {}             ## team id -> enemy birds it has downed
 var _next_team := 100       ## (the teams of birds added without one)
+const WARN_RANGE := 25.0    ## m: rounds closer than this, heading at a bird, are warned of
 const LANE := 1.3           ## m off the line of fire within which a teammate is in the way (a burst's reach)
 var _rng := RandomNumberGenerator.new()
 var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
@@ -217,22 +218,35 @@ func friend_in_line(l: Launcher) -> Bird:
 ## What threatens `b` that it could see (for evading): the nearest projectile within 25 m heading at it, else a
 ## launcher with a lock on it. Returns the threat's position, or null.
 func threat_to(b: Bird) -> Variant:
-	var best: Variant = null
-	var best_d := 25.0
+	var w := warnings_for(b)
+	if not (w.rounds as Array).is_empty():
+		return w.rounds[0].pos
+	if not (w.locks as Array).is_empty():
+		return w.locks[0].from
+	return null
+
+
+## What `b` is warned of -- the same for the player's HUD and for any AI (it knows nothing the player isn't
+## shown): {rounds: rounds in flight within WARN_RANGE heading at it (within 35 deg) that aren't its own,
+## nearest in time first, each {pos, vel, tgo (s to reach it), kind}; locks: launchers holding a lock above half
+## on it, strongest first, each {from (the locker's position), lock (0..1), locked}}.
+func warnings_for(b: Bird) -> Dictionary:
+	var rounds := []
 	for p in projectiles:
-		if p.shooter == b:
+		if p.shooter == b or not p.alive:
 			continue
 		var to: Vector3 = b.global_position - p.pos
 		var d := to.length()
-		if d < best_d and p.vel.length() > 1.0 and p.vel.angle_to(to) < deg_to_rad(35.0):
-			best = p.pos
-			best_d = d
-	if best != null:
-		return best
+		var spd: float = p.vel.length()
+		if d < WARN_RANGE and spd > 1.0 and p.vel.angle_to(to) < deg_to_rad(35.0):
+			rounds.append({"pos": p.pos, "vel": p.vel, "tgo": d / spd, "kind": p.kind})
+	rounds.sort_custom(func(x, y): return float(x.tgo) < float(y.tgo))
+	var locks := []
 	for l in launchers:
-		if l.bird != b and l.lock_target == b and l.lock > 0.5:
-			return l.bird.global_position
-	return null
+		if is_instance_valid(l.bird) and l.bird != b and l.lock_target == b and l.lock > 0.5:
+			locks.append({"from": l.bird.global_position, "lock": l.lock, "locked": l.locked()})
+	locks.sort_custom(func(x, y): return float(x.lock) > float(y.lock))
+	return {"rounds": rounds, "locks": locks}
 
 
 func _trail(id: int) -> Variant:
