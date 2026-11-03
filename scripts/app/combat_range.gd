@@ -56,6 +56,8 @@ var wingman_pilot: CircuitPilot
 var with_wingman := true
 var return_fire := false     ## the target fires back at you (AICombat), for the HUD's warnings
 var match_mode := false      ## --match: 3 v 3 against combat-AI birds instead of the target
+var is_loaded := false       ## the arena built and the birds out (behind the loading screen until then: Loading)
+signal loaded
 var match_skill := "pilot"
 var match_team: Array = ["crow", "hawk"]               ## your two AI wingmen
 var match_enemy: Array = ["falcon", "owl", "crow"]     ## the other side
@@ -91,15 +93,18 @@ func _ready() -> void:
 	if start_seekers:
 		loadout = ["seekers", "seekers"]
 	var pinewood := Boot.arg_value(args, "--forest") != "greybox"   # (the pine wood in its light; --forest greybox: the old test arena)
+	var screen := Loading.new(("3 v 3 match, %s skill" % match_skill) if match_mode else "Target practice")
+	add_child(screen)
 	if pinewood:
 		ForestLight.setup(self)
 	else:
 		Game.add_environment(self)
-	layout = Pinewood.generate(7) if pinewood else ArenaLayout.generate(7)
+	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(7)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(7))
+	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
 	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
-	arena.build(layout)
+	await screen.run(arena.steps(layout), 0.85)
 	world = CombatWorld.new()
 	world.layout = layout
 	add_child(world)
@@ -118,7 +123,10 @@ func _ready() -> void:
 	layer.add_child(flight_hud)
 	combat_hud = CombatHud.new()
 	layer.add_child(combat_hud)
-	restart()
+	await screen.run([["Saddling the birds", restart, 1.0]], 0.97)
+	is_loaded = true
+	loaded.emit()
+	screen.finish()
 	var shot := Boot.arg_value(args, "--shot")
 	if shot != "":
 		var after := Boot.arg_value(args, "--shot-after")
@@ -323,13 +331,15 @@ func _on_downed(b: Bird) -> void:
 
 ## The landing bar on the perch ahead while catch is held, as in the game.
 func _physics_process(_dt: float) -> void:
-	if bird == null or not is_instance_valid(bird):
+	if not is_loaded or bird == null or not is_instance_valid(bird):
 		return
 	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
 	arena.show_candidate(mark, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
 
 
 func _process(_dt: float) -> void:
+	if not is_loaded:
+		return
 	if bird != null and is_instance_valid(bird):
 		flight_hud.gamepad = player_ctl.using_gamepad
 		var t := bird.telemetry()
@@ -344,6 +354,8 @@ func _process(_dt: float) -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	if not is_loaded:
+		return
 	player_ctl.handle_event(e)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED

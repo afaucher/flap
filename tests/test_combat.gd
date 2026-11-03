@@ -578,6 +578,8 @@ func _surfaces() -> void:
 func _range() -> void:
 	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 	add_child(r)
+	if not r.is_loaded:
+		await r.loaded
 	await frames(2)
 	r.demo = true
 	r.evade = true
@@ -618,6 +620,8 @@ func _range() -> void:
 func _range_match() -> void:
 	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 	add_child(r)
+	if not r.is_loaded:
+		await r.loaded
 	await frames(2)
 	r.match_mode = true
 	r.restart()

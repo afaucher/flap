@@ -8,6 +8,8 @@ func _init() -> void:
 func setup() -> void:
 	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 	add_child(r)
+	if not r.is_loaded:
+		await r.loaded
 	await frames(2)
 	r.demo = true
 	r.start_seekers = OS.get_environment("FLAP_SEEKERS") == "1"

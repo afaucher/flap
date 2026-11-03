@@ -21,6 +21,8 @@ extends Node3D
 ##   --look <name>      the pine wood's look: golden (default) | afternoon | misty_morning | overcast (ForestLight.LOOKS;
 ##                      F6 steps through them in game)
 ##   --hud <style>      classic (default) | ring | dev: the HUD's layout (FlightHud.style)
+## The arena grows behind a loading screen (Loading): the layout on a worker thread, the wood built a step a frame,
+## the birds spawned; `loaded` fires (and `is_loaded` turns true) when it's ready to fly.
 
 var layout: ArenaLayout
 var arena: ArenaBuilder
@@ -34,6 +36,8 @@ var ai_birds: Array[Bird] = []
 var profile_id := "crow"
 var use_autopilot := false
 var rider := true            ## crows, falcons and hawks carry the war tack (--no-rider: none)
+var is_loaded := false       ## the arena built and the birds spawned (behind the loading screen until then)
+signal loaded
 
 
 func _ready() -> void:
@@ -63,15 +67,18 @@ func _ready() -> void:
 		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"
 
 	var pinewood := Boot.arg_value(args, "--forest") != "greybox"   # (the pine wood in its own light; --forest greybox: the old test arena)
+	var screen := Loading.new("The pine wood" if pinewood else "The test arena")
+	add_child(screen)
 	if pinewood:
 		ForestLight.setup(self)
 	else:
 		_environment()
-	layout = Pinewood.generate(arena_seed) if pinewood else ArenaLayout.generate(arena_seed)
+	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(arena_seed)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(arena_seed))
+	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
 	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
-	arena.build(layout)
+	await screen.run(arena.steps(layout), 0.85)
 	autopilot = AIPilot.new(layout, arena_seed + 100)
 
 	camera = ChaseCamera.new()
@@ -83,21 +90,10 @@ func _ready() -> void:
 	layer.add_child(hud)
 	audio = GameAudio.new()
 	add_child(audio)
-	_spawn_player(profile_id, layout.start_perch())
-
+	var birds := [["Saddling the birds", _spawn_player.bind(profile_id, layout.start_perch()), 1.0]]
 	for i in ai_count:
-		var pid: String = BirdProfile.IDS[(i + 1) % BirdProfile.IDS.size()]
-		var b := Bird.new()
-		b.name = "AI%d" % i
-		var pilot := AIPilot.new(layout, arena_seed * 31 + i)
-		add_child(b)
-		b.setup(BirdProfile.by_id(pid), layout, pilot)
-		b.arena = arena
-		if rider and Tack.RIDDEN.has(pid):
-			Tack.fit(b.rig, b)
-		b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
-		audio.watch(b)
-		ai_birds.append(b)
+		birds.append(["Saddling the birds", _spawn_ai.bind(i, arena_seed), 1.0])
+	await screen.run(birds, 0.97)
 
 	var perf := Boot.arg_value(args, "--perf")
 	if perf != "":   # (profile `perf` seconds of play, write the report and quit: .\perf.ps1)
@@ -111,6 +107,24 @@ func _ready() -> void:
 	if shot != "":
 		var after_arg := Boot.arg_value(args, "--shot-after")
 		_screenshot(shot, float(after_arg) if after_arg != "" else 3.0)
+	is_loaded = true
+	loaded.emit()
+	await screen.finish()
+
+
+func _spawn_ai(i: int, arena_seed: int) -> void:
+	var pid: String = BirdProfile.IDS[(i + 1) % BirdProfile.IDS.size()]
+	var b := Bird.new()
+	b.name = "AI%d" % i
+	var pilot := AIPilot.new(layout, arena_seed * 31 + i)
+	add_child(b)
+	b.setup(BirdProfile.by_id(pid), layout, pilot)
+	b.arena = arena
+	if rider and Tack.RIDDEN.has(pid):
+		Tack.fit(b.rig, b)
+	b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
+	audio.watch(b)
+	ai_birds.append(b)
 
 
 func _environment() -> void:
@@ -167,7 +181,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 
 
 func _physics_process(_dt: float) -> void:
-	if bird == null:
+	if bird == null or not is_loaded:
 		return
 	var p0 := Perf.t()
 	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
@@ -176,6 +190,8 @@ func _physics_process(_dt: float) -> void:
 
 
 func _process(_dt: float) -> void:
+	if not is_loaded:
+		return
 	if bird != null:
 		var p0 := Perf.t()
 		var t := bird.telemetry()
@@ -187,6 +203,8 @@ func _process(_dt: float) -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	if not is_loaded:
+		return
 	player.handle_event(e)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED

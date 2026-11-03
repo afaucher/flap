@@ -15,19 +15,37 @@ var _mats := {}
 
 
 func build(l: ArenaLayout) -> void:
+	for st in steps(l):
+		(st[1] as Callable).call()
+
+
+## The build as steps, in order: [what it's doing (a loading screen shows it), the step, its share of the time].
+## build() runs them at once; Loading runs them a frame apart, so its screen moves while the wood goes up.
+func steps(l: ArenaLayout) -> Array:
 	layout = l
-	_ground()
+	var out := [["Clearing the ground", _ground, 0.04]]
 	if layout.style == "pinewood":
-		_pinewood()
+		_cells = {}
+		var n := layout.trees.size()
+		for i in range(0, n, TREES_A_STEP):
+			out.append(["Growing the trees", _pinewood_trees.bind(i, mini(i + TREES_A_STEP, n)), 0.5 * TREES_A_STEP / maxf(n, 1.0)])
+		out.append(["Barking the trunks", _pinewood_wood, 0.1])
+		out.append(["Needles and leaves", _crowns, 0.14])
+		out.append(["Bracken on the forest floor", _floor, 0.14])
+		out.append(["Building the outposts", _outposts, 0.08])
 	else:
-		_lanes()
-		var tier_colors := [Color(0.34, 0.32, 0.30), Color(0.43, 0.41, 0.38), Color(0.52, 0.50, 0.47)]
-		for t in layout.trees:
-			_tree(t, POST_COLOR if t.kind == ArenaLayout.Kind.POST else tier_colors[t.tier])
-	if layout.style != "pinewood":   # (in the pine wood perches are just wood; the catch ring shows on approach)
-		for p in layout.perches:
-			_perch_marker(p)
-	_highlight()
+		out.append(["Planting the trees", _greybox, 0.9])
+	out.append(["", _highlight, 0.0])
+	return out
+
+
+func _greybox() -> void:
+	_lanes()
+	var tier_colors := [Color(0.34, 0.32, 0.30), Color(0.43, 0.41, 0.38), Color(0.52, 0.50, 0.47)]
+	for t in layout.trees:
+		_tree(t, POST_COLOR if t.kind == ArenaLayout.Kind.POST else tier_colors[t.tier])
+	for p in layout.perches:   # (in the pine wood perches are just wood; the catch ring shows on approach)
+		_perch_marker(p)
 
 
 func _mat(key: String, c: Color, rough := 0.9) -> StandardMaterial3D:
@@ -276,8 +294,23 @@ func _pinewood() -> void:
 	# Trunks and limbs as built meshes (smooth, tapered, curved; a collar where a limb leaves its trunk, a flare
 	# at a trunk's foot, a little wobble round and up it), grouped by material in 32 m cells so cells off
 	# screen and outside a shadow cascade are skipped; collision as before (trunk cylinders, limb capsules).
-	var cells := {}
-	for t in layout.trees:
+	_cells = {}
+	_pinewood_trees(0, layout.trees.size())
+	_pinewood_wood()
+	_crowns()
+	_floor()
+	_outposts()
+
+
+const TREES_A_STEP := 40   ## trees built between a loading screen's frames
+var _cells := {}           ## the pine wood's trunk and limb arrays, by material and cell, as the trees go up
+
+
+## Trees `i0` to `i1`: their collision bodies, their trunks and limbs into the cells' arrays (_pinewood_wood meshes them).
+func _pinewood_trees(i0: int, i1: int) -> void:
+	var cells := _cells
+	for ti in range(i0, i1):
+		var t: ArenaLayout.TreeData = layout.trees[ti]
 		var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 		var body := StaticBody3D.new()
 		body.name = "Tree%d" % t.id
@@ -316,6 +349,11 @@ func _pinewood() -> void:
 			body.add_child(bcs)
 		add_child(body)
 		tree_bodies.append(body)
+
+
+## The trunks and limbs as meshes, one per material and cell.
+func _pinewood_wood() -> void:
+	var cells := _cells
 	for k in cells:
 		var arr: Array = cells[k]
 		if (arr[0] as PackedVector3Array).is_empty():
@@ -335,8 +373,10 @@ func _pinewood() -> void:
 		mi.mesh = m
 		mi.material_override = _bark(String(k).get_slice("@", 0))
 		add_child(mi)
-	_crowns()
-	_floor()
+	_cells = {}
+
+
+func _outposts() -> void:
 	for o in layout.outposts:
 		_outpost(o)
 

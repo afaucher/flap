@@ -56,7 +56,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   to pick your bird, rockets or seekers, the 3 v 3 match (at recruit | pilot | ace) or target practice, with the
   mode's rules; `Menu.fight_options()`; Lab), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
-  `Boot.args()` (the command line plus the menu's choice).
+  `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
+  look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they
+  set `is_loaded` and emit `loaded` when ready (a test that opens them awaits it).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
   smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
   and flutter to the ground; down; ruffled coverts; shedding.
