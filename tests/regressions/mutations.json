@@ -2196,20 +2196,6 @@
   ]
  },
  {
-  "id": "combat-bank-ignores-pullout",
-  "bug": "The lift-limited bank cap left nothing for pulling out of a dive: a bird banked to the cap while pulling up from a stoop or a break stalled (2026-11-02).",
-  "tests": [
-   "test_combat_ai"
-  ],
-  "edits": [
-   {
-    "file": "scripts/combat/ai/combat_brain.gd",
-    "find": "\t\t\tpull = m.speed * minf(maxf(want - m.path_angle, 0.0) * 3.0, 1.5) / Engagement.G",
-    "replace": "\t\t\tpull = 0.0"
-   }
-  ]
- },
- {
   "id": "combat-sense-no-turn",
   "bug": "Combat sense tracks had no turn rate: the AI led a bird in a hard break as if it flew straight and missed it (2026-11-02).",
   "tests": [
@@ -2871,7 +2857,7 @@
  },
  {
   "id": "pitch-damper-stalls-dive",
-  "bug": "The pitch damper added angle of attack in proportion to the bird's acceleration with no cap: diving steeply, it took the wing past the stall by itself, and the stall flickered on and off (a sparrow breaking in a 63 deg dive; a player diving the same) (2026-11-03).",
+  "bug": "The pitch damper added angle of attack in proportion to the bird's acceleration with no cap: diving steeply, it took the wing past the stall by itself, and the stall flickered on and off (a sparrow breaking in a 63 deg dive; a player diving the same) (2026-11-03). It was the real cause of the pull-out stalls first blamed on the break's climb and the bank cap (combat-break-pulls-out-of-dive, combat-bank-ignores-pullout, retired: with the damper capped, 96 diving breaks over four birds stall with or without either).",
   "tests": [
    "test_combat_ai"
   ],

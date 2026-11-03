@@ -146,7 +146,8 @@ func _rearms_at_base() -> void:
 
 
 ## Sitting on its base turned `turned` deg from facing out (180: facing the trunk; +-90: along the rail, toward the
-## hangar's end or away from it), rested and armed, with an enemy about: it turns out and pushes off clean.
+## hangar's end or away from it), rested and armed, with an enemy about: it turns to face out before it lets go (pushing
+## off straight ahead, it would fly into the hangar or the tree), and leaves touching nothing.
 func _leaves_base(turned: float) -> void:
 	var layout := Pinewood.generate(ARENA_SEED)
 	var home := CombatWorld.far_base(layout, Vector3(60, 0, 0))
@@ -165,11 +166,17 @@ func _leaves_base(turned: float) -> void:
 	b.facing = home.facing.rotated(Vector3.UP, deg_to_rad(turned))
 	b.global_basis = b._sit_basis()
 	var flew := false
+	var off_out := -1.0   # deg between the way it faced as it let go and the way out from the tree
 	for f in 60 * 4:
+		var was_perched := b.state == Bird.State.PERCHED
+		var facing := b.facing
 		await d.step()
+		if was_perched and b.state != Bird.State.PERCHED and off_out < 0.0:
+			off_out = rad_to_deg(facing.angle_to(home.facing))
 		flew = flew or b.state == Bird.State.FLYING
-	print("on its base turned %.0f deg: flew %s, %d bonks, %.1f m out after 4 s" % [turned, flew, b.bonks, b.global_position.distance_to(home.position)])
+	print("on its base turned %.0f deg: flew %s, let go %.0f deg off facing out, %d bonks, %.1f m out after 4 s" % [turned, flew, off_out, b.bonks, b.global_position.distance_to(home.position)])
 	check(flew, "on its base turned %.0f deg from facing out: it leaves to fight" % turned)
+	check(off_out >= 0.0 and off_out < 25.0, "it turns to face out before it lets go (turned %.0f deg: let go %.0f deg off)" % [turned, off_out])
 	eq(b.bonks, 0, "and touches nothing leaving (turned %.0f deg)" % turned)
 	d.cleanup()
 	d.queue_free()
