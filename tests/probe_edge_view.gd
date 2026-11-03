@@ -1,0 +1,88 @@
+extends TestCase
+## The arena's edge as it is today, from inside the pine wood looking out across the boundary: reference shots for
+## designing what lies beyond it (a cliff, a river and a rival wood, a balloon line, heath). A falcon with its rider
+## and tack in the chase camera's place in most of them. Windowed:
+##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into]
+## Views: chase_canopy (at crown height, the edge 40 m ahead), chase_above (over the canopy), low_trunks (among the
+## trunks at 6 m), overview (60 m up from the far side, the whole wood to its far edge).
+
+
+func _init() -> void:
+	timeout_sec = 120.0
+
+
+func setup() -> void:
+	var args := OS.get_cmdline_user_args()
+	var out_dir := Boot.arg_value(args, "--out-dir")
+	var seed_arg := Boot.arg_value(args, "--seed")
+	var heading := Boot.arg_value(args, "--heading")
+	get_window().size = Vector2i(1376, 768)   # (the main window, as the game draws it: a SubViewport loses the sky)
+	var root := Node3D.new()
+	add_child(root)
+	var layout := Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
+	ForestLight.setup(root)
+	var arena := ArenaBuilder.new()
+	root.add_child(arena)
+	arena.build(layout)
+	var cam := Camera3D.new()
+	cam.fov = 62.0
+	cam.far = 1500.0
+	root.add_child(cam)
+	cam.current = true
+	# Which way we look out: with the sun behind us (away), across it (side), or into it (into).
+	var to_sun := (Basis.from_euler(Vector3(deg_to_rad(-ForestLight.SUN_ELEVATION), deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
+	var sun_h := Vector3(to_sun.x, 0.0, to_sun.z).normalized()
+	var d := -sun_h
+	if heading == "side":
+		d = sun_h.rotated(Vector3.UP, PI * 0.5)
+	elif heading == "into":
+		d = sun_h
+	var rig := BirdRig.new()
+	root.add_child(rig)
+	rig.build(BirdProfile.by_id("falcon"))
+	RigPoses.apply(rig, "glide", 0.0)
+	var tack := Tack.fit(rig)
+	var edge := layout.boundary
+	# [name, bird at (null: no bird), camera, looking at]
+	var views := [
+		["chase_canopy", d * (edge - 40.0) + Vector3.UP * 20.0],
+		["chase_above", d * (edge - 45.0) + Vector3.UP * 34.0],
+		["low_trunks", null, d * (edge - 30.0) + Vector3.UP * 6.0, d * (edge + 40.0) + Vector3.UP * 8.0],
+		["overview", null, -d * 40.0 + Vector3.UP * 60.0, d * edge * 0.7],
+	]
+	for v in views:
+		var bird_at = v[1]
+		if bird_at != null:
+			bird_at = _clear_line(layout, bird_at, d)
+		rig.visible = bird_at != null
+		if bird_at != null:
+			rig.global_transform = Transform3D(Basis.looking_at(d, Vector3.UP), bird_at)
+			tack.update(0.0)
+			cam.look_at_from_position(bird_at - d * 2.2 + Vector3.UP * 0.65, bird_at + d * 30.0 + Vector3.UP * -1.5, Vector3.UP)
+		else:
+			cam.look_at_from_position(v[2], v[3], Vector3.UP)
+		await frames(30)
+		await RenderingServer.frame_post_draw
+		var img := get_viewport().get_texture().get_image()
+		img.convert(Image.FORMAT_RGB8)
+		if out_dir != "":
+			var path := out_dir.path_join("edge_%s_%s.png" % [v[0], heading if heading != "" else "away"])
+			img.save_png(path)
+			print("shot: ", path)
+	finish()
+
+
+## The nearest spot to `at`, sideways, from which the chase camera sees 30 m ahead along `d` with no wood or leaves
+## in the way (so the shot isn't a branch in the lens).
+func _clear_line(layout: ArenaLayout, at: Vector3, d: Vector3) -> Vector3:
+	var side := d.cross(Vector3.UP).normalized()
+	for k in 40:
+		var p := at + side * (float((k + 1) / 2) * 1.5 * (1.0 if k % 2 == 0 else -1.0))
+		var cam := p - d * 2.2 + Vector3.UP * 0.65
+		var ok := layout.segment_clear(cam, p + d * 30.0, 0.6)
+		for i in 32:
+			if ok and not Pinewood._leaf_free(layout, cam + d * float(i), 0.6):
+				ok = false
+		if ok:
+			return p
+	return at
