@@ -129,11 +129,15 @@ var _feather_area := {}
 var feather_kinds: PackedInt32Array = []      ## WingShape.Kind per feather_xforms entry (6 = tail); tests   ## every feather this tick (the MultiMeshes' copy; tests, debug)
 ## GPU feather placement (proof of concept; the game's --gpu-feathers): the feather shader places each flight and tail
 ## feather from the wing's joints (feather_place.gdshaderinc), so a pose writes ~150 numbers instead of every feather's
-## transform. feather_xforms is then filled only when something reads it (perched: the lean; a hit: flight_feathers).
+## transform. feather_xforms is then filled only when something reads it (a hit: flight_feathers); a sitting bird's
+## lean measures the tips on the GPU too (LeanProbe).
 static var gpu_feathers := false
 var feather_slots: PackedInt32Array = []      ## per feather_xforms entry: its column in the shader's defs (GPU placement)
 var gpu_place := false                        ## this rig's feathers are placed by the shader
 var _cpu_feathers := false                    ## (GPU placement) fill feather_xforms this pose all the same
+var probe_worst := 0.0                        ## (GPU placement) sitting: the deepest tip, as LeanProbe last measured it
+var probe_frame := -1                         ## (the frame it was drawn in)
+var gpu_defs_writes := 0                      ## (GPU placement) how often the feathers' definitions were written (tests)
 var _defs_tex: ImageTexture
 var _pose_tex: ImageTexture
 var _defs_buf := PackedFloat32Array()
@@ -769,7 +773,7 @@ func _build_feathers() -> void:
 		if _emarg_u != null:
 			_emarg_u.visible_instance_count = 0
 	_paint_dirty = true
-	gpu_place = gpu_feathers and marks_material != null and Plumage.level >= 6
+	gpu_place = gpu_feathers and marks_material != null and Plumage.level >= 6 and RenderingServer.get_rendering_device() != null
 	if gpu_place:
 		var w := _plain_count + maxi(_emarg_count, 1)
 		_defs_buf.resize(w * 3 * 4)
@@ -1711,19 +1715,27 @@ func animate(t: Dictionary, dt: float) -> void:
 ## Visual only: the rig turns within the Bird's own (unchanged) body.
 func _posture(t: Dictionary, dt: float, sitting: bool) -> void:
 	var srf: Dictionary = t.get("surface", {})
-	_cpu_feathers = sitting and not srf.is_empty()   # (GPU placement: the lean below needs the feathers' tips)
 	if not sitting or srf.is_empty():
 		lean = maxf(lean - dt * 2.0, 0.0)
 	else:
 		var margin := _L * 0.01
 		var worst := -INF   # (the deepest tip below the surface plus margin; negative: the smallest clearance)
-		var xf := global_transform
-		var tips := PackedVector3Array()
-		for f in feather_xforms:
-			tips.append(xf * (f.origin + f.basis.z))
-		for p in tips:
-			worst = maxf(worst, _depth(srf, p) + margin)
-		if worst > 0.0:
+		if gpu_place:   # (the tips are only on the GPU: measured there, the answer a frame or two later -- LeanProbe)
+			LeanProbe.request(self, srf, margin)
+			if probe_frame < 0 or Engine.get_frames_drawn() - probe_frame > 10:
+				worst = NAN   # (no answer yet for this perch: hold the lean)
+			else:
+				worst = probe_worst
+		else:
+			var xf := global_transform
+			var tips := PackedVector3Array()
+			for f in feather_xforms:
+				tips.append(xf * (f.origin + f.basis.z))
+			for p in tips:
+				worst = maxf(worst, _depth(srf, p) + margin)
+		if is_nan(worst):
+			pass
+		elif worst > 0.0:
 			lean = minf(lean + dt * clampf(worst / (_L * 0.02), 0.5, 6.0), 1.0)
 		elif worst < -_L * 0.03:
 			lean = maxf(lean - dt * 0.6, 0.0)
@@ -2096,6 +2108,7 @@ func apply_pose() -> void:
 	if gpu_place:
 		_pose_tex.update(Image.create_from_data(POSE_W, 3, false, Image.FORMAT_RGBAF, _pose_buf.to_byte_array()))
 		if gpu_defs:
+			gpu_defs_writes += 1
 			_defs_tex.update(Image.create_from_data(_defs_tex.get_width(), 3, false, Image.FORMAT_RGBAF, _defs_buf.to_byte_array()))
 	_paint_dirty = false
 	_custom_dirty = false

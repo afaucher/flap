@@ -82,12 +82,13 @@ three terms and worked out in the shader. The instances' transforms stay identit
 
 Measured A/B (game on autopilot, quiet machine, 15 s runs):
 
-| | Feathers placed in GDScript | Placed in the shader |
+| | Feathers placed in GDScript | Placed in the shader (and the lean probed there) |
 |---|---|---|
-| 4 birds: rig per frame | 11.3 ms | 8.4 ms |
-| 4 birds: wings and feathers | 5.4 ms | 2.5 ms (mostly the arm loft) |
-| 20 birds: rig per frame | 58 ms | 45-50 ms |
-| GPU time, 4 birds | 7.35 ms | 7.29 ms |
+| 4 birds: rig per frame | 11.9 ms | 8.4 ms |
+| 4 birds: wings and feathers | 5.6 ms | 2.3 ms (the arm loft) |
+| 20 birds: rig per frame | 58.6 ms | 43.1 ms |
+| 20 birds: wings and feathers | 26.1 ms | 10.9 ms (the arm loft) |
+| GPU time, 4 birds | 7.35 ms | 7.38 ms |
 
 The pictures match: in the rig gallery (glide, flare, folded, flap from below and the side) at most 15 of 1.44
 million pixels differ, along feather edges.
@@ -98,9 +99,23 @@ placement: within 0.2 um, every species, spread to folded, alula, slots, lost fe
 `gpu_test_*` and run windowed (`test_runner.ps1` leaves out `--headless` for them), since the headless renderer runs
 no shaders.
 
-What stays on the CPU: the rig's own placement, for what reads feathers in the game. A perched bird's lean reads
-every feather's tip each pose (`_posture`), so perched birds still place them in GDScript; a hit works out the
-flight feathers for that pose (`flight_feathers`). The CPU copy is also what the GPU test compares against. Moving
-those readers off the feathers (the lean from the wing joints, the hit from the defs) would leave one copy.
+A sitting bird's lean reads every feather's tip (`_posture`: the deepest inside what it sits on). With the feathers
+placed on the GPU it is measured there too (`LeanProbe`): each sitting bird gets a pixel of a small half-float
+viewport, `lean_probe.gdshader` places its feathers with the same include and measures their tips against the
+surface, and the row comes back through `RenderingDevice.texture_get_data_async` a frame or two later -- the frame
+never waits on it. The lean eases in over a fraction of a second, so the late answer doesn't show; with no answer
+yet for a perch the lean holds. `gpu_test_lean_probe` holds the probe to the rig's rule (every species, branches
+across and along, a treetop, the ground; tips inside and clear: within 1e-5 m), `gpu_test_posture` runs
+`test_posture` with it, and `gpu_test_feather_image` renders every species both ways and compares the pictures.
+
+What stays on the CPU: a hit works out the flight feathers of that pose in GDScript (`flight_feathers`, once a hit).
+Damage is simulation: it has to be the same every run and run headless, so it doesn't wait on the GPU. That copy of
+the placement is also what the GPU tests compare against.
+
+GPU time read with care. The GPU clocks down when the CPU leaves it idle: the same 4-bird scene reports 6.7 ms of
+GPU at 60 fps and 37.6 ms capped at 8 fps (`-Engine --max-fps,8`), so the 33-38 ms seen at 20 birds (8 fps,
+CPU-bound) says little about the work. At 60 fps it is 6.7 ms (shadows 2.4, the opaque pass 2.0, the depth pre-pass
+1.7, the rest under 1), the same with 1 bird or 4: mostly the forest. `.\perf.ps1 -Engine --gpu-profile` adds the
+GPU's time by render pass to the report.
 
 ![Feathers placed in GDScript and in the shader, and their difference](../images/gpu_feathers_ab.jpg)

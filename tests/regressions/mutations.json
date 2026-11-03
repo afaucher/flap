@@ -1540,5 +1540,61 @@
     "replace": "\treturn true"
    }
   ]
+ },
+ {
+  "id": "gpu-cards-placed-by-shader",
+  "bug": "GPU feather placement: the silhouette cards share the feather material, and the shader placed them as feathers, around the heads (2026-11-02).",
+  "tests": [
+   "gpu_test_feather_image"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/feather_texture.gdshader",
+    "find": "instance uniform int def_offset = -1;",
+    "replace": "instance uniform int def_offset = 0;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-defs-rewritten-each-fold",
+  "bug": "GPU feather placement: every feather's definition was rewritten whenever the fold changed, nearly every pose in flight, which kept most of the cost (2026-11-02).",
+  "tests": [
+   "gpu_test_feathers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tvar gpu_defs := gpu_place and (_defs_lost != lost.hash() or _custom_dirty or _paint_dirty)",
+    "replace": "\tvar gpu_defs := gpu_place"
+   }
+  ]
+ },
+ {
+  "id": "lean-probe-no-margin",
+  "bug": "The GPU lean probe measured the deepest tip without the margin the rig's rule adds (2026-11-02).",
+  "tests": [
+   "gpu_test_lean_probe"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/lean_probe.gdshader",
+    "find": "worst = max(worst, fp_depth(tip) + margin);",
+    "replace": "worst = max(worst, fp_depth(tip));"
+   }
+  ]
+ },
+ {
+  "id": "lean-probe-ignored",
+  "bug": "With the feathers placed on the GPU, a sitting bird never read the probe's answer and so never leaned: its tail went into the branch (2026-11-02).",
+  "tests": [
+   "gpu_test_posture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t\tworst = probe_worst\n",
+    "replace": "\t\t\t\tworst = NAN\n"
+   }
+  ]
  }
 ]

@@ -50,6 +50,7 @@ func setup() -> void:
 	vp.add_child(rect)
 	for p in BirdProfile.all():
 		var rig := BirdRig.new()
+		rig.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # (posed by hand, as Bird's rig is: drawn as posed)
 		add_child(rig)
 		rig.build(p)
 		check(rig.gpu_place, p.id + ": placed on the GPU")
@@ -58,6 +59,14 @@ func setup() -> void:
 		rect.size = Vector2(12, w)
 		mat.set_shader_parameter("defs", rig._defs_tex)
 		mat.set_shader_parameter("pose", rig._pose_tex)
+		# The definitions are written once: folding and slotting the wing changes only the pose.
+		rig.apply_pose()
+		var writes := rig.gpu_defs_writes
+		for q in [[0.3, 0.2], [0.7, 0.9], [1.0, 0.0]]:
+			rig.fold = q[0]
+			rig.slot = q[1]
+			rig.apply_pose()
+		eq(rig.gpu_defs_writes, writes, p.id + ": folding and slotting don't rewrite the feathers' definitions")
 		for k in POSES.size():
 			var q: Array = POSES[k]
 			rig.fold = q[0]
