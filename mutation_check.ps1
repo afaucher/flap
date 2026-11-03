@@ -140,21 +140,24 @@ try {
 
     if ($live.Count) {
         # The scratch trees: the worktree, imported once, and copies of it (assets, docs and the imported files shared
-        # through junctions, unless an entry edits them). The import starts from this checkout's: the engine
-        # reimports only what differs from it.
-        if (Test-Path (Join-Path $root ".godot\imported")) { robocopy (Join-Path $root ".godot") (Join-Path $t0 ".godot") /E /MT:8 /NFL /NDL /NJH /NJS /NP | Out-Null }
+        # through junctions, unless an entry edits them), copied all at once.
         & $godot --path $t0 --headless --import 2>&1 | Out-Null
         $edited = @($live | ForEach-Object { $_.edits } | ForEach-Object { $_.file })
         $share = @(@("assets", "docs", ".godot\imported") | Where-Object {
             $d = $_.Replace("\", "/"); (Test-Path (Join-Path $t0 $_)) -and -not ($edited | Where-Object { $_.StartsWith("$d/") })
         })
         $count = [Math]::Min($live.Count + [int]($baseNames.Count -gt 0), $slots + 2)
-        for ($i = 1; $i -lt $count; $i++) {
-            $ti = "$t0-$i"
-            $xd = @($share | ForEach-Object { Join-Path $t0 $_ })
-            robocopy $t0 $ti /E /MT:8 /XF .git /XD @xd /NFL /NDL /NJH /NJS /NP | Out-Null
-            if ($LASTEXITCODE -ge 8) { throw "Could not copy the scratch tree to $ti." }
-            $trees += $ti
+        $xd = (@($share | ForEach-Object { "`"$(Join-Path $t0 $_)`"" }) -join " ")
+        $copies = @(for ($i = 1; $i -lt $count; $i++) {
+            $psi = New-Object Diagnostics.ProcessStartInfo "robocopy", "`"$t0`" `"$t0-$i`" /E /MT:4 /XF .git /XD $xd /NFL /NDL /NJH /NJS /NP"
+            $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+            [PSCustomObject]@{ Tree = "$t0-$i"; Proc = [Diagnostics.Process]::Start($psi) }
+        })
+        $trees += @($copies | ForEach-Object { $_.Tree })
+        foreach ($c in $copies) { $c.Proc.WaitForExit() }
+        foreach ($c in $copies) {
+            if ($c.Proc.ExitCode -ge 8) { throw "Could not copy the scratch tree to $($c.Tree)." }
+            $ti = $c.Tree
             foreach ($d in $share) {
                 $link = Join-Path $ti $d
                 New-Item -ItemType Junction -Path $link -Target (Join-Path $t0 $d) | Out-Null
@@ -176,7 +179,7 @@ try {
         foreach ($m in $live) {
             $runs = @(Get-TestRuns $t0 @($m.tests) | Sort-Object -Property @{ Expression = { Get-Dur $_.Label }; Descending = $true })
             $k = $kills[$m.id]
-            $first = if ($k) { @($runs | Where-Object { $_.Label -eq $k.Label }) } else { @() }
+            $first = @(if ($k) { $runs | Where-Object { $_.Label -eq $k.Label } })   # (inside @(): PowerShell 5.1's lone object has no Count)
             if ($first.Count) { $runs = @($first) + @($runs | Where-Object { $_.Label -ne $k.Label }) }
             $est = if ($first.Count) { $k.Sec } else { ($runs | ForEach-Object { Get-Dur $_.Label } | Measure-Object -Maximum).Maximum }
             [void]$queue.Add([PSCustomObject]@{ Id = $m.id; Mutant = $m; Files = $byId[$m.id].Files; Runs = $runs; Released = $(if ($first.Count) { 1 } else { $runs.Count })
@@ -197,6 +200,12 @@ try {
         foreach ($t in $trees) { $free.Enqueue($t) }
         $active = New-Object System.Collections.ArrayList
         $running = 0
+        $procSec = 0.0; $loop = [Diagnostics.Stopwatch]::StartNew(); $tick = 0
+        $runLog = New-Object Collections.ArrayList   # (FLAP_MUT_DEBUG=1: every run, to test_logs\mutation_runs.csv, and a timeline)
+        function Add-RunLog($j, $p) {
+            $script:procSec += $p.Proc.Watch.Elapsed.TotalSeconds
+            if ($env:FLAP_MUT_DEBUG) { [void]$runLog.Add(("{0},{1},{2:F2},{3:F2},{4}" -f $j.Id, $p.Run.Label, $p.T0, $loop.Elapsed.TotalSeconds, [bool]$p.Proc.FirstFail)) }
+        }
         $newKills = @{}
         while ($queue.Count -or $active.Count) {
             $busy = $false
@@ -205,7 +214,7 @@ try {
                 foreach ($p in @($j.Procs)) {
                     $tp = $p.Proc
                     if (-not ($tp.FirstFail -or $tp.HasExited -or $tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec)) { continue }
-                    $tp.Kill(); $tp.Wait()
+                    $tp.Kill(); $tp.Wait(); Add-RunLog $j $p
                     $j.Procs = @($j.Procs | Where-Object { $_ -ne $p }); $j.Ended += 1; $running -= 1; $busy = $true
                     $ok = (-not $tp.FirstFail) -and (Test-RunPassed $p.Run.Name $tp.Proc.ExitCode $tp.Out $tp.Err)
                     if (-not $ok -and -not $j.Failed) {
@@ -214,7 +223,7 @@ try {
                     }
                 }
                 if ($j.Failed) {
-                    foreach ($p in $j.Procs) { $p.Proc.Kill(); $p.Proc.Wait(); $running -= 1 }
+                    foreach ($p in $j.Procs) { $p.Proc.Kill(); $p.Proc.Wait(); $running -= 1; Add-RunLog $j $p }
                     $j.Procs = @()
                 } elseif ($j.Ended -eq $j.Released -and $j.Released -lt $j.Runs.Count) {
                     $j.Released = $j.Runs.Count   # (the remembered killer passed: the rest now)
@@ -256,13 +265,18 @@ try {
             foreach ($j in $active) {
                 while ($running -lt $slots -and $j.Next -lt $j.Released) {
                     $run = $j.Runs[$j.Next]; $j.Next += 1
-                    $j.Procs += [PSCustomObject]@{ Run = $run; Proc = (Start-TestRun $engine $j.Tree $run) }
+                    $j.Procs += [PSCustomObject]@{ Run = $run; Proc = (Start-TestRun $engine $j.Tree $run); T0 = $loop.Elapsed.TotalSeconds }
                     $running += 1; $busy = $true
                 }
+            }
+            if ($env:FLAP_MUT_DEBUG -and $loop.Elapsed.TotalSeconds -gt $tick) {
+                $tick += 5; Write-Host ("    [{0,4:F0} s] running {1}, jobs {2}, queued {3}, free trees {4}" -f $loop.Elapsed.TotalSeconds, $running, $active.Count, $queue.Count, $free.Count) -ForegroundColor DarkGray
             }
             if (-not $busy) { Start-Sleep -Milliseconds 50 }
         }
 
+        if ($env:FLAP_MUT_DEBUG) { $runLog | Set-Content (Join-Path $root "test_logs\mutation_runs.csv") }
+        Write-Host ("Test processes busy {0:P0} of {1} slots over {2:F0} s." -f ($procSec / [Math]::Max(1, $slots * $loop.Elapsed.TotalSeconds)), $slots, $loop.Elapsed.TotalSeconds) -ForegroundColor DarkGray
         # Remember the killers for next time (this checkout's test_logs).
         foreach ($id in $newKills.Keys) { $kills[$id] = $null }
         $rows = @($kills.Keys | Where-Object { $kills[$_] } | ForEach-Object { "$_,$($kills[$_].Label),$($kills[$_].Sec)" }) +
