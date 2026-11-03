@@ -7,7 +7,8 @@ extends CharacterBody3D
 ## States: FLYING -> (CATCH held as a perch comes into reach slow enough) -> LANDING (a short Hermite blend onto
 ## the grip point where the bird meets the branch) -> PERCHED -> (FLAP: take off with a free wingbeat, or CATCH: let go and drop) -> FLYING.
 ## Perched (or on the ground) the stick turns the bird to look around; it leaves the way it faces.
-## Settling slowly onto the ground or anything flat stands on it (GROUNDED); FLAP jumps up and takes off.
+## Settling slowly onto the ground or anything flat stands on it (GROUNDED, at stand_y); onto a perch's branch or
+## treetop (after a bonk, say), it perches there. FLAP jumps up and takes off.
 ## Hitting a trunk or branch bounces, costs speed and briefly takes the controls away.
 
 signal perched(perch: Perch)
@@ -49,6 +50,7 @@ var perch_grip := Vector3.ZERO       ## where the feet hold on (landing on / sit
 var _land_facing := Vector3.FORWARD
 var sit_pitch_deg := 0.0             ## body pitch when perched (+ = upright); per species (BirdRig.POSE)
 var ground_pitch_deg := 0.0          ## ... and standing on the ground
+var stand_y := ArenaLayout.GROUND_Y  ## m: what a GROUNDED bird stands on (the ground, a deck, a hangar roof)
 var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a perch in the last few metres
 var bonks := 0
 var stun := 0.0
@@ -235,7 +237,7 @@ func _fly(dt: float, inp: FlightInput) -> void:
 	model.position = global_position
 	# Belly on the ground and settling: stand (even if the contact came through a seam the collision missed).
 	if _grace <= 0.0 and global_position.y < _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
-		_land_on_ground()
+		_land_on_ground(ArenaLayout.GROUND_Y)
 		return
 	global_basis = model.body_basis()
 
@@ -307,9 +309,17 @@ func _on_collision(col: KinematicCollision3D) -> void:
 	var v := model.velocity
 	var into := v.dot(n)
 	var collider := col.get_collider()
-	# Settling slowly onto anything flat (the ground, a trunk top): stand on it.
+	# Settling slowly onto anything flat: a perch (a branch, a treetop: falling onto it after a bonk) takes it, as a
+	# catch would; anything else (the ground, a deck, a roof) it stands on, where it is.
 	if _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:
-		_land_on_ground()
+		var at := col.get_position()
+		var under := _perch_under(at)
+		if under != null:
+			candidate = under
+			candidate_grip = under.closest_grip(at)
+			_begin_landing(under)
+		else:
+			_land_on_ground(at.y)
 		return
 	if into < -BONK_MIN:
 		v -= (1.0 + BOUNCE) * into * n
@@ -325,8 +335,21 @@ func _on_collision(col: KinematicCollision3D) -> void:
 			move_and_collide(rest)
 
 
-func _land_on_ground() -> void:
+## The perch whose wood the bird has settled on at `at` (the contact point), or null.
+func _perch_under(at: Vector3) -> Perch:
+	var best: Perch = null
+	var best_d := INF
+	for p in layout.perches_near(at, 1.0):
+		var d := p.distance_to(at)
+		if d < maxf(p.thickness, 0.05) + 0.05 and d < best_d:
+			best = p
+			best_d = d
+	return best
+
+
+func _land_on_ground(top: float) -> void:
 	state = State.GROUNDED
+	stand_y = top
 	perch = null
 	model.velocity = Vector3.ZERO
 	var fwd := model.flight_dir()
@@ -412,7 +435,7 @@ func _sit(dt: float, inp: FlightInput) -> void:
 		if inp.flap_pressed or inp.catch_pressed:
 			_leave_perch(inp.flap_pressed)
 	elif inp.flap_pressed:
-		_push_grip = Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)
+		_push_grip = Vector3(global_position.x, stand_y, global_position.z)
 		_push_left = PUSH_TIME
 		# Jump and beat: mostly up, a little forward, with ground effect helping the first wingbeats. The legs
 		# build the speed up over the push (_leap) rather than in one tick.
@@ -513,6 +536,7 @@ func telemetry() -> Dictionary:
 		"bird": p.display_name,
 		"species": p.id,
 		"state": state,
+		"stand_height": stand_y - ArenaLayout.GROUND_Y,   # (GROUNDED: how far above the ground it stands)
 		"position": global_position,
 		"velocity": m.velocity,
 		"flight_dir": m.flight_dir(),
@@ -590,7 +614,7 @@ func _look_target() -> Vector3:
 ## radius), "disc" (a treetop: centre on its top, radius) or "ground" (centre on it)}; empty in the air.
 func _surface() -> Dictionary:
 	if state == State.GROUNDED:
-		return {"kind": "ground", "centre": Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)}
+		return {"kind": "ground", "centre": Vector3(global_position.x, stand_y, global_position.z)}
 	if perch == null or not (state == State.PERCHED or state == State.LANDING):
 		return {}
 	if perch.kind == Perch.Kind.BRANCH:
@@ -606,7 +630,7 @@ func _grip_point() -> Variant:
 		State.LANDING, State.PERCHED:
 			return perch_grip if perch != null else null
 		State.GROUNDED:
-			return Vector3(global_position.x, ArenaLayout.GROUND_Y, global_position.z)
+			return Vector3(global_position.x, stand_y, global_position.z)
 	if _push_left > 0.0:
 		return _push_grip   # the leap: the feet stay on what they pushed off from while the legs extend
 	if candidate != null and candidate_distance < 3.0:

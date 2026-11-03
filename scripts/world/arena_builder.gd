@@ -359,8 +359,9 @@ func _cell(cells: Dictionary, cell: Vector2i, key: String) -> Array:
 
 ## A tube through `pts` with `radii` (per point), `segs` round, appended to `arr`. UV in metres -- round the tube
 ## a whole number of `tile`s at its base radius (no seam), along it its length -- UV2 (share of its length, seed).
-## Normals radial; frames carried along the curve without twisting.
-func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs: int, tile: float, seed: float, rings := []) -> void:
+## Normals radial; frames carried along the curve without twisting. `cap`: its far end closed with a low dome (a
+## trunk's top, a limb's tip: open, it's a hole seen from above or past the end).
+func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs: int, tile: float, seed: float, rings := [], cap := true) -> void:
 	var n := pts.size()
 	var base: int = (arr[0] as PackedVector3Array).size()
 	var around: float = maxf(1.0, roundf(TAU * radii[0] / tile)) * tile
@@ -391,6 +392,19 @@ func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs:
 			var v := base + i * (segs + 1) + j
 			var w := v + segs + 1
 			arr[5].append_array(PackedInt32Array([v, w, v + 1, v + 1, w, w + 1]))
+	if cap:   # the far end closed: a low dome over the last ring (a broken-off top, a limb's tip), not an open hole
+		var tg := (pts[n - 1] - pts[n - 2]).normalized()
+		var last := base + (n - 1) * (segs + 1)
+		var r_end: float = radii[n - 1]
+		var tip := base + n * (segs + 1)
+		arr[0].append(pts[n - 1] + tg * r_end * 0.35)
+		arr[1].append(tg)
+		var side := tg.cross(Vector3.UP if absf(tg.y) < 0.95 else Vector3.RIGHT).normalized()
+		arr[2].append_array(PackedFloat32Array([side.x, side.y, side.z, 1.0]))
+		arr[3].append(Vector2(around * 0.5, run + r_end))
+		arr[4].append(Vector2(1.0, seed))
+		for j in segs:
+			arr[5].append_array(PackedInt32Array([last + j, tip, last + j + 1]))
 
 
 ## A trunk: tapering, flared at its foot, a little out of round and wobbling up its height; capped at the top.
