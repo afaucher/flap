@@ -735,7 +735,8 @@
   "id": "vertical-body-flip",
   "bug": "Climbing near vertical, the body flipped 180 deg whenever the path wobbled past straight up (the lift plane from world up changing side) (2026-11-02).",
   "tests": [
-   "test_takeoff_pose"
+   "test_takeoff_pose",
+   "test_flight_controls"
   ],
   "edits": [
    {

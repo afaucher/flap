@@ -21,6 +21,10 @@ func setup() -> void:
 	var audio := FlightAudio.new()
 	add_child(audio)
 	await frames(1)
+	# Headless, the generator is never started: the dummy audio driver never releases a started generator playback.
+	# (It shows as a leak at exit only if the mixer reached the playback before the test quit, so that warning alone
+	# is a race; this is the start itself.)
+	check(not audio._player.has_stream_playback(), "headless: no generator playback is started")
 	var t := _telemetry(p, 0.0, 0)
 	# Ramp 0 -> 3x best glide -> 0, a frame at a time.
 	var loud_slow := 0.0

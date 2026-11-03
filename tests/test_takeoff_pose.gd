@@ -1,12 +1,15 @@
 extends TestCase
 ## A ground take-off, every species, frame by frame, as drawn:
-## - the body swings into the climb (no snap): the drawn body turns at most BirdRig.ATT_RATE;
+## - the body swings into the climb (no snap): the drawn body turns at most MAX_TURN, a number of the test's own
+##   (BirdRig.ATT_RATE's, not read from it: a rig turned faster must fail);
 ## - and once the flight steadies the drawn body is the Bird's own attitude again (it follows, it doesn't lag);
 ## - the head stays near the horizon and looks ahead, not at the sky up the steep climb or back past vertical;
 ## - the neck: the head's lag behind its jolted body short in the air, the neck bones inside the drawn neck;
 ## - the blink: the membrane is a film on the eye's own cap, so it never shows outside the eye.
 ## And off a perch (the lab's push take-off and drop-off): no shove in the first tick. Off the ground or a perch,
 ## the legs build the speed up over the push (Bird._leap) rather than giving it all in one tick.
+
+const MAX_TURN := 400.0   ## deg/s the drawn body may turn
 
 
 func _init() -> void:
@@ -68,7 +71,7 @@ func setup() -> void:
 		for k in mini(speeds.size(), 10):
 			top_push = maxf(top_push, speeds[k])
 		check(speeds.size() > 10 and speeds[0] < top_push * 0.45, "%s take-off: the legs build the speed up, not in one tick (%.2f m/s at once, %.2f by the push's end)" % [p.id, speeds[0] if not speeds.is_empty() else 0.0, top_push])
-		var step := BirdRig.ATT_RATE * maxf(dt, 1.0 / 60.0) * 2.5   # (a rig tick can carry two physics ticks)
+		var step := MAX_TURN * maxf(dt, 1.0 / 60.0) * 2.5   # (a rig tick can carry two physics ticks)
 		check(worst_turn < step, "%s take-off: the body swings, no snap (worst %.1f deg a frame)" % [p.id, worst_turn])
 		check(worst_head < 50.0, "%s take-off: the head near the horizon (highest %.0f deg)" % [p.id, worst_head])
 		check(worst_back > 0.0, "%s take-off: the head looks ahead, not back (worst %.2f)" % [p.id, worst_back])
