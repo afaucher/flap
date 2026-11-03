@@ -7,8 +7,8 @@ extends TestCase
 ##  - the planks' nails are where the planks cross the drawn bearers;
 ##  - ironwork: domed carriage bolts on the bearers' faces, the braces' feet plated to the trunk's bark, brass
 ##    corners on every ammo box;
-##  - the hangar stands at the back, on the right seen from the rail (as in the concept); the props (ladder, coil,
-##    windsock) hang off the other end, drawn only: the outpost's collision is its deck, rail and hangar;
+##  - the hangar stands at the back, on the right seen from the rail (as in the concept); the props (coil,
+##    windsock) are at the other end, drawn only: the outpost's collision is its deck, rail and hangar;
 ##  - the outpost is a handful of draw calls (its planks and one frame mesh), one mesh for the outposts of a size.
 
 
@@ -114,11 +114,12 @@ func setup() -> void:
 			hn += 1
 	hc /= maxi(hn, 1)
 	check((hc - o.centre).dot(right_seen) > 0.3 and (hc - o.centre).dot(o.out) < -0.1, "the hangar stands at the back on the right seen from the rail (%.2f m right, %.2f m out)" % [(hc - o.centre).dot(right_seen), (hc - o.centre).dot(o.out)])
-	# The props off the other end: the ladder hangs below the deck there, the windsock's pole stands on it.
-	for name in ["ladder_rope", "ladder_rung", "coil", "windsock", "windsock_pole", "pennant"]:
+	# The props off the other end: the coil hangs on the rim there, the windsock's pole stands on it; no ladder.
+	for name in ["coil", "windsock", "windsock_pole", "pennant"]:
 		check(by_name.has(name), "the outpost has its %s" % name)
-	var lad: Vector3 = fm.global_transform * (by_name["ladder_rope"][0].xform as Transform3D).origin
-	check((lad - o.centre).dot(right_seen) < -o.width * 0.45 and lad.y < o.centre.y - 0.3, "the ladder hangs off the deck's far end from the hangar")
+	check(not by_name.has("ladder_rope") and not by_name.has("ladder_rung"), "no rope ladder")
+	var coil: Vector3 = fm.global_transform * (by_name["coil"][0].xform as Transform3D).origin
+	check((coil - o.centre).dot(right_seen) < -o.width * 0.45, "the coil hangs off the deck's far end from the hangar")
 	# Carriage bolts: each head a dome (its crown on its axis), not a flat hex.
 	var domes := 0
 	var flat := 0
