@@ -296,8 +296,9 @@ func _apply_assists() -> void:
 	if _push_left > 0.0:   # (the leap: the legs extending speed the bird up over the push, not in one tick)
 		push += _leap / PUSH_TIME
 	var horiz := Vector2(global_position.x, global_position.z)
-	if horiz.length() > layout.boundary:
-		var back := -horiz.normalized() * (horiz.length() - layout.boundary) * 3.0
+	var wall := layout.reach(horiz)   # (the boundary; out by the cliff in the escarpment's sector)
+	if horiz.length() > wall:
+		var back := -horiz.normalized() * (horiz.length() - wall) * 3.0
 		push += Vector3(back.x, 0.0, back.y)
 	if global_position.y > layout.ceiling:
 		push.y -= (global_position.y - layout.ceiling) * 2.0

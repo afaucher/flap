@@ -124,6 +124,11 @@ static func generate(s: int) -> ArenaLayout:
 			placed += 1
 	_outposts(a, rng)
 	a.add_posts()
+	# The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
+	# DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
+	var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+	a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": s}
+	a.add_rock()
 	return a
 
 

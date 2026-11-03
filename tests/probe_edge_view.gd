@@ -2,7 +2,7 @@ extends TestCase
 ## The arena's edge as it is today, from inside the pine wood looking out across the boundary: reference shots for
 ## designing what lies beyond it (a cliff, a river and a rival wood, a balloon line, heath). A falcon with its rider
 ## and tack in the chase camera's place in most of them. Windowed:
-##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into]
+##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff] [--look <name>] [--no-fog] [--tag <suffix>]
 ## Views: chase_canopy (at crown height, the edge 40 m ahead), chase_above (over the canopy), low_trunks (among the
 ## trunks at 6 m), overview (60 m up from the far side, the whole wood to its far edge).
 
@@ -21,9 +21,21 @@ func setup() -> void:
 	add_child(root)
 	var layout := Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
 	ForestLight.setup(root)
+	if args.has("--no-fog"):   # (diagnostic: how much of what we see far off is the haze)
+		for c in root.get_children():
+			if c is WorldEnvironment:
+				(c as WorldEnvironment).environment.volumetric_fog_enabled = false
+				(c as WorldEnvironment).environment.fog_enabled = false
 	var arena := ArenaBuilder.new()
 	root.add_child(arena)
+	var t0 := Time.get_ticks_msec()
 	arena.build(layout)
+	print("arena built in %d ms" % (Time.get_ticks_msec() - t0))
+	var t1 := Time.get_ticks_msec()
+	var again := EdgeBuilder.new()
+	again.build(layout)
+	again.free()
+	print("(of which the edge, built again alone: %d ms)" % (Time.get_ticks_msec() - t1))
 	var cam := Camera3D.new()
 	cam.fov = 62.0
 	cam.far = 1500.0
@@ -37,6 +49,10 @@ func setup() -> void:
 		d = sun_h.rotated(Vector3.UP, PI * 0.5)
 	elif heading == "into":
 		d = sun_h
+	elif heading == "heath":   # (well round from the escarpment, the sun to one side)
+		d = (-sun_h).rotated(Vector3.UP, deg_to_rad(105.0))
+	elif heading == "cliff":   # (straight at the escarpment's middle)
+		d = Vector3(sin(float(layout.escarpment.at)), 0.0, cos(float(layout.escarpment.at)))
 	var rig := BirdRig.new()
 	root.add_child(rig)
 	rig.build(BirdProfile.by_id("falcon"))
@@ -66,7 +82,7 @@ func setup() -> void:
 		var img := get_viewport().get_texture().get_image()
 		img.convert(Image.FORMAT_RGB8)
 		if out_dir != "":
-			var path := out_dir.path_join("edge_%s_%s.png" % [v[0], heading if heading != "" else "away"])
+			var path := out_dir.path_join("edge_%s_%s%s.png" % [v[0], heading if heading != "" else "away", Boot.arg_value(args, "--tag")])
 			img.save_png(path)
 			print("shot: ", path)
 	finish()

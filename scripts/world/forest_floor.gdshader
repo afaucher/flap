@@ -16,6 +16,13 @@ uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, r
 uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float scan_tile = 2.0;
 uniform vec3 scan_tint : source_color = vec3(1.0);
+// Past the wood's edge the litter gives way to heath (EdgeBuilder; heath.gdshaderinc), from heath_from to heath_to
+// m out from the middle, raggedly.
+uniform bool heath_on = false;
+uniform float heath_from = 84.0;
+uniform float heath_to = 98.0;
+
+#include "res://scripts/world/heath.gdshaderinc"
 
 varying vec2 wxz;
 
@@ -91,8 +98,13 @@ void fragment() {
 	col = mix(col, moss * (0.85 + 0.3 * fbm(p * 4.0)), moss_m);
 	col = mix(col, earth, earth_m * 0.7);
 	col *= 0.9 + 0.2 * fbm(p * 2.5 + 5.0);
+	float heath_k = 0.0;
+	if (heath_on) {
+		heath_k = smoothstep(heath_from, heath_to, length(p) + (big - 0.5) * 10.0);
+		col = mix(col, heath_albedo(p), heath_k);
+	}
 	ALBEDO = col;
-	ROUGHNESS = mix(use_scan ? scan_r : 0.95, 0.85, moss_m);
+	ROUGHNESS = mix(mix(use_scan ? scan_r : 0.95, 0.85, moss_m), 0.95, heath_k);
 	SPECULAR = 0.25;
 	// Relief: the needle streaks and the moss's lumps, as a normal.
 	float e = 0.01;
@@ -100,5 +112,5 @@ void fragment() {
 	float hx = fbm((p + vec2(e, 0.0)) * 0.6 + 3.0) * 0.4 + needles((p + vec2(e, 0.0)) * 18.0) * keep * 0.3;
 	float hy = fbm((p + vec2(0.0, e)) * 0.6 + 3.0) * 0.4 + needles((p + vec2(0.0, e)) * 18.0) * keep * 0.3;
 	vec3 pn = normalize(vec3((h0 - hx) / e * 0.02, (h0 - hy) / e * 0.02, 1.0));
-	NORMAL_MAP = use_scan ? mix(scan_n, pn * 0.5 + 0.5, moss_m) : pn * 0.5 + 0.5;
+	NORMAL_MAP = mix(use_scan ? mix(scan_n, pn * 0.5 + 0.5, moss_m) : pn * 0.5 + 0.5, vec3(0.5, 0.5, 1.0), heath_k * 0.7);
 }

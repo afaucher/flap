@@ -10,6 +10,7 @@ const WORLD_LAYER := 1
 var layout: ArenaLayout
 var tree_bodies: Array[StaticBody3D] = []   ## by tree id
 var highlight: MeshInstance3D      ## the landing mark (show_candidate)
+var edge: EdgeBuilder              ## beyond the boundary (the pine wood's): the escarpment, the heath, the fence
 var _hl_mat: StandardMaterial3D
 var _mats := {}
 
@@ -63,6 +64,9 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
+		sm.set_shader_parameter("heath_on", true)
+		sm.set_shader_parameter("heath_from", layout.boundary - 1.0)
+		sm.set_shader_parameter("heath_to", layout.boundary + 12.0)
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
@@ -277,7 +281,12 @@ func _pinewood() -> void:
 	# at a trunk's foot, a little wobble round and up it), grouped by material in 32 m cells so cells off
 	# screen and outside a shadow cascade are skipped; collision as before (trunk cylinders, limb capsules).
 	var cells := {}
+	var rock_id := -1
 	for t in layout.trees:
+		if t.kind == ArenaLayout.Kind.ROCK:   # (the escarpment's: EdgeBuilder builds it, its body stands in below)
+			rock_id = t.id
+			tree_bodies.append(null)
+			continue
 		var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 		var body := StaticBody3D.new()
 		body.name = "Tree%d" % t.id
@@ -339,6 +348,12 @@ func _pinewood() -> void:
 	_floor()
 	for o in layout.outposts:
 		_outpost(o)
+	edge = EdgeBuilder.new()
+	edge.name = "Edge"
+	add_child(edge)
+	edge.build(layout)
+	if rock_id >= 0:
+		tree_bodies[rock_id] = edge.rock_body
 
 
 ## The bark materials (bark.gdshader; textures in assets/textures/bark, assets/LICENSES.md): [A, B, settings].
