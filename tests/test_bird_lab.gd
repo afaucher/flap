@@ -4,6 +4,8 @@ extends TestCase
 ## the ground take-off gets airborne. The lab scene itself loads, runs a scenario, leaves ghosts, steps
 ## while paused and switches species.
 
+const SHARDS := 2   ## (the species split over two processes; the lab scene with the second)
+
 
 func _init() -> void:
 	timeout_sec = 240.0
@@ -16,7 +18,11 @@ func setup() -> void:
 	arena.build(layout)
 	await frames(2)
 	var perch: Perch = layout.perches[0]
-	for p in BirdProfile.all():
+	var all := BirdProfile.all()
+	for k in all.size():
+		if not in_shard(k % SHARDS):
+			continue
+		var p: BirdProfile = all[k]
 		var row := []
 		for s in LabScenarios.LIST:
 			if LabScenarios.is_pose(s):
@@ -25,6 +31,7 @@ func setup() -> void:
 			add_child(b)
 			b.setup(p, layout, null)
 			b.arena = arena
+			b.rig.visible = false   # (only the flight is measured here; skip the feather maths)
 			LabScenarios.start(s, b, layout)
 			var start_y := b.global_position.y
 			var perched_at := -1.0
@@ -62,6 +69,9 @@ func setup() -> void:
 			b.queue_free()
 			await frames(1)
 		print(p.id, "  ", ", ".join(row))
+	if not in_shard(1):
+		finish()
+		return
 	# The scene: loads, runs, pauses, steps, switches.
 	var lab: Node = load("res://scenes/bird_lab.tscn").instantiate()
 	add_child(lab)

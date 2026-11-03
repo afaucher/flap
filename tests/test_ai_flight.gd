@@ -5,6 +5,7 @@ extends TestCase
 
 const SIM_SECONDS := 90.0
 const SEEDS := [7, 3]
+const SHARDS := 2   ## (the two greybox arenas in one process, the planner checks and the pine wood in another)
 
 
 func _init() -> void:
@@ -12,15 +13,18 @@ func _init() -> void:
 
 
 func setup() -> void:
-	await _plans_fit_the_bird()
-	await _nowhere_to_go()
-	var per_species := {}
-	for s in SEEDS:
-		await _fly_arena(s, per_species)
-	var in_pinewood := {}
-	await _fly_arena(7, in_pinewood, true)
-	for id in BirdProfile.IDS:
-		check(per_species[id] >= 4, "%s chains perches in both arenas (%d)" % [id, per_species[id]])
+	if in_shard(1):
+		await _plans_fit_the_bird()
+		await _nowhere_to_go()
+	if in_shard(0):
+		var per_species := {}
+		for s in SEEDS:
+			await _fly_arena(s, per_species)
+		for id in BirdProfile.IDS:
+			check(per_species[id] >= 4, "%s chains perches in both arenas (%d)" % [id, per_species[id]])
+	if in_shard(1):
+		var in_pinewood := {}
+		await _fly_arena(7, in_pinewood, true)
 	finish()
 
 

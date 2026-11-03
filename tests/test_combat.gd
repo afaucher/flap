@@ -26,11 +26,21 @@ class Dummy extends Node3D:
 	var model := FakeModel.new()
 
 
+const SHARDS := 3   ## (the range scene and its match, the longest parts, each in a process of its own)
+
+
 func _init() -> void:
 	timeout_sec = 240.0
 
 
 func setup() -> void:
+	if not in_shard(0):
+		if in_shard(1):
+			await _range()
+		if in_shard(2):
+			await _range_match()
+		finish()
+		return
 	_rockets()
 	_surfaces()
 	await _fuses()
@@ -44,8 +54,10 @@ func setup() -> void:
 	_far_base()
 	await _warnings()
 	await _perched_aim()
-	await _range()
-	await _range_match()
+	if in_shard(1):
+		await _range()
+	if in_shard(2):
+		await _range_match()
 	finish()
 
 

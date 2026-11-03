@@ -16,6 +16,7 @@ extends TestCase
 ##     has no break to fly.
 
 const ARENA_SEED := 7
+const SHARDS := 3   ## (straight on and the resting perch; the ambush and resting; rearming, turning fights, pull-outs)
 
 
 func _init() -> void:
@@ -23,23 +24,26 @@ func _init() -> void:
 
 
 func setup() -> void:
-	for id in ["sparrow", "crow"]:
-		var r: Dictionary = await _versus_racetrack(id, false, false)
-		var kind := "seekers" if CombatStyle.of(BirdProfile.by_id(id)).weapon == Launcher.Weapon.SEEKERS else "rockets"
-		print("%s (%s) vs the racetrack target, straight on: %d hits, downed %d, %d shots, %d bonks" % [id, kind, r.hits, r.downs, r.shots, r.bonks])
-		check(r.hits >= 3, "%s lands hits on a target flying straight on (%d)" % [id, r.hits])
-		check(r.downs >= 1, "%s downs it within 40 s" % id)
-		check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
-	await _rearms_at_base()
-	for id in ["hawk", "sparrow"]:
-		for dir in [1.0, -1.0]:
-			await _turning_fight(id, dir)
-	await _ambush()
-	await _rests_out_of_sight()
-	for side in [1.0, -1.0]:
-		for dive in [1.2, 2.0]:
-			await _pull_out(side, dive)
-	await _rest_holds()
+	if in_shard(0):
+		for id in ["sparrow", "crow"]:
+			var r: Dictionary = await _versus_racetrack(id, false, false)
+			var kind := "seekers" if CombatStyle.of(BirdProfile.by_id(id)).weapon == Launcher.Weapon.SEEKERS else "rockets"
+			print("%s (%s) vs the racetrack target, straight on: %d hits, downed %d, %d shots, %d bonks" % [id, kind, r.hits, r.downs, r.shots, r.bonks])
+			check(r.hits >= 3, "%s lands hits on a target flying straight on (%d)" % [id, r.hits])
+			check(r.downs >= 1, "%s downs it within 40 s" % id)
+			check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
+		await _rest_holds()
+	if in_shard(1):
+		await _ambush()
+		await _rests_out_of_sight()
+	if in_shard(2):
+		await _rearms_at_base()
+		for id in ["hawk", "sparrow"]:
+			for dir in [1.0, -1.0]:
+				await _turning_fight(id, dir)
+		for side in [1.0, -1.0]:
+			for dive in [1.2, 2.0]:
+				await _pull_out(side, dive)
 	finish()
 
 
