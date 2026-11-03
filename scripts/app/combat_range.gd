@@ -15,6 +15,7 @@ extends Node3D
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
 ## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
 ## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
+## --look <name> sets the pine wood's look (ForestLight.LOOKS; F6 steps through them).
 ## --demo flies your bird for you (chasing the target and firing), for screenshots and the test.
 ## --match: a team match instead of the target (docs/design/combat_ai.md, 4.8): you and two combat-AI wingmen
 ## (--team crow,hawk) against three combat-AI birds (--enemy falcon,owl,crow) out from the far base, at --skill
@@ -348,6 +349,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
+		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
 		ForestLight.toggle_far_blur(self)
 	if e.is_action_pressed("respawn"):

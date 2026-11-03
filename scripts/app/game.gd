@@ -11,11 +11,15 @@ extends Node3D
 ##   --legs <kind>      detail (default) | capsules: the legs drawn
 ##   --max-steps <n>    physics ticks a frame may run to catch up (the project sets 3; Godot's default is 8)
 ##   --rig-tick         pose the rigs on the physics tick, not every rendered frame (Bird.rig_in_process; for comparison)
+##   --cpu-feathers     place the feathers in GDScript, not the shader (BirdRig.gpu_feathers off; for comparison)
+##   --cpu-body         build the neck, arm wings and trousers in GDScript, not the shader (BirdRig.gpu_body off)
 ##   --shot <png>       save a screenshot after --shot-after seconds (default 3) and quit
 ##   --shot-after <s>
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
 ##   --no-rider         no war tack on any bird (the menu's Flight)
 ##   --no-far-blur      no softening of the far wood (ForestLight.far_blur; F5 toggles in game)
+##   --look <name>      the pine wood's look: golden (default) | afternoon | misty_morning | overcast (ForestLight.LOOKS;
+##                      F6 steps through them in game)
 ##   --hud <style>      classic (default) | ring | dev: the HUD's layout (FlightHud.style)
 
 var layout: ArenaLayout
@@ -47,6 +51,10 @@ func _ready() -> void:
 		ForestLight.far_blur = false
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
+	if args.has("--cpu-feathers"):
+		BirdRig.gpu_feathers = false
+	if args.has("--cpu-body"):
+		BirdRig.gpu_body = false
 	if args.has("--rig-tick"):
 		Bird.rig_in_process = false
 	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; project.godot sets 3)
@@ -184,6 +192,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
+		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
 		ForestLight.toggle_far_blur(self)
 	if e.is_action_pressed("toggle_debug"):

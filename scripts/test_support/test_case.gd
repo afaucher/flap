@@ -21,6 +21,8 @@ func _ready() -> void:
 		finish())
 	add_child(t)
 	t.start()
+	if DisplayServer.get_name() != "headless":   # (GPU tests run windowed: as fast as they can, not at the display's rate)
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var args := OS.get_cmdline_user_args()
 	if args.has("--shard"):
 		shard = int(Boot.arg_value(args, "--shard"))

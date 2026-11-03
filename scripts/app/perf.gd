@@ -23,7 +23,13 @@ var _t_last := 0
 var _t_start := 0
 var _rows: Array = []
 var _sections := {}   ## every section name seen
+var _gpu_passes := {}   ## every GPU pass seen
 var _vp: RID
+## (`--perf-hide tack,feathers,...`: parts of every bird left out, to see what each costs the GPU; `shadows`: the
+## birds cast none)
+var _hide: PackedStringArray = []
+const HIDE := {"tack": ["Tack"], "feathers": ["Feathers", "SlottedPrimaries"], "cards": ["SilhouetteCards"],
+	"legs": ["LegFeathers", "LegSkin"], "body": ["Trunk", "Neck", "HeadSurface"], "rider_head": ["head_mesh"]}
 
 
 static func t() -> int:
@@ -43,6 +49,9 @@ func _ready() -> void:
 	RenderingServer.viewport_set_measure_render_time(_vp, true)
 	_t_last = Time.get_ticks_usec()
 	_t_start = _t_last
+	var h := Boot.arg_value(Boot.args(), "--perf-hide")
+	if h != "":
+		_hide = h.split(",")
 
 
 func _physics_process(_dt: float) -> void:
@@ -67,8 +76,19 @@ func _process(_dt: float) -> void:
 		row[k] = int(_acc[k]) / 1000.0
 		_sections[k] = true
 	_acc.clear()
+	# The GPU's time by render pass (the renderer's own timestamps, from the last frame the GPU finished; captured with
+	# the engine's --gpu-profile, .\perf.ps1 -Engine --gpu-profile): each mark's share is the time to the next mark.
+	var rd := RenderingServer.get_rendering_device()
+	if rd != null:
+		var nts := rd.get_captured_timestamps_count()
+		for i in nts - 1:
+			var key := "gpu: " + rd.get_captured_timestamp_name(i).strip_edges()
+			row[key] = float(row.get(key, 0.0)) + (rd.get_captured_timestamp_gpu_time(i + 1) - rd.get_captured_timestamp_gpu_time(i)) / 1e6
+			_gpu_passes[key] = true
 	_ticks = 0
 	var t: float = row.t
+	if not _hide.is_empty() and t < warmup and Engine.get_process_frames() % 20 == 0:
+		_apply_hide()
 	if t >= warmup:
 		_rows.append(row)
 	if t >= warmup + seconds:
@@ -129,6 +149,17 @@ func _write() -> void:
 	for e in by_mean:
 		var v := _col(e[1])
 		lines.append("  %-24s %8.3f %8.3f %8.3f %7.0f%% %9.3f" % [e[1], _mean(v), _pct(v, 0.95), _pct(v, 1.0), 100.0 * _mean(v) / maxf(_mean(frames), 1e-6), _mean(v) * per_tick])
+	if not _gpu_passes.is_empty():
+		lines.append("  the GPU, by render pass (each timestamp to the next):")
+		var gp: Array = []
+		for s in _gpu_passes:
+			gp.append([_mean(_col(s)), s])
+		gp.sort_custom(func(a, b): return a[0] > b[0])
+		for e in gp:
+			if e[0] < 0.01:
+				continue
+			var v := _col(e[1])
+			lines.append("  %-40s %8.3f %8.3f %8.3f" % [e[1], _mean(v), _pct(v, 0.95), _pct(v, 1.0)])
 	lines.append("")
 	lines.append("Worst 12 frames:")
 	var order: Array = range(n)
@@ -147,6 +178,29 @@ func _write() -> void:
 	txt.store_string("\n".join(lines) + "\n")
 	txt.close()
 	print("\n".join(lines))
+
+
+func _apply_hide() -> void:
+	for b in get_tree().root.find_children("*", "CharacterBody3D", true, false):
+		if not b is Bird:
+			continue
+		for n in b.find_children("*", "GeometryInstance3D", true, false):
+			var g := n as GeometryInstance3D
+			if _hide.has("shadows"):
+				g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			for part in _hide:
+				for pre in HIDE.get(part, []):
+					if String(g.name).begins_with(pre) or (pre == "Tack" and _under(g, "Tack")):
+						g.visible = false
+
+
+static func _under(n: Node, name: String) -> bool:
+	var p := n.get_parent()
+	while p != null:
+		if p.name == name:
+			return true
+		p = p.get_parent()
+	return false
 
 
 func _col(c: String) -> PackedFloat64Array:

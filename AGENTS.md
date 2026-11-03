@@ -22,7 +22,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/flight/`: `BirdProfile` (species numbers, derived polar), `FlightModel` (pure, headless-testable),
   `EnergyModel` (burst + stamina), `FlightInput`.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision).
+  collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): hand-sawn planks + one `TimberMesh` each
+  (framing, ironwork, rail, hangar, ammo boxes; every vertex carries its piece's grain frame, so `planks.gdshader`
+  draws end grain on end faces and maps the planks scan at its true scale). Look with `tests/probe_timber.gd`
+  (close-ups, `--warm`) and `tests/probe_outpost_concept.gd` (the menu's outpost framed like the concept).
 - `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
@@ -47,8 +50,11 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   know of threats; `--return-fire` has the target shoot back.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
-- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
-  rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
+- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: a screen
+  to pick your bird, rockets or seekers, the 3 v 3 match (at recruit | pilot | ace) or target practice, with the
+  mode's rules; `Menu.fight_options()`; Lab), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+  with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
+  `Boot.args()` (the command line plus the menu's choice).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
   smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
   and flutter to the ground; down; ruffled coverts; shedding.
@@ -57,6 +63,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `CombatPilot` flies through `AIPilot.steer()` and `AICombat` fires by (`FireControl` flies the real `Projectile`).
   `Duel` (`scripts/test_support/`) runs headless matches; `tests/probe_duels.gd` prints duel traces and cost
   (`DUEL=hawk,crow DUEL_TARGET=circuit DUEL_TRACE=1`). Teams share a `TeamBoard`; `.\range.ps1 -Match` is a 3 v 3.
+- GPU-built surfaces, on by default where there is a RenderingDevice (`BirdRig.gpu_feathers`, `gpu_body`; `--cpu-feathers` /
+  `--cpu-body` turn them off): flight and tail feathers placed by `feather_place.gdshaderinc`, the neck, arm wings and
+  trousers built by `neck_place` / `arm_place` / `trouser_place.gdshaderinc`. Headless runs use the GDScript builds,
+  which stay the reference: `tests/gpu_test_*` (run windowed) read the shader's vertices back and compare.
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
@@ -67,6 +77,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
   game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
   ticks per frame, worst frames, the machine's load while it ran). Rules and numbers: `docs/design/performance.md`.
+- Looks: `ForestLight.LOOKS` (golden by default, afternoon, misty_morning, overcast; `--look`, F6), graded as in
+  `docs/design/color_grading.md` (`tests/probe_grade.gd` renders fixed views; `tools/grade_scopes.py` charts them
+  beside the concept art).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a

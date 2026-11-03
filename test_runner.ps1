@@ -5,6 +5,9 @@
 #   .\test_runner.ps1 -TestAll -NoImport          # skip the import check
 #   .\test_runner.ps1 -TestAll -Jobs 8            # at most 8 at a time
 #
+# GPU tests (tests\gpu_test_*.gd: they read back what a shader computed) run windowed, since the headless renderer
+# runs no shaders; -TestAll includes them.
+#
 # Logs: test_logs\<name>.log / .err.log (a sharded test: <name>.<shard>.log). A test passes only with exit code 0,
 # the ">>> [TEST PASSED] <name> <<<" marker, AND no "SCRIPT ERROR" or engine ERROR:/WARNING: line in its output.
 # Tests run under --fixed-fps 60, so physics is deterministic and runs as fast as the CPU allows.
@@ -44,7 +47,8 @@ function Start-Test($Run) {
     $shardArg = if ($Run.Shard -ge 0) { " --shard $($Run.Shard)" } else { "" }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $engine
-    $psi.Arguments = "--path `"$PSScriptRoot`" --headless --fixed-fps 60 -- --run-test $($Run.Name)$shardArg"
+    $mode = if ($Run.Name -like "gpu_test_*") { "" } else { "--headless " }
+    $psi.Arguments = "--path `"$PSScriptRoot`" $mode--fixed-fps 60 -- --run-test $($Run.Name)$shardArg"
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -99,7 +103,7 @@ if (Test-Path $durSrc) {
     }
 }
 
-$names = if ($TestAll) { Get-ChildItem "$PSScriptRoot\tests\test_*.gd" | ForEach-Object { $_.BaseName } } else { @($TestName -split '[\s,]+' | Where-Object { $_ -ne "" }) }
+$names = if ($TestAll) { Get-ChildItem "$PSScriptRoot\tests\test_*.gd", "$PSScriptRoot\tests\gpu_test_*.gd" | ForEach-Object { $_.BaseName } } else { @($TestName -split '[\s,]+' | Where-Object { $_ -ne "" }) }
 $runs = @()
 foreach ($n in $names) {
     $shards = 0

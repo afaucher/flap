@@ -497,8 +497,13 @@
   "edits": [
    {
     "file": "scripts/bird/leg_rig.gd",
-    "find": "\tvar bend_r := shank * 1.15\n",
-    "replace": "\tvar bend_r := 0.0\n"
+    "find": "of the joint give way to one ring on the arc.\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := shank * 1.15\n",
+    "replace": "of the joint give way to one ring on the arc.\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := 0.0\n"
+   },
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tvar rows: Array = []\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := shank * 1.15\n",
+    "replace": "\tvar rows: Array = []\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := 0.0\n"
    }
   ]
  },
@@ -2366,6 +2371,265 @@
     "file": "scripts/combat/ai/combat_tree.gd",
     "find": "const OVERLEAD := 1.4",
     "replace": "const OVERLEAD := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "gpu-cards-placed-by-shader",
+  "bug": "GPU feather placement: the silhouette cards share the feather material, and the shader placed them as feathers, around the heads (2026-11-02).",
+  "tests": [
+   "gpu_test_feather_image"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/feather_texture.gdshader",
+    "find": "instance uniform int def_offset = -1;",
+    "replace": "instance uniform int def_offset = 0;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-defs-rewritten-each-fold",
+  "bug": "GPU feather placement: every feather's definition was rewritten whenever the fold changed, nearly every pose in flight, which kept most of the cost (2026-11-02).",
+  "tests": [
+   "gpu_test_feathers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tvar gpu_defs := gpu_place and (_defs_lost != lost.hash() or _custom_dirty or _paint_dirty)",
+    "replace": "\tvar gpu_defs := gpu_place"
+   }
+  ]
+ },
+ {
+  "id": "lean-probe-no-margin",
+  "bug": "The GPU lean probe measured the deepest tip without the margin the rig's rule adds (2026-11-02).",
+  "tests": [
+   "gpu_test_lean_probe"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/lean_probe.gdshader",
+    "find": "worst = max(worst, fp_depth(tip) + margin);",
+    "replace": "worst = max(worst, fp_depth(tip));"
+   }
+  ]
+ },
+ {
+  "id": "lean-probe-ignored",
+  "bug": "With the feathers placed on the GPU, a sitting bird never read the probe's answer and so never leaned: its tail went into the branch (2026-11-02).",
+  "tests": [
+   "gpu_test_posture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t\tworst = probe_worst\n",
+    "replace": "\t\t\t\tworst = NAN\n"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-seam-uv-jump",
+  "bug": "GPU neck: the head's feather coordinates weren't run on past the head ring's seam, so the neck's seam column jumped a whole lap (2026-11-02).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": " + float(lap) * texelFetch(neck_tab, ivec2(0, 5), 0).y",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-normal-corner",
+  "bug": "GPU neck: a vertex took the wrong triangle of the quad it starts, so its normal wasn't the rig's smoothed one (2026-11-02).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "\t\t\t\tacc += f1;               // this vertex is a",
+    "replace": "\t\t\t\tacc += f2;               // this vertex is a"
+   }
+  ]
+ },
+ {
+  "id": "gpu-arm-rounding-slivers",
+  "bug": "GPU arm wing: points the rig places at one spot landed a rounding step apart and the compiler reordered the cross product, so triangles the rig has as nothing gave whole normals (2026-11-02).",
+  "tests": [
+   "gpu_test_arm"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/arm_place.gdshaderinc",
+    "find": "\tf1 = (cb || ar_tiny(c - a) || ar_tiny(b - a) || dot(f1, f1) <= 1e-24) ? vec3(0.0) : normalize(f1);\n\tf2 = (cb || ar_tiny(d - b) || ar_tiny(d - c) || dot(f2, f2) <= 1e-24) ? vec3(0.0) : normalize(f2);",
+    "replace": "\tf1 = dot(f1, f1) <= 1e-24 ? vec3(0.0) : normalize(f1);\n\tf2 = dot(f2, f2) <= 1e-24 ? vec3(0.0) : normalize(f2);"
+   }
+  ]
+ },
+ {
+  "id": "gpu-arm-loop-colour",
+  "bug": "GPU arm wing: the trunk's colour where the arm's loop lies wasn't Plumage.body's (the flanks blended at another strength) (2026-11-02).",
+  "tests": [
+   "gpu_test_arm"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/body_place.gdshaderinc",
+    "find": "smoothstep(0.55, 0.95, side) * 0.8);",
+    "replace": "smoothstep(0.55, 0.95, side) * 0.6);"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-wound-wrong",
+  "bug": "GPU trousers: one winding for both legs, where MeshBuild winds the mirrored right leg the other way: culled from behind, the right tube showed its inside (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers",
+   "gpu_test_feather_image"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\t\tflip = bi.size() >= 3 and bi[1] == bi[0] + 1",
+    "replace": "\t\t\tflip = false"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-owl-pad-centre",
+  "bug": "GPU trousers: the owl's rows down to the pad slid the ring round their own displaced centre instead of the last ring's (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/trouser_place.gdshaderinc",
+    "find": "\t\tvec3 q = tr_row_ring(leg, k - (kind == 4 ? 1 : 2), j);",
+    "replace": "\t\tvec3 q = tr_row_ring(leg, k, j);"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-fillet-unscaled",
+  "bug": "GPU trousers: the loop and fillet didn't scale with the trunk (fluff, breath) as the trunk's bone scaled them: the loop came off the drawn belly (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/trouser_place.gdshaderinc",
+    "find": "\t\tpos *= (1.0 - ws) * st + ws;",
+    "replace": "\t\tpos *= 1.0;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-no-fold-pass",
+  "bug": "GPU trousers: no pass down each column keeping each ring's point ahead of the one before, so on a sharp ankle the rings crossed (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/trouser_place.gdshaderinc",
+    "find": "\t\tif (kk < last) {",
+    "replace": "\t\tif (false) {"
+   }
+  ]
+ },
+ {
+  "id": "gpu-coverts-not-ruffled",
+  "bug": "Merging master's ruffled coverts into GPU placement: the shader didn't twist a covert over a lost flight feather, so GPU birds showed no ruffle (2026-11-03).",
+  "tests": [
+   "gpu_test_feathers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/feather_place.gdshaderinc",
+    "find": "\t\tif (d2.y != 0.0 && abs(d2.y) < 0.5) {   // a covert over a lost flight feather: stands up and twists",
+    "replace": "\t\tif (false) {"
+   }
+  ]
+ },
+ {
+  "id": "gpu-feather-copy-unplaced",
+  "bug": "A knocked-out feather's copy read feather_xforms, which a GPU-placed pose leaves empty: no falling feather (2026-11-03).",
+  "tests": [
+   "gpu_test_feathers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "func feather_copy(key: int) -> Node3D:\n\t_need_feather_xforms()\n",
+    "replace": "func feather_copy(key: int) -> Node3D:\n"
+   }
+  ]
+ },
+ {
+  "id": "timber-end-grain-smeared",
+  "bug": "The outposts' end faces (plank ends, beam ends, the rail's ends) took the planks scan by (across, along) like a long face, so with nothing changing along the grain they drew it smeared into streaks: no end grain (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\tbool end_face = abs(nl.y) > 0.6;",
+    "replace": "\tbool end_face = false;"
+   }
+  ]
+ },
+ {
+  "id": "timber-wide-face-stretched",
+  "bug": "A timber face wider than one board of the scan (the hangar's 0.42 m sides) took a single scan board clamped to its middle, so its edge texels stretched across the rest of the face (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tfloat nb = max(1.0, ceil(2.0 * cw / BOARD_USE - 0.001));",
+    "replace": "\t\tfloat nb = 1.0;"
+   },
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tfloat cc = x - (sub + 0.5) * sw;",
+    "replace": "\t\tfloat cc = clamp(x - (sub + 0.5) * sw, -0.084, 0.084);"
+   }
+  ]
+ },
+ {
+  "id": "brace-grain-across",
+  "bug": "The outpost's braces ran their grain across the piece (the bearer's material, grain_axis 0, on a cylinder along y) instead of along it (2026-11-03).",
+  "tests": [
+   "test_outpost_timber",
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\ttm.box(\"brace_r\" if e > 0.0 else \"brace_l\", xf, Vector3(bs, ln, bs), TimberMesh.Kind.BEAM, rng.randf(), heart.call())",
+    "replace": "\t\ttm.box(\"brace_r\" if e > 0.0 else \"brace_l\", Transform3D(Basis(xf.basis.y, -xf.basis.x, xf.basis.z), xf.origin), Vector3(ln, bs, bs), TimberMesh.Kind.BEAM, rng.randf(), heart.call())"
+   }
+  ]
+ },
+ {
+  "id": "scan-board-straddles-gap",
+  "bug": "Each plank took a strip of the planks scan that didn't line up with the scan's own boards (they start at u 0.0605, not 0), so a plank could show one of the scan's gaps as a dark line down its middle (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "const float SCAN_GAP0 = 0.0605;",
+    "replace": "const float SCAN_GAP0 = 0.0;"
    }
   ]
  }

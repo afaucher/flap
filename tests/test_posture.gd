@@ -61,6 +61,10 @@ func setup() -> void:
 
 ## The deepest drawn feather tip inside the surface the bird sits on (m; negative: all clear).
 func _deepest(b: Bird) -> float:
+	if b.rig.gpu_place:   # (placed on the GPU, as drawn: the rig's own placement of this pose, to measure)
+		b.rig._cpu_feathers = true
+		b.rig.apply_pose()
+		b.rig._cpu_feathers = false
 	var srf: Dictionary = b.telemetry().surface
 	var xf := b.rig.global_transform
 	var worst := -INF
