@@ -20,7 +20,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 
 ## Layout
 - `scripts/flight/`: `BirdProfile` (species numbers, derived polar), `FlightModel` (pure, headless-testable),
-  `EnergyModel` (burst + stamina), `FlightInput`.
+  `EnergyModel` (burst + stamina), `FlightInput`, `AirField` (the air's movement: thermals over the clearings, ridge
+  lift for a cliff; the bird flies through it, `FlightModel.wind`; `AirFx` draws it; `--calm`; the combat range
+  is calm until the combat AI reads the air: `CombatWorld.calm_air`). The chase camera zooms with the mouse wheel.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
   collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
   `TimberMesh` each (framing, ironwork, rail, the hangar back-right seen from the rail, ammo boxes, and drawn-only

@@ -4,7 +4,8 @@ extends TestCase
 ## sinking air drops it (both ways). A thermal's air rises most in its core, less to its edge, sinks a little in a
 ## ring round it, nothing far off, nothing near the floor or over its top, and pulses; ridge lift rises in front of a
 ## face and over its edge, not behind the edge nor past its ends. The pine wood has its thermals over the clearing
-## and the glade. A crow circling in a thermal climbs where, in still air, it sinks.
+## and the glade. A crow circling in a thermal climbs where, in still air, it sinks. The HUD says LIFT in rising air,
+## SINK in sinking air, nothing in still air or perched. The game draws the thermals (AirFx: fluff rising in each).
 
 
 func _init() -> void:
@@ -16,6 +17,8 @@ func setup() -> void:
 	_thermal_profile()
 	_ridge_profile()
 	_pinewood_thermals()
+	_hud()
+	_drawn()
 	await _circling_climbs()
 	finish()
 
@@ -118,3 +121,31 @@ func _circling_climbs() -> void:
 	print("circling 20 s: in the thermal %+.1f m, in still air %+.1f m" % [dh[false], dh[true]])
 	check(dh[false] > 8.0, "a crow circling in a thermal climbs (%+.1f m in 20 s)" % dh[false])
 	check(dh[true] < -5.0, "in still air the same turns lose height (%+.1f m)" % dh[true])
+
+
+func _hud() -> void:
+	var hud := FlightHud.new()
+	for c in [[2.1, Bird.State.FLYING, "LIFT +2.1"], [-0.6, Bird.State.FLYING, "SINK -0.6"], [0.1, Bird.State.FLYING, ""], [2.1, Bird.State.PERCHED, ""]]:
+		hud.t = {"air": Vector3(0, c[0], 0), "state": c[1], "velocity": Vector3(0, 0.8, -9)}
+		var s := hud.lift_text()
+		check(s.begins_with(c[2]) and (c[2] != "" or s == ""), "the HUD in air rising %+.1f m/s, %s: \"%s\"" % [c[0], Bird.State.keys()[c[1]], s])
+	hud.free()
+
+
+func _drawn() -> void:
+	var air := AirField.new()
+	air.add_thermal(Vector2(5, 5), 20.0, 2.6, 55.0)
+	air.add_thermal(Vector2(-40, 10), 8.0, 1.0, 30.0)
+	var fx := AirFx.new()
+	add_child(fx)
+	fx.build(air)
+	var parts := fx.find_children("*", "GPUParticles3D", true, false)
+	eq(parts.size(), 2, "a column of motes for each thermal")
+	if parts.size() == 2:
+		var big := parts[0] as GPUParticles3D
+		var small := parts[1] as GPUParticles3D
+		check(big.amount > small.amount, "more in the wider thermal (%d v %d)" % [big.amount, small.amount])
+		var m := big.process_material as ParticleProcessMaterial
+		check(m.direction.y > 0.9 and m.initial_velocity_min > 0.5, "rising")
+		check(Vector2(big.global_position.x, big.global_position.z).distance_to(Vector2(5, 5)) < 0.01 and big.visibility_aabb.end.y > 50.0, "over its thermal, up to its top")
+	fx.queue_free()

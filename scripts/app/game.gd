@@ -21,6 +21,8 @@ extends Node3D
 ##   --look <name>      the pine wood's look: golden (default) | afternoon | misty_morning | overcast (ForestLight.LOOKS;
 ##                      F6 steps through them in game)
 ##   --hud <style>      classic (default) | ring | dev: the HUD's layout (FlightHud.style)
+##   --calm             still air: no thermals (AirField.enabled)
+## The mouse wheel zooms the chase camera in and out.
 ## The arena grows behind a loading screen (Loading): the layout on a worker thread, the wood built a step a frame,
 ## the birds spawned; `loaded` fires (and `is_loaded` turns true) when it's ready to fly.
 
@@ -53,6 +55,7 @@ func _ready() -> void:
 	rider = not args.has("--no-rider")
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
+	AirField.enabled = not args.has("--calm")
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
 	if args.has("--cpu-feathers"):
@@ -79,6 +82,9 @@ func _ready() -> void:
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	await screen.run(arena.steps(layout), 0.85)
+	var air_fx := AirFx.new()   # (the thermals made visible: fluff rising in them)
+	add_child(air_fx)
+	air_fx.build(layout.air)
 	autopilot = AIPilot.new(layout, arena_seed + 100)
 
 	camera = ChaseCamera.new()
@@ -210,6 +216,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventMouseButton and e.pressed and (e.button_index == MOUSE_BUTTON_WHEEL_UP or e.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		camera.zoom_by(-1.0 if e.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0)   # (the wheel: up in, down out)
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
 		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:

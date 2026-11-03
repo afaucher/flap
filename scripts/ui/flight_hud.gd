@@ -112,9 +112,11 @@ func _draw_styled(sz: Vector2) -> void:
 	if style == "classic":
 		_text(Vector2(24, 34), "%s%s" % [t.bird, "   [AUTOPILOT]" if autopilot else ""], FG, 20)
 		_text(Vector2(24, 54), "alt %.0f m" % t.altitude, DIM, 14)
+		_lift(Vector2(100, 54), 14)
 		_bars(Vector2(24, 66), 200.0)
 	else:
 		_text(Vector2(24, 34), "%s   alt %.0f m%s" % [t.bird, t.altitude, "   [AUTOPILOT]" if autopilot else ""], DIM, 15)
+		_lift(Vector2(24, 54), 14)
 		_ring_energy()
 	_prompts(Vector2(sz.x * 0.5, sz.y - 120), 17)
 	if hints_left > 0.0:
@@ -127,6 +129,26 @@ func _draw_styled(sz: Vector2) -> void:
 		_roll_arc(Vector2(sz.x * 0.5, 120))
 		_stick(Vector2(sz.x * 0.5, sz.y - 190))
 		_debug(Vector2(sz.x - 330, 40))
+
+
+## The air the bird is flying in, when it's moving (a thermal, ridge lift, the sinking ring round a thermal):
+## "LIFT +2.1" green, "SINK -0.6" warm, with the bird's own climb (+) or sink (-) over the ground beside it.
+func lift_text() -> String:
+	var air: Vector3 = t.get("air", Vector3.ZERO)
+	if int(t.state) != Bird.State.FLYING or absf(air.y) < LIFT_SHOWN:
+		return ""
+	var climb: float = (t.velocity as Vector3).y
+	return "%s %+.1f m/s   climbing %+.1f" % ["LIFT" if air.y > 0.0 else "SINK", air.y, climb]
+
+
+const LIFT_SHOWN := 0.3   ## m/s: weaker air isn't worth a word
+
+
+func _lift(pos: Vector2, fs: int) -> void:
+	var s := lift_text()
+	if s != "":
+		var air: Vector3 = t.get("air", Vector3.ZERO)
+		_text(pos, s, GOOD if air.y > 0.0 else WARN, fs)
 
 
 ## Burst and stamina as two bars at `o`, `w` wide (thin, without labels, under the screen's middle).

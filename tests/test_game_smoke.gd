@@ -1,6 +1,7 @@
 extends TestCase
 ## The whole game scene runs: arena, player bird on its start perch, AI birds, camera, HUD. It loads behind a
-## loading screen: up at once, its bar only ever filling, its step named, gone once the game is ready to fly. The player's
+## loading screen: up at once, its bar only ever filling, its step named, gone once the game is ready to fly. The
+## mouse wheel zooms the chase camera out (down) and in (up), within its range. The player's
 ## bird is put on autopilot and flies for a while; every bird switch works.
 
 
@@ -9,6 +10,7 @@ func setup() -> void:
 	add_child(game)
 	await _loading_screen(game)
 	await frames(5)
+	await _zoom(game)
 	check(game.bird != null and game.bird.state == Bird.State.PERCHED, "player starts perched")
 	check(game.ai_birds.size() >= 1, "AI birds spawned")
 	check(not game.hud.t.is_empty(), "HUD has telemetry")
@@ -116,3 +118,26 @@ func _loading_screen(game: Game) -> void:
 	check(steps.size() >= 4, "and says what it's doing (%s)" % ", ".join(steps.keys()))
 	await frames(40)
 	check(not is_instance_valid(screen), "it's gone once the game is ready")
+
+
+func _zoom(game: Game) -> void:
+	await frames(30)
+	var d0 := game.camera.global_position.distance_to(game.bird.global_position)
+	var wheel := func(button: MouseButton, n: int) -> void:
+		for i in n:
+			var e := InputEventMouseButton.new()
+			e.button_index = button
+			e.pressed = true
+			game._unhandled_input(e)
+	wheel.call(MOUSE_BUTTON_WHEEL_DOWN, 4)
+	await frames(90)
+	var d_out := game.camera.global_position.distance_to(game.bird.global_position)
+	wheel.call(MOUSE_BUTTON_WHEEL_UP, 30)
+	await frames(90)
+	var d_in := game.camera.global_position.distance_to(game.bird.global_position)
+	check(d_out > d0 * 1.5, "the wheel down zooms out (%.2f -> %.2f m)" % [d0, d_out])
+	check(d_in < d0 * 0.6 and d_in > d0 * 0.3, "the wheel up zooms in, as far as its range (%.2f m)" % d_in)
+	wheel.call(MOUSE_BUTTON_WHEEL_DOWN, 30)
+	wheel.call(MOUSE_BUTTON_WHEEL_UP, 30)
+	game.camera.zoom = 1.0
+	await frames(60)

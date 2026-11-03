@@ -63,6 +63,29 @@ Here q = ½ρv². CL rises linearly up to the stall angle, then sags to 65% of i
 
 The research suggests labelling these "lifting area" and "airbrake area" in the full HUD.
 
+### Moving air: thermals and ridge lift (`scripts/flight/air_field.gd`)
+
+The air has its own movement (`AirField.at(p, t)`, the arena's `layout.air`): the bird is flown through it. Each tick
+`FlightModel.step` works in the air's frame -- the velocity through the air is what the wing feels, so airspeed,
+the angle of attack, the lift vector and the body all follow the air -- and the air's own velocity is added back to
+carry the bird over the ground. A bird in air rising at w keeps its glide through the air and rises with the air:
+in a thermal stronger than its sink rate (a crow's is about 0.7 m/s at best glide, more in a turn) it climbs.
+`path_angle` and `flight_dir()` are over the ground (what the HUD shows and the AI steers by); `speed` is airspeed.
+
+- **Thermals** (Pinewood: over the clearing 2.6 m/s, the glade 2.0, the gaps 1.0, each about as wide as its opening):
+  a bell-shaped core (exp(-2 (r/R)^2)) ringed by gently sinking air; weak below treetop height (the warm air still
+  gathering: birds landing on low limbs aren't thrown about), full above it, dying away at the top; bubbles pulse
+  it by +-25% every 18 s. A crow circling about 8 m round in the clearing's core gains about 16 m in 20 s where it
+  would lose 24 in still air (`test_air`).
+- **Ridge lift** (`add_ridge(top edge a..b, outward face normal, height, lift)`): rising air in front of a cliff and
+  over its edge, strongest a quarter of the height out and up to about the height above the top; none in the lee
+  nor past the face's ends. Ready for the cliff in the new setting.
+- **Seen**: `AirFx` draws fluff rising in each thermal (and up a ridge's face); the HUD says LIFT / SINK and the
+  bird's climb when the air moves more than 0.3 m/s.
+- `--calm` turns it off. The combat AI doesn't read the air yet (its aim and stoops reckon on still air: over 16
+  woods the thermals cost the hawk about a quarter of its hits), so the range and the duels fly in still air
+  (`CombatWorld.calm_air`) until it does.
+
 ## 2. The energy model (`scripts/flight/energy_model.gd`)
 
 There are two reserves, so you can't flap forever and can't flap infinitely fast.
