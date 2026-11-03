@@ -3,7 +3,9 @@ extends TestCase
 ## Boot.extra) is the game with no tack on any bird, and without them the riders are back. Fight opens its own
 ## screen (Esc back): your bird, your weapon, the mode and, for a match, the AI's skill, each shown with what it
 ## means; Start opens the range as chosen -- that species, one kind of round (six rockets or four seekers, nothing
-## to switch to), the 3 v 3 match at that skill, or target practice with no match.
+## to switch to), the 3 v 3 match at that skill, or target practice with no match. Behind the menu, birds
+## perched on an outpost's rail, their feet on it, idling: each looks about and, within a few seconds, moves its
+## tail, wings, plumage or neck.
 
 
 const SHARDS := 2   ## (the menu and the game in one process, the range in another)
@@ -32,6 +34,7 @@ func _menu_and_flight() -> void:
 	for want in ["Flight", "Fight", "Lab"]:
 		check(labels.has(want), "the menu offers " + want)
 	eq(menu.find_children("Choice*", "Button", true, false).size(), Menu.CHOICES.size(), "a button per choice")
+	await _backdrop(menu)
 	# The Fight screen.
 	(menu.find_child("Choice1", true, false) as Button).pressed.emit()
 	await frames(2)
@@ -85,6 +88,32 @@ func _menu_and_flight() -> void:
 			check(tacks >= 1, "the game's riders are there without Flight's options (%d)" % tacks)
 		game.queue_free()
 		await frames(2)
+
+
+func _backdrop(menu: Menu) -> void:
+	var bd := menu.backdrop
+	check(bd != null and bd.rigs.size() >= 3, "birds behind the menu")
+	if bd == null:
+		return
+	var rest := []   # each bird's perched controls, its head's way, and how far each moved from them
+	for r in bd.rigs:
+		for i in 2:
+			var foot := r.global_transform * (r.leg_joints[i][3] as Vector3)
+			check(absf(foot.y - bd.rail_top) < 0.03, "%s's %s foot on the rail (%.3f m off)" % [r.profile.id, ["left", "right"][i], foot.y - bd.rail_top])
+		rest.append({"c": [r.fold, r.tail_pitch, r.fluff, r.neck_ext], "head": r.head_basis.get_rotation_quaternion(), "moved": 0.0, "turned": 0.0})
+	for f in 7 * 60:
+		await frames(1)
+		for k in bd.rigs.size():
+			var r := bd.rigs[k]
+			var c: Array = rest[k].c
+			var now := [r.fold, r.tail_pitch, r.fluff, r.neck_ext]
+			for j in 4:
+				rest[k].moved = maxf(rest[k].moved, absf(float(now[j]) - float(c[j])))
+			rest[k].turned = maxf(rest[k].turned, rest[k].head.angle_to(r.head_basis.get_rotation_quaternion()))
+	for k in bd.rigs.size():
+		var id := bd.rigs[k].profile.id
+		check(rest[k].moved > 0.05, "the %s idles in 7 s (tail, wings, plumage or neck: %.2f)" % [id, rest[k].moved])
+		check(rest[k].turned > deg_to_rad(15.0), "the %s looks about (%.0f deg)" % [id, rad_to_deg(rest[k].turned)])
 
 
 func _fights() -> void:

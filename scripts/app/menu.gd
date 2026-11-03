@@ -6,6 +6,9 @@ extends Control
 ## Fight opens a second screen first: your bird, your weapon (six rockets or four seekers), the mode (the 3 v 3
 ## match, or target practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot |
 ## ace), with the rules of the mode chosen. Enter starts it, Esc goes back.
+## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
+## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight`: on the Fight
+## screen); `--no-backdrop` leaves the birds out.
 
 ## [label, scene, options] ("fight": the Fight screen)
 const CHOICES := [
@@ -48,6 +51,8 @@ static var fight_match := true
 static var fight_skill := "pilot"
 
 var page := "main"   ## "main" | "fight"
+var backdrop: MenuBackdrop
+var _ui: Control   ## the pages
 var _main: VBoxContainer
 var _fight: VBoxContainer
 var _blurb: Label
@@ -60,22 +65,40 @@ var _skill_note: Label
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	var bg := ColorRect.new()
-	bg.color = Color(0.12, 0.14, 0.13)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	_main = _page("FLAP")
+	if not Boot.args().has("--no-backdrop"):
+		backdrop = MenuBackdrop.new()
+		add_child(backdrop)
+	if Boot.arg_value(Boot.args(), "--page") == "fight":
+		page = "fight"
+	_build()
+	var shot := Boot.arg_value(Boot.args(), "--shot")
+	if shot != "":
+		var after := Boot.arg_value(Boot.args(), "--shot-after")
+		await get_tree().create_timer(float(after) if after != "" else 2.0).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(shot)
+		print("screenshot: ", shot)
+		get_tree().quit()
+
+
+func _build() -> void:
+	_ui = Control.new()
+	_ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui.theme = MenuStyle.theme()
+	add_child(_ui)
+	_main = _page("FLAP", true)
 	for i in CHOICES.size():
 		var b := _button("%d   %s" % [i + 1, CHOICES[i][0]], 22, Vector2(320, 48))
 		b.name = "Choice%d" % i
 		b.pressed.connect(choose.bind(i))
 		_main.add_child(b)
 	_build_fight()
-	_show("main")
+	_show(page)
 
 
 func _build_fight() -> void:
-	_fight = _page("FIGHT")
+	_fight = _page("FIGHT", false)
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 48)
 	_fight.add_child(cols)
@@ -174,10 +197,10 @@ func start_fight() -> void:
 
 func _show(p: String) -> void:
 	page = p
-	_main.get_parent().visible = p == "main"
-	_fight.get_parent().visible = p == "fight"
+	_main.get_meta("page").visible = p == "main"
+	_fight.get_meta("page").visible = p == "fight"
 	if p == "main":
-		(_main.get_child(1) as Button).grab_focus()
+		(_main.find_child("Choice0", true, false) as Button).grab_focus()
 	else:
 		(_fight.find_child("Start", true, false) as Button).grab_focus()
 
@@ -192,19 +215,47 @@ func _refresh() -> void:
 			_skill_note.text = k[2]
 
 
-## A page: a column centred on the screen.
-func _page(title_text: String) -> VBoxContainer:
-	var centre := CenterContainer.new()
-	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(centre)
+## A page: a panel (MenuStyle's) holding a column under its title, centred on the screen, or `left` of it (the
+## main page, clear of the birds).
+func _page(title_text: String, left: bool) -> VBoxContainer:
+	var holder := Control.new()
+	holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui.add_child(holder)
+	var at: Container = CenterContainer.new() if not left else MarginContainer.new()
+	at.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	at.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if left:
+		at.add_theme_constant_override("margin_left", 110)
+		at.add_theme_constant_override("margin_top", 120)
+	holder.add_child(at)
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	at.add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
-	centre.add_child(box)
+	panel.add_child(box)
+	box.set_meta("page", holder)
 	var title := Label.new()
 	title.text = title_text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 56)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if not left else HORIZONTAL_ALIGNMENT_LEFT
+	title.add_theme_font_override("font", MenuStyle.font(MenuStyle.TITLE_FONT, 700))
+	title.add_theme_font_size_override("font_size", 64 if left else 52)
+	title.add_theme_color_override("font_color", MenuStyle.ACCENT)
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	title.add_theme_constant_override("shadow_offset_y", 3)
 	box.add_child(title)
+	var rule := ColorRect.new()   # a brass line under the title
+	rule.color = MenuStyle.EDGE
+	rule.custom_minimum_size = Vector2(0, 2)
+	box.add_child(rule)
+	if left:
+		var sub := Label.new()
+		sub.text = "Hedgerow air corps"
+		sub.add_theme_font_size_override("font_size", 18)
+		sub.add_theme_color_override("font_color", MenuStyle.DIM)
+		box.add_child(sub)
 	return box
 
 
@@ -232,11 +283,12 @@ static func _button(text: String, font: int, min_size: Vector2) -> Button:
 	return b
 
 
-static func _heading(text: String) -> Label:
+func _heading(text: String) -> Label:
 	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", 22)
-	l.modulate = Color(0.75, 0.85, 0.8)
+	l.text = text.to_upper()
+	l.add_theme_font_size_override("font_size", 19)
+	l.add_theme_font_override("font", MenuStyle.font(MenuStyle.BODY_FONT, 600))
+	l.add_theme_color_override("font_color", MenuStyle.DIM)
 	return l
 
 
@@ -247,9 +299,10 @@ static func _column(width: float) -> VBoxContainer:
 	return c
 
 
-static func _note(width: float) -> Label:
+func _note(width: float) -> Label:
 	var l := Label.new()
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size = Vector2(width, 0)
 	l.add_theme_font_size_override("font_size", 16)
+	l.add_theme_font_override("font", MenuStyle.font(MenuStyle.NOTES_FONT))
 	return l
