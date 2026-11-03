@@ -240,6 +240,13 @@ func _fly(dt: float, inp: FlightInput) -> void:
 	global_basis = model.body_basis()
 
 
+## Too fast to catch the candidate perch: in reach and over the catch speed, or not in reach yet and already over it.
+## (A bird can only be too fast for a catch, never too slow.)
+func candidate_too_fast() -> bool:
+	return candidate_status == Perch.Catch.TOO_FAST or (candidate_status == Perch.Catch.OUT_OF_RANGE
+			and model.velocity.length() > profile.grab_speed_max)
+
+
 func _update_candidate() -> void:
 	candidate = null
 	candidate_status = Perch.Catch.OUT_OF_RANGE

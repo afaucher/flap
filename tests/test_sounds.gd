@@ -85,6 +85,10 @@ func _recipes() -> void:
 		check(SoundDsp.rms(b, 0.0, 0.03) > SoundDsp.rms(b, 0.1, 0.4) * 3.0, "burst %d hits at once and dies away" % take)
 	var r := SoundRecipes.render("rocket_launch")
 	check(SoundDsp.rms(r, 0.2) < SoundDsp.rms(r, 0.0, 0.2) * 0.15, "a rocket launch is over in 0.2 s")
+	for take in 3:
+		var low := SoundDsp.lowpass(SoundRecipes.render("bonk", take), 300.0, 2)
+		var ring := SoundDsp.rms(low, 0.08, 0.25) / maxf(SoundDsp.rms(low, 0.0, 0.03), 1e-6)
+		check(ring < 0.04, "bonk %d is a thud with no low ring after it (a held tone sounds like a honk): %.3f" % [take + 1, ring])
 	var lengths := {}
 	for take in SoundRecipes.files_of("perch_catch").size():
 		var c := SoundRecipes.render("perch_catch", take)
@@ -92,6 +96,13 @@ func _recipes() -> void:
 		check(SoundDsp.onset(c, 0.0, 12.0) < 0.03, "perch catch %d starts on its scratch" % (take + 1))
 		check(SoundDsp.rms(c, c.size() / float(SoundDsp.RATE) - 0.02) < SoundDsp.rms(c) * 0.2, "perch catch %d ends quiet" % (take + 1))
 	check(lengths.size() >= 4, "the perch catch takes are different scratches of the recording")
+	for sp: String in SoundRecipes.CALLS:
+		for kind in ["call", "alarm"]:
+			var name := "%s_%s" % [kind, sp]
+			for take in SoundRecipes.files_of(name).size():
+				var c := SoundRecipes.render(name, take)
+				check(SoundDsp.onset(c, 0.0, 12.0) < 0.06, "%s %d starts on the call" % [name, take + 1])
+				check(SoundDsp.rms(c, c.size() / float(SoundDsp.RATE) - 0.02) < SoundDsp.rms(c) * 0.25, "%s %d ends quiet" % [name, take + 1])
 	var owl := SoundRecipes.render("call_owl")
 	var hawk := SoundRecipes.render("call_hawk")
 	check(owl.size() > SoundDsp.n_of(0.5) and hawk.size() > SoundDsp.n_of(0.5), "the owl's screech and the hawk's scream are long calls")

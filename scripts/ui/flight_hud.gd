@@ -105,10 +105,10 @@ func _text(pos: Vector2, s: String, c: Color, fs := 16, align := HORIZONTAL_ALIG
 	draw_string(_font, pos, s, align, w, fs, c)
 
 
-## classic / ring: the status where the style puts it, speed on the perch, the instruments only with F3.
+## classic / ring: the status where the style puts it, the instruments only with F3. (The perch you'd land on is
+## marked in the world: ArenaBuilder.show_candidate.)
 func _draw_styled(sz: Vector2) -> void:
 	_place_ring(sz)
-	_perch_gauge()
 	if style == "classic":
 		_text(Vector2(24, 34), "%s%s" % [t.bird, "   [AUTOPILOT]" if autopilot else ""], FG, 20)
 		_text(Vector2(24, 54), "alt %.0f m" % t.altitude, DIM, 14)
@@ -143,29 +143,6 @@ func _bars(o: Vector2, w: float, thin := false) -> void:
 	if not thin:
 		_text(Vector2(o.x + w + 8, o.y + hgt), "burst", FG, 12)
 		_text(Vector2(o.x + w + 8, o.y + gap + hgt), "stamina", FG, 12)
-
-
-## On the perch being caught (catch held): a short bar of your speed against the catch speed (the notch), the
-## number above it; green when the catch would hold, red when it's too fast ("slow to N").
-func _perch_gauge() -> void:
-	var cam := get_viewport().get_camera_3d()
-	if cam == null or not show_perch(bool(t.catch_armed)) or style == "dev" or int(t.state) != Bird.State.FLYING or float(t.candidate_distance) > 30.0:
-		return
-	var g: Vector3 = t.candidate_grip
-	if cam.is_position_behind(g):
-		return
-	var p := cam.unproject_position(g) + Vector2(0, -30)
-	var speed: float = t.speed
-	var grab: float = t.grab_speed
-	var status := int(t.candidate_status)   # (the catch's own verdict once in reach; before that, airspeed)
-	var ok := status == Perch.Catch.OK or (status == Perch.Catch.OUT_OF_RANGE and speed <= grab)
-	var col := GOOD if ok else BAD
-	var w := 80.0
-	var f := clampf(speed / (grab * 2.0), 0.0, 1.0)
-	draw_rect(Rect2(p.x - w * 0.5 - 1, p.y - 1, w + 2, 8), OUTLINE)
-	draw_rect(Rect2(p.x - w * 0.5, p.y, w * f, 6), col)
-	draw_line(Vector2(p.x, p.y - 4), Vector2(p.x, p.y + 10), FG, 2.0)
-	_text(Vector2(p.x - 60, p.y - 8), "%.0f m/s" % speed if ok else "%.0f  slow to %.0f" % [speed, grab], col, 15, HORIZONTAL_ALIGNMENT_CENTER, 120)
 
 
 ## The aim ring this frame: round the point 25 m down the flight path (perched: where the bird faces), its

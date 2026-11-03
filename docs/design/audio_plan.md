@@ -266,7 +266,10 @@ Still open:
     dozen scratches (`SoundDsp.events`) and keeps the six loudest as takes, with the rumble cut and the hiss between
     strokes gated out.
 - The pinewood birdsong is squirrel racer's recipes, ported.
-- **Stand-ins:** the five species' calls, synthesized after their real calls.
+- **Bird calls:** the five species' calls and alarms are cut from Freesound recordings (CC0; the kestrel CC BY 4.0,
+  credited in `assets/LICENSES.md`) by `SoundRecipes.CALLS`: fixed windows of each recording, low hum cut, background
+  gated out between notes. An alarm is several calls strung together tighter and a little faster. The synthesized
+  stand-ins went: the crow's caw sounded like a honk (user, 2026-11-02).
 
 **Not built yet:**
 - the near-miss whizz;
