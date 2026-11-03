@@ -84,8 +84,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   beside the concept art).
 - `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
-  back. The script applies each in a scratch worktree and requires the named tests to fail (KILLED); a
-  SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code.
+  back. The script applies each in a scratch tree and requires the named tests to fail (KILLED); a
+  SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code. Entries run in
+  parallel (`-Jobs`, 12 test processes by default), each stopped at its first failing line, the test (shard)
+  that killed it last time first (`test_logs\mutation_kills.csv`); `-Changed` checks only the entries the branch
+  could affect; tests `test_runner.ps1` just passed on the same tree (`test_logs\passed.txt`) skip the baseline.
+  Shared process handling and the pass rule: `test_lib.ps1`.
 
 ## Rules
 - Profile numbers: set the readable ones (mass, span, area, e, glide ratio, CL max) and let `derive()` compute

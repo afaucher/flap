@@ -20,6 +20,8 @@
 #   - the engine itself is launched (not its _console.exe wrapper, one process fewer per test), and its CPU time
 #     goes in durations.csv beside the wall time;
 #   - the import pass runs only when a script, scene, asset or test changed since the last one.
+# test_logs\passed.txt records the tree tested and the tests that passed on it, so mutation_check.ps1 needn't run
+# them again as its baseline. Process handling and the pass rule are in test_lib.ps1 (shared with mutation_check).
 param(
     [string]$TestName = "",
     [switch]$TestAll,
@@ -28,10 +30,9 @@ param(
     [int]$Jobs = 0
 )
 . "$PSScriptRoot\godot_env.ps1"
+. "$PSScriptRoot\test_lib.ps1"
 $godot = Resolve-FlapGodot
-# The engine itself: the console wrapper only relays its output, and these pipes take it directly.
-$engine = $godot -replace '_console\.exe$', '.exe'
-if (-not (Test-Path $engine)) { $engine = $godot }
+$engine = Get-FlapEngine $godot
 $logDir = Join-Path $PSScriptRoot "test_logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
@@ -41,45 +42,28 @@ if (-not $TestAll -and $TestName -eq "") {
     exit 1
 }
 if (-not $NoImport) { Update-FlapImport $godot }
+$tree = Get-WorkingTree $PSScriptRoot   # (what these runs test: test_logs\passed.txt records it)
 
 # A run: one process of a test (Shard -1: the test isn't sharded).
 function Start-Test($Run) {
-    $shardArg = if ($Run.Shard -ge 0) { " --shard $($Run.Shard)" } else { "" }
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $engine
-    $mode = if ($Run.Name -like "gpu_test_*") { "" } else { "--headless " }
-    $psi.Arguments = "--path `"$PSScriptRoot`" $mode--fixed-fps 60 -- --run-test $($Run.Name)$shardArg"
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $p = New-Object System.Diagnostics.Process
-    $p.StartInfo = $psi
-    [void]$p.Start()
-    return [PSCustomObject]@{ Run = $Run; Proc = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync(); Watch = [Diagnostics.Stopwatch]::StartNew() }
+    return [PSCustomObject]@{ Run = $Run; Proc = (Start-TestRun $engine $PSScriptRoot $Run) }
 }
 
-$script:times = @{}
+$script:times = Read-TestDurations $PSScriptRoot
 function Finish-Test($r) {
-    $left = [Math]::Max(0, [int](($TimeoutSec - $r.Watch.Elapsed.TotalSeconds) * 1000))
-    if (-not $r.Proc.WaitForExit($left)) { try { $r.Proc.Kill() } catch {}; $r.Proc.WaitForExit() }
-    $out = $r.Out.Result; $err = $r.Err.Result
+    if (-not $r.Proc.HasExited) { $r.Proc.Kill() }   # (timed out)
+    $r.Proc.Wait()
+    $out = $r.Proc.Out; $err = $r.Proc.Err
     $label = $r.Run.Label
     Set-Content -Path "$logDir\$($r.Run.Log).log" -Value $out
     Set-Content -Path "$logDir\$($r.Run.Log).err.log" -Value $err
-    # A script error inside a coroutine aborts the test silently but can still end in a
-    # PASS marker, so any SCRIPT ERROR in the output fails the test too.
-    $scriptErr = ($out + "`n" + $err) -match "SCRIPT ERROR"
-    # Engine errors and warnings fail the test too (e.g. the camera's physics-interpolation warning, a leaked
-    # object at exit): they are bugs that never show up as a failed check.
-    $engineMsg = ($out + "`n" + $err) -match "(?m)^(USER )?(ERROR|WARNING):"
-    $ok = ($r.Proc.ExitCode -eq 0) -and ($out -match [regex]::Escape(">>> [TEST PASSED] $($r.Run.Name) <<<")) -and (-not $scriptErr) -and (-not $engineMsg)
-    $wall = ($r.Proc.ExitTime - $r.Proc.StartTime).TotalSeconds
-    $cpu = $r.Proc.TotalProcessorTime.TotalSeconds
-    $script:times[$label] = "{0:F1},{1:F1}" -f $wall, $cpu
+    $ok = Test-RunPassed $r.Run.Name $r.Proc.Proc.ExitCode $out $err
+    $wall = $r.Proc.WallSec
+    $script:times[$label] = "{0:F1},{1:F1}" -f $wall, $r.Proc.CpuSec
     $secs = $wall.ToString("F1")
     if ($ok) { Write-Host "  PASS  $label  ($secs s)" -ForegroundColor Green }
     else {
-        Write-Host "  FAIL  $label  ($secs s, exit $($r.Proc.ExitCode))" -ForegroundColor Red
+        Write-Host "  FAIL  $label  ($secs s, exit $($r.Proc.Proc.ExitCode))" -ForegroundColor Red
         ($out + "`n" + $err) -split "`n" | Where-Object { $_ -match "ASSERT FAILED|SCRIPT ERROR|Parse Error|ERROR:|WARNING:|TEST FAILED" } | Select-Object -First 15 | ForEach-Object { Write-Host "        $_" }
     }
     return $ok
@@ -87,37 +71,11 @@ function Finish-Test($r) {
 
 # The last run's times (label -> wall seconds): this checkout's, else the main checkout's (a fresh worktree has none).
 $durFile = Join-Path $logDir "durations.csv"
-$durSrc = $durFile
-if (-not (Test-Path $durSrc)) {
-    $common = git -C $PSScriptRoot rev-parse --git-common-dir 2>$null
-    if ($common) {
-        if (-not [IO.Path]::IsPathRooted($common)) { $common = Join-Path $PSScriptRoot $common }
-        $durSrc = Join-Path (Split-Path ([IO.Path]::GetFullPath($common)) -Parent) "test_logs\durations.csv"
-    }
-}
 $last = @{}
-if (Test-Path $durSrc) {
-    foreach ($line in Get-Content $durSrc) {
-        $f = $line -split ","
-        if ($f.Count -ge 2) { $last[$f[0]] = [double]$f[1]; $script:times[$f[0]] = ($f[1..($f.Count - 1)] -join ",") }
-    }
-}
+foreach ($k in @($script:times.Keys)) { $last[$k] = [double](($script:times[$k] -split ",")[0]) }
 
 $names = if ($TestAll) { Get-ChildItem "$PSScriptRoot\tests\test_*.gd", "$PSScriptRoot\tests\gpu_test_*.gd" | ForEach-Object { $_.BaseName } } else { @($TestName -split '[\s,]+' | Where-Object { $_ -ne "" }) }
-$runs = @()
-foreach ($n in $names) {
-    $shards = 0
-    $src = "$PSScriptRoot\tests\$n.gd"
-    if (Test-Path $src) {
-        $m = [regex]::Match((Get-Content -Raw $src), '(?m)^const SHARDS\s*:=\s*(\d+)')
-        if ($m.Success) { $shards = [int]$m.Groups[1].Value }
-    }
-    if ($shards -gt 1) {
-        for ($i = 0; $i -lt $shards; $i++) { $runs += [PSCustomObject]@{ Name = $n; Shard = $i; Label = "$n#$i"; Log = "$n.$i" } }
-    } else {
-        $runs += [PSCustomObject]@{ Name = $n; Shard = -1; Label = $n; Log = $n }
-    }
-}
+$runs = @(Get-TestRuns $PSScriptRoot $names)
 # Longest first; a test with no time yet goes first too (it may be long).
 $runs = @($runs | Sort-Object -Property @{ Expression = { if ($last.ContainsKey($_.Label)) { $last[$_.Label] } else { 1e9 } }; Descending = $true }, Label)
 
@@ -127,7 +85,7 @@ $running = @(); $failed = @(); $total = 0
 $suite = [Diagnostics.Stopwatch]::StartNew()
 foreach ($run in $runs) {
     while ($true) {
-        $done = @($running | Where-Object { $_.Proc.HasExited -or $_.Watch.Elapsed.TotalSeconds -gt $TimeoutSec })
+        $done = @($running | Where-Object { $_.Proc.HasExited -or $_.Proc.Watch.Elapsed.TotalSeconds -gt $TimeoutSec })
         foreach ($r in $done) {
             $total += 1
             if (-not (Finish-Test $r)) { $failed += $r.Run.Label }
@@ -139,7 +97,7 @@ foreach ($run in $runs) {
     $running += Start-Test $run
 }
 while ($running.Count -gt 0) {
-    $done = @($running | Where-Object { $_.Proc.HasExited -or $_.Watch.Elapsed.TotalSeconds -gt $TimeoutSec })
+    $done = @($running | Where-Object { $_.Proc.HasExited -or $_.Proc.Watch.Elapsed.TotalSeconds -gt $TimeoutSec })
     if ($done.Count -eq 0) { Start-Sleep -Milliseconds 50; continue }
     foreach ($r in $done) {
         $total += 1
@@ -148,6 +106,9 @@ while ($running.Count -gt 0) {
     }
 }
 $script:times.Keys | Sort-Object | ForEach-Object { "$_,$($script:times[$_])" } | Set-Content -Path $durFile
+# The tests that passed, every shard, on this tree (if nothing changed while they ran): mutation_check.ps1's baseline.
+$passed = @($names | Where-Object { $n = $_; -not ($failed | Where-Object { ($_ -split "#")[0] -eq $n }) })
+if ($passed.Count -and (Get-WorkingTree $PSScriptRoot) -eq $tree) { Write-PassedTests $PSScriptRoot $tree $passed }
 
 $wall = $suite.Elapsed.TotalSeconds.ToString("F0")
 if ($failed.Count -gt 0) { Write-Host "$($failed.Count) of $total test(s) FAILED in $wall s: $($failed -join ', ')" -ForegroundColor Red; exit 1 }
