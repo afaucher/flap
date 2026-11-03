@@ -18,6 +18,7 @@ var has_uv := false      ## built with feather coordinates: each ring carries it
 var builds := 0         ## full builds so far (tests: they mustn't be every pose)
 var positions := PackedVector3Array()   ## what the mesh draws now (written to it; the GPU's copy can't be read back)
 var normals_now := PackedVector3Array()
+var colors_built := PackedColorArray()   ## the colours it was built with, before the mesh keeps them in 8 bits (tests)
 var _vd := PackedByteArray()
 var _noff := 0
 var _flip := false       ## the triangles' winding as SurfaceTool's normals see it
@@ -77,6 +78,7 @@ func build(rows: Array, colors: Array, uvs: Array, uv2s: Array) -> void:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	positions = pos
 	normals_now = nrm
+	colors_built = col
 	# The vertex buffer as built, written here rather than read back (a read back from the GPU stalls the frame).
 	_noff = RenderingServer.mesh_surface_get_format_offset(mesh.surface_get_format(0), pos.size(), Mesh.ARRAY_NORMAL)
 	_vd = pos.to_byte_array()

@@ -1,6 +1,7 @@
 extends TestCase
-## A bird drawn with its feathers placed on the GPU (BirdRig.gpu_feathers) looks as it does with them placed by the
-## rig: every species rendered both ways, spread and folded, from above and below, the pictures compared pixel by pixel.
+## A bird drawn with its feathers placed and its neck lofted on the GPU (BirdRig.gpu_feathers, gpu_body) looks as it
+## does with the rig doing both: every species rendered both ways, spread and folded, the head turned, from above and
+## below, the pictures compared pixel by pixel.
 ## (The silhouette cards share the feather material: placed by the shader as feathers, they stood off the body.)
 ## A GPU test: runs windowed.
 
@@ -29,6 +30,7 @@ func setup() -> void:
 				var shots: Array[Image] = []
 				for gpu in [false, true]:
 					BirdRig.gpu_feathers = gpu
+					BirdRig.gpu_body = gpu
 					var rig := BirdRig.new()
 					rig.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # (posed by hand, as Bird's rig is: drawn as posed)
 					vp.add_child(rig)
@@ -36,6 +38,7 @@ func setup() -> void:
 					rig.set_clock(1.0)
 					rig.fold = fold
 					rig.tail_spread = 0.6
+					rig.look_dir = Vector3(0.6, 0.2, -0.75).normalized()   # (the head turned: the neck twists)
 					rig.apply_pose()
 					cam.position = view.normalized() * p.span * (1.3 if fold < 0.5 else 0.7)   # (folded: closer)
 					cam.look_at(Vector3.ZERO)
@@ -45,6 +48,7 @@ func setup() -> void:
 					rig.queue_free()
 					await get_tree().process_frame
 				BirdRig.gpu_feathers = false
+				BirdRig.gpu_body = false
 				var a := shots[0]
 				var b := shots[1]
 				var differ := 0
@@ -60,5 +64,5 @@ func setup() -> void:
 							drawn += 1
 				var tag := "%s fold %.0f view %s" % [p.id, fold, "above" if view.y > 0.0 else "below"]
 				check(drawn > 2000, "%s: the bird is in the picture (%d px)" % [tag, drawn])
-				check(differ < 40, "%s: drawn the same with the feathers placed on the GPU (%d px differ)" % [tag, differ])
+				check(differ < 40, "%s: drawn the same with the feathers placed and the neck lofted on the GPU (%d px differ)" % [tag, differ])
 	finish()

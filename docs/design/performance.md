@@ -119,3 +119,36 @@ CPU-bound) says little about the work. At 60 fps it is 6.7 ms (shadows 2.4, the 
 GPU's time by render pass to the report.
 
 ![Feathers placed in GDScript and in the shader, and their difference](../images/gpu_feathers_ab.jpg)
+
+## Proof of concept: the neck and arm wings lofted on the GPU (`--gpu-body`, 2026-11-02)
+
+The game's `--gpu-body` (`BirdRig.gpu_body`) lofts the neck and both arm wings in the body shader instead of in
+GDScript (`neck_place.gdshaderinc`, `arm_place.gdshaderinc`, picked per mesh by the instance uniform `gpu_surface`).
+Each is a fixed mesh of the loft's rows and columns (UV: row, column) that the shader moves; every vertex works out
+its own position, its normal (LoftMesh's rule: its triangles' unit normals summed, over its 3 x 3 neighbours), colour
+and feather coordinates. A pose writes a few numbers: the neck's centreline and head frame and how its rings pair
+(the pairing itself still found in GDScript, as before), each arm's joints, normal and opening. What never changes for
+a bird goes into tables once: the head's neck ring and the trunk's front ring with their colours and coordinates; the
+trunk's rings, its feather grid and the species' plumage zones (`BodyShape.ring_at`, `half_width_at`, `uv_at` and
+`Plumage.body` are ported to the shader, so the arm's loop on the trunk takes the trunk's colour and coordinates where
+it lies, every frame -- the rig rebuilt them only when the loop had moved `ARM_REBUILD`).
+
+| 4 birds, per frame | GDScript | Shader |
+|---|---|---|
+| neck | 1.39 ms | 0.34 ms (the ring pairing) |
+| arm wings | 2.29 ms | 0.05 ms |
+| rig in all (feathers on the GPU in both) | 8.0 ms | 4.6 ms |
+
+At 20 birds the rig went from 44 to 24 ms a frame; what's left is mostly the legs' trousers (17 ms). The GPU spends
+about 0.3 ms more at 4 birds (the depth pre-pass).
+
+Tests: `gpu_test_neck` and `gpu_test_arm` read the shader's vertices back (the same includes, in a capture pass) and
+hold them to the rig's lofts -- positions within 1e-7 m, normals within 1e-4, colours and coordinates within 1e-5 --
+for every species, the head turned every way, the wing spread to nearly folded, flapped, twisted, swept. The
+arm's wrist end is a straight segment of slivers inside the hand's piece, whose normals are rounding on either side:
+held to the rig's positions there, and to unit normals. `gpu_test_feather_image` renders every species both ways.
+
+Two GPU lessons: GPU compilers reorder arithmetic, so points the rig places at exactly one spot can land a rounding
+step apart, and a triangle that is exactly nothing on the CPU gets a whole normal -- the arm treats a triangle with an
+edge under 0.1 um as none. And a function this long, indexing a local array in a loop, came out wrong on this GPU:
+the neighbours are named variables.

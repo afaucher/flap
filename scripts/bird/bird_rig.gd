@@ -178,6 +178,22 @@ var _neck_mesh: ArrayMesh
 var _custom_dirty := true          ## the feathers' instance data (strip row, share of the flex, atlas cell, seed) to write
 var _flex_set := INF
 var _neck_loft := LoftMesh.new()   ## the neck's surface (built in full only when its rings' pairing changes)
+## GPU body surfaces (proof of concept; the game's --gpu-body): the neck lofted in the body shader
+## (neck_place.gdshaderinc) from a few numbers a pose and the bird's fixed tables (_neck_tab), not in GDScript.
+static var gpu_body := false
+var gpu_neck := false
+var _cpu_neck := false            ## (GPU neck) loft it here as well this pose (tests compare the two)
+var _neck_tab: ImageTexture
+var _hp60 := PackedVector3Array()  ## the head's neck ring (head space): it never changes, so worked out once
+var _ca_cols: Array = []           ## the trunk's front ring's colours (the same)
+## The arm wings lofted in the body shader too (arm_place.gdshaderinc): their loop on the trunk takes the trunk's colour
+## and feather coordinates there every frame, from the body's own tables (_body_tab).
+var gpu_arm := false
+var _cpu_arm := false              ## (GPU arm) loft it here as well this pose (tests compare the two)
+var _body_tab: ImageTexture
+var _arm_pose_tex: ImageTexture
+var _arm_pose_buf := PackedFloat32Array()
+const ARM_POSE_W := 7
 var _neck_key := ""
 var _head_world := Vector3.INF
 var _body_tint := Color.WHITE
@@ -268,6 +284,10 @@ func build(p: BirdProfile) -> void:
 			_build_cards()
 	_built = true
 	apply_pose()
+	if gpu_body and body_texture_material != null and RenderingServer.get_rendering_device() != null:
+		_setup_gpu_neck()
+		_setup_gpu_arm()
+		apply_pose()
 
 
 static func _tint(bird_id: String) -> Color:
@@ -513,6 +533,21 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 	mi.visible = true
 	var rc := shape.root_chord()
 	var le := (wrist - sh) / span
+	if gpu_arm:   # (the shader lofts it: this side's pose)
+		var gnn := (n_in - le * le.dot(n_in)).normalized()
+		var gaft := (le.cross(gnn) * s).normalized()
+		var gl_h := sh.distance_to(elbow)
+		var gl_f := elbow.distance_to(wrist)
+		_arm_px(i, 0, sh, span)
+		_arm_px(i, 1, le, open)
+		_arm_px(i, 2, gnn, s)
+		_arm_px(i, 3, elbow, gl_h)
+		_arm_px(i, 4, wrist, gl_f)
+		_arm_px(i, 5, Vector3(1.0 if gaft.cross(gnn).dot(le) < 0.0 else 0.0, fluff * (1.0 + 0.012 * breath), rc), _L)
+		_arm_px(i, 6, Vector3(-1.0 if (_arm_loft[i] as LoftMesh)._flip else 1.0, _tile * ARM_FEATHER, 0.0), 0.0)
+		if not _cpu_arm:
+			arm_web[i] = {"from": sh, "to": wrist, "depth": maxf((elbow - sh).dot(gaft), 0.0), "chord_at_elbow": _arm_chord_at_elbow(sh, elbow, wrist, le, gnn, s, span, gl_h, gl_f, rc, open)}
+			return
 	var nn := (n_in - le * le.dot(n_in)).normalized()
 	var aft := (le.cross(nn) * s).normalized()
 	var flip := aft.cross(nn).dot(le) < 0.0   # (keep the faces' winding outward on either wing)
@@ -2066,6 +2101,8 @@ func apply_pose() -> void:
 		_pose_bone("hand." + ("L" if i == 0 else "R"), wrist, hand, hand_n)
 		Perf.add("  limb_pieces (in wings)", pl)
 
+	if gpu_arm:
+		_arm_pose_tex.update(Image.create_from_data(ARM_POSE_W, 2, false, Image.FORMAT_RGBAF, _arm_pose_buf.to_byte_array()))
 	Perf.add("rig.wings_feathers", p0)
 	p0 = Perf.t()
 	# Tail: 12 rectrices fanned, pitched and twisted as a group.
@@ -2301,18 +2338,23 @@ func _loft_neck() -> void:
 	var st := fluff * (1.0 + 0.012 * breath)      # (the trunk's scale, so the first loop lands on it)
 	var ca := Vector3(0.0, ring[0], body.collar_z) * st
 	var u_neck := body.u_at(body.collar_z)
+	if _hp60.is_empty():   # (fixed for the bird: the head's ring in head space, the trunk ring's colours)
+		for q in HEAD_AROUND:
+			_hp60.append(_head_point(_neck_entry, -TAU * q / HEAD_AROUND))
+		for j in TRUNK_AROUND:
+			var a := TAU * j / TRUNK_AROUND
+			_ca_cols.append(_body_color_at(u_neck, sin(a), absf(cos(a))))
 	var la: Array = []
-	var ca_cols: Array = []
+	var ca_cols := _ca_cols
 	for j in TRUNK_AROUND:
 		var a := TAU * j / TRUNK_AROUND
 		var q := BodyShape.section(a, ring[1], ring[2], ring[3])
 		la.append(ca + Vector3(q.x, q.y, 0.0) * st)
-		ca_cols.append(_body_color_at(u_neck, sin(a), absf(cos(a))))
 	var lb: Array = []
 	var lb60: Array = []
 	var cb := Vector3.ZERO
 	for q in HEAD_AROUND:
-		var p: Vector3 = _head.transform * _head_point(_neck_entry, -TAU * q / HEAD_AROUND)
+		var p: Vector3 = _head.transform * _hp60[q]
 		lb60.append(p)
 		if q % (HEAD_AROUND / TRUNK_AROUND) == 0:
 			lb.append(p)
@@ -2349,6 +2391,20 @@ func _loft_neck() -> void:
 	var cv := _neck_curve(cb)
 	var p1: Vector3 = cv[1]
 	var p2: Vector3 = cv[2]
+	if gpu_neck:   # (the shader lofts it: the pose's numbers)
+		var m0 := m[0]
+		var mat := body_texture_material
+		mat.set_shader_parameter("neck_ca", ca)
+		mat.set_shader_parameter("neck_p1", p1)
+		mat.set_shader_parameter("neck_p2", p2)
+		mat.set_shader_parameter("neck_cb", cb)
+		mat.set_shader_parameter("neck_hb", _head.transform.basis)
+		mat.set_shader_parameter("neck_st", st)
+		mat.set_shader_parameter("neck_r", m0)
+		mat.set_shader_parameter("neck_rev", 1 if m[1] == posmod(m0 - 3, HEAD_AROUND) else 0)
+		mat.set_shader_parameter("neck_ub_off", (ub[0].x - _neck_ucont[m0]) if have_uv else 0.0)
+		if not _cpu_neck:
+			return
 	var rows: Array = []
 	var cols: Array = []
 	var uvs: Array = []
@@ -2389,6 +2445,220 @@ func _loft_neck() -> void:
 		_neck_key = key
 	else:
 		_neck_loft.update(rows)
+
+
+func _arm_px(i: int, k: int, v: Vector3, w: float) -> void:
+	var o := (i * ARM_POSE_W + k) * 4
+	_arm_pose_buf[o] = v.x
+	_arm_pose_buf[o + 1] = v.y
+	_arm_pose_buf[o + 2] = v.z
+	_arm_pose_buf[o + 3] = w
+
+
+## (GPU arm) The arm's chord at the elbow, as _loft_arm measures it for arm_web: the station within half a station of
+## the elbow along the arm.
+func _arm_chord_at_elbow(sh: Vector3, elbow: Vector3, wrist: Vector3, le: Vector3, nn: Vector3, s: float, span: float, l_h: float, l_f: float, rc: float, open: float) -> float:
+	var chord_elbow := 0.0
+	for k in ARM_STATIONS + 1:
+		var u := lerpf(ARM_U0, 1.0, clampf(float(k) / ARM_STATIONS, 0.0, 1.0))
+		var arc := u * (l_h + l_f)
+		if absf(arc - l_h) >= (l_h + l_f) / ARM_STATIONS * 0.5:
+			continue
+		var e := sh + le * span * u
+		var nu := Vector3.UP.slerp(nn, smoothstep(0.0, 0.4, u))
+		nu = (nu - le * le.dot(nu)).normalized()
+		var aft_u := (le.cross(nu) * s).normalized()
+		var bone := sh.lerp(elbow, arc / maxf(l_h, 1e-5)) if arc <= l_h else elbow.lerp(wrist, (arc - l_h) / maxf(l_f, 1e-5))
+		chord_elbow = (maxf((bone - e).dot(aft_u), 0.0) + rc * lerpf(0.42, 0.26, u)) * open
+	return chord_elbow
+
+
+## GPU arm: the body's tables for arm_place.gdshaderinc (its rings, feather grid, plumage zones; the arm stations'
+## colours and feather sizes), a mesh of each arm loft's rows and columns for the shader to move, and both arms drawn
+## through them from here on.
+func _setup_gpu_arm() -> void:
+	var nr := body.rings.size()
+	var nz := body.trunk_z.size()
+	var around: int = (body.trunk_uv[0] as PackedVector2Array).size() - 1
+	var w := maxi(maxi(nr, nz), maxi(around + 1, ARM_AROUND))
+	var h := 5 + nz + 2 * (ARM_STATIONS + 2) + 1
+	var buf := PackedFloat32Array()
+	buf.resize(w * h * 4)
+	var put := func(x: int, y: int, v: Vector4) -> void:
+		var o := (y * w + x) * 4
+		buf[o] = v.x
+		buf[o + 1] = v.y
+		buf[o + 2] = v.z
+		buf[o + 3] = v.w
+	var col4 := func(c: Color) -> Vector4:
+		return Vector4(c.r, c.g, c.b, c.a)
+	for i in nr:
+		var r: PackedFloat32Array = body.rings[i]
+		put.call(i, 0, Vector4(r[0], r[1], r[2], r[3]))
+		put.call(i, 1, Vector4(r[4], body._slope(i, 1), body._slope(i, 2), body._slope(i, 3)))
+		put.call(i, 2, Vector4(body._slope(i, 4), 0.0, 0.0, 0.0))
+	for i in nz:
+		put.call(i, 3, Vector4(body.trunk_z[i], 0.0, 0.0, 0.0))
+		var g: PackedVector2Array = body.trunk_uv[i]
+		var g2: PackedVector2Array = body.trunk_uv2[i]
+		for j in around + 1:
+			put.call(j, 4 + i, Vector4(g[j].x, g[j].y, g2[j].x, g2[j].y))
+	var py := 4 + nz
+	var b: Dictionary = Plumage.spec(profile.id).body
+	var hx := func(k: String) -> Vector4:
+		return col4.call(Plumage.hex(b[k]))
+	put.call(0, py, hx.call("back"))
+	put.call(1, py, hx.call("rump"))
+	put.call(2, py, hx.call("breast"))
+	put.call(3, py, hx.call("belly"))
+	put.call(4, py, hx.call("vent"))
+	put.call(5, py, hx.call("flanks"))
+	var band: Array = b.get("band", ["#000000", 0.0, 0.0])
+	var bib: Array = b.get("bib", ["#000000", 0.0])
+	var scap: Array = b.get("scap", ["#000000", 0.0, 0.0])
+	put.call(6, py, col4.call(Plumage.hex(band[0])))
+	put.call(7, py, col4.call(Plumage.hex(bib[0])))
+	put.call(8, py, col4.call(Plumage.hex(scap[0])))
+	put.call(9, py, Vector4(float(band[1]), float(band[2]), float(bib[1]), 1.0 if b.has("band") else 0.0))
+	put.call(10, py, Vector4(float(scap[1]), float(scap[2]), 1.0 if b.has("scap") else 0.0, 1.0 if Plumage.level >= 4 and b.has("bib") else 0.0))
+	put.call(11, py, Vector4(float(b.line), float(b.soft), 0.0, 0.0))
+	var lengths := shape.bone_lengths()
+	var rc := shape.root_chord()
+	for i in 2:
+		var flip := i == 1   # (the right wing's sections run the other way round: _loft_arm's winding)
+		var by_row: Array = _arm_cols[i][flip]
+		for k in ARM_STATIONS + 2:
+			for j in ARM_AROUND:
+				put.call(j, 5 + nz + i * (ARM_STATIONS + 2) + k, col4.call(by_row[k][j]))
+	for k in ARM_STATIONS + 2:
+		var u := lerpf(ARM_U0, 1.0, clampf(float(k) / ARM_STATIONS, 0.0, 1.0))
+		put.call(k, 5 + nz + 2 * (ARM_STATIONS + 2), Vector4((u - ARM_U0) * (lengths[0] + lengths[1]) + _L * 0.04, rc * lerpf(0.6, 0.35, u), 0.0, 0.0))
+	_body_tab = ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGBAF, buf.to_byte_array()))
+	_arm_pose_buf.resize(ARM_POSE_W * 2 * 4)
+	_arm_pose_tex = ImageTexture.create_from_image(Image.create_from_data(ARM_POSE_W, 2, false, Image.FORMAT_RGBAF, _arm_pose_buf.to_byte_array()))
+	var mat := body_texture_material
+	mat.set_shader_parameter("body_tab", _body_tab)
+	mat.set_shader_parameter("arm_pose", _arm_pose_tex)
+	mat.set_shader_parameter("body_rings", nr)
+	mat.set_shader_parameter("body_nz", nz)
+	mat.set_shader_parameter("body_around", around)
+	var rows := ROOT_ROWS + ARM_STATIONS + 2
+	var cols := ARM_AROUND + 1
+	var reach := shape.half_span() * shape.scale + _L
+	for i in 2:
+		var pos := PackedVector3Array()
+		var uv := PackedVector2Array()
+		for r in rows:
+			for j in cols:
+				pos.append(Vector3.ZERO)
+				uv.append(Vector2(r, j))
+		var idx := PackedInt32Array()
+		for r in rows - 1:
+			for j in ARM_AROUND:
+				var a := r * cols + j
+				var bq := r * cols + (j + 1) % cols
+				var c := (r + 1) * cols + j
+				var d := (r + 1) * cols + (j + 1) % cols
+				idx.append_array([a, c, bq, bq, c, d])
+		var arr := []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = pos
+		arr[Mesh.ARRAY_TEX_UV] = uv
+		arr[Mesh.ARRAY_TEX_UV2] = uv
+		arr[Mesh.ARRAY_COLOR] = PackedColorArray(Array(uv).map(func(_q): return Color.WHITE))
+		arr[Mesh.ARRAY_INDEX] = idx
+		var gm := ArrayMesh.new()
+		gm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		var mi: MeshInstance3D = _fairings[i][0]
+		mi.mesh = gm
+		mi.material_override = body_texture_material
+		mi.set_instance_shader_parameter("gpu_surface", 2 + i)
+		mi.custom_aabb = AABB(Vector3.ONE * -reach, Vector3.ONE * reach * 2.0)
+	gpu_arm = true
+
+
+## GPU neck: the bird's fixed tables for neck_place.gdshaderinc, a mesh of the loft's rows and columns (UV: row,
+## column) that the shader moves, and the neck drawn through it from here on.
+var _neck_ucont := PackedFloat32Array()   ## the head ring's u, run on round it (no jump where it comes round)
+func _setup_gpu_neck() -> void:
+	var w := HEAD_AROUND
+	var h := 6 + NECK_ROWS
+	var buf := PackedFloat32Array()
+	buf.resize(w * h * 4)
+	var put := func(x: int, y: int, v: Vector4) -> void:
+		var o := (y * w + x) * 4
+		buf[o] = v.x
+		buf[o + 1] = v.y
+		buf[o + 2] = v.z
+		buf[o + 3] = v.w
+	var mean := Vector3.ZERO
+	for q in TRUNK_AROUND:
+		mean += _hp60[q * (HEAD_AROUND / TRUNK_AROUND)] / TRUNK_AROUND
+	var pb: float = (_hb_uv2[0] as Vector2).x
+	_neck_ucont.resize(HEAD_AROUND)
+	for q in HEAD_AROUND:
+		var hp: Vector3 = _hp60[q] - mean
+		put.call(q, 0, Vector4(hp.x, hp.y, hp.z, 0.0))
+		var c: Color = _hb_col[q]
+		put.call(q, 1, Vector4(c.r, c.g, c.b, c.a))
+		var hu: Vector2 = _hb_uv[q]
+		var hu2: Vector2 = _hb_uv2[q]
+		put.call(q, 2, Vector4(hu.x, hu.y, hu2.x, hu2.y))
+		var x := hu.x
+		if q > 0:
+			x -= pb * roundf((x - _neck_ucont[q - 1]) / pb)
+		_neck_ucont[q] = x
+	var hu0: float = (_hb_uv[0] as Vector2).x
+	var lap := hu0 - pb * roundf((hu0 - _neck_ucont[HEAD_AROUND - 1]) / pb) - _neck_ucont[0]
+	for q in HEAD_AROUND:
+		put.call(q, 5, Vector4(_neck_ucont[q], lap if q == 0 else 0.0, 0.0, 0.0))
+	var ring := body.ring_at(body.collar_z)
+	var u_neck := body.u_at(body.collar_z)
+	var ua: PackedVector2Array = body.trunk_uv[0]
+	var ua2: PackedVector2Array = body.trunk_uv2[0]
+	for j in TRUNK_AROUND + 1:
+		put.call(j, 4, Vector4(ua[j].x, ua[j].y, ua2[j].x, ua2[j].y))
+	for j in TRUNK_AROUND:
+		var a := TAU * j / TRUNK_AROUND
+		var sq := BodyShape.section(a, ring[1], ring[2], ring[3])
+		put.call(j, 3, Vector4(sq.x, sq.y, 0.0, 0.0))
+		for i in NECK_ROWS:   # (mesh order: the head end first)
+			var u := float(NECK_ROWS - 1 - i) / (NECK_ROWS - 1)
+			var c: Color = _ca_cols[j] if u <= 0.0 else _body_color_at(u_neck * (1.0 - u), sin(a), absf(cos(a)))
+			put.call(j, 6 + i, Vector4(c.r, c.g, c.b, c.a))
+	_neck_tab = ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGBAF, buf.to_byte_array()))
+	var mat := body_texture_material
+	mat.set_shader_parameter("neck_tab", _neck_tab)
+	mat.set_shader_parameter("neck_flip", -1.0 if _neck_loft._flip else 1.0)
+	# The mesh: the loft's vertices in its order, each carrying its row and column; the shader places them.
+	var cols := TRUNK_AROUND + 1
+	var pos := PackedVector3Array()
+	var uv := PackedVector2Array()
+	for i in NECK_ROWS:
+		for j in cols:
+			pos.append(_neck_loft.positions[i * cols + j])
+			uv.append(Vector2(i, j))
+	var idx := PackedInt32Array()
+	for i in NECK_ROWS - 1:
+		for j in TRUNK_AROUND:
+			var a := i * cols + j
+			var b := i * cols + (j + 1) % cols
+			var c := (i + 1) * cols + j
+			var d := (i + 1) * cols + (j + 1) % cols
+			idx.append_array([a, c, b, b, c, d])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = pos
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_TEX_UV2] = uv
+	arr[Mesh.ARRAY_COLOR] = PackedColorArray(Array(uv).map(func(_q): return Color.WHITE))
+	arr[Mesh.ARRAY_INDEX] = idx
+	var gm := ArrayMesh.new()
+	gm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	_neck_mi.mesh = gm
+	_neck_mi.set_instance_shader_parameter("gpu_surface", 1)
+	_neck_mi.custom_aabb = AABB(Vector3.ONE * -_L * 2.0, Vector3.ONE * _L * 4.0)   # (the head reaches: bounds by hand)
+	gpu_neck = true
 
 
 ## Pair two equal edge loops for a connector between them: loop B's index for each of A's, keeping them

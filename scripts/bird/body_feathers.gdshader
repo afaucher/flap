@@ -47,8 +47,28 @@ uniform float fray = 0.0;            // the outline's fraying (0 off .. 1)
 uniform float fray_grazing = 0.3;    // frays where |N.V| is below this: the outermost few millimetres
 
 varying vec2 period_up;
+instance uniform int gpu_surface = 0;   // BirdRig.gpu_body: 1 the neck, 2 / 3 the left / right arm wing, lofted here
+#include "res://scripts/bird/neck_place.gdshaderinc"
+#include "res://scripts/bird/arm_place.gdshaderinc"
 
 void vertex() {
+	if (gpu_surface == 1) {
+		vec4 col;
+		vec2 uv;
+		vec2 uv2;
+		neck_vertex(int(UV.x + 0.5), int(UV.y + 0.5), VERTEX, NORMAL, col, uv, uv2);
+		COLOR = col;
+		UV = uv;
+		UV2 = uv2;
+	} else if (gpu_surface >= 2) {
+		vec4 col;
+		vec2 uv;
+		vec2 uv2;
+		arm_vertex(gpu_surface - 2, int(UV.x + 0.5), int(UV.y + 0.5), VERTEX, NORMAL, col, uv, uv2);
+		COLOR = col;
+		UV = uv;
+		UV2 = uv2;
+	}
 	period_up = UV2;
 }
 

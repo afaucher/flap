@@ -1596,5 +1596,61 @@
     "replace": "\t\t\t\tworst = NAN\n"
    }
   ]
+ },
+ {
+  "id": "gpu-neck-seam-uv-jump",
+  "bug": "GPU neck: the head's feather coordinates weren't run on past the head ring's seam, so the neck's seam column jumped a whole lap (2026-11-02).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": " + float(lap) * texelFetch(neck_tab, ivec2(0, 5), 0).y",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-normal-corner",
+  "bug": "GPU neck: a vertex took the wrong triangle of the quad it starts, so its normal wasn't the rig's smoothed one (2026-11-02).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "\t\t\t\tacc += f1;               // this vertex is a",
+    "replace": "\t\t\t\tacc += f2;               // this vertex is a"
+   }
+  ]
+ },
+ {
+  "id": "gpu-arm-rounding-slivers",
+  "bug": "GPU arm wing: points the rig places at one spot landed a rounding step apart and the compiler reordered the cross product, so triangles the rig has as nothing gave whole normals (2026-11-02).",
+  "tests": [
+   "gpu_test_arm"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/arm_place.gdshaderinc",
+    "find": "\tf1 = (cb || ar_tiny(c - a) || ar_tiny(b - a) || dot(f1, f1) <= 1e-24) ? vec3(0.0) : normalize(f1);\n\tf2 = (cb || ar_tiny(d - b) || ar_tiny(d - c) || dot(f2, f2) <= 1e-24) ? vec3(0.0) : normalize(f2);",
+    "replace": "\tf1 = dot(f1, f1) <= 1e-24 ? vec3(0.0) : normalize(f1);\n\tf2 = dot(f2, f2) <= 1e-24 ? vec3(0.0) : normalize(f2);"
+   }
+  ]
+ },
+ {
+  "id": "gpu-arm-loop-colour",
+  "bug": "GPU arm wing: the trunk's colour where the arm's loop lies wasn't Plumage.body's (the flanks blended at another strength) (2026-11-02).",
+  "tests": [
+   "gpu_test_arm"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/arm_place.gdshaderinc",
+    "find": "smoothstep(0.55, 0.95, side) * 0.8);",
+    "replace": "smoothstep(0.55, 0.95, side) * 0.6);"
+   }
+  ]
  }
 ]

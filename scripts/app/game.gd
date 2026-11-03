@@ -12,6 +12,7 @@ extends Node3D
 ##   --max-steps <n>    physics ticks a frame may run to catch up (the project sets 3; Godot's default is 8)
 ##   --rig-tick         pose the rigs on the physics tick, not every rendered frame (Bird.rig_in_process; for comparison)
 ##   --gpu-feathers     place the feathers in the shader (BirdRig.gpu_feathers; proof of concept)
+##   --gpu-body         loft the neck in the shader (BirdRig.gpu_body; proof of concept)
 ##   --shot <png>       save a screenshot after --shot-after seconds (default 3) and quit
 ##   --shot-after <s>
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
@@ -50,6 +51,8 @@ func _ready() -> void:
 		FlightHud.style = Boot.arg_value(args, "--hud")
 	if args.has("--gpu-feathers"):
 		BirdRig.gpu_feathers = true
+	if args.has("--gpu-body"):
+		BirdRig.gpu_body = true
 	if args.has("--rig-tick"):
 		Bird.rig_in_process = false
 	if Boot.arg_value(args, "--max-steps") != "":   # (catch-up physics ticks a frame may run; project.godot sets 3)
