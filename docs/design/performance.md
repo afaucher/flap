@@ -152,3 +152,35 @@ Two GPU lessons: GPU compilers reorder arithmetic, so points the rig places at e
 step apart, and a triangle that is exactly nothing on the CPU gets a whole normal -- the arm treats a triangle with an
 edge under 0.1 um as none. And a function this long, indexing a local array in a loop, came out wrong on this GPU:
 the neighbours are named variables.
+
+## Proof of concept: the legs' feather tubes ("trousers") built on the GPU (`--gpu-body`, 2026-11-02)
+
+With `--gpu-body` the trousers are built in the body shader every frame too (`trouser_place.gdshaderinc`, sharing the
+body's lookups with the arm in `body_place.gdshaderinc`). Nothing is rebuilt, re-rested or skin-weighted any more,
+and there is no drift threshold: they are exactly LegRig's construction every frame, where before they were skinned
+between rebuilds (up to `TROUSER_DRIFT`, 2 mm, off) and each rebuild cost 2-4 ms.
+
+The construction is kept as it was. It turned out cheap to keep its rules: each pose `LegRig._gpu_layout` lays out
+each leg's rows -- where the leg leaves the body, each ring's centre, frame and radii, the skirt's, the owl's last
+rows to the pad -- about 150 numbers a leg, a few microseconds. Rows that a pose doesn't have are the last row again
+(zero-area triangles: MeshBuild's normals weigh triangles by area, so they add nothing). The shader does every
+vertex: the loop dropped onto the trunk along the shell's normal (the same bracket and halving as `_shell_loop`),
+the trunk's colour and normal there from its mesh's grid, the fillet, the rings, the pass down each column that
+stops them crossing at the ankle, the skirt, the hem as the skin draws it (the skin's top ring in the tarsus bone's
+frame), colours, feather coordinates and area-weighted normals. Built on the unscaled trunk, then the loop and
+fillet scaled with the trunk as its bone scaled them.
+
+| Rig per frame (feathers, neck and arms on the GPU in both) | Trousers rebuilt in GDScript | Built in the shader |
+|---|---|---|
+| 4 birds | 7.6 ms (legs 2.9, of it rebuilds 2.0) | 2.9 ms (legs 1.2) |
+| 20 birds | 41.9 ms (legs 17.8) | 11.6 ms (legs 4.6) |
+
+The 4-bird frame's p95 went from 25 to 20 ms (the rebuilds' spikes, 10-18 ms frames, are gone).
+
+`gpu_test_trousers` reads the shader's vertices back and holds them to `_build_feathers`'s build of the same pose --
+positions within 1e-7 m, normals 1e-4, colours exact, coordinates 2e-5 -- every species, both legs, perched,
+flaring, reaching and tucked part way, the leg leaving on the tibia and on the tarsus, the owl's tube to the pad,
+and its faces wound as MeshBuild winds them (the legs mirrored, the right leg's the other way round: wound the
+same, the right tube showed its inside from below, which the readback alone didn't see).
+
+![The legs drawn by GDScript and by the shader, and their difference](../images/gpu_body_legs_ab.jpg)

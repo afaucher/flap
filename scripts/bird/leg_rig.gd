@@ -125,6 +125,20 @@ var rest_swing := 0.0   ## the owl's outer toe's swing in the rest pose (perched
 var _loop_key: Array = [PackedFloat32Array(), PackedFloat32Array()]
 var _loop: Array = [{}, {}]   ## per side: the cached edge loop on the (unscaled) trunk shell
 var _hem: Array = [PackedVector3Array(), PackedVector3Array()]   ## the feather tube's last ring = the skin's first
+## GPU trousers (BirdRig.gpu_body): the feather tube built in the body shader every frame (trouser_place.gdshaderinc)
+## -- the same construction as _build_feathers, so no rebuilds, re-resting or skin weights. Each pose lays out each
+## leg's rows here (where the leg leaves the body, each ring's centre, frame and radii, the skirt's, the hem as the
+## skin draws it) into a small texture, a few dozen numbers; the shader does every vertex: the loop dropped onto the
+## trunk, the fillet, the rings with no fold at the ankle, the skirt, colours, feather coordinates and normals.
+const T_MAXT := 11   ## tail rows at most (the owl's: five on the tibia, the ankle, three down the tarsus, two to the pad)
+const T_HEAD := 16   ## header texels a leg
+var gpu := false
+var cpu_trousers := false   ## (GPU) build them here as well this pose, into cpu_mesh (tests compare the two)
+var cpu_mesh: Array = [ArrayMesh.new(), ArrayMesh.new()]
+var cpu_colors: Array = [PackedColorArray(), PackedColorArray()]   ## (GPU) the CPU build's colours, before 8 bits (tests)
+var _pose_tex: ImageTexture
+var _pose_buf := PackedFloat32Array()
+var _static_tex: ImageTexture
 
 
 func _init(r: BirdRig) -> void:
@@ -191,7 +205,14 @@ func pose(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, f
 	pad_centre[i] = foot
 	var ex := _exit(knee, ankle, foot, 1.0)
 	var tr: Dictionary = _tr[i]
-	if String(ex[1]) != String(tr.get("seg", "?")) or (String(ex[1]) != "" and (ex[0] as Vector3).distance_to(tr.e) > L * TROUSER_DRIFT):
+	if gpu:
+		var p0 := Perf.t()
+		_gpu_layout(i, knee, ankle, foot, up_w, fwd_h, xf, ex)
+		Perf.add("  trousers_layout (in legs)", p0)
+		if cpu_trousers:   # (tests: the CPU's build of this very pose, fresh)
+			_loop_key[i] = PackedFloat32Array()
+			_rebuild_trousers(i, knee, ankle, foot, up_w, fwd_h, xf, ex)
+	elif String(ex[1]) != String(tr.get("seg", "?")) or (String(ex[1]) != "" and (ex[0] as Vector3).distance_to(tr.e) > L * TROUSER_DRIFT):
 		var p0 := Perf.t()
 		_rebuild_trousers(i, knee, ankle, foot, up_w, fwd_h, xf, ex)
 		Perf.add("  trousers_rebuild (in legs)", p0)
@@ -437,6 +458,218 @@ static func _fill_v2(n: int, v: Vector2) -> PackedVector2Array:
 	return out
 
 
+# --- The feather tube on the GPU ------------------------------------------------------------------------------
+
+## Switch both legs' feather tubes to the shader: the fixed tables (the skin's top ring in the tarsus bone's frame, the
+## drawn trunk's colours and normals), a mesh of rows and columns for the shader to move, unskinned.
+func setup_gpu() -> void:
+	if not _built:
+		_build_rest()
+	var n := AROUND
+	var arr := (rig._trunk.mesh as ArrayMesh).surface_get_arrays(0)
+	var cols: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	var nrms: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var nz := rig.body.trunk_z.size()
+	var w := cols.size() / nz
+	var sw := maxi(w, n)
+	var sh := 2 + 2 * nz
+	var buf := PackedFloat32Array()
+	buf.resize(sw * sh * 4)
+	var put := func(x: int, y: int, v: Vector4) -> void:
+		var o := (y * sw + x) * 4
+		buf[o] = v.x
+		buf[o + 1] = v.y
+		buf[o + 2] = v.z
+		buf[o + 3] = v.w
+	for i in 2:
+		var m := (_bind[i][B_TARS] as Transform3D)
+		var rh: PackedVector3Array = _rest_hem[i]
+		for j in rh.size():
+			var q := m * rh[j]
+			put.call(j, i, Vector4(q.x, q.y, q.z, 0.0))
+	for r in nz:
+		for j in w:
+			var c := cols[r * w + j]
+			var q := nrms[r * w + j]
+			put.call(j, 2 + r, Vector4(c.r, c.g, c.b, c.a))
+			put.call(j, 2 + nz + r, Vector4(q.x, q.y, q.z, 0.0))
+	_static_tex = ImageTexture.create_from_image(Image.create_from_data(sw, sh, false, Image.FORMAT_RGBAF, buf.to_byte_array()))
+	_pose_buf.resize(T_HEAD * 2 * (1 + T_MAXT) * 4)
+	_pose_tex = ImageTexture.create_from_image(Image.create_from_data(T_HEAD, 2 * (1 + T_MAXT), false, Image.FORMAT_RGBAF, _pose_buf.to_byte_array()))
+	var mat := rig.body_texture_material
+	mat.set_shader_parameter("leg_pose", _pose_tex)
+	mat.set_shader_parameter("leg_static", _static_tex)
+	mat.set_shader_parameter("trunk_w", w)
+	mat.set_shader_parameter("leg_l", L)
+	var rows := FILLET_W.size() + T_MAXT
+	for i in 2:
+		var pos := PackedVector3Array()
+		var uv := PackedVector2Array()
+		for r in rows:
+			for j in n + 1:
+				pos.append(Vector3.ZERO)
+				uv.append(Vector2(r, j))
+		# (wound as the rest build wound it -- MeshBuild turns each leg's faces to face out, the legs mirrored: culled
+		# from behind, a tube wound the other way shows its inside)
+		var built := (feather_mi[i].mesh as ArrayMesh)
+		var flip := false
+		if built.get_surface_count() > 0:
+			var bi: PackedInt32Array = built.surface_get_arrays(0)[Mesh.ARRAY_INDEX]
+			flip = bi.size() >= 3 and bi[1] == bi[0] + 1
+		var idx := PackedInt32Array()
+		for r in rows - 1:
+			for j in n:
+				var a := r * (n + 1) + j
+				if flip:
+					idx.append_array([a, a + 1, a + n + 1, a + 1, a + n + 2, a + n + 1])
+				else:
+					idx.append_array([a, a + n + 1, a + 1, a + 1, a + n + 1, a + n + 2])
+		var ga := []
+		ga.resize(Mesh.ARRAY_MAX)
+		ga[Mesh.ARRAY_VERTEX] = pos
+		ga[Mesh.ARRAY_TEX_UV] = uv
+		ga[Mesh.ARRAY_TEX_UV2] = uv
+		ga[Mesh.ARRAY_COLOR] = PackedColorArray(Array(uv).map(func(_q): return Color.WHITE))
+		ga[Mesh.ARRAY_INDEX] = idx
+		var gm := ArrayMesh.new()
+		gm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ga)
+		var mi := feather_mi[i]
+		mi.skin = null
+		mi.skeleton = NodePath()
+		mi.mesh = gm
+		mi.material_override = mat
+		mi.set_instance_shader_parameter("gpu_surface", 4 + i)
+		mi.custom_aabb = AABB(Vector3.ONE * -L * 2.0, Vector3.ONE * L * 4.0)
+	gpu = true
+
+
+func _tp(i: int, row: int, k: int, v: Vector3, w: float) -> void:
+	var o := ((i * (1 + T_MAXT) + row) * T_HEAD + k) * 4
+	_pose_buf[o] = v.x
+	_pose_buf[o + 1] = v.y
+	_pose_buf[o + 2] = v.z
+	_pose_buf[o + 3] = w
+
+
+## Leg `i`'s feather tube this pose, laid out for the shader as _build_feathers lays it out (built on the unscaled trunk,
+## as the rebuild builds it; the shader scales the loop and fillet with the trunk as the trunk's bone did): where it
+## leaves the body, its rows (rings: centre, frame, radii, distance down, colour weight, axis; or the skirt, its edge
+## and the hem, or the owl's last two down to the pad), and the hem as the skin draws it.
+func _gpu_layout(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w: Vector3, fwd_h: Vector3, xf: Array, ex: Array) -> void:
+	var s: float = BirdRig.SIDES[i]
+	var n := AROUND
+	exit_on[i] = ex[1]
+	feather_mi[i].visible = ex[1] != ""
+	if ex[1] == "":
+		return
+	var owl: bool = spec.feathered == "foot"
+	var t1 := (ankle - knee).normalized()
+	var t2 := (foot - ankle).normalized()
+	var tars := ankle.distance_to(foot)
+	var f1 := _frame(t1, s)
+	var f2 := _frame(t2, s)
+	var thigh := float(spec.thigh) * L
+	var shank := float(spec.shank) * L
+	var tr := float(spec.tars_r) * L
+	var er := float(spec.get("end_r", spec.shank)) * L
+	var e: Vector3 = ex[0]
+	var on_tarsus: bool = ex[1] == "tarsus"
+	if not on_tarsus and e.distance_to(ankle) < shank * 1.7:
+		on_tarsus = true
+		e = ankle
+	var rows: Array = []
+	var dev := acos(clampf(t1.dot(t2), -1.0, 1.0))
+	var bend_r := shank * 1.15
+	var bend_t := minf(bend_r * tan(minf(dev, 2.4) * 0.5), 0.45 * minf(e.distance_to(ankle), tars))
+	if not on_tarsus:
+		var dl := e.distance_to(ankle)
+		var tib := knee.distance_to(ankle)
+		for x: float in [0.12, 0.3, 0.5, 0.7, 0.88]:
+			if dl * (1.0 - x) < bend_t and x > 0.12:
+				continue
+			var c := e + t1 * dl * x
+			var r := lerpf(thigh, shank, pow(clampf((c - knee).dot(t1) / tib, 0.0, 1.0), 0.8))
+			rows.append([c, f1[0], f1[1], r, r * 0.85, r * 1.15, dl * x, t1])
+		var tb := (t1 + t2).normalized()
+		var fb := _frame(tb, s)
+		var mid := ankle
+		if dev > 0.05:
+			var inner := (t2 - t1).normalized()
+			mid = ankle + inner * (bend_r / cos(minf(dev, 2.4) * 0.5) - bend_r)
+		rows.append([mid, fb[0], fb[1], shank, shank * 0.85, shank * 1.12, dl, tb])
+		if owl:
+			for x: float in [0.3, 0.55, 0.75]:
+				if tars * x < bend_t:
+					continue
+				var r := lerpf(shank, er, x)
+				rows.append([ankle + t2 * tars * x, f2[0], f2[1], r, r * 0.9, r * 1.1, dl + tars * x, t2])
+	elif not owl:
+		var r := shank * 1.1
+		rows.append([e + t2 * tars * 0.03, f2[0], f2[1], r, r * 0.9, r * 1.1, tars * 0.03, t2])
+	else:
+		var dl := e.distance_to(foot)
+		for x: float in [0.15, 0.45, 0.75]:
+			var r := lerpf(shank, er, x)
+			rows.append([e + t2 * dl * x, f2[0], f2[1], r, r * 0.9, r * 1.1, dl * x, t2])
+	var axis := t2 if on_tarsus else t1
+	var total_d: float = float(rows[rows.size() - 1][6])
+	# Rows, kind 0 rings; then 1 skirt, 2 its edge, 3 the hem; or 4 / 5 the owl's halfway and on the pad.
+	var tail: Array = []
+	for rk: Array in rows:
+		tail.append([0, rk[0], rk[1], rk[2], rk[3], rk[4], rk[5], float(rk[6]), lerpf(0.3, 1.0, smoothstep(0.0, 0.6, float(rk[6]) / maxf(total_d, 1e-5))), rk[7]])
+	var flag := 0.0
+	var d_row := 0.0
+	var d0 := 0.0
+	var fr := _pad_frame(i, foot, up_w, fwd_h)
+	if owl:
+		var last: Array = rows[rows.size() - 1]
+		var a3 := PI + TAU * (n / 4) / n
+		var sa3 := sin(a3)
+		var q3: Vector3 = (last[0] as Vector3) + (last[1] as Vector3) * (cos(a3) * float(last[3])) + (last[2] as Vector3) * (sa3 * (float(last[4]) if sa3 >= 0.0 else float(last[5])))
+		var gap_d: float = (_onto_pad(q3, t2, fr) - (last[0] as Vector3)).dot(t2)
+		var d_last: float = last[6]
+		tail.append([4, (last[0] as Vector3) + t2 * gap_d * 0.5, last[1], last[2], last[3], last[4], last[5], d_last + gap_d * 0.5, 1.0, t2])
+		tail.append([5, (last[0] as Vector3) + t2 * gap_d, last[1], last[2], last[3], last[4], last[5], d_last + gap_d, 1.0, t2])
+	else:
+		flag = (maxf(float(spec.flag), 0.12) if on_tarsus else float(spec.flag)) * tars
+		d_row = ((e - ankle).dot(t2) + tars * 0.03) if on_tarsus else bend_t
+		d0 = total_d - d_row
+		var dm := d_row + flag * 0.6
+		tail.append([1, ankle + t2 * lerpf(d_row, dm, 0.5), f2[0], f2[1], 0.0, 0.0, 0.0, d0 + lerpf(d_row, dm, 0.5), 1.0, t2])
+		tail.append([2, ankle + t2 * dm, f2[0], f2[1], 0.0, 0.0, 0.0, d0 + dm, 1.0, t2])
+		tail.append([3, ankle + t2 * (dm * 0.85), f2[0], f2[1], 0.0, 0.0, 0.0, d0 + dm * 1.05, 1.0, t2])
+	var c0: Vector3 = rows[0][0]
+	var tcol := Color(0, 0, 0, 0)
+	if spec.trouser != "":
+		tcol = Color.html(spec.trouser)
+		tcol.a = 1.0
+	_tp(i, 0, 0, e, rig.fluff * (1.0 + 0.012 * rig.breath))
+	_tp(i, 0, 1, ankle, tars)
+	_tp(i, 0, 2, t2, flag)
+	_tp(i, 0, 3, f2[0], d_row)
+	_tp(i, 0, 4, f2[1], tr)
+	_tp(i, 0, 5, axis, shank)
+	_tp(i, 0, 6, Vector3(thigh, rig._tile * rig._size_trunk(c0.z), rig._tile * LEG_FEATHER), float(tail.size()))
+	_tp(i, 0, 7, Vector3(tcol.r, tcol.g, tcol.b), 1.0 if spec.trouser != "" else 0.0)
+	var tt := xf[B_TARS] as Transform3D
+	_tp(i, 0, 8, tt.basis.x, 0.0)
+	_tp(i, 0, 9, tt.basis.y, 0.0)
+	_tp(i, 0, 10, tt.basis.z, 0.0)
+	_tp(i, 0, 11, tt.origin, 0.0)
+	_tp(i, 0, 12, fr[0], float(fr[4]))
+	_tp(i, 0, 13, fr[1], float(fr[5]))
+	_tp(i, 0, 14, fr[2], 1.0 if owl else 0.0)
+	_tp(i, 0, 15, fr[3], d0)
+	for k in tail.size():
+		var t: Array = tail[k]
+		_tp(i, 1 + k, 0, t[1], float(t[0]))
+		_tp(i, 1 + k, 1, t[2], float(t[4]))
+		_tp(i, 1 + k, 2, t[3], float(t[5]))
+		_tp(i, 1 + k, 3, t[9], float(t[6]))
+		_tp(i, 1 + k, 4, Vector3(float(t[7]), float(t[8]), 0.0), 0.0)
+	_pose_tex.update(Image.create_from_data(T_HEAD, 2 * (1 + T_MAXT), false, Image.FORMAT_RGBAF, _pose_buf.to_byte_array()))
+
+
 # --- The feather tube ----------------------------------------------------------------------------------------
 
 ## Where the polyline knee -> ankle -> foot leaves the trunk (scaled by `st`): [point, segment ("tibia",
@@ -639,8 +872,9 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 	var tr := float(spec.tars_r) * L
 	var er := float(spec.get("end_r", spec.shank)) * L
 	_hem[i] = PackedVector3Array()
+	var out_mesh: ArrayMesh = cpu_mesh[i] if gpu else feather_mi[i].mesh
 	if ex[1] == "":
-		(feather_mi[i].mesh as ArrayMesh).clear_surfaces()
+		out_mesh.clear_surfaces()
 		feather_mi[i].visible = false
 		parts_f[i] = {}
 		return
@@ -890,7 +1124,9 @@ func _build_feathers(i: int, knee: Vector3, ankle: Vector3, foot: Vector3, up_w:
 		bld.fixed[j] = lnrm[j % n]
 	Perf.add("    tube+weights (in trousers)", q0)
 	q0 = Perf.t()
-	bld.commit(feather_mi[i].mesh as ArrayMesh)
+	if gpu:
+		cpu_colors[i] = bld.c
+	bld.commit(out_mesh)
 	Perf.add("    commit (in trousers)", q0)
 	parts_f[i] = bld.parts
 

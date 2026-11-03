@@ -287,6 +287,8 @@ func build(p: BirdProfile) -> void:
 	if gpu_body and body_texture_material != null and RenderingServer.get_rendering_device() != null:
 		_setup_gpu_neck()
 		_setup_gpu_arm()
+		if legs != null:
+			legs.setup_gpu()
 		apply_pose()
 
 

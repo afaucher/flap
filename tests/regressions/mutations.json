@@ -497,8 +497,13 @@
   "edits": [
    {
     "file": "scripts/bird/leg_rig.gd",
-    "find": "\tvar bend_r := shank * 1.15\n",
-    "replace": "\tvar bend_r := 0.0\n"
+    "find": "of the joint give way to one ring on the arc.\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := shank * 1.15\n",
+    "replace": "of the joint give way to one ring on the arc.\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := 0.0\n"
+   },
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\tvar rows: Array = []\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := shank * 1.15\n",
+    "replace": "\tvar rows: Array = []\n\tvar dev := acos(clampf(t1.dot(t2), -1.0, 1.0))\n\tvar bend_r := 0.0\n"
    }
   ]
  },
@@ -1647,9 +1652,66 @@
   ],
   "edits": [
    {
-    "file": "scripts/bird/arm_place.gdshaderinc",
+    "file": "scripts/bird/body_place.gdshaderinc",
     "find": "smoothstep(0.55, 0.95, side) * 0.8);",
     "replace": "smoothstep(0.55, 0.95, side) * 0.6);"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-wound-wrong",
+  "bug": "GPU trousers: one winding for both legs, where MeshBuild winds the mirrored right leg the other way: culled from behind, the right tube showed its inside (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers",
+   "gpu_test_feather_image"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/leg_rig.gd",
+    "find": "\t\t\tflip = bi.size() >= 3 and bi[1] == bi[0] + 1",
+    "replace": "\t\t\tflip = false"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-owl-pad-centre",
+  "bug": "GPU trousers: the owl's rows down to the pad slid the ring round their own displaced centre instead of the last ring's (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/trouser_place.gdshaderinc",
+    "find": "\t\tvec3 q = tr_row_ring(leg, k - (kind == 4 ? 1 : 2), j);",
+    "replace": "\t\tvec3 q = tr_row_ring(leg, k, j);"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-fillet-unscaled",
+  "bug": "GPU trousers: the loop and fillet didn't scale with the trunk (fluff, breath) as the trunk's bone scaled them: the loop came off the drawn belly (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/trouser_place.gdshaderinc",
+    "find": "\t\tpos *= (1.0 - ws) * st + ws;",
+    "replace": "\t\tpos *= 1.0;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-trousers-no-fold-pass",
+  "bug": "GPU trousers: no pass down each column keeping each ring's point ahead of the one before, so on a sharp ankle the rings crossed (2026-11-02).",
+  "tests": [
+   "gpu_test_trousers"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/trouser_place.gdshaderinc",
+    "find": "\t\tif (kk < last) {",
+    "replace": "\t\tif (false) {"
    }
   ]
  }

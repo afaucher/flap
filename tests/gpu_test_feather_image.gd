@@ -1,6 +1,6 @@
 extends TestCase
-## A bird drawn with its feathers placed and its neck lofted on the GPU (BirdRig.gpu_feathers, gpu_body) looks as it
-## does with the rig doing both: every species rendered both ways, spread and folded, the head turned, from above and
+## A bird drawn with its feathers placed and its neck, arm wings and trousers built on the GPU (BirdRig.gpu_feathers,
+## gpu_body) looks as it does with the rig doing all of it (its trousers built at the pose, not skinned since a rebuild): every species rendered both ways, spread and folded, the head turned, from above and
 ## below, the pictures compared pixel by pixel.
 ## (The silhouette cards share the feather material: placed by the shader as feathers, they stood off the body.)
 ## A GPU test: runs windowed.
@@ -39,6 +39,9 @@ func setup() -> void:
 					rig.fold = fold
 					rig.tail_spread = 0.6
 					rig.look_dir = Vector3(0.6, 0.2, -0.75).normalized()   # (the head turned: the neck twists)
+					if not gpu and rig.legs != null:   # (the rig's trousers built at this very pose, not skinned since the last)
+						rig.legs._tr = [{}, {}]
+						rig.legs._loop_key = [PackedFloat32Array(), PackedFloat32Array()]
 					rig.apply_pose()
 					cam.position = view.normalized() * p.span * (1.3 if fold < 0.5 else 0.7)   # (folded: closer)
 					cam.look_at(Vector3.ZERO)
@@ -64,5 +67,8 @@ func setup() -> void:
 							drawn += 1
 				var tag := "%s fold %.0f view %s" % [p.id, fold, "above" if view.y > 0.0 else "below"]
 				check(drawn > 2000, "%s: the bird is in the picture (%d px)" % [tag, drawn])
-				check(differ < 40, "%s: drawn the same with the feathers placed and the neck lofted on the GPU (%d px differ)" % [tag, differ])
+				if differ >= 40 and OS.has_environment("FLAP_SHOTS"):
+					a.save_png(OS.get_environment("FLAP_SHOTS") + "/%s_%d_%s_cpu.png" % [p.id, int(fold), "above" if view.y > 0.0 else "below"])
+					b.save_png(OS.get_environment("FLAP_SHOTS") + "/%s_%d_%s_gpu.png" % [p.id, int(fold), "above" if view.y > 0.0 else "below"])
+				check(differ < 40, "%s: drawn the same with the feathers and the body's surfaces on the GPU (%d px differ)" % [tag, differ])
 	finish()
