@@ -2868,5 +2868,47 @@
     "replace": "\t\talpha_target = damped"
    }
   ]
+ },
+ {
+  "id": "salvo-downs-in-one-pass",
+  "bug": "Every hit knocked out its full 2 or 3 feathers however soon after the last: a salvo's rounds are in the air before the first lands, so a bird that flew on (a player) was downed by one AI salvo within 1.4 s of its first hit, before it could do anything (2026-11-03; probe_salvo). Now a hit within CombatWorld.recover s of the last takes at most RECOVER_FEATHERS.",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tn = mini(n, RECOVER_FEATHERS)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "recovery-window-not-restarted",
+  "bug": "The recovery window counted only from a salvo's first (full) hit, so a salvo longer than the window took full counts again from its later rounds (2026-11-03).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t_last_hit[b] = _clock\n",
+    "replace": "\tif n > RECOVER_FEATHERS:\n\t\t_last_hit[b] = _clock\n"
+   }
+  ]
+ },
+ {
+  "id": "brain-thinks-on-global-tick",
+  "bug": "A combat-AI brain thought on alternate ticks of the engine's global physics frame count, so a duel played out differently depending on how many ticks ran before it in the process: test_combat_defense's tree drag passed or failed by the parity the earlier cases left (exposed when CombatWorld.recover made those cases run longer) (2026-11-03). Now each brain counts its own ticks.",
+  "tests": [
+   "test_duel_repeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "posmod(_ticks + _phase, THINK_EVERY)",
+    "replace": "posmod(Engine.get_physics_frames() + _phase, THINK_EVERY)"
+   }
+  ]
  }
 ]

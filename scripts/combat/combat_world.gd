@@ -7,7 +7,9 @@ extends Node3D
 ##
 ## A burst hurts every bird within `blast` m but its shooter: a short stun (no control, as when hitting a tree)
 ## and a shove away from it, and it knocks out the flight feathers nearest it (Bird.lose_feathers) -- 2 or 3
-## (FEATHERS_PER_HIT on average) within a fuse's reach, 1 from the blast's outer ring -- in a puff.
+## (FEATHERS_PER_HIT on average) within a fuse's reach, 1 from the blast's outer ring -- in a puff. A bird hit again
+## within `recover` s of its last hit loses at most RECOVER_FEATHERS: a salvo's rounds are in the air before the first
+## lands, and they'd otherwise down a bird before it could do a thing about it (each hit restarts the window).
 ## Bird.DOWN_FEATHERS lost downs a bird (a long stun; it drops) and `downed` is emitted -- the scene decides what
 ## happens next.
 
@@ -26,6 +28,8 @@ static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.f
 const SHOVE := 4.0          ## m/s, push from a burst at its centre
 const HIT_STUN := 0.5       ## s
 const FEATHERS_PER_HIT := 2.5   ## on average, within a fuse's reach (Projectile.fuse)
+static var recover := 1.0   ## s after a hit in which another knocks out at most RECOVER_FEATHERS (0: off)
+const RECOVER_FEATHERS := 1
 const DOWN_STUN := 2.5      ## s
 const SMOKE_EVERY := 0.025  ## s between smoke points
 const SMOKE_LIFE := 2.2     ## s
@@ -43,6 +47,7 @@ var _next_team := 100       ## (the teams of birds added without one)
 const WARN_RANGE := 25.0    ## m: rounds closer than this, heading at a bird, are warned of
 const LANE := 1.3           ## m off the line of fire within which a teammate is in the way (a burst's reach)
 var _rng := RandomNumberGenerator.new()
+var _last_hit := {}         ## Bird -> _clock at its last hit (the recovery window)
 var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
 var player: Launcher = null
 
@@ -115,6 +120,7 @@ func add_bird(b: Bird, controller: Object = null, team := -1) -> Launcher:
 
 func remove_bird(b: Bird) -> void:
 	birds.erase(b)
+	_last_hit.erase(b)
 	hits.erase(b)
 	teams.erase(b)
 	for l in launchers.duplicate():
@@ -294,7 +300,11 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	away = away.normalized() if away.length() > 0.01 else Vector3.UP
 	b.model.velocity += away * SHOVE * (0.4 + 0.6 * strength)
 	b.stun = maxf(b.stun, HIT_STUN)
-	var keys := b.lose_feathers(at, feathers_for(strength))
+	var n := feathers_for(strength)
+	if recover > 0.0 and _clock - float(_last_hit.get(b, -INF)) < recover:
+		n = mini(n, RECOVER_FEATHERS)
+	_last_hit[b] = _clock
+	var keys := b.lose_feathers(at, n)
 	fx.knocked_out(b, at, keys, away)
 	struck.emit(b, at, keys)
 	if was_up and b.is_down():

@@ -41,7 +41,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); a bird
   carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
-  that area and drops (`FlightModel.wing_loss`); eight down the bird; your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
+  that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
+  takes one feather at most, so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
   locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The
   HUD: enemies warm (`CombatHud.ENEMY`), teammates a teal caret (`FRIEND`), a teal cross over the gunsight while a

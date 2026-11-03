@@ -40,6 +40,7 @@ var clock := 0.0
 var rng := RandomNumberGenerator.new()
 var _frame := -1
 var _phase := 0                 ## which of the THINK_EVERY ticks it thinks on (birds take turns)
+var _ticks := 0                 ## ticks since it was made (its own count, so a match plays the same whatever ran before)
 var _unthought := 0.0           ## s since it last thought
 var _next_decide := 0.0
 var _mode_since := 0.0
@@ -87,9 +88,10 @@ func tick(dt: float) -> void:
 	if f == _frame or launcher == null:   # (no launcher: taken out of the fight)
 		return
 	_frame = f
+	_ticks += 1
 	_unthought += dt
 	sense.record(dt)
-	if picture != null and posmod(f + _phase, THINK_EVERY) != 0:
+	if picture != null and posmod(_ticks + _phase, THINK_EVERY) != 0:
 		CombatSense.coast(picture, dt)
 		return
 	dt = _unthought
