@@ -11,7 +11,7 @@ const GRASS_IN := 15.0      ## m inside the posts the heath's grass reaches, thi
 const GRASS_FULL := 3.0     ## m past the posts it's at its thickest
 const GRASS_TO := 300.0     ## m: as far out as it's sown; it ends where the ground rises into the hills (GRASS_RISE)
 const GRASS_RISE := Vector2(1.0, 7.0)   ## m above the valley floor: where it starts thinning, and where it's gone
-const HILLS_FROM := 130.0    ## m: where the hills mesh takes over from the ground plane and the escarpment's grid
+const HILLS_FROM := 150.0    ## m: where the hills mesh takes over from the ground plane and the escarpment's grid
 const HILLS_TO := 1100.0
 const WIRES := [0.6, 1.15]   ## m: the fence's two strands, up the posts
 const WIRE_R := 0.012
@@ -86,7 +86,7 @@ func hill(x: float, z: float) -> float:
 	# (layered, as the heath concept's: a near ridge whose height swings round the ring, so its crest runs across the
 	# view on a slant; a lower valley behind it; a long far ridge, blue with distance; a little roughness over all)
 	var dir := Vector2(x, z) / r   # (noise round the ring from the direction, not the angle: no seam where it wraps)
-	var k := smoothstep(HILLS_FROM, 190.0, r)
+	var k := smoothstep(HILLS_FROM, 210.0, r)
 	var near_h := 8.0 + 50.0 * _fbm(dir * 1.3 + Vector2(2.0, 0.0)) * _fbm(dir * 0.55 + Vector2(4.0, 7.0)) * 1.6
 	var near := near_h * exp(-pow((r - 240.0) / 85.0, 2.0))
 	var far := (40.0 + 45.0 * _fbm(dir * 0.8 + Vector2(9.0, 1.0))) * smoothstep(480.0, 820.0, r)
@@ -101,7 +101,7 @@ func hill(x: float, z: float) -> float:
 func _rock() -> void:
 	var thetas := _thetas(0.5, esc.foot)
 	var radii := PackedFloat32Array()
-	var r := esc.foot - Escarpment.SCREE - 1.0
+	var r := layout.boundary + 1.0   # (the talus reaches out almost to the boundary)
 	while r < minf(esc.foot + 40.0, HILLS_FROM + 2.0):
 		radii.append(r)
 		r += 0.3
@@ -120,6 +120,8 @@ func _rock() -> void:
 	rock.mesh = _grid_mesh(_rock_grid, thetas.size(), radii.size(), true)
 	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.9, 0.92, 0.97), 1.0, true)
 	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_steep", true)   # (the wall draws those)
+	# (not out at the sector's ends, where the wall is low and its sheet thin: there the height field draws its steps)
+	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_sector", Vector2(esc.at, Escarpment.HALF * 0.8))
 	(rock.material_override as ShaderMaterial).set_shader_parameter("fracture", 0.4)
 	add_child(rock)
 	var faces := PackedVector3Array()
@@ -295,16 +297,17 @@ func _rock_dressing() -> void:
 		if esc.taper(theta) < 0.05:
 			continue
 		var s := Vector2(at.x, at.z).length() - esc.foot
-		if s < 1.0 and h < Escarpment.SCREE_H * 1.2:   # (the scree: its blocks, _scree_blocks)
+		var tal := esc.talus(_column_near(theta)).y
+		if h < tal + 0.6:   # (the talus: its blocks, _scree_blocks)
 			continue
-		elif n.y > 0.93 and h > Escarpment.SCREE_H + 2.0:   # (a ledge or the top)
+		elif n.y > 0.93 and h > tal + 2.0:   # (a ledge or the top)
 			var col := _column_near(theta)   # (the top: anywhere past where its last face ends, the plateau too)
 			var on_top := not col.is_empty() and s + esc.foot > esc.top_start(col) - 0.3
 			if on_top and _rng.randf() < 0.0035:   # (about one every 8 m along it)   # (along the top: pines, taller than the ledges')
 				var tall := _rng.randf_range(9.0, 16.0)
 				tx_top.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall)), at))
 				tc_top.append(Color(1, 1, 1) * _rng.randf_range(0.85, 1.05))
-			elif not on_top and _rng.randf() < 0.1 * smoothstep(0.62, 0.8, _vnoise(Vector2(at.x, at.z) * 0.08)):   # (a few, in clumps)
+			elif not on_top and Vector2(at.x, at.z).length() > layout.boundary + 8.0 and _rng.randf() < 0.1 * smoothstep(0.5, 0.72, _vnoise(Vector2(at.x, at.z) * 0.08)):   # (a few, in clumps; none leaning over the fence)
 				var tall := _rng.randf_range(2.0, 5.5)
 				var b := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall) * Vector3(_rng.randf_range(0.8, 1.2), 1.0, _rng.randf_range(0.8, 1.2)))
 				px.append(Transform3D(b, at))
@@ -345,7 +348,7 @@ const BLOCK_SHAPES := 4
 func _scree_blocks(sets: Array) -> void:
 	var stones := esc.stones()
 	var solid := []
-	for n in 5200:
+	for n in 7000:
 		var theta := esc.at + _rng.randf_range(-1.0, 1.0) * Escarpment.HALF
 		var w := esc.taper(theta)
 		if w < 0.05 or _rng.randf() > w:
@@ -353,8 +356,9 @@ func _scree_blocks(sets: Array) -> void:
 		var col := _column_near(theta)
 		if col.is_empty():
 			continue
-		var s := _rng.randf_range(-Escarpment.SCREE - 1.2, 0.4)
-		var r: float = col[1] + s
+		var tw := esc.talus(col).x
+		var s := _rng.randf_range(-tw - 1.2, 0.4)
+		var r: float = col[6] + s
 		var p := Vector2(sin(theta), cos(theta)) * r
 		var clear := true
 		for st in stones:
@@ -366,7 +370,9 @@ func _scree_blocks(sets: Array) -> void:
 				clear = false
 		if not clear or r < layout.boundary + 1.5:
 			continue
-		var toe := clampf(-s / Escarpment.SCREE, 0.0, 1.2)   # (0 at the foot, 1 at the toe)
+		var toe := clampf(-s / tw, 0.0, 1.2)   # (0 at the foot, 1 at the toe)
+		if _rng.randf() < 0.95 * smoothstep(0.35, 0.55, _soil(p)):   # (bare earth in patches: few blocks there)
+			continue
 		var size := lerpf(0.5, 2.6, toe) * _rng.randf_range(0.6, 1.35) * (1.8 if _rng.randf() < 0.08 else 1.0) * lerpf(0.6, 1.0, w)
 		var dims := Vector3(size, size * _rng.randf_range(0.4, 0.75), size * _rng.randf_range(0.55, 1.0))
 		var h := esc.height_in(col, r)
@@ -395,17 +401,18 @@ func _scree_blocks(sets: Array) -> void:
 	# Heather and grass come up among the scree in patches, thickest out at its toe (more soil, less rock).
 	var hx := []
 	var hc := []
-	for n in 9000:
+	for n in 7000:
 		var theta := esc.at + _rng.randf_range(-1.0, 1.0) * Escarpment.HALF
 		if esc.taper(theta) < 0.1:
 			continue
 		var col := _column_near(theta)
 		if col.is_empty():
 			continue
-		var s := _rng.randf_range(-Escarpment.SCREE - 1.0, 0.0)
+		var tw := esc.talus(col).x
+		var s := _rng.randf_range(-tw - 1.0, 0.0)
 		var r: float = col[6] + s
 		var p := Vector2(sin(theta), cos(theta)) * r
-		var toe := clampf(-s / Escarpment.SCREE, 0.0, 1.0)
+		var toe := clampf(-s / tw, 0.0, 1.0)
 		if r < layout.boundary + 1.0 or _rng.randf() > toe * smoothstep(0.4, 0.7, _vnoise(p * 0.11 + Vector2(2.0, 5.0))):
 			continue
 		var at := Vector3(p.x, ArenaLayout.GROUND_Y + esc.height(p.x, p.y), p.y)
@@ -445,6 +452,11 @@ func _ledge_growth(hx: Array, hc: Array) -> void:
 				tc.append(Color(0.3, 0.3, 0.13).lerp(Color(0.15, 0.2, 0.07), _rng.randf()))
 	var mi := _batch("ledge_tufts", _tuft_cards(), tx, tc)
 	mi.material_override = _grass_mat()
+
+
+## The talus's earthy patches (the shader's soil, the same noise): 0..1.
+func _soil(p: Vector2) -> float:
+	return _vnoise(p * 0.09 + Vector2(13.0, 13.0)) * 0.7 + _vnoise(p * 0.2 + Vector2(3.0, 9.0)) * 0.3
 
 
 func _stone_colour() -> Color:
@@ -784,7 +796,7 @@ static func _rock_mat(scan: String, tile: float, tint: Color, strata: float, scr
 		m.set_shader_parameter("ground_normal", load(g + "_nor_gl_2k.jpg"))
 		m.set_shader_parameter("ground_tile", 1.8)
 		m.set_shader_parameter("ground_y", ArenaLayout.GROUND_Y)
-		m.set_shader_parameter("scree_top", Escarpment.SCREE_H + 0.6)
+		m.set_shader_parameter("scree_top", (Escarpment.SKYLINE.y + Escarpment.SKYLINE.z) * 0.5 * Escarpment.TALUS.y + 1.0)
 	return m
 
 

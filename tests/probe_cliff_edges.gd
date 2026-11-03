@@ -29,8 +29,8 @@ func setup() -> void:
 		a += STEP
 	var z_max := Escarpment.SKYLINE.z + 2.0
 	var nz := int(z_max / STEP) + 1
-	var r_lo := esc.foot - Escarpment.SCREE - 2.0
-	var nrr := int((Escarpment.PLATEAU + 45.0 + Escarpment.SCREE) / STEP)
+	var r_lo := layout.boundary
+	var nrr := int((esc.foot + Escarpment.PLATEAU + 45.0 - r_lo) / STEP)
 	var front := PackedFloat32Array()   # (row-major: z rows, arc columns; NaN where there's no wall)
 	var plan := PackedFloat32Array()    # (r rows, arc columns)
 	var feet := []

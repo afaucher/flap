@@ -5,13 +5,14 @@
 // steep faces, lichen, the vertical joints, cracks, and grass and heather on whatever faces up; and low down, where
 // the ground lies gentle, the scree's own scan (gray_rocks) seen from above.
 shader_type spatial;
-render_mode cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;   // (both sides: the wall seen side-on where the ring curves away)
 
 uniform float strata = 1.0;   // the bedding bands and joints (0 for the blocks, which lie any way up)
 uniform float bump = 0.6;     // the procedural bump (without a scan)
 uniform float veg_amount = 1.0;
 uniform float fracture = 0.0;          // how strongly the surface breaks into facets (the cliff's and the blocks': 1)
 uniform float fracture_size = 0.8;     // m across a facet
+uniform vec2 cut_sector = vec2(0.0, 0.0);   // (the wall's sector: its middle angle, and how far either side it's cut)
 uniform bool cut_steep = false;   // the height field under the wall: its steep parts not drawn (the wall's sheet is)   // how much grass and heather grows on what faces up
 
 uniform bool use_scan = false;
@@ -114,7 +115,8 @@ void fragment() {
 	vec3 n = normalize(wn);
 	if (cut_steep) {   // (by the triangle's own slope, not the smoothed normal: no slivers of a step left standing)
 		vec3 face_n = normalize(cross(dFdx(wp), dFdy(wp)));
-		if (abs(face_n.y) < 0.6) {
+		float off = abs(mod(atan(wp.x, wp.z) - cut_sector.x + 3.14159265, 6.2831853) - 3.14159265);
+		if (abs(face_n.y) < 0.6 && off < cut_sector.y) {   // (only where the wall's sheet stands in front)
 			discard;
 		}
 	}
@@ -178,7 +180,10 @@ void fragment() {
 	if (use_ground) {
 		scree = (1.0 - smoothstep(scree_top - 1.5, scree_top, wp.y - ground_y)) * smoothstep(0.5, 0.75, n.y);
 		vec2 gu = wp.xz / ground_tile;
-		col = mix(col, texture(ground_albedo, gu).rgb * ground_tint, scree);
+		// (and earth between, in patches: the talus is soil and rubble as much as stone)
+		float soil = smoothstep(0.35, 0.55, fbm3(wp * 0.09 + 13.0)) * 0.9;
+		vec3 ground = mix(texture(ground_albedo, gu).rgb * ground_tint, vec3(0.2, 0.15, 0.1) * (0.8 + 0.4 * fine), soil);
+		col = mix(col, ground, scree);
 		vec3 gn = texture(ground_normal, gu).rgb * 2.0 - 1.0;
 		nw = normalize(mix(nw, normalize(vec3(gn.x, gn.z, gn.y) + n * 0.5), scree));   // (seen from above: x, z across, y up)
 		rough = mix(rough, 0.92, scree);
@@ -194,6 +199,9 @@ void fragment() {
 	SPECULAR = 0.3;
 	if (use_scan) {
 		NORMAL = normalize((VIEW_MATRIX * vec4(normalize(mix(nw, n, veg * 0.6)), 0.0)).xyz);
+		if (!FRONT_FACING) {
+			NORMAL = -NORMAL;
+		}
 	} else {
 		// Bump from the same noise (surface gradient).
 		float hgt = mid * 0.25 + fine * 0.06 + (1.0 - smoothstep(0.0, 0.025, cr)) * -0.05;

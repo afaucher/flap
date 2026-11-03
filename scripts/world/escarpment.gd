@@ -23,28 +23,33 @@ extends RefCounted
 const HALF := deg_to_rad(52.0)      ## the sector's half width
 const RAKE := deg_to_rad(50.0)      ## how far round from straight away from the sun its middle stands (so the sun
                                     ## rakes across the face and every block casts a shadow)
-const FOOT := 14.0                  ## m past the boundary: the cliff's foot (the scree starts SCREE inside that)
-const SCREE := 11.0                 ## m: the scree's width, out to the foot
-const SCREE_H := 5.5                ## m: how high it piles at the foot
+const FOOT := 26.0                  ## m past the boundary: the cliff's mean foot (its talus reaches out in front)
+const SCREE := 11.0                 ## m: the least talus width (the scree blocks' sorting is by share of the width)
+const SCREE_H := 5.5                ## m: the least talus height
+## The talus apron the wall stands in: up to TALUS.x..TALUS.y of the cliff's mean height up its face, sloping at TALUS.z
+## deg (a little steeper than scree's angle of repose where the wood is close), as the concept's lower half is.
+const TALUS := Vector3(0.38, 0.58, 37.0)
+const BAY := Vector2(24.0, 10.0)    ## the foot's bays and buttresses: m along (their size), m in and out
 const BED := Vector2(3.4, 0.5)     ## a bed's thickness: m (its median), and its spread (lognormal)
 const BED_DIP := 0.05               ## how the beds rise along the cliff (m per m: about 3 deg)
 const FAULT := Vector3(35.0, 70.0, 2.6)   ## fault blocks along the cliff: m long (least, most), the most a fault throws
 const FAULT_RAMP := 2.5             ## m along the cliff a fault's step takes
-const JOINTS := [Vector2(7.5, 0.55), Vector2(14.0, 0.6)]   ## two sets: spacing m along a bed (median), its spread
-const RUN_ON := 0.35                ## the chance a joint carries on into the bed above (most stop at the bedding)
-const SOFT := 0.8                   ## m a soft bed stands back behind a hard one (so a hard one over it juts)
-const PANEL := 1.0                 ## m each panel stands out or back on its own
-const LOSS := Vector2(0.11, 2.4)    ## the chance a panel's block is gone, and how deep the hole
-const PANEL_TILT := 0.14            ## the most a panel's face turns from the cliff's line (m per m along it)
+const JOINTS := [Vector2(5.0, 0.55), Vector2(11.0, 0.6)]   ## two sets: spacing m along a bed (median), its spread
+const RUN_ON := 0.6                 ## the chance a joint carries on into the bed above (long joints, as the concept's)
+const SLANT := Vector2(0.45, 0.35)  ## the share of beds whose joints run aslant, and the most they lean (m per m up)
+const SOFT := 0.55                  ## m a soft bed stands back behind a hard one (so a hard one over it juts)
+const PANEL := 0.45                 ## m each panel stands out or back on its own
+const LOSS := Vector2(0.05, 1.3)    ## the chance a panel's block is gone, and how deep the hole
+const PANEL_TILT := 0.08            ## the most a panel's face turns from the cliff's line (m per m along it)
 const LEAN := 0.045                 ## m the wall leans back per m up
-const BENCHES := [[9.0, 4.4], [17.0, 3.0]]   ## [height m, width m]: the beds nearest these heights are ledges
+const BENCHES := [[19.0, 4.4], [27.0, 3.4]]   ## [height m, width m]: the beds nearest these heights are ledges
 const ROW_F := [0.03, 0.18, 0.34, 0.5, 0.66, 0.82, 0.97]   ## the sheet's rows up each bed (fractions, foot to top)
 const BULGE := Vector2(0.4, 0.15)   ## m: a face's gentle swell over a few metres, and its roughness over one
 ## A panel's face broken into planar facets -- the rock's own fracturing, not a texture: [m across, the most one
 ## stands back, the most it tilts (m per m)], big ones that break up the whole face, small ones over them.
-const FRACTURES := [Vector3(3.4, 0.75, 0.32), Vector3(1.3, 0.14, 0.12)]
+const FRACTURES := [Vector3(3.4, 0.5, 0.22), Vector3(1.3, 0.14, 0.12)]
 const SKYLINE := Vector3(24.0, 30.0, 44.0)    ## the top: m per stretch, its height (least, most)
-const GULLY := Vector3(28.0, 4.5, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
+const GULLY := Vector3(28.0, 3.0, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const PLATEAU := 30.0               ## m past the top's edge it rises (the hills take over beyond)
 const BUTTRESS := 4.5               ## m the foot wanders in and out
 const REACH := 24.0                 ## m past the foot: the soft wall in its sector (just past the top's edge)
@@ -54,7 +59,7 @@ const STONE_H := Vector2(1.6, 3.2)  ## m: their tops' height
 const PERCH_EVERY := [11.0, 26.0]   ## m along the cliff between perches on each tier's ledge, foot up
                                                 ## (none on the top tier: nothing up there to settle on)
 const PERCH_DISC := 0.45            ## m: a ledge perch's footing (Perch.treetop's disc)
-const LEDGE_BANDS := [Vector2(SCREE_H + 1.0, 13.5), Vector2(13.5, 26.0)]   ## m: the heights each tier's perches are sought at
+const LEDGE_BANDS := [Vector2(0.5, 9.0), Vector2(9.0, 18.0)]   ## m above the talus: the heights each tier's perches are sought at
 const COLUMN_STEP := 0.002          ## rad: columns are cached to this (20 cm at the foot)
 
 var at := 0.0      ## the sector's middle, as an angle round the ring (x = sin, z = cos)
@@ -66,6 +71,7 @@ var _beds := PackedFloat32Array()   ## each bed's foot's height at the sector's 
 var _hard := PackedFloat32Array()   ## each bed's hardness, 0..1
 var _joints := []   ## per bed, the joints crossing it: PackedFloat32Array of m along the cliff, sorted
 var _bench := []    ## per bed, how wide a bench it carries on its top (0: none)
+var _slant := PackedFloat32Array()   ## per bed, how its joints lean (m along per m up; 0: upright)
 var _cache := {}    ## column(), by angle in COLUMN_STEPs
 var _facets := []   ## per FRACTURES size: each cell's [jitter along, jitter up, set back, tilt along, tilt up], flat
 var _facet_n := []  ## and how many cells along and up (Vector2i)
@@ -118,6 +124,7 @@ func _lay() -> void:
 	for b in n:
 		_joints.append([])
 		_bench.append(0.0)
+		_slant.append(SLANT.y * (_h(b * 6.7 + 2.2) * 2.0 - 1.0) if _h(b * 3.1 + 8.8) < SLANT.x else 0.0)
 	var span := HALF * foot + 12.0
 	for b in n:   # (each bed its own joints, both sets; a share carried on from the bed below, the rest stopping there)
 		for s in JOINTS.size():
@@ -248,7 +255,7 @@ func _column(theta: float) -> PackedFloat32Array:
 		return col
 	_lay()
 	var arc := off(theta) * foot   # (m along the cliff)
-	var r0 := foot + BUTTRESS * (_n1(theta * 9.0) * 0.7 + _n1(theta * 31.0 + 3.0) * 0.3)
+	var r0 := foot_r(theta)
 	var top := maxf(skyline(arc) * w, 1.0)
 	var lift := _lift(arc)
 	var cleft := gully(arc) * GULLY.y
@@ -259,9 +266,11 @@ func _column(theta: float) -> PackedFloat32Array:
 	for b in n:
 		var z0 := (_beds[b] + lift) * w
 		var z1 := (_beds[b + 1] + lift) * w
-		var back := _panel(b, arc) + _benches(b, arc) + cleft
+		var bed_back := _benches(b, arc) + cleft
+		var zc := (z0 + z1) * 0.5
 		for f in ROW_F:
 			var z := lerpf(z0, z1, f)
+			var back := bed_back + _panel(b, arc - _slant[b] * (z - zc))   # (its joints aslant, in some beds)
 			# (a face isn't a plane: it swells and hollows gently over a few metres, rougher over one)
 			var swell := BULGE.x * (_n1(arc / 2.6 + z / 2.1 + b * 3.1) - 0.5) * 2.0 + BULGE.y * (_n1(arc * 1.1 + z * 0.9 + b * 7.0) - 0.5) * 2.0
 			var r := r0 + maxf(back + LEAN * z + swell + _facet(arc, z, b, 0) + _facet(arc, z, b, 1), -0.8)
@@ -293,12 +302,10 @@ func height_in(col: PackedFloat32Array, r: float) -> float:
 	var foot_r := col[6]   # (the wall's foot, its lowest row)
 	var s := r - foot_r
 	var mins := 5 + rows * 2
-	if s < 0.0 and r < col[mins]:   # (in front of all of it: the scree, and the flat stones standing on it)
-		var h0 := 0.0
-		if s >= -SCREE:
-			var k := (s + SCREE) / SCREE
-			h0 = SCREE_H * w * k * k * (0.8 + 0.4 * _n1(theta * 60.0 + s * 0.7))
-		var p := Vector2(sin(theta), cos(theta)) * r   # (the stones wherever they stand, at the scree's edge too)
+	var tal := talus_in(col, r)
+	if s < 0.0 and r < col[mins]:   # (in front of all of it: the talus, and the flat stones standing on it)
+		var h0 := tal
+		var p := Vector2(sin(theta), cos(theta)) * r   # (the stones wherever they stand, at the talus's edge too)
 		for st in stones():
 			var d := p.distance_to(st[0])
 			var rim := float(st[1]) + 0.6
@@ -316,12 +323,11 @@ func height_in(col: PackedFloat32Array, r: float) -> float:
 			hi = mid - 1
 	var h := col[5 + lo * 2]
 	if lo < rows - 1 or r < col[6 + lo * 2]:
-		var ground := SCREE_H * w if s < 0.0 else 0.0   # (the scree still piled against a lip's foot)
-		return maxf(h + 0.12 * _n1(theta * 80.0 + r), ground)
+		return maxf(h + 0.12 * _n1(theta * 80.0 + r), tal)   # (the talus piled up against the face)
 	# The top: rising a little, then level, its steps smoothing out to the cliff's mean height away from the edge
 	# (so the hills beyond carry no ridges from them).
 	var t := r - col[6 + lo * 2]
-	return lerpf(col[3], mean_top() * w, smoothstep(0.0, PLATEAU, t)) + minf(t, PLATEAU) * 0.1 * w
+	return maxf(lerpf(col[3], mean_top() * w, smoothstep(0.0, PLATEAU, t)) + minf(t, PLATEAU) * 0.1 * w, tal)
 
 
 ## The ledges in column `col`: runs of level rock at least `least` m deep, below the top, above the scree:
@@ -338,7 +344,7 @@ func ledges(col: PackedFloat32Array, least := 1.4) -> Array:
 		r += 0.2
 		var h := height_in(col, r)
 		if absf(h - h0) > 0.3 or h >= top - 0.5:
-			if r - start >= least and h0 > SCREE_H * col[0] + 0.5 and h0 < top - 0.5:
+			if r - start >= least and h0 > talus(col).y + 0.5 and h0 < top - 0.5:
 				out.append([start, r - 0.2, h0])
 			start = r
 			h0 = h
@@ -396,10 +402,11 @@ func stones() -> Array:
 	for i in STONES:
 		var u := (float(i) + 0.5) / STONES * 1.2 - 0.6 + (_h(i * 3.1 + 0.7) - 0.5) * 0.1
 		var theta := at + u * HALF
-		var r0 := foot + BUTTRESS * (_n1(theta * 9.0) * 0.7 + _n1(theta * 31.0 + 3.0) * 0.3)
-		var r := r0 - SCREE * lerpf(0.25, 0.6, _h(i * 7.7 + 1.3))
+		var col := column(theta)
+		var tw := talus(col)
+		var r: float = col[1] - tw.x * lerpf(0.55, 0.8, _h(i * 7.7 + 1.3))   # (low on the talus, out toward its toe)
 		var top_r := lerpf(STONE_R.x, STONE_R.y, _h(i * 5.3 + 2.1))
-		_stones.append([Vector2(sin(theta), cos(theta)) * r, top_r, lerpf(STONE_H.x, STONE_H.y, _h(i * 2.9 + 4.4))])
+		_stones.append([Vector2(sin(theta), cos(theta)) * r, top_r, talus_in(col, r) + lerpf(STONE_H.x, STONE_H.y, _h(i * 2.9 + 4.4))])
 	return _stones
 
 
@@ -432,7 +439,7 @@ func _ledge_spot(i: int, arc: float) -> Array:
 	var col := column(theta)
 	if col.is_empty() or col[0] < 0.7:
 		return []
-	var band: Vector2 = LEDGE_BANDS[i]
+	var band: Vector2 = LEDGE_BANDS[i] + Vector2.ONE * talus(col).y
 	for l in ledges(col):
 		var h: float = l[2]
 		if h < band.x or h >= band.y:
@@ -458,6 +465,38 @@ func reach(theta: float, boundary: float) -> float:
 	if absf(off(theta)) > HALF:
 		return boundary
 	return lerpf(boundary, foot + REACH, smoothstep(0.0, 0.3, taper(theta)))
+
+
+## The wall's mean foot toward angle `theta`: bays and buttresses tens of metres across, a little wander over them.
+func foot_r(theta: float) -> float:
+	var arc := off(theta) * foot
+	return foot + BAY.y * (_n1(arc / BAY.x + 2.0) - 0.5) * 2.0 + BUTTRESS * 0.4 * (_n1(arc / 9.0 + 5.0) - 0.5) * 2.0
+
+
+## The talus in column `col`: (how far out in front of the wall's foot it reaches, how high it stands against it). Its
+## height wanders along the cliff and stands higher under the clefts (the rock comes down them); its width is its
+## height over its slope, short of the boundary.
+func talus(col: PackedFloat32Array) -> Vector2:
+	if col.is_empty():
+		return Vector2.ZERO
+	var w := col[0]
+	var arc := off(col[2]) * foot
+	var h := mean_top() * w * lerpf(TALUS.x, TALUS.y, _n1(arc / 31.0 + 5.0) * 0.75 + _n1(arc / 9.0 + 1.0) * 0.25)
+	h += gully(arc) * mean_top() * 0.12 * w
+	h = maxf(h, SCREE_H * w)
+	var width := minf(h / tan(deg_to_rad(TALUS.z)), col[6] - (foot - FOOT) - 2.0)
+	return Vector2(maxf(width, 1.0), h)
+
+
+## The talus's height `r` m out in column `col`: from its toe up its slope (a little concave, lumpy), level with its
+## top against the wall.
+func talus_in(col: PackedFloat32Array, r: float) -> float:
+	var t := talus(col)
+	var k := (r - (col[6] - t.x)) / t.x
+	if k <= 0.0:
+		return 0.0
+	k = minf(k, 1.0)
+	return t.y * pow(k, 1.3) * (0.92 + 0.16 * _n1(col[2] * 120.0 + r * 0.6))
 
 
 ## The tallest the escarpment stands at angle `theta` (its top's height).

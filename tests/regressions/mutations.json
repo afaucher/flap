@@ -2886,7 +2886,7 @@
  },
  {
   "id": "edge-rock-rows-backwards",
-  "bug": "The escarpment's grid ran its fine rows out past where the coarse ones were to start, so its last row stepped back inward: a strip of triangles folded over, inside out (2026-11-03).",
+  "bug": "The escarpment's grid ran its fine rows out past where the coarse ones were to start, so its last row stepped back inward: a strip of triangles folded over, inside out (2026-11-03). (The entry runs the fine rows 60 m past the foot: with the cliff out at today's foot the original 40 m no longer reaches the coarse rows.)",
   "tests": [
    "test_arena_edge"
   ],
@@ -2894,7 +2894,7 @@
    {
     "file": "scripts/world/edge_builder.gd",
     "find": "\twhile r < minf(esc.foot + 40.0, HILLS_FROM + 2.0):",
-    "replace": "\twhile r < esc.foot + 40.0:"
+    "replace": "\twhile r < esc.foot + 60.0:"
    }
   ]
  },
@@ -2907,8 +2907,8 @@
   "edits": [
    {
     "file": "scripts/world/escarpment.gd",
-    "find": "\treturn lerpf(col[3], mean_top() * w, smoothstep(0.0, PLATEAU, t)) + minf(t, PLATEAU) * 0.1 * w",
-    "replace": "\treturn col[3] + t * 0.08"
+    "find": "\treturn maxf(lerpf(col[3], mean_top() * w, smoothstep(0.0, PLATEAU, t)) + minf(t, PLATEAU) * 0.1 * w, tal)",
+    "replace": "\treturn maxf(col[3] + t * 0.08, tal)"
    }
   ]
  },
@@ -3005,22 +3005,22 @@
   "edits": [
    {
     "file": "scripts/world/escarpment.gd",
-    "find": "const RUN_ON := 0.35 ",
+    "find": "const RUN_ON := 0.6 ",
     "replace": "const RUN_ON := 1.0 "
    }
   ]
  },
  {
   "id": "edge-stones-cut-at-scree-edge",
-  "bug": "Past the scree's outer edge the height returned flat ground before looking for the flat perch stones, so a stone at the edge was half missing from the rock (a perch over a hole) (2026-11-03).",
+  "bug": "Past the scree's outer edge the height returned flat ground before looking for the flat perch stones, so a stone at the edge was half missing from the rock (a perch over a hole) (2026-11-03). (Since the talus, the stones stand well up it: the entry now takes the stones out of the rock's height altogether -- a perch over nothing, the same failure.)",
   "tests": [
    "test_arena_edge"
   ],
   "edits": [
    {
     "file": "scripts/world/escarpment.gd",
-    "find": "\t\tvar h0 := 0.0\n\t\tif s >= -SCREE:",
-    "replace": "\t\tvar h0 := 0.0\n\t\tif s < -SCREE:\n\t\t\treturn 0.0\n\t\tif s >= -SCREE:"
+    "find": "\t\t\t\th0 = maxf(h0, float(st[2]) * (1.0 - smoothstep(float(st[1]), rim, d) * 0.7))",
+    "replace": "\t\t\t\th0 = maxf(h0, 0.0 * (1.0 - smoothstep(float(st[1]), rim, d) * 0.7))"
    }
   ]
  }

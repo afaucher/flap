@@ -13,7 +13,7 @@ extends TestCase
 ##   - the heath's cover is thick by the fence and thins away from it, and none grows on the rock;
 ##   - the fence's two strands run from post to post, sagging between them.
 
-const BANDS := [0.0, 5.0, 14.0, 22.0, 30.0, 999.0]   ## perch heights, m: stones, the tiers' ledges, the top
+const BANDS := [-999.0, 0.0, 6.0, 12.0, 20.0, 999.0]   ## perch heights above the talus, m: stones (on it), ledges up the face
 
 
 func _init() -> void:
@@ -94,25 +94,34 @@ func _rock(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 	while nr < verts.size() - 1 and _r(verts[nr + 1]) > _r(verts[nr]):
 		nr += 1
 	nr += 1
-	var c0 := (verts.size() / nr / 2) * nr   # (the middle column's first point)
-	var ledges := []
-	var level_run := 0.0
-	var steep_seen := false
-	for j in nr - 1:
-		var a := verts[c0 + j]
-		var b := verts[c0 + j + 1]
-		var run := _r(b) - _r(a)
-		var rise := b.y - a.y
-		if rise > run * 2.0:
-			steep_seen = true
-			level_run = 0.0
-		elif absf(rise) < run * 0.35 and steep_seen:
-			level_run += run
-			if level_run >= 0.8:
-				ledges.append(snappedf(a.y - ArenaLayout.GROUND_Y, 0.1))
-				steep_seen = false
-	print("EDGE ledges up the middle at: %s m" % [ledges])
-	check(ledges.size() >= 3, "the tiers leave level ledges between steep faces (%d up the middle)" % ledges.size())
+	# (up 15 columns across the middle third: the ledges in each -- how many, at what heights -- as the rock varies)
+	var nt := verts.size() / nr
+	var counts := []
+	var heights := []
+	for q in 15:
+		var c0 := int(nt * (0.33 + 0.34 * q / 14.0)) * nr
+		var n_here := 0
+		var level_run := 0.0
+		var steep_seen := false
+		for j in nr - 1:
+			var a := verts[c0 + j]
+			var b := verts[c0 + j + 1]
+			var run := _r(b) - _r(a)
+			var rise := b.y - a.y
+			if rise > run * 2.0:
+				steep_seen = true
+				level_run = 0.0
+			elif absf(rise) < run * 0.35 and steep_seen:
+				level_run += run
+				if level_run >= 0.8:
+					n_here += 1
+					heights.append(snappedf(a.y - ArenaLayout.GROUND_Y, 0.1))
+					steep_seen = false
+		counts.append(n_here)
+	counts.sort()
+	var median: int = counts[counts.size() / 2]
+	print("EDGE ledges up 15 columns across the middle: %s a column (sorted); at %s m" % [counts, heights.slice(0, 12)])
+	check(median >= 2 and counts[-1] >= 3, "the face leaves level ledges between steep rises (median %d a column, most %d)" % [median, counts[-1]])
 	# The faces: the sun across them (lit, not head on), and drawn facing out: a height field faces up everywhere, and
 	# Godot's front faces wind clockwise seen from the front, so each triangle's edges' cross product points down.
 	var to_sun := (Basis.from_euler(Vector3(deg_to_rad(-ForestLight.SUN_ELEVATION), deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK).normalized()
@@ -177,11 +186,14 @@ func _perches(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 		if p.tree_id != layout.rock_tree:
 			continue
 		mine.append(p)
-		var h: float = p.position.y - ArenaLayout.GROUND_Y
+		# (heights above the talus there: the stones on it come below 0, the ledges over it from 0 up)
+		var h: float = p.position.y - ArenaLayout.GROUND_Y - layout.rock.talus(layout.rock.column(atan2(p.position.x, p.position.z))).y + 0.001
+		var hb := maxf(h, 0.0) if h > -999.0 else 0.0
+		h = -1.0 if h < 0.5 else hb
 		for i in BANDS.size() - 1:
 			if h >= BANDS[i] and h < BANDS[i + 1]:
 				counts[i] += 1
-		if h > top - 3.0:
+		if p.position.y - ArenaLayout.GROUND_Y > top - 3.0:
 			on_top += 1
 		var down := space.intersect_ray(PhysicsRayQueryParameters3D.create(p.position + Vector3.UP * 2.0, p.position - Vector3.UP * 2.0))
 		if down.is_empty() or down.collider != edge.rock_body or absf(down.position.y - p.position.y) > 0.25:
@@ -237,7 +249,7 @@ func _sheet(edge: EdgeBuilder) -> void:
 		for j in range(per, nr, per):   # (each bed's foot against the top of the bed under it)
 			var hi := verts[i * nr + j]
 			var lo := verts[i * nr + j - 1]
-			if hi.y - ArenaLayout.GROUND_Y > Escarpment.SCREE_H and hi.y - lo.y < 0.5 and _r(hi) < _r(lo) - 0.3:
+			if hi.y - ArenaLayout.GROUND_Y > esc.talus(esc.column(atan2(hi.x, hi.z))).y and hi.y - lo.y < 0.5 and _r(hi) < _r(lo) - 0.3:
 				lipped += 1
 				break
 	# Joints: along two beds' middles, high on the wall, where the wall steps in or out between neighbouring columns.
