@@ -4,11 +4,23 @@ extends TestCase
 ## carries one kind of round, six rockets or four seekers, with nothing to switch to.
 
 
+const SHARDS := 2   ## (the menu and the game in one process, the range in another)
+
+
 func _init() -> void:
 	timeout_sec = 90.0
 
 
 func setup() -> void:
+	if in_shard(0):
+		await _menu_and_flight()
+	if in_shard(1):
+		await _fights()
+	Boot.extra = PackedStringArray()
+	finish()
+
+
+func _menu_and_flight() -> void:
 	var menu: Menu = load("res://scenes/menu.tscn").instantiate()
 	add_child(menu)
 	await frames(2)
@@ -36,6 +48,8 @@ func setup() -> void:
 		game.queue_free()
 		await frames(2)
 
+
+func _fights() -> void:
 	for seekers in [false, true]:
 		Boot.extra = PackedStringArray(Menu.CHOICES[2][2] if seekers else Menu.CHOICES[1][2])
 		var r: Node = load("res://scenes/combat_range.tscn").instantiate()
@@ -53,8 +67,6 @@ func setup() -> void:
 		eq(l.weapon, w, "and nothing to switch to")
 		r.queue_free()
 		await frames(2)
-	Boot.extra = PackedStringArray()
-	finish()
 
 
 class _Switch:

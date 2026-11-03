@@ -76,7 +76,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   the polar. `test_bird_profiles` and `test_glide_trim` hold the polar honest; don't loosen their tolerances
   to make a tuning change pass.
 - Any assist (pitch damping, turn assist, auto-sweep, perch assist) must stay switchable to 0.
-- New tests extend `TestCase`; set `timeout_sec` in `_init()` (not `setup()`) for long ones.
+- New tests extend `TestCase`; set `timeout_sec` in `_init()` (not `setup()`) for long ones. The suite takes as
+  long as its slowest test: split a long one with `const SHARDS := N` and `if in_shard(i):` round each part (the
+  runner starts N processes), and hide a bird's rig (`b.rig.visible = false`) where only its flight is checked.
 - Fixing a bug: add an entry to `tests/regressions/mutations.json` that reintroduces it, and run
   `.\mutation_check.ps1 -Only <id>` -- it must come back KILLED. A test that passes with the bug back in
   proves nothing. Run the whole check (a few minutes) before committing rig, flight-model or AI changes.

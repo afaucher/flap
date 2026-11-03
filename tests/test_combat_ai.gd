@@ -10,6 +10,7 @@ extends TestCase
 ##     the target turning either way).
 
 const ARENA_SEED := 7
+const SHARDS := 3   ## (straight on; the evading target, AI v demo; rearming and the turning fights)
 
 
 func _init() -> void:
@@ -17,21 +18,24 @@ func _init() -> void:
 
 
 func setup() -> void:
-	for id in ["sparrow", "crow"]:
-		var r: Dictionary = await _versus_racetrack(id, false, false)
-		var kind := "seekers" if CombatStyle.of(BirdProfile.by_id(id)).weapon == Launcher.Weapon.SEEKERS else "rockets"
-		print("%s (%s) vs the racetrack target, straight on: %d hits, downed %d, %d shots, %d bonks" % [id, kind, r.hits, r.downs, r.shots, r.bonks])
-		check(r.hits >= 3, "%s lands hits on a target flying straight on (%d)" % [id, r.hits])
-		check(r.downs >= 1, "%s downs it within 40 s" % id)
-		check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
-	var ai: Dictionary = await _versus_racetrack("crow", true, false)
-	var demo: Dictionary = await _versus_racetrack("crow", true, true)
-	print("against the evading target: the combat AI %d hits (%d shots), the old demo shooter %d hits (%d shots)" % [ai.hits, ai.shots, demo.hits, demo.shots])
-	check(ai.hits > demo.hits, "the combat AI lands more hits on the evading target than the old demo shooter (%d vs %d)" % [ai.hits, demo.hits])
-	await _rearms_at_base()
-	for id in ["hawk", "sparrow"]:
-		for dir in [1.0, -1.0]:
-			await _turning_fight(id, dir)
+	if in_shard(0):
+		for id in ["sparrow", "crow"]:
+			var r: Dictionary = await _versus_racetrack(id, false, false)
+			var kind := "seekers" if CombatStyle.of(BirdProfile.by_id(id)).weapon == Launcher.Weapon.SEEKERS else "rockets"
+			print("%s (%s) vs the racetrack target, straight on: %d hits, downed %d, %d shots, %d bonks" % [id, kind, r.hits, r.downs, r.shots, r.bonks])
+			check(r.hits >= 3, "%s lands hits on a target flying straight on (%d)" % [id, r.hits])
+			check(r.downs >= 1, "%s downs it within 40 s" % id)
+			check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
+	if in_shard(1):
+		var ai: Dictionary = await _versus_racetrack("crow", true, false)
+		var demo: Dictionary = await _versus_racetrack("crow", true, true)
+		print("against the evading target: the combat AI %d hits (%d shots), the old demo shooter %d hits (%d shots)" % [ai.hits, ai.shots, demo.hits, demo.shots])
+		check(ai.hits > demo.hits, "the combat AI lands more hits on the evading target than the old demo shooter (%d vs %d)" % [ai.hits, demo.hits])
+	if in_shard(2):
+		await _rearms_at_base()
+		for id in ["hawk", "sparrow"]:
+			for dir in [1.0, -1.0]:
+				await _turning_fight(id, dir)
 	finish()
 
 
