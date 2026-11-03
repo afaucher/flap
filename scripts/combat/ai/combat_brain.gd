@@ -175,7 +175,7 @@ func in_firing_position(t: CombatSense.Track) -> bool:
 		return false
 	var me := bird.global_position
 	var d := t.pos.distance_to(me)
-	if d > FIRING_RANGE or Engagement.ata(t.pos, t.vel.normalized(), me) > deg_to_rad(25.0):
+	if d > minf(FIRING_RANGE, skill.watch_range) or Engagement.ata(t.pos, t.vel.normalized(), me) > deg_to_rad(25.0):
 		return false
 	var off_my_nose := Engagement.ata(me, bird.model.flight_dir(), t.pos)
 	if intent.mode == "attack" and t.bird == target and off_my_nose < deg_to_rad(30.0):

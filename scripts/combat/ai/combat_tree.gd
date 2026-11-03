@@ -522,8 +522,9 @@ class Attack extends ActionLeaf:
 
 ## Boom and zoom (docs/design/combat_ai.md, 4.4 and 5), for the birds that can't turn with their targets:
 ##   climb  -- run out to ROOM m from it, climbing, then turn back at a point STOOP_HEIGHT above it;
-##   stoop  -- with the height and it ahead within reach (any aspect: a head-on pass too), dive on its rocket lead,
-##             wings unflapped, weapons free, until past it (close, behind me, or below it) or out of reach;
+##   stoop  -- with the height and it ahead within reach (any aspect: a head-on pass too), dive on its rocket lead
+##             (which follows the turn it's seen making), wings unflapped, weapons free, until past it (close, behind
+##             me, or below it) or out of reach;
 ##   zoom   -- pull up and climb away along my heading, trading the dive's speed for height, then climb again.
 class BoomAndZoom extends ActionLeaf:
 	const STOOP_HEIGHT := 9.0
@@ -550,7 +551,7 @@ class BoomAndZoom extends ActionLeaf:
 			else:
 				i.mode = "attack"
 				i.fire = true
-				var aim := CombatTree._overlead(br, br.rocket_lead(t))
+				var aim := br.rocket_lead(t)
 				i.aim = aim
 				i.opts.gamma = clampf(atan2(aim.y - pos.y, maxf(Vector2(aim.x - pos.x, aim.z - pos.z).length(), 1.0)), deg_to_rad(-60.0), deg_to_rad(10.0))
 				i.opts.flap = "none"
@@ -585,18 +586,6 @@ class BoomAndZoom extends ActionLeaf:
 		i.opts.flap = "hold"
 		i.opts.speed = br.style.v_best
 		return SUCCESS
-
-
-## Aim past `lead` by how far the gunsight trails it (where my nose points at that range): the guidance lags a
-## moving lead by a few degrees, which is a metre or two at 20 m -- outside the fuse.
-static func _overlead(br: CombatBrain, lead: Vector3) -> Vector3:
-	var l := br.launcher
-	var m := l.muzzle()
-	var nose := m + l.aim() * m.distance_to(lead)
-	return lead + (lead - nose) * OVERLEAD
-
-
-const OVERLEAD := 0.8
 
 
 ## Get into a shooting position: behind it, and above by the style's energy wanted.

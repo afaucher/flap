@@ -415,6 +415,8 @@ Every knob degrades a perfect pilot; 0 / the "off" value is the honest maximum. 
 | `tactics` | which manoeuvres it knows (yo-yos, tree drag, scissors) | pursuit only / + yo-yos, gimbal drag / all |
 | `aggression` | risk taken (energy deficit it accepts, hits before REARM) | low / mid / high |
 | `rest_at` | stamina at which it goes to rest | 0.4 / 0.3 / 0.2 |
+| `ambush_patience` | s an ambusher waits on its perch | 12 / 25 / 40 |
+| `watch_range` | m out to which it reads a bird lining up on it and breaks before any warning (built) | 20 / 42 / 42 |
 
 ## 7. Prerequisites outside the AI
 
@@ -549,8 +551,7 @@ birds in a 3 v 3 (`docs/design/performance.md`).
   the hits from 4 to 16 in 90 s.
 - **Boom and zoom** (hawk, falcon: `CombatStyle.prefers_height`): the Fight branch's `BoomZoom` -- climb (run out to
   30 m from the target, climbing at 16 deg while above v*, then back at a point 9 m above it), stoop (with 5+ m of
-  height, the target ahead within 45 deg and 8-32 m: dive on the rocket lead, unflapped, weapons free, aiming past the
-  lead by how far the gunsight trails it), zoom (pull up 30 deg along the heading while faster than v*). Against the
+  height, the target ahead within 45 deg and 8-32 m: dive on the rocket lead, unflapped, weapons free), zoom (pull up 30 deg along the heading while faster than v*). Against the
   racetrack target the hawk lands 4 hits and the falcon 3 in 40 s (before: none).
 - **Ambush** (owl: `CombatStyle.ambusher`): a perch 4-15 m above where it has seen the enemies fly
   (`CombatBrain.fight_area`, a slow average), 15-45 m out from there; sit (resting) until one passes below within

@@ -1950,8 +1950,8 @@
   "edits": [
    {
     "file": "scripts/combat/ai_combat.gd",
-    "find": "l.aim(), t.pos, t.vel) < Projectile.fuse * quality",
-    "replace": "l.aim(), t.pos, t.vel) < FireControl.reach() * quality"
+    "find": "l.aim(), t.pos, t.vel, t.turn) < Projectile.fuse * quality",
+    "replace": "l.aim(), t.pos, t.vel, t.turn) < FireControl.reach() * quality"
    }
   ]
  },
@@ -1964,8 +1964,8 @@
   "edits": [
    {
     "file": "scripts/combat/ai/combat_sense.gd",
-    "find": "tr.pos = pos + tr.vel * minf(skill.reaction, clock - float(past[0]))",
-    "replace": "tr.pos = pos"
+    "find": "\t\t\t\ttr.pos += tr.vel * lag / RECKON_STEPS",
+    "replace": "\t\t\t\ttr.pos += Vector3.ZERO"
    }
   ]
  },
@@ -1978,7 +1978,7 @@
   "edits": [
    {
     "file": "scripts/combat/ai/combat_brain.gd",
-    "find": "\t\tintent.opts.bank_frac = minf(float(intent.opts.get(\"bank_frac\", skill.bank_frac)), style.lift_bank(bird.model.speed) / style.max_bank)",
+    "find": "\t\tintent.opts.bank_frac = minf(float(intent.opts.get(\"bank_frac\", skill.bank_frac)), style.lift_bank(m.speed, pull) / style.max_bank)",
     "replace": "\t\tpass"
    }
   ]
@@ -2131,6 +2131,157 @@
     "file": "scripts/audio/sound_recipes.gd",
     "find": "[[OWL, 84.73, 85.6], [OWL, 46.74, 47.65]]",
     "replace": "[[OWL, 84.73, 85.6], [OWL, 46.74, 47.2]]"
+   }
+  ]
+ },
+ {
+  "id": "combat-sense-los-own-branch",
+  "bug": "A perched combat-AI bird checked its line of sight from inside the branch it sat on, so it saw nothing: an ambushing owl never dropped on anyone (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_sense.gd",
+    "find": "var own := me.perch.tree_id if me.state == Bird.State.PERCHED and me.perch != null else -1",
+    "replace": "var own := -1"
+   }
+  ]
+ },
+ {
+  "id": "combat-defend-while-perched",
+  "bug": "A perched bird took an enemy whose nose swung past it as being in firing position and pushed off to defend: an ambusher left its perch every time its quarry turned toward it (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\tif bird.state != Bird.State.FLYING:\n\t\treturn false   # (perched",
+    "replace": "\tif false:\n\t\treturn false   # (perched"
+   }
+  ]
+ },
+ {
+  "id": "combat-bank-ignores-pullout",
+  "bug": "The lift-limited bank cap left nothing for pulling out of a dive: a bird banked to the cap while pulling up from a stoop or a break stalled (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\t\t\tpull = m.speed * minf(maxf(want - m.path_angle, 0.0) * 3.0, 1.5) / Engagement.G",
+    "replace": "\t\t\tpull = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "combat-break-pulls-out-of-dive",
+  "bug": "A defensive break commanded a climb whatever the bird was doing: pulled out of a dive into a climb at full bank, the hawk stalled (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\tbr.defend_gamma = clampf(br.defend_gamma, b.model.path_angle - deg_to_rad(12.0), b.model.path_angle + deg_to_rad(12.0))",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "combat-sense-no-turn",
+  "bug": "Combat sense tracks had no turn rate: the AI led a bird in a hard break as if it flew straight and missed it (2026-11-02).",
+  "tests": [
+   "test_combat_sense",
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_sense.gd",
+    "find": "\t\t\ttr.turn = clampf(-v0.signed_angle_to(v1, Vector3.UP) / span, -6.0, 6.0) if span > 0.05 and v0.length() > 1.0 and v1.length() > 1.0 else 0.0",
+    "replace": "\t\t\ttr.turn = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "combat-reckon-straight",
+  "bug": "A seen bird was carried on through the reaction delay in a straight line, its velocity a quarter second stale: against a bird turning hard the lead was off by its turn (2026-11-02).",
+  "tests": [
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_sense.gd",
+    "find": "\t\t\t\ttr.vel = tr.vel.rotated(Vector3.UP, -tr.turn * lag / RECKON_STEPS)",
+    "replace": "\t\t\t\ttr.vel = tr.vel"
+   }
+  ]
+ },
+ {
+  "id": "combat-lead-ignores-turn",
+  "bug": "The brain's rocket lead ignored the turn it saw the target making (2026-11-02).",
+  "tests": [
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel, t.turn) - t.pos",
+    "replace": "FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel) - t.pos"
+   }
+  ]
+ },
+ {
+  "id": "combat-ambush-below-them",
+  "bug": "An ambusher took the perch nearest to hand whatever its height, even one below where its enemies fly: it could never drop on them (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\tvar up := c.position.y - area.y",
+    "replace": "\t\tvar up := 10.0"
+   },
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "br.amb_perch.position.y < br.fight_area.y + 3.0",
+    "replace": "br.amb_perch.position.y < -1000.0"
+   }
+  ]
+ },
+ {
+  "id": "combat-rest-perch-unsafe",
+  "bug": "A tired combat-AI bird rested on whatever perch AIPilot liked, wherever the enemies were (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\teyes.append(t.pos)\n\t\teyes.append(t.pos + t.vel * 2.0)",
+    "replace": "\t\tpass"
+   },
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\teyes.append(br.fight_area)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "combat-no-team-spread",
+  "bug": "Combat-AI teammates all chose the same best-scoring enemy (2026-11-02).",
+  "tests": [
+   "test_combat_team"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\t\t\tscore -= SPREAD * board.on_target(t.bird, bird)",
+    "replace": "\t\t\tscore -= 0.0"
    }
   ]
  }
