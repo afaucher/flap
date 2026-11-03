@@ -255,7 +255,7 @@ func _sheet(edge: EdgeBuilder) -> void:
 			var arc := esc.off(atan2(b.x, b.z)) * esc.foot
 			if esc.gully(arc) > 0.0 or esc.gully(arc - 0.5) > 0.0:   # (the clefts cut every bed: not joints)
 				continue
-			if absf(arc) / (Escarpment.HALF * esc.foot) < 0.6 and absf(_r(b) - _r(a)) > 0.35:
+			if absf(arc) / (Escarpment.HALF * esc.foot) < 0.6 and absf(_r(b) - _r(a)) > 0.6:   # (a joint, not a fracture facet)
 				at.append(i)
 		steps.append(at)
 	var gaps := []

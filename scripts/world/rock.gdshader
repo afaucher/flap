@@ -10,6 +10,8 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 uniform float strata = 1.0;   // the bedding bands and joints (0 for the blocks, which lie any way up)
 uniform float bump = 0.6;     // the procedural bump (without a scan)
 uniform float veg_amount = 1.0;
+uniform float fracture = 0.0;          // how strongly the surface breaks into facets (the cliff's and the blocks': 1)
+uniform float fracture_size = 0.8;     // m across a facet
 uniform bool cut_steep = false;   // the height field under the wall: its steep parts not drawn (the wall's sheet is)   // how much grass and heather grows on what faces up
 
 uniform bool use_scan = false;
@@ -55,6 +57,31 @@ float fbm3(vec3 p) {
 		a *= 0.5;
 	}
 	return s / 0.97;
+}
+
+// Voronoi in 3D: (distance to the nearest cell point, to the second nearest, the nearest cell's id).
+vec3 voronoi3(vec3 p) {
+	vec3 c = floor(p);
+	float f1 = 8.0;
+	float f2 = 8.0;
+	float id = 0.0;
+	for (int x = -1; x <= 1; x++) {
+		for (int y = -1; y <= 1; y++) {
+			for (int z = -1; z <= 1; z++) {
+				vec3 g = c + vec3(float(x), float(y), float(z));
+				vec3 o = g + vec3(hash13(g), hash13(g + 17.1), hash13(g + 41.7));
+				float d = length(p - o);
+				if (d < f1) {
+					f2 = f1;
+					f1 = d;
+					id = hash13(g + 3.3);
+				} else if (d < f2) {
+					f2 = d;
+				}
+			}
+		}
+	}
+	return vec3(f1, f2, id);
 }
 
 vec3 tri_weights(vec3 n) {
@@ -117,6 +144,18 @@ void fragment() {
 		col *= 0.88 + 0.24 * fine;
 	}
 	float k = use_scan ? 0.7 : 1.0;   // (the scan has its own detail: the painted marks lighter on it)
+	// Fracture facets: cells a little under a metre across, each a plane turned its own way, dark cracks between
+	// them where the cells meet, and the facets' own light and dark.
+	float crack = 1.0;
+	if (fracture > 0.0) {
+		vec3 v = voronoi3(wp / fracture_size);
+		vec3 tilt = vec3(hash13(vec3(v.z * 71.0, 1.0, 2.0)), hash13(vec3(v.z * 37.0, 5.0, 3.0)), hash13(vec3(v.z * 13.0, 7.0, 9.0))) * 2.0 - 1.0;
+		nw = normalize(nw + (tilt - n * dot(tilt, n)) * 0.28 * fracture);
+		crack = smoothstep(0.0, 0.05, v.y - v.x);
+		col *= mix(0.72, 1.0, mix(1.0, crack, fracture)) * (0.94 + 0.12 * v.z * fracture);
+		v = voronoi3(wp / (fracture_size * 0.33) + 7.0);   // (and finer chips)
+		col *= mix(1.0, 0.9 + 0.1 * smoothstep(0.0, 0.05, v.y - v.x), fracture);
+	}
 	// Bedding: thin darker bands, wavering.
 	float bed = sin(wp.y * 1.6 + big * 7.0);
 	col *= 1.0 - 0.16 * k * smoothstep(0.82, 0.98, bed) * strata;

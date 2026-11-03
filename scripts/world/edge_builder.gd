@@ -120,6 +120,7 @@ func _rock() -> void:
 	rock.mesh = _grid_mesh(_rock_grid, thetas.size(), radii.size(), true)
 	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.9, 0.92, 0.97), 1.0, true)
 	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_steep", true)   # (the wall draws those)
+	(rock.material_override as ShaderMaterial).set_shader_parameter("fracture", 0.4)
 	add_child(rock)
 	var faces := PackedVector3Array()
 	var v: PackedVector3Array = _rock_grid[0]
@@ -156,7 +157,7 @@ func _rock() -> void:
 ## field under it (_rock) draws only its gentle parts -- the scree, the ledges, the top -- so where the wall
 ## overhangs, the sheet is what's seen. Its rows above the top close up on the top's edge.
 func _wall() -> void:
-	var thetas := _thetas(0.5, esc.foot)
+	var thetas := _thetas(0.33, esc.foot)   # (fine enough to draw the faces' fracture facets)
 	var nt := thetas.size()
 	var cols := []
 	for t in thetas:
@@ -214,6 +215,7 @@ func _wall() -> void:
 	wall.name = "Wall"
 	wall.mesh = m
 	var mat := _rock_mat("marble_cliff_05", 7.0, Color(0.9, 0.92, 0.97), 1.0, false)
+	mat.set_shader_parameter("fracture", 0.7)
 	wall.material_override = mat
 	add_child(wall)
 
@@ -757,6 +759,8 @@ func _heather_colour() -> Color:
 func _rock_mat_instanced() -> Material:
 	var m := _rock_mat("rock_boulder_dry", 2.4, Color(0.8, 0.83, 0.9), 0.0, false)
 	m.set_shader_parameter("veg_amount", 0.3)   # (a little moss on the blocks' tops, not a lawn)
+	m.set_shader_parameter("fracture", 0.5)
+	m.set_shader_parameter("fracture_size", 0.5)
 	return m
 
 

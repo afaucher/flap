@@ -40,6 +40,8 @@ const LEAN := 0.045                 ## m the wall leans back per m up
 const BENCHES := [[9.0, 4.4], [17.0, 3.0]]   ## [height m, width m]: the beds nearest these heights are ledges
 const ROW_F := [0.03, 0.27, 0.5, 0.73, 0.97]   ## the sheet's rows up each bed (fractions, foot to top)
 const BULGE := Vector2(0.4, 0.15)   ## m: a face's gentle swell over a few metres, and its roughness over one
+const FRACTURE := Vector3(1.4, 0.13, 0.1)   ## a face broken into planar facets: m across, the most one stands back,
+                                             ## and the most it tilts (m per m)
 const SKYLINE := Vector3(24.0, 30.0, 44.0)    ## the top: m per stretch, its height (least, most)
 const GULLY := Vector3(28.0, 4.5, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const PLATEAU := 30.0               ## m past the top's edge it rises (the hills take over beyond)
@@ -167,6 +169,30 @@ func _panel(b: int, arc: float) -> float:
 	return back + (1.0 - _hard[b]) * SOFT
 
 
+## How far the face stands back for its fracture facet at (`arc` m along, `z` m up) in bed `b`: the face split into
+## cells FRACTURE.x across (the nearest of jittered points: Voronoi), each a plane of its own -- set back by its own
+## amount and tilted its own way -- so the surface is faceted and stepped, as broken rock is, not smooth.
+func _facet(arc: float, z: float, b: int) -> float:
+	var s := FRACTURE.x
+	var cx := floorf(arc / s)
+	var cz := floorf(z / s)
+	var best := INF
+	var out := 0.0
+	for ix in 3:
+		for iz in 3:
+			var gx := cx + float(ix - 1)
+			var gz := cz + float(iz - 1)
+			var id := gx * 92.7 + gz * 37.3 + b * 11.9
+			var px := (gx + _h(id + 0.1)) * s
+			var pz := (gz + _h(id + 0.6)) * s
+			var d := (arc - px) * (arc - px) + (z - pz) * (z - pz)
+			if d < best:
+				best = d
+				var tilt := Vector2(_h(id + 1.3) * 2.0 - 1.0, _h(id + 2.9) * 2.0 - 1.0) * FRACTURE.z
+				out = FRACTURE.y * _h(id + 4.1) + tilt.dot(Vector2(arc - px, z - pz))
+	return out
+
+
 ## The benches under bed `b` at `arc`: how far it stands back for them (each comes and goes along the cliff).
 func _benches(b: int, arc: float) -> float:
 	var back := 0.0
@@ -213,7 +239,7 @@ func _column(theta: float) -> PackedFloat32Array:
 			var z := lerpf(z0, z1, f)
 			# (a face isn't a plane: it swells and hollows gently over a few metres, rougher over one)
 			var swell := BULGE.x * (_n1(arc / 2.6 + z / 2.1 + b * 3.1) - 0.5) * 2.0 + BULGE.y * (_n1(arc * 1.1 + z * 0.9 + b * 7.0) - 0.5) * 2.0
-			var r := r0 + maxf(back + LEAN * z + swell, -0.8)
+			var r := r0 + maxf(back + LEAN * z + swell + _facet(arc, z, b), -0.8)
 			if z > top:   # (above the top: none -- the rows close up on the top's edge)
 				z = top
 				r = last_r
