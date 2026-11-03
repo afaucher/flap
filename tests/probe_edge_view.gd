@@ -66,6 +66,11 @@ func setup() -> void:
 		["low_trunks", null, d * (edge - 30.0) + Vector3.UP * 6.0, d * (edge + 40.0) + Vector3.UP * 8.0],
 		["overview", null, -d * 40.0 + Vector3.UP * 60.0, d * edge * 0.7],
 	]
+	if heading == "ortho":   # (the cliff straight on, a long lens with no perspective, the wood and the heath's cover
+		# hidden: to set beside docs/images/edge/concept_cliff_ortho.png and measure with tools/cliff_edges.py)
+		await _ortho(layout, arena, cam, out_dir)
+		finish()
+		return
 	if heading == "fence":   # (as the heath concept is framed: low, just inside the posts, looking along them, the
 		# wood on the left and the heath on the right, the falcon flying ahead low over the fence line; on the far
 		# side of the ring from the escarpment)
@@ -115,3 +120,34 @@ func _clear_line(layout: ArenaLayout, at: Vector3, d: Vector3) -> Vector3:
 		if ok:
 			return p
 	return at
+
+
+## The escarpment's middle straight on in an orthographic camera, ORTHO_SIZE m high, with everything in front of it
+## hidden (the wood, the heath's cover, the fence, the posts): edge_ortho.png.
+const ORTHO_SIZE := 54.0
+func _ortho(layout: ArenaLayout, arena: ArenaBuilder, cam: Camera3D, out_dir: String) -> void:
+	get_window().size = Vector2i(1536, 512)
+	for c in arena.get_children():
+		if c != arena.edge and c.name != "Ground":
+			c.visible = false
+	for c in arena.edge.get_children():
+		var keep := c == arena.edge.rock or c == arena.edge.wall or String(c.name).begins_with("Edge_blocks") or String(c.name).begins_with("Edge_scree") or String(c.name).begins_with("Edge_ledge") or c == arena.edge.hills
+		if c is VisualInstance3D:
+			(c as VisualInstance3D).visible = keep
+	var d := Vector3(sin(float(layout.escarpment.at)), 0.0, cos(float(layout.escarpment.at)))
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = ORTHO_SIZE
+	cam.near = 1.0
+	cam.far = 600.0
+	for c in arena.get_parent().get_children():   # (no far blur: it's all far, and the point is the detail)
+		if c is WorldEnvironment and (c as WorldEnvironment).camera_attributes is CameraAttributesPractical:
+			((c as WorldEnvironment).camera_attributes as CameraAttributesPractical).dof_blur_far_enabled = false
+	cam.look_at_from_position(d * (layout.rock.foot - 120.0) + Vector3.UP * (ORTHO_SIZE * 0.5 - 4.0), d * layout.rock.foot + Vector3.UP * (ORTHO_SIZE * 0.5 - 4.0), Vector3.UP)
+	await frames(40)
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	img.convert(Image.FORMAT_RGB8)
+	if out_dir != "":
+		var path := out_dir.path_join("edge_ortho.png")
+		img.save_png(path)
+		print("shot: ", path)
