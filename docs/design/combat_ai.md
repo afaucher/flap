@@ -603,7 +603,20 @@ denied by the stoop's speed) and partly balance (seeker turn rate, gimbal, lock 
 - **Defence outweighed attack** between AI birds until the attackers read the turn: a 3 v 3 of pilots landed 4 hits
   in 90 s, most of each bird's time spent breaking. Stage 6 (the duel matrix) is where that balance gets tuned.
 
-**Cost, flagged:** ~0.6-0.7 ms per AI bird per physics tick, nearly all `ai.avoid` (AIPilot's tree avoidance run
-every tick in combat), against section 8's 0.1 ms budget; the brain (tree, target choice) is ~0.07 ms, sense ~0.02 ms,
-fire control ~0.003 ms. Not cut: lowering it (throttling avoidance, a cheaper predict) changes behaviour, so it waits
-for the user's go-ahead.
+**Cost** (`tests/probe_team_cost.gd`: a 3 v 3, six AI birds, 60 s; it prints a fingerprint of every bird's flight so a
+change meant to leave behaviour alone can be shown to, to the bit). 2026-11-03: 7.35 ms per physics tick, of it 5.5 ms AI
+(~0.9 ms per bird), worst ticks 80-150 ms. Now ~3 ms per tick, ~2 ms of it AI (~0.35 ms per bird), worst ~40-100 ms:
+- Exact (the fingerprint unchanged): a tree's branches filed by height band (`TreeData.bands()`), so a clearance check
+  visits only those at the segment's height -- it walked all ~47 of every nearby tree's, 6,500 a tick; the avoidance
+  fan doesn't check a heading against the wood once it couldn't beat the best clear one; a predicted path checked in
+  one call (`ArenaLayout.path_blocked_at`), against the outposts near it only; `obstacle_distance` pruned (trees in
+  order, none that can't come nearer), and the planner's nodes asked yes/no (`clear_by`). Avoidance 2.9 -> 1.2 ms.
+- Bugs that cost time: a combat bird sent to a perch it had no route to (team 1's base: an outpost facing a tree 6 m
+  off its rail) planned a route to some random perch every tick. Outposts now face only where every species can swoop
+  onto the rail (`Pinewood.APPROACH*`); the pilot heads for a perch it can't plan to; the hangar is in the layout's
+  geometry; a combat bird turns to face out before it pushes off. Planning 1.3 -> 0.1 ms.
+- Lower rates: the brain looks and decides every other tick (`CombatBrain.THINK_EVERY`, 30 Hz, well inside the best
+  reaction time), the picture coasted on between looks; history is still recorded every tick (sparser history made the
+  turning shot and the seeker drag miss). Brain + sense 1.0 -> 0.6 ms.
+Still over section 8's 0.1 ms per bird: avoidance (~0.2 ms per bird) and the occasional long plan home (a bird 70-160 m
+from its base: a few hundred expansions, every new node and edge checked against the wood -- not a failed search).

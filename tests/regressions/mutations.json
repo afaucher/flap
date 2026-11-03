@@ -261,8 +261,8 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\tplanner.clearance = 0.9 + 0.15 * turn_radius",
-    "replace": "\tplanner.clearance = 0.9"
+    "find": "\treturn 0.9 + 0.15 * cruise_turn_radius(p)",
+    "replace": "\treturn 0.9"
    },
    {
     "file": "scripts/ai/ai_pilot.gd",
@@ -1665,7 +1665,7 @@
    },
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\tif not _leg_ok(app, p.approach_anchor(), -1, p.tree_id):\n\t\treturn none",
+    "find": "\tif not swoop_clear(p, profile):\n\t\treturn none",
     "replace": "\tif false:\n\t\treturn none"
    }
   ]
@@ -2630,6 +2630,92 @@
     "file": "scripts/world/planks.gdshader",
     "find": "const float SCAN_GAP0 = 0.0605;",
     "replace": "const float SCAN_GAP0 = 0.0;"
+   }
+  ]
+ },
+ {
+  "id": "outpost-no-way-in",
+  "bug": "Outposts faced the most open level run with no check on the final swoop: one in wood 7 (team 1's base in the 3 v 3) had a tree 6 m in front of its rail, and no bird could plan a landing on it (2026-11-03).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d):\n\t\t\t\tcontinue\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "combat-pilot-wanders-unreachable",
+  "bug": "A combat bird sent to a perch it had no route to (its base) fell through to AIPilot's own perch flight, which picked a random perch and planned a route to it -- every tick (a 3 ms plan each, spikes to 90 ms) (2026-11-03).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_pilot.gd",
+    "find": "\t\tif ai.target == i.perch:\n\t\t\treturn ai.sample(bird, dt)",
+    "replace": "\t\tif true:\n\t\t\treturn ai.sample(bird, dt)"
+   }
+  ]
+ },
+ {
+  "id": "combat-pushoff-facing-in",
+  "bug": "A combat bird pushed off its perch straight ahead whichever way it sat: perched on its base facing the trunk, it flew into the hangar (2026-11-03).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_pilot.gd",
+    "find": "\t\t\tif absf(err) > deg_to_rad(20.0) and _turning < TURN_OUT_TIME:",
+    "replace": "\t\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "hangar-unseen-by-ai",
+  "bug": "The outposts' hangars were solid but not in the layout's geometry: the planner and the avoidance flew birds into them landing on and leaving a base (2026-11-03).",
+  "tests": [
+   "test_outpost_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\tout.append([h, h + Vector3.UP * HANGAR_SIZE.y, Vector2(HANGAR_SIZE.x, HANGAR_SIZE.z).length() * 0.5])\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "combat-picture-stale-between-looks",
+  "bug": "With the brain looking every other tick, the picture between looks was a tick old: fire control and the defence read where birds and rounds had been (2026-11-03).",
+  "tests": [
+   "test_fire_control",
+   "test_combat_defense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\t\tCombatSense.coast(picture, dt)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "combat-history-at-look-rate",
+  "bug": "Sense recorded the birds' history only when it looked (every other tick): what it read a reaction time back was up to a tick older, enough to lose a seeker drag past a trunk and a turning shot (2026-11-03).",
+  "tests": [
+   "test_fire_control",
+   "test_combat_defense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\tsense.record(dt)\n\tif picture != null and posmod(f + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n",
+    "replace": "\tif picture != null and posmod(f + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n\tsense.record(_unthought)\n"
    }
   ]
  }

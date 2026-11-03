@@ -36,6 +36,7 @@ func _turn_rate(side: float) -> void:
 	var measured := 0.0
 	for f in 90:
 		await get_tree().physics_frame
+		sense.record(1.0 / 60.0)
 		t = sense.update(1.0 / 60.0).track_of(tb)
 		var v := Vector3(tb.model.velocity.x, 0.0, tb.model.velocity.z)
 		if f == 59:
@@ -74,6 +75,7 @@ func _dead_reckoning(side: float) -> void:
 	var pic: CombatSense.Picture
 	for f in 60:
 		await get_tree().physics_frame
+		sense.record(1.0 / 60.0)
 		pic = sense.update(1.0 / 60.0)
 	var t := pic.track_of(them.bird)
 	var tb: Bird = them.bird
@@ -102,6 +104,7 @@ func _blind_cone() -> void:
 	var ahead_ok := true
 	for f in 75:
 		await get_tree().physics_frame
+		sense.record(1.0 / 60.0)
 		pic = sense.update(1.0 / 60.0)
 		var tb := pic.track_of(behind.bird)
 		var ta := pic.track_of(ahead.bird)
@@ -137,6 +140,7 @@ func _behind_a_trunk() -> void:
 	var seen_after := false
 	for f in 120:
 		await get_tree().physics_frame
+		sense.record(1.0 / 60.0)
 		var t := sense.update(1.0 / 60.0).track_of(them.bird)
 		if t == null:
 			forgot = true

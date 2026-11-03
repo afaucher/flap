@@ -32,7 +32,6 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 				_turning += dt
 				return FlightInput.new(Vector2(clampf(err * 1.5, -1.0, 1.0), 0.0))
 			_turning = 0.0
-			ai.leaving(bird)
 			return FlightInput.new(Vector2.ZERO, true, false)   # push off with a wingbeat
 		Bird.State.GROUNDED:
 			if i.mode == "rest":

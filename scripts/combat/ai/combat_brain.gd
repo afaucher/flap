@@ -88,7 +88,9 @@ func tick(dt: float) -> void:
 		return
 	_frame = f
 	_unthought += dt
+	sense.record(dt)
 	if picture != null and posmod(f + _phase, THINK_EVERY) != 0:
+		CombatSense.coast(picture, dt)
 		return
 	dt = _unthought
 	_unthought = 0.0

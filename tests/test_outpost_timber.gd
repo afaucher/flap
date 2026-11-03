@@ -97,6 +97,20 @@ func setup() -> void:
 		sizes.append((c.shape as BoxShape3D).size)
 	check(sizes.has(Vector3(o.width, o.thickness, o.depth)), "the deck's collision box")
 	check(sizes.has(ArenaBuilder.HANGAR_SIZE), "the hangar's collision box")
+	# ... and the AI's clearance queries see all of it: every corner of the hangar's box lies in the deck's capsules.
+	for c in boxes:
+		if (c.shape as BoxShape3D).size != ArenaBuilder.HANGAR_SIZE:
+			continue
+		var outside := 0
+		for k in 8:
+			var corner: Vector3 = c.global_transform * (Vector3(float(k & 1) - 0.5, float((k >> 1) & 1) - 0.5, float((k >> 2) & 1) - 0.5) * ArenaBuilder.HANGAR_SIZE)
+			var inside := false
+			for seg in b.layout.deck_lines(o):
+				if corner.distance_to(Geometry3D.get_closest_point_to_segment(corner, seg[0], seg[1])) <= float(seg[2]) + 1e-3:
+					inside = true
+			if not inside:
+				outside += 1
+		eq(outside, 0, "the AI's clearance queries hold the hangar (corners outside them)")
 
 	# The planks' nails: where each plank crosses a drawn bearer.
 	var plank: MeshInstance3D = b.get_node("Outpost2_Plank4")

@@ -110,7 +110,8 @@ func _perched(bird: Bird) -> FlightInput:
 	if absf(err) > deg_to_rad(20.0) and clock < rest_until + 3.0:
 		return FlightInput.new(Vector2(clampf(err * 1.5, -1.0, 1.0), 0.0))
 	mode = Mode.CRUISE
-	leaving(bird)
+	_left_perch = bird.perch.id
+	_takeoff_pos = bird.global_position
 	return FlightInput.new(Vector2.ZERO, true, false)
 
 
@@ -179,14 +180,6 @@ func go_to_perch(bird: Bird, perch: Perch) -> void:
 	if bird.state == Bird.State.FLYING:
 		mode = Mode.CRUISE
 	_replan(bird)
-
-
-## It's letting go of its perch: the tree it leaves is passed closer for a while (DEPARTURE_RANGE), and not at all in
-## the first PUSH_OFF metres, which it passes through as it lets go.
-func leaving(bird: Bird) -> void:
-	_last_tree = bird.perch.tree_id
-	_left_perch = bird.perch.id
-	_takeoff_pos = bird.global_position
 
 
 ## Has it given `perch` up for now (no route in, or an approach that failed)?

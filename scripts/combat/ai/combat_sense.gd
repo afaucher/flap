@@ -66,8 +66,21 @@ func _init(b: Bird, w: CombatWorld, s: CombatSkill) -> void:
 	skill = s
 
 
-func update(dt: float) -> Picture:
+## Every tick: where each other bird is now, kept HISTORY s back (what a look reads, the reaction time ago).
+func record(dt: float) -> void:
 	clock += dt
+	for b in world.birds:
+		if b == me or not is_instance_valid(b):
+			continue
+		var h: Array = _history.get(b, [])
+		h.append([clock, b.global_position, Projectile.velocity_of(b)])
+		while h.size() > 2 and float(h[0][0]) < clock - HISTORY:
+			h.pop_front()
+		_history[b] = h
+
+
+## A look (after record()): the picture now, `dt` s after the last look.
+func update(dt: float) -> Picture:
 	var pic := Picture.new()
 	pic.me = me
 	pic.clock = clock
@@ -83,10 +96,8 @@ func update(dt: float) -> Picture:
 		if b == me or not is_instance_valid(b):
 			continue
 		var h: Array = _history.get(b, [])
-		h.append([clock, b.global_position, Projectile.velocity_of(b)])
-		while h.size() > 2 and float(h[0][0]) < clock - HISTORY:
-			h.pop_front()
-		_history[b] = h
+		if h.is_empty():
+			continue
 		var past: Array = _at(h, clock - skill.reaction)
 		var pos: Vector3 = past[1]
 		var tr: Track = _tracks.get(b, null)
@@ -140,6 +151,21 @@ func update(dt: float) -> Picture:
 		pic.locked = true
 		pic.locked_from = w.locks[0].from
 	return pic
+
+
+## Between looks (CombatBrain.THINK_EVERY): carry the picture on `dt` -- each bird in sight along the turn it was seen
+## in, each round along its line -- as it would be carried on to now at the next look. (One out of sight is carried on
+## at the next look, for all the time since the last.)
+static func coast(pic: Picture, dt: float) -> void:
+	pic.clock += dt
+	for t in pic.tracks:
+		if not t.visible:
+			continue
+		t.vel = t.vel.rotated(Vector3.UP, -t.turn * dt)
+		t.pos += t.vel * dt
+	for r in pic.threats:
+		r.pos = (r.pos as Vector3) + (r.vel as Vector3) * dt
+		r.tgo = maxf(float(r.tgo) - dt, 0.0)
 
 
 ## Line of sight from `from` to `b` at `to`, through the trunks and branches (cached for LOS_EVERY s).

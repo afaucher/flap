@@ -18,6 +18,7 @@ const GRIP_TRUNK_GAP := 0.12   ## m, the grip line starts this far out from the 
 const GRIP_TIP_GAP := 0.08     ## m, and stops this far short of the tip
 const BOX_MARGIN := 1e-3       ## m, the slack in a clearance query's box test (rounding in the distance test)
 const BAND := 2.0              ## m, the height bands a tree's branches are filed under for clearance queries
+const HANGAR_SIZE := Vector3(0.42, 0.5, 0.44)   ## an outpost's hangar, a box on its deck (along the rail, up, out)
 
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 ## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest).
@@ -418,8 +419,18 @@ func _tree_clear(t: TreeData, a: Vector3, b: Vector3, clearance: float, skip_per
 	return true
 
 
-## An outpost's deck as capsules for clearance queries: [a, b, radius] lines across it, near edge to rail
-## (worked out on the first query, once the outpost is built).
+## The hangar's place on an outpost's deck, in the deck's frame (x along the rail, z out from the deck's middle): by
+## the trunk, at one end of the deck.
+static func hangar_x(o: OutpostData) -> float:
+	return o.width * 0.5 - 0.27
+
+
+static func hangar_z(o: OutpostData) -> float:
+	return -o.depth * 0.5 + 0.3
+
+
+## An outpost's deck as capsules for clearance queries: [a, b, radius] lines across it, near edge to rail, and its
+## hangar standing on it (worked out on the first query, once the outpost is built).
 func deck_lines(o: OutpostData) -> Array:
 	if o.lines.is_empty():
 		o.lines = _deck_lines(o)
@@ -433,6 +444,8 @@ func _deck_lines(o: OutpostData) -> Array:
 	for f in [0.25, 0.75]:
 		var c: Vector3 = o.centre + o.out * (f - 0.5) * o.depth - Vector3.UP * o.thickness * 0.5
 		out.append([c - side * (o.width * 0.5 - r), c + side * (o.width * 0.5 - r), r])
+	var h: Vector3 = o.centre + side * hangar_x(o) + o.out * hangar_z(o)
+	out.append([h, h + Vector3.UP * HANGAR_SIZE.y, Vector2(HANGAR_SIZE.x, HANGAR_SIZE.z).length() * 0.5])
 	return out
 
 

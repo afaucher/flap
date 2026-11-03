@@ -5,7 +5,8 @@ extends TestCase
 ##   - (against the target breaking when shot at, it beats the range's old demo shooter: test_combat_vs_demo);
 ##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this; a base
 ##     it finds no way in to, it heads for without planning a route again every tick (or wandering off to plan one to
-##     some other perch);
+##     some other perch); sitting on its base facing the trunk or along the rail, it turns to face out before it
+##     pushes off, and leaves without touching the deck, the hangar or the tree;
 ##   - in a long turning fight with a sparrow that breaks and turns (an AI with nothing to shoot), it banks no
 ##     harder than its lift holds at the speed it has: it never stalls, nor spirals down (a hawk and a sparrow,
 ##     the target turning either way);
@@ -41,6 +42,8 @@ func setup() -> void:
 		await _no_way_in()
 	if in_shard(2):
 		await _rearms_at_base()
+		for turned in [180.0, 90.0, -90.0]:
+			await _leaves_base(turned)
 		for id in ["hawk", "sparrow"]:
 			for dir in [1.0, -1.0]:
 				await _turning_fight(id, dir)
@@ -117,6 +120,37 @@ func _rearms_at_base() -> void:
 	check(landed_at == home, "out of rounds: it lands on its own base")
 	check(rearmed_at > 0.0, "and rearms there")
 	check(took_off_full, "then goes back up")
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
+
+
+## Sitting on its base turned `turned` deg from facing out (180: facing the trunk; +-90: along the rail, toward the
+## hangar's end or away from it), rested and armed, with an enemy about: it turns out and pushes off clean.
+func _leaves_base(turned: float) -> void:
+	var layout := Pinewood.generate(ARENA_SEED)
+	var home := CombatWorld.far_base(layout, Vector3(60, 0, 0))
+	var d := Duel.new()
+	add_child(d)
+	d.setup(layout, {0: home, 1: CombatWorld.far_base(layout, home.position)})
+	await frames(1)
+	var cp := CircuitPilot.new()
+	cp.waypoints = CircuitPilot.clear_racetrack(layout, Vector3(0, 20, 0), 40.0, 12.0)
+	cp.evade = false
+	cp.wp = 1
+	var w: Array = cp.waypoints
+	d.add_bird("crow", 1, cp, null, w[0], (w[1] as Vector3) - (w[0] as Vector3))
+	var me: Dictionary = d.add_ai("crow", 0, Vector3.ZERO, Vector3.FORWARD, CombatSkill.preset("pilot"), 5, home)
+	var b: Bird = me.bird
+	b.facing = home.facing.rotated(Vector3.UP, deg_to_rad(turned))
+	b.global_basis = b._sit_basis()
+	var flew := false
+	for f in 60 * 4:
+		await d.step()
+		flew = flew or b.state == Bird.State.FLYING
+	print("on its base turned %.0f deg: flew %s, %d bonks, %.1f m out after 4 s" % [turned, flew, b.bonks, b.global_position.distance_to(home.position)])
+	check(flew, "on its base turned %.0f deg from facing out: it leaves to fight" % turned)
+	eq(b.bonks, 0, "and touches nothing leaving (turned %.0f deg)" % turned)
 	d.cleanup()
 	d.queue_free()
 	await frames(2)
@@ -215,7 +249,7 @@ func _ambush() -> void:
 	var perch_y := -INF
 	for f in 60 * 90:
 		await get_tree().physics_frame
-		if b.state == Bird.State.PERCHED and br.intent.mode == "ambush":
+		if b.state == Bird.State.PERCHED and br.intent.mode == "ambush" and b.perch == br.amb_perch:   # (not its base, about to leave for one)
 			sat += 1.0 / 60.0
 			perch_y = b.global_position.y
 	var hits := int(d.world.hits.get(target.bird, 0))

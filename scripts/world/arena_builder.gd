@@ -645,16 +645,16 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	add_child(fm)
 
 
-const HANGAR_SIZE := Vector3(0.42, 0.5, 0.44)   ## the hangar's box (its collision), deck frame
+const HANGAR_SIZE := ArenaLayout.HANGAR_SIZE   ## the hangar's box (its collision), deck frame
 const ROUNDEL_Y := 0.27
 const ROUNDEL_R := 0.15
 
 static func _hangar_x(o: ArenaLayout.OutpostData) -> float:
-	return o.width * 0.5 - 0.27
+	return ArenaLayout.hangar_x(o)
 
 
 static func _hangar_z(o: ArenaLayout.OutpostData) -> float:
-	return -o.depth * 0.5 + 0.3
+	return ArenaLayout.hangar_z(o)
 
 
 ## The bearers' z in the deck frame (out from its middle): the outer one under the plank ends by the rail, the
