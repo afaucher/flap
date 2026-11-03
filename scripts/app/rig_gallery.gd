@@ -3,7 +3,7 @@ extends Node3D
 ##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile|feet|toes]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
 ##       [--zoom <x>] [--ortho] [--light studio|flat] [--no-cards] [--no-down] [--legs detail|capsules] [--branch]
-##       [--shot <png> --shot-after <s>] [--measure <frames>] [--gpu-feathers] [--gpu-body]
+##       [--shot <png> --shot-after <s>] [--measure <frames>] [--cpu-feathers] [--cpu-body]
 ## --only frames one bird close up; --sun back lights it from behind (feather translucency); --time freezes the
 ## clock (feather flutter) for repeatable screenshots. --measure prints the mean GPU render time and pose time over that many
 ## frames (after a warm-up) and quits: the plumage levels' cost (docs/research/feather_texture_study.md).
@@ -31,8 +31,8 @@ func _ready() -> void:
 	var only := Boot.arg_value(args, "--only")
 	BirdRig.plain_feathers = not args.has("--feather-shader")
 	BirdRig.flat_perch = args.has("--flat-perch")
-	BirdRig.gpu_feathers = args.has("--gpu-feathers")   # (the feathers placed in the shader; A/B against the rig's own)
-	BirdRig.gpu_body = args.has("--gpu-body")   # (the neck lofted in the shader)
+	BirdRig.gpu_feathers = not args.has("--cpu-feathers")   # (the feathers placed by the rig, not the shader; A/B)
+	BirdRig.gpu_body = not args.has("--cpu-body")   # (the neck, arm wings and trousers built by the rig, not the shader)
 	BirdRig.silhouette_cards = not args.has("--no-cards")
 	BirdRig.outline_down = not args.has("--no-down")
 	if Boot.arg_value(args, "--legs") != "":

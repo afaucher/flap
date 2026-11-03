@@ -127,11 +127,11 @@ const FLIGHT_KINDS := [WingShape.Kind.PRIMARY, WingShape.Kind.SECONDARY, WingSha
 const FLIGHT_SHARE := 0.8   ## of each wing's area, the share its flight feathers make (the rest: the arm's web, the coverts)
 var _feather_area := {}
 var feather_kinds: PackedInt32Array = []      ## WingShape.Kind per feather_xforms entry (6 = tail); tests   ## every feather this tick (the MultiMeshes' copy; tests, debug)
-## GPU feather placement (proof of concept; the game's --gpu-feathers): the feather shader places each flight and tail
+## GPU feather placement (on by default; the game's --cpu-feathers turns it off): the feather shader places each flight and tail
 ## feather from the wing's joints (feather_place.gdshaderinc), so a pose writes ~150 numbers instead of every feather's
 ## transform. feather_xforms is then filled only when something reads it (a hit: flight_feathers); a sitting bird's
 ## lean measures the tips on the GPU too (LeanProbe).
-static var gpu_feathers := false
+static var gpu_feathers := true   ## (needs a RenderingDevice: headless runs place them here)
 var feather_slots: PackedInt32Array = []      ## per feather_xforms entry: its column in the shader's defs (GPU placement)
 var gpu_place := false                        ## this rig's feathers are placed by the shader
 var _cpu_feathers := false                    ## (GPU placement) fill feather_xforms this pose all the same
@@ -178,9 +178,10 @@ var _neck_mesh: ArrayMesh
 var _custom_dirty := true          ## the feathers' instance data (strip row, share of the flex, atlas cell, seed) to write
 var _flex_set := INF
 var _neck_loft := LoftMesh.new()   ## the neck's surface (built in full only when its rings' pairing changes)
-## GPU body surfaces (proof of concept; the game's --gpu-body): the neck lofted in the body shader
-## (neck_place.gdshaderinc) from a few numbers a pose and the bird's fixed tables (_neck_tab), not in GDScript.
-static var gpu_body := false
+## GPU body surfaces (on by default; the game's --cpu-body turns it off): the neck, arm wings and legs' feather tubes
+## built in the body shader (neck_place / arm_place / trouser_place.gdshaderinc) from a few numbers a pose and the
+## bird's fixed tables (_neck_tab, _body_tab), not in GDScript.
+static var gpu_body := true   ## (needs a RenderingDevice: headless runs build them here)
 var gpu_neck := false
 var _cpu_neck := false            ## (GPU neck) loft it here as well this pose (tests compare the two)
 var _neck_tab: ImageTexture

@@ -48,6 +48,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
   rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
+- GPU-built surfaces, on by default where there is a RenderingDevice (`BirdRig.gpu_feathers`, `gpu_body`; `--cpu-feathers` /
+  `--cpu-body` turn them off): flight and tail feathers placed by `feather_place.gdshaderinc`, the neck, arm wings and
+  trousers built by `neck_place` / `arm_place` / `trouser_place.gdshaderinc`. Headless runs use the GDScript builds,
+  which stay the reference: `tests/gpu_test_*` (run windowed) read the shader's vertices back and compare.
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).

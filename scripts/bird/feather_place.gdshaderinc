@@ -1,7 +1,7 @@
 // Each flight and tail feather's placement on the GPU (BirdRig.gpu_feathers): the same maths as BirdRig.apply_pose's
 // feather loop, from the wing's joints this pose (`pose`, written each pose) and each feather's own definition
 // (`defs`, written when the feather set changes). Included by the feather shader (drawing) and by the capture shader
-// tests read back (tests/test_gpu_feathers.gd), so there is one copy.
+// tests read back (tests/gpu_test_feathers.gd), so there is one copy.
 //
 // defs (RGBA32F, x = the feather's slot: plain feathers first, then the slotted primaries):
 //   y0: bone, t, rel (deg; its term at no fold and slot), kind      y1: length, width, layer (m), index

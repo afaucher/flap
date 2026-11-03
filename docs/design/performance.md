@@ -71,9 +71,13 @@ together: 10-18 ms frames when several birds' legs swing at once (landings, take
 detail above, and spreading or cheapening those rebuilds; then, if needed, the feather placement in compiled code or a
 vertex shader.
 
-## Proof of concept: feathers placed on the GPU (branch `gpu-poc`, 2026-11-02)
+## Feathers placed on the GPU (on by default since 2026-11-03)
 
-The game's `--gpu-feathers` (`BirdRig.gpu_feathers`) moves the flight and tail feathers' placement from GDScript into
+Since 2026-11-03 the GPU paths below are the default wherever there is a RenderingDevice; `--cpu-feathers` and
+`--cpu-body` (game and rig gallery) put the work back in GDScript for comparison, and headless runs always use it.
+The numbers below were measured as A/B against that.
+
+`BirdRig.gpu_feathers` moves the flight and tail feathers' placement from GDScript into
 the feather shader (`feather_place.gdshaderinc`). Each pose writes about 150 numbers (each wing's joints and normals,
 the fold, the tail's frame) into a small float texture. Each feather's own definition goes into another texture
 once: the only part of it that changes with the fold and slot, its angle, is linear in both, so it is stored as
@@ -120,9 +124,9 @@ GPU's time by render pass to the report.
 
 ![Feathers placed in GDScript and in the shader, and their difference](../images/gpu_feathers_ab.jpg)
 
-## Proof of concept: the neck and arm wings lofted on the GPU (`--gpu-body`, 2026-11-02)
+## The neck and arm wings lofted on the GPU (`BirdRig.gpu_body`, 2026-11-02)
 
-The game's `--gpu-body` (`BirdRig.gpu_body`) lofts the neck and both arm wings in the body shader instead of in
+`BirdRig.gpu_body` lofts the neck and both arm wings in the body shader instead of in
 GDScript (`neck_place.gdshaderinc`, `arm_place.gdshaderinc`, picked per mesh by the instance uniform `gpu_surface`).
 Each is a fixed mesh of the loft's rows and columns (UV: row, column) that the shader moves; every vertex works out
 its own position, its normal (LoftMesh's rule: its triangles' unit normals summed, over its 3 x 3 neighbours), colour
@@ -153,9 +157,9 @@ step apart, and a triangle that is exactly nothing on the CPU gets a whole norma
 edge under 0.1 um as none. And a function this long, indexing a local array in a loop, came out wrong on this GPU:
 the neighbours are named variables.
 
-## Proof of concept: the legs' feather tubes ("trousers") built on the GPU (`--gpu-body`, 2026-11-02)
+## The legs' feather tubes ("trousers") built on the GPU (`BirdRig.gpu_body`, 2026-11-02)
 
-With `--gpu-body` the trousers are built in the body shader every frame too (`trouser_place.gdshaderinc`, sharing the
+With `gpu_body` the trousers are built in the body shader every frame too (`trouser_place.gdshaderinc`, sharing the
 body's lookups with the arm in `body_place.gdshaderinc`). Nothing is rebuilt, re-rested or skin-weighted any more,
 and there is no drift threshold: they are exactly LegRig's construction every frame, where before they were skinned
 between rebuilds (up to `TROUSER_DRIFT`, 2 mm, off) and each rebuild cost 2-4 ms.
