@@ -570,9 +570,12 @@ func _floor() -> void:
 	mi.material_override = _foliage_mat("ferns", {"tex": "fern", "tint": Color(1, 1, 1)}, {"bend": 0.35, "clump_normal": 0.45, "sway": 0.015, "flutter": 0.01, "backlight": 0.7})
 
 
-## An outpost: a deck of planks on two bearers and a pair of braces to the trunk; the rounded landing rail
-## along its outer edge (the perch, rope-wrapped where the feet go); a nest-box hangar with a roundel by the
-## trunk; a few small crates.
+## An outpost (docs/images/concepts/r4_aces_outpost.jpg): a deck of hand-sawn planks nailed across two heavy
+## squared bearers and a rim beam each side, braced to the trunk by squared struts with iron plates and bolts; the
+## round landing rail along its outer edge (the perch), rope-wound where the feet go and strapped down at its ends;
+## a hangar of vertical boards on battens under a plank roof, a roundel painted on its outer side, its door toward
+## the rail; brass-bound ammo boxes stacked by it. The planks are their own meshes (_plank_mesh, test_planks); all
+## the rest is one TimberMesh (one draw call: _outpost_frame), shared by every outpost of a size.
 func _outpost(o: ArenaLayout.OutpostData) -> void:
 	var body := StaticBody3D.new()
 	body.name = "Outpost%d" % o.id
@@ -582,8 +585,9 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	var frame := Basis(side, Vector3.UP, -o.out)   # (x along the rail, y up, z back toward the trunk)
 	var at := func(x: float, y: float, z: float) -> Vector3:   # deck frame, m: z out from the deck's middle
 		return o.centre + side * x + Vector3.UP * y + o.out * z
-	var wood := _timber("plank", {"grain_axis": 2, "length_m": o.depth})
-	var dark := _timber("bearer", {"grain_axis": 0, "nails": false, "wood": Color(0.42, 0.32, 0.22), "weather": 0.35})
+	var zo := _bearer_z(o, true)
+	var zi := _bearer_z(o, false)
+	var wood := _timber("plank", {"nails": true, "nail_at": Vector2(-zo, -zi), "weather": 0.7})   # (a plank's z runs back: frame z = -out)
 	# The planks: sawn by hand, no two quite alike (_plank_mesh), laid edge to edge with small uneven gaps.
 	var prng := RandomNumberGenerator.new()
 	prng.seed = 7919 * (o.id + 1) + layout.seed
@@ -599,27 +603,20 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 		var gap := prng.randf_range(0.006, 0.016)
 		var mi := MeshInstance3D.new()
 		mi.name = "Outpost%d_Plank%d" % [o.id, i]
-		mi.mesh = _plank_mesh(w - gap, o.thickness * 0.6, o.depth, prng)
+		mi.mesh = _plank_mesh(w - gap, o.thickness * 0.6, o.depth, prng, (i + o.id * 4) % 9)
 		mi.material_override = wood
 		mi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -o.thickness * 0.3, 0.0))
 		add_child(mi)
 		x0 += w
-	for z in [-o.depth * 0.3, o.depth * 0.3]:
-		_box(body, at.call(0.0, -o.thickness * 0.8, z), frame, Vector3(o.width, o.thickness * 0.5, 0.07), dark, false)
 	var col := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(o.width, o.thickness, o.depth)
 	col.shape = box
 	col.transform = Transform3D(frame, at.call(0.0, -o.thickness * 0.5, 0.0))
 	body.add_child(col)
-	# Braces: from under the outer corners down and back to the trunk.
-	for e in [-1.0, 1.0]:
-		_rod(at.call(e * o.width * 0.38, -o.thickness, o.depth * 0.3), at.call(e * o.width * 0.12, -0.9, -o.depth * 0.5 + 0.1), 0.035, dark)
-	# The landing rail: a peeled log along the outer edge, rope-wrapped in the middle.
+	# The landing rail's collision: a capsule along the outer edge (the perch; drawn in the frame mesh).
 	var r0: Vector3 = at.call(-o.width * 0.5, o.rail_radius - o.thickness * 0.2, o.depth * 0.5 - o.rail_radius)
 	var r1: Vector3 = at.call(o.width * 0.5, o.rail_radius - o.thickness * 0.2, o.depth * 0.5 - o.rail_radius)
-	_rod(r0, r1, o.rail_radius, _timber("rail", {"grain_axis": 1, "nails": false, "wood": Color(0.62, 0.5, 0.36), "weather": 0.25}))
-	_rod(r0.lerp(r1, 0.3), r0.lerp(r1, 0.7), o.rail_radius + 0.006, _mat("pw_rope", Color(0.72, 0.64, 0.46)))
 	var rc := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = o.rail_radius
@@ -627,29 +624,268 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	rc.shape = cap
 	rc.transform = Transform3D(_basis_along(side), (r0 + r1) * 0.5)
 	body.add_child(rc)
-	# The hangar: a nest box by the trunk to one side, its door toward the rail, a roundel on its outer side.
-	var hx := o.width * 0.5 - 0.27
-	var hz := -o.depth * 0.5 + 0.3
-	var hangar := _box(body, at.call(hx, 0.25, hz), frame, Vector3(0.42, 0.5, 0.44), _timber("hangar", {"grain_axis": 1, "nails": false, "weather": 0.7}), true)
-	hangar.name = "Hangar"
-	_box(body, at.call(hx, 0.52, hz), frame * Basis(Vector3.RIGHT, deg_to_rad(-12.0)), Vector3(0.5, 0.03, 0.54), dark, false)
-	_disc(at.call(hx, 0.22, hz + 0.222), o.out, 0.09, _mat("pw_door", Color(0.05, 0.04, 0.03)))
-	var rings := [[0.13, Color(0.85, 0.72, 0.25)], [0.1, Color(0.15, 0.25, 0.55)], [0.045, Color(0.85, 0.72, 0.25)]]
-	for i in rings.size():
-		_disc(at.call(hx + 0.212 + 0.001 * i, 0.27, hz), side, rings[i][0], _mat("pw_roundel%d" % i, rings[i][1]))
-	# Crates: small, stacked by the hangar.
-	var crate := _mat("pw_crate", Color(0.55, 0.44, 0.22))
-	for q in [[-0.05, 0.0, 0.0], [0.05, 0.0, 0.02], [0.0, 0.06, 0.01], [0.16, 0.0, -0.06]]:
-		_box(body, at.call(hx - 0.36 + q[0], 0.03 + q[1], hz + 0.05 + q[2]), frame, Vector3(0.09, 0.06, 0.06), crate, false)
+	# The hangar's collision: its box (drawn as boards in the frame mesh).
+	var hx := _hangar_x(o)
+	var hz := _hangar_z(o)
+	var hs := CollisionShape3D.new()
+	var hb := BoxShape3D.new()
+	hb.size = HANGAR_SIZE
+	hs.shape = hb
+	hs.transform = Transform3D(frame, at.call(hx, HANGAR_SIZE.y * 0.5, hz))
+	hs.name = "Hangar"
+	body.add_child(hs)
+	# Everything else: one mesh in the deck's frame.
+	var fr := _outpost_frame(o)
+	var fm := MeshInstance3D.new()
+	fm.name = "Outpost%d_Frame" % o.id
+	fm.mesh = fr[0]
+	fm.set_meta("pieces", fr[1])
+	fm.material_override = _timber("frame", {"weather": 0.5, "roundel_c": Vector3(hx + HANGAR_SIZE.x * 0.5, ROUNDEL_Y, -hz), "roundel_n": Vector3.RIGHT, "roundel_r": ROUNDEL_R})
+	fm.transform = Transform3D(frame, o.centre)
+	add_child(fm)
+
+
+const HANGAR_SIZE := Vector3(0.42, 0.5, 0.44)   ## the hangar's box (its collision), deck frame
+const ROUNDEL_Y := 0.27
+const ROUNDEL_R := 0.13
+
+static func _hangar_x(o: ArenaLayout.OutpostData) -> float:
+	return o.width * 0.5 - 0.27
+
+
+static func _hangar_z(o: ArenaLayout.OutpostData) -> float:
+	return -o.depth * 0.5 + 0.3
+
+
+## The bearers' z in the deck frame (out from its middle): the outer one under the plank ends by the rail, the
+## inner one against the trunk.
+static func _bearer_z(o: ArenaLayout.OutpostData, outer: bool) -> float:
+	return o.depth * 0.5 - 0.085 if outer else -o.depth * 0.5 + 0.13
+
+
+var _frames := {}
+
+## The outpost's framing, rail, hangar and crates as one TimberMesh, in the deck's own frame (x along the rail,
+## y up, z back toward the trunk -- so deck z goes in negated): [ArrayMesh, pieces].
+func _outpost_frame(o: ArenaLayout.OutpostData) -> Array:
+	var key := "%.3f_%.3f_%.3f_%.3f" % [o.width, o.depth, o.thickness, o.rail_radius]
+	if _frames.has(key):
+		return _frames[key]
+	var tm := TimberMesh.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4243
+	var d := func(x: float, y: float, z: float) -> Vector3:   # deck (x, y up, z out) -> the mesh's frame
+		return Vector3(x, y, -z)
+	var X := Vector3.RIGHT
+	var Y := Vector3.UP
+	var Z := Vector3(0.0, 0.0, -1.0)   # (deck out, in the mesh's frame)
+	var pt := o.thickness * 0.6        # (the planks' thickness: their underside at -pt)
+	var heart := func() -> Vector2:     # a boxed heart: the pith near the middle of a squared beam's section
+		return Vector2(rng.randf_range(-0.012, 0.012), rng.randf_range(-0.012, 0.012))
+	# Bearers: heavy squared timbers across under the planks, their ends standing out past the deck's sides.
+	var bh := 0.09
+	var bw := 0.075
+	var blen := o.width + 0.14
+	var by := -pt - bh * 0.5
+	for outer in [true, false]:
+		var z := _bearer_z(o, outer)
+		var xf := TimberMesh.frame_along(d.call(-blen * 0.5, by, z), d.call(blen * 0.5, by, z), Y)
+		tm.box("bearer_out" if outer else "bearer_in", xf, Vector3(bh, blen, bw), TimberMesh.Kind.BEAM, rng.randf(), heart.call())
+		# Bolted through where the rim beams butt on, and along the front between.
+		var face: float = z + (bw * 0.5 if outer else -bw * 0.5)
+		var bx := [-o.width * 0.5 + 0.035, o.width * 0.5 - 0.035]
+		if outer:
+			bx += [-0.42, -0.14, 0.14, 0.42]
+		for x in bx:
+			tm.bolt(d.call(x, by + 0.014, face), Z if outer else -Z, 0.0095, rng.randf())
+	# Rim beams: along each side under the outermost planks, between the bearers.
+	var rw := 0.06
+	var rh := 0.075
+	var z0 := _bearer_z(o, false) + bw * 0.5
+	var z1 := _bearer_z(o, true) - bw * 0.5
+	for e: float in [-1.0, 1.0]:
+		var x: float = e * (o.width * 0.5 - rw * 0.5 - 0.005)
+		var y := -pt - rh * 0.5
+		var xf := TimberMesh.frame_along(d.call(x, y, z0), d.call(x, y, z1), Y)
+		tm.box("rim_r" if e > 0.0 else "rim_l", xf, Vector3(rh, z1 - z0, rw), TimberMesh.Kind.BEAM, rng.randf(), heart.call())
+		for k in 3:
+			tm.bolt(d.call(x + e * rw * 0.5, y, lerpf(z0, z1, (k + 0.5) / 3.0)), X * e, 0.008, rng.randf())
+	# Braces: squared struts from under the outer bearer down and back to the trunk, iron-plated at the head.
+	var bs := 0.06
+	for e: float in [-1.0, 1.0]:
+		var top: Vector3 = d.call(e * o.width * 0.36, by - bh * 0.5 + 0.02, _bearer_z(o, true))
+		var foot: Vector3 = d.call(e * o.width * 0.12, -0.9, -o.depth * 0.5 + 0.1)
+		var xf := TimberMesh.frame_along(foot, top, X)
+		var ln := foot.distance_to(top)
+		tm.box("brace_r" if e > 0.0 else "brace_l", xf, Vector3(bs, ln, bs), TimberMesh.Kind.BEAM, rng.randf(), heart.call())
+		var ax := xf.basis.y
+		for sg: float in [-1.0, 1.0]:   # (a plate each side of the strut's head, two bolts through)
+			var nrm: Vector3 = xf.basis.x * sg
+			var pc: Vector3 = top - ax * 0.09 + nrm * bs * 0.5
+			tm.plate(pc, nrm, ax, Vector3(0.13, bs * 0.85, 0.004), rng.randf())
+			for k: float in [-1.0, 1.0]:
+				tm.bolt(pc + nrm * 0.004 + ax * k * 0.04, nrm, 0.007, rng.randf())
+		# A strap on the bearer's face over the strut's head.
+		var sp: Vector3 = d.call(e * o.width * 0.36, by, _bearer_z(o, true) + bw * 0.5)
+		tm.plate(sp, Z, Y, Vector3(bh * 0.95, 0.07, 0.004), rng.randf())
+		for k: float in [-1.0, 1.0]:
+			tm.bolt(sp + Z * 0.004 + Y * k * 0.025, Z, 0.0075, rng.randf())
+	# The landing rail: a peeled log along the outer edge (the perch), rope-wound in the middle, strapped at the ends.
+	var ra: Vector3 = d.call(-o.width * 0.5, o.rail_radius - o.thickness * 0.2, o.depth * 0.5 - o.rail_radius)
+	var rb: Vector3 = d.call(o.width * 0.5, o.rail_radius - o.thickness * 0.2, o.depth * 0.5 - o.rail_radius)
+	var rxf := TimberMesh.frame_along(ra, rb, Y)
+	tm.cylinder("rail", rxf, o.rail_radius, ra.distance_to(rb), TimberMesh.Kind.ROUND, rng.randf(), 18)
+	tm.cylinder("rope", Transform3D(rxf.basis, ra.lerp(rb, 0.5)), o.rail_radius + 0.006, ra.distance_to(rb) * 0.4, TimberMesh.Kind.ROPE, rng.randf(), 18)
+	for u: float in [0.06, 0.94]:
+		tm.cylinder("strap", Transform3D(rxf.basis, ra.lerp(rb, u)), o.rail_radius + 0.0025, 0.022, TimberMesh.Kind.IRON, rng.randf(), 18)
+	_hangar_frame(tm, o, rng, d)
+	_crates(tm, o, rng, d)
+	var out := [tm.commit(), tm.pieces]
+	_frames[key] = out
+	return out
+
+
+## The hangar (in the deck frame by `d`): a dark box inside, walls of vertical boards with gaps (the outer side's
+## carrying the painted roundel), battens nailed across them low and high, corner boards, a plank roof falling to
+## the back with a fascia, a door toward the rail with a landing board under it.
+func _hangar_frame(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenerator, d: Callable) -> void:
+	var hx := _hangar_x(o)
+	var hz := _hangar_z(o)
+	var S := HANGAR_SIZE
+	var X := Vector3.RIGHT
+	var Y := Vector3.UP
+	var Z := Vector3(0.0, 0.0, -1.0)
+	var bt := 0.016   # (board thickness)
+	var pitch := tan(deg_to_rad(8.0))
+	var roof_y := func(z: float) -> float:   # the roof's underside over deck z
+		return S.y - 0.01 + (z - hz) * pitch
+	tm.box("hangar_core", Transform3D(Basis(), d.call(hx, S.y * 0.48, hz)), Vector3(S.x - 0.02, S.y * 0.96, S.z - 0.02), TimberMesh.Kind.DARK, 0.0)
+	# The walls: [name, outward normal (deck), the wall's middle, its width, whether it runs along deck z]
+	var walls := [
+		["px", Vector3(1, 0, 0), Vector3(hx + S.x * 0.5 - bt * 0.5, 0.0, hz), S.z, true],
+		["nx", Vector3(-1, 0, 0), Vector3(hx - S.x * 0.5 + bt * 0.5, 0.0, hz), S.z, true],
+		["pz", Vector3(0, 0, 1), Vector3(hx, 0.0, hz + S.z * 0.5 - bt * 0.5), S.x - bt * 2.0, false],
+		["nz", Vector3(0, 0, -1), Vector3(hx, 0.0, hz - S.z * 0.5 + bt * 0.5), S.x - bt * 2.0, false],
+	]
+	for wall in walls:
+		var nm: Vector3 = wall[1]
+		var c: Vector3 = wall[2]
+		var wlen: float = wall[3]
+		var along_z: bool = wall[4]
+		var flags := TimberMesh.PAINTED if wall[0] == "px" else 0
+		var nmesh := Vector3(nm.x, nm.y, -nm.z)
+		var t_dir: Vector3 = Z if along_z else X   # (across the wall, in the mesh frame)
+		# Four boards of uneven width, small gaps between.
+		var nb := 4
+		var ws := []
+		var tot := 0.0
+		for i in nb:
+			ws.append(rng.randf_range(0.85, 1.15))
+			tot += ws[i]
+		var gap := 0.005
+		var pos := -wlen * 0.5
+		for i in nb:
+			var bwid: float = (wlen - gap * (nb - 1)) * ws[i] / tot
+			var mid := pos + bwid * 0.5
+			var bc: Vector3 = c + (Vector3(0, 0, mid) if along_z else Vector3(mid, 0, 0))
+			var top: float = roof_y.call(bc.z) + 0.004
+			var xf := TimberMesh.frame_along(d.call(bc.x, 0.0, bc.z), d.call(bc.x, top, bc.z), t_dir)
+			if xf.basis.z.dot(nmesh) < 0.0:   # (through the board: out of the wall)
+				xf.basis.x = -xf.basis.x
+				xf.basis.z = -xf.basis.z
+			tm.box("hangar_board_%s_%d" % [wall[0], i], xf, Vector3(bwid, top, bt), TimberMesh.Kind.BOARD, rng.randf(), Vector2(rng.randf_range(-0.1, 0.1), -rng.randf_range(0.12, 0.3)), -1, flags)
+			pos += bwid + gap
+		# Battens across the boards, low and high, on the outside, nailed through to each board.
+		var bat_h := 0.04
+		var bat_t := 0.012
+		var highs: float = roof_y.call(c.z) - 0.065
+		if wall[0] == "px":
+			highs = minf(highs, ROUNDEL_Y + ROUNDEL_R + 0.045)
+		for bat_y: float in [0.06, highs]:
+			var bcen: Vector3 = c + nm * (bt * 0.5 + bat_t * 0.5) + Vector3(0, bat_y, 0)
+			var l2 := wlen * 0.5 - 0.012
+			var off: Vector3 = Vector3(0, 0, l2) if along_z else Vector3(l2, 0, 0)
+			var a0: Vector3 = bcen - off
+			var a1: Vector3 = bcen + off
+			var bxf := TimberMesh.frame_along(d.call(a0.x, a0.y, a0.z), d.call(a1.x, a1.y, a1.z), Y)
+			if bxf.basis.z.dot(nmesh) < 0.0:
+				bxf.basis.x = -bxf.basis.x
+				bxf.basis.z = -bxf.basis.z
+			tm.box("hangar_batten_%s" % wall[0], bxf, Vector3(bat_h, l2 * 2.0, bat_t), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, -rng.randf_range(0.1, 0.25)), -1, flags)
+			for k in 4:
+				var u := lerpf(-l2 + 0.04, l2 - 0.04, k / 3.0)
+				var np: Vector3 = bcen + nm * bat_t * 0.5 + (Vector3(0, 0, u) if along_z else Vector3(u, 0, 0))
+				tm.bolt(d.call(np.x, np.y, np.z), nmesh, 0.0035, rng.randf())
+	# Corner boards up the front and back corners.
+	for zs: float in [-1.0, 1.0]:
+		for xs: float in [-1.0, 1.0]:
+			var cz: float = hz + zs * (S.z * 0.5 + 0.006)
+			var cx: float = hx + xs * (S.x * 0.5 - 0.018)
+			var top: float = roof_y.call(cz)
+			var xf := TimberMesh.frame_along(d.call(cx, 0.0, cz), d.call(cx, top, cz), X)
+			tm.box("hangar_corner", xf, Vector3(0.036, top, 0.012), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, -0.15))
+	# The roof: boards front to back, pitched to the back, overhanging, a fascia along the front.
+	var rl := S.z + 0.14
+	var rwid := S.x + 0.1
+	var nr := 4
+	var rgap := 0.006
+	var rbw := (rwid - rgap * (nr - 1)) / nr
+	for i in nr:
+		var x: float = hx - rwid * 0.5 + rbw * 0.5 + i * (rbw + rgap)
+		var zf: float = hz + rl * 0.5 + 0.02
+		var zb: float = hz - rl * 0.5 + 0.02
+		var a0: Vector3 = d.call(x, roof_y.call(zb) + 0.011, zb)
+		var a1: Vector3 = d.call(x, roof_y.call(zf) + 0.011, zf)
+		tm.box("roof_%d" % i, TimberMesh.frame_along(a0, a1, X), Vector3(rbw, rl, 0.022), TimberMesh.Kind.BOARD, rng.randf(), Vector2(rng.randf_range(-0.08, 0.08), -rng.randf_range(0.15, 0.3)))
+	var fz: float = hz + rl * 0.5 + 0.02 + 0.008
+	var fy: float = roof_y.call(fz) - 0.004
+	tm.box("fascia", TimberMesh.frame_along(d.call(hx - rwid * 0.5, fy, fz), d.call(hx + rwid * 0.5, fy, fz), Y), Vector3(0.04, rwid, 0.016), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, 0.2))
+	# The door: a dark opening toward the rail, framed, a landing board under it.
+	var dz := hz + S.z * 0.5
+	var dw := 0.15
+	var dh := 0.2
+	var dy := 0.12
+	tm.box("door", Transform3D(Basis(), d.call(hx, dy + dh * 0.5, dz + 0.001)), Vector3(dw, dh, 0.004), TimberMesh.Kind.DARK, 0.0)
+	for k in 2:   # (the jambs)
+		var jx: float = hx + (k * 2 - 1) * (dw * 0.5 + 0.012)
+		tm.box("door_jamb", TimberMesh.frame_along(d.call(jx, dy - 0.012, dz + 0.007), d.call(jx, dy + dh + 0.024, dz + 0.007), X), Vector3(0.024, dh + 0.036, 0.012), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, -0.2))
+	tm.box("door_head", TimberMesh.frame_along(d.call(hx - dw * 0.5 - 0.024, dy + dh + 0.012, dz + 0.007), d.call(hx + dw * 0.5 + 0.024, dy + dh + 0.012, dz + 0.007), Y), Vector3(0.024, dw + 0.048, 0.012), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, -0.2))
+	tm.box("door_step", TimberMesh.frame_along(d.call(hx - dw * 0.5 - 0.02, dy - 0.008, dz + 0.04), d.call(hx + dw * 0.5 + 0.02, dy - 0.008, dz + 0.04), Z), Vector3(0.075, dw + 0.04, 0.016), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, -0.2))
+
+
+## Ammo boxes (the concept's): olive-painted, brass-bound -- a band round each end, brass corners, a lip round the
+## lid, a latch on the front, a handle at each end -- two stacked by the hangar, one beside, one set down askew.
+func _crates(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenerator, d: Callable) -> void:
+	var hx := _hangar_x(o)
+	var hz := _hangar_z(o)
+	var cs := Vector3(0.13, 0.065, 0.075)   # (x long, y tall, z deep)
+	var places := [[hx - 0.37, 0.0, hz + 0.02, 0.0], [hx - 0.365, cs.y, hz + 0.025, 3.0], [hx - 0.36, 0.0, hz + 0.115, -4.0], [hx - 0.15, 0.0, hz + 0.3, 18.0]]
+	for p in places:
+		var b := Basis(Vector3.UP, deg_to_rad(p[3]))   # (mesh frame: b.x along the box, b.y up, b.z deep)
+		var c: Vector3 = d.call(p[0], p[1] + cs.y * 0.5, p[2])
+		var xb := Basis(b.y, b.x, -b.z)   # (piece frame: across up, along the box, through)
+		var xf := Transform3D(xb, c)
+		tm.box("crate", xf, Vector3(cs.y, cs.x, cs.z), TimberMesh.Kind.PAINT, rng.randf())
+		for e: float in [-1.0, 1.0]:
+			tm.box("crate_band", Transform3D(xb, c + b.x * e * (cs.x * 0.5 - 0.016)), Vector3(cs.y + 0.004, 0.012, cs.z + 0.004), TimberMesh.Kind.BRASS, rng.randf())
+			tm.box("crate_handle", Transform3D(xb, c + b.x * e * (cs.x * 0.5 + 0.004) + b.y * 0.008), Vector3(0.008, 0.008, cs.z * 0.5), TimberMesh.Kind.BRASS, rng.randf())
+			for ey: float in [-1.0, 1.0]:
+				for ez: float in [-1.0, 1.0]:
+					tm.box("crate_corner", Transform3D(xb, c + b.x * e * (cs.x * 0.5 - 0.006) + b.y * ey * (cs.y * 0.5 - 0.006) + b.z * ez * (cs.z * 0.5 - 0.006)), Vector3(0.015, 0.015, 0.015), TimberMesh.Kind.BRASS, rng.randf())
+		tm.box("crate_lip", Transform3D(xb, c + b.y * (cs.y * 0.5 - 0.016)), Vector3(0.005, cs.x - 0.05, cs.z + 0.003), TimberMesh.Kind.BRASS, rng.randf())
+		tm.box("crate_latch", Transform3D(xb, c + b.y * (cs.y * 0.5 - 0.02) - b.z * (cs.z * 0.5 + 0.003)), Vector3(0.022, 0.014, 0.005), TimberMesh.Kind.BRASS, rng.randf())
 
 
 ## A hand-sawn plank, centred like a BoxMesh of (w, t, length) -- x across, y up, z along -- but not quite square:
 ## its edges waver a few mm along the length (low, smooth bends, a little taper), the sawn ends are a touch out of
 ## square, the corners are knocked off, the upper arrises are worn round (a small bevel that catches the light),
-## and the top is very slightly cupped and uneven. Within PLANK_DEV of the box everywhere.
+## and the top is very slightly cupped and uneven. Within PLANK_DEV of the box everywhere. Each vertex carries the
+## plank's frame for planks.gdshader (TimberMesh's attributes: across x, along z, through y), `board` the scan
+## board it is cut from, and its pith: below or above the board for most (flat-sawn: the end grain's rings arcs),
+## off to one side for some (quarter-sawn: the rings upright).
 const PLANK_DEV := 0.006   ## m: the most any edge strays from the plank's box
 const PLANK_STATIONS := 14
-static func _plank_mesh(w: float, t: float, length: float, rng: RandomNumberGenerator) -> ArrayMesh:
+static func _plank_mesh(w: float, t: float, length: float, rng: RandomNumberGenerator, board := -1) -> ArrayMesh:
 	var ph := [rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU]
 	var taper := rng.randf_range(-0.004, 0.004)
 	var end_skew := [rng.randf_range(0.0015, 0.005) * signf(rng.randf() - 0.5), rng.randf_range(0.0015, 0.005) * signf(rng.randf() - 0.5)]   # (each end's run out of square)
@@ -680,18 +916,29 @@ static func _plank_mesh(w: float, t: float, length: float, rng: RandomNumberGene
 			p.y += sgn * (end_skew[e] * (1.0 if s == 1 else -1.0) - 0.0015)
 			p.x += (chip[e * 2 + s] * 0.5) * (1.0 if s == 0 else -1.0)   # (the knocked-off corner pulls in)
 			row[s] = p
+	var pith := Vector2(rng.randf_range(-0.06, 0.06), rng.randf_range(0.05, 0.16) * signf(rng.randf() - 0.35))
+	if rng.randf() < 0.25:
+		pith = Vector2(rng.randf_range(0.1, 0.2) * signf(rng.randf() - 0.5), rng.randf_range(-0.03, 0.03))
+	var pseed := rng.randf()
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_custom_format(0, SurfaceTool.CUSTOM_RGBA_FLOAT)
+	st.set_custom_format(1, SurfaceTool.CUSTOM_RGBA_FLOAT)
 	st.set_smooth_group(0xFFFFFFFF)   # (flat: each face its own normal, the worn arrises catching the light)
+	var put := func(p: Vector3) -> void:
+		st.set_uv(Vector2(p.x, p.z))
+		st.set_uv2(Vector2(p.y, pseed))
+		st.set_custom(0, Color(w * 0.5, length * 0.5, t * 0.5, float(TimberMesh.Kind.BOARD)))
+		st.set_custom(1, Color(pith.x, pith.y, float(board), 0.0))
+		st.add_vertex(p)
 	var top := t * 0.5
 	var bot := -t * 0.5
 	# Heights: the top's edges sit a little lower than its middle (cupped and worn), varying along the length.
 	var lift := func(u: float) -> float:
 		return 0.0006 * sin(u * PI * 2.0 + float(ph[0]))
-	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3, ua: Vector2, ub: Vector2, uc: Vector2, ud: Vector2) -> void:
-		for v in [[a, ua], [b, ub], [c, uc], [a, ua], [c, uc], [d, ud]]:
-			st.set_uv(v[1])
-			st.add_vertex(v[0])
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+		for v in [a, b, c, a, c, d]:
+			put.call(v)
 	for k in PLANK_STATIONS:
 		var u0 := float(k) / PLANK_STATIONS
 		var u1 := float(k + 1) / PLANK_STATIONS
@@ -710,26 +957,24 @@ static func _plank_mesh(w: float, t: float, length: float, rng: RandomNumberGene
 		var ir1 := Vector3(rr1.x - bevel, h1 - cup, rr1.y)
 		var m0 := Vector3((l0.x + rr0.x) * 0.5, h0, (l0.y + rr0.y) * 0.5)
 		var m1 := Vector3((l1.x + rr1.x) * 0.5, h1, (l1.y + rr1.y) * 0.5)
-		var uv := func(p: Vector3) -> Vector2:
-			return Vector2(p.x, p.z)
-		quad.call(il0, m0, m1, il1, uv.call(il0), uv.call(m0), uv.call(m1), uv.call(il1))
-		quad.call(m0, ir0, ir1, m1, uv.call(m0), uv.call(ir0), uv.call(ir1), uv.call(m1))
+		quad.call(il0, m0, m1, il1)
+		quad.call(m0, ir0, ir1, m1)
 		# The worn arrises: from the top's edge down to the side, `bevel` in and down.
 		var el0 := Vector3(l0.x, h0 - cup - bevel, l0.y)
 		var el1 := Vector3(l1.x, h1 - cup - bevel, l1.y)
 		var er0 := Vector3(rr0.x, h0 - cup - bevel, rr0.y)
 		var er1 := Vector3(rr1.x, h1 - cup - bevel, rr1.y)
-		quad.call(el0, il0, il1, el1, uv.call(el0), uv.call(il0), uv.call(il1), uv.call(el1))
-		quad.call(ir0, er0, er1, ir1, uv.call(ir0), uv.call(er0), uv.call(er1), uv.call(ir1))
+		quad.call(el0, il0, il1, el1)
+		quad.call(ir0, er0, er1, ir1)
 		# The sides, down to the bottom.
 		var bl0 := Vector3(l0.x, bot, l0.y)
 		var bl1 := Vector3(l1.x, bot, l1.y)
 		var br0 := Vector3(rr0.x, bot, rr0.y)
 		var br1 := Vector3(rr1.x, bot, rr1.y)
-		quad.call(bl0, el0, el1, bl1, Vector2(l0.y, bot), Vector2(l0.y, el0.y), Vector2(l1.y, el1.y), Vector2(l1.y, bot))
-		quad.call(er0, br0, br1, er1, Vector2(rr0.y, er0.y), Vector2(rr0.y, bot), Vector2(rr1.y, bot), Vector2(rr1.y, er1.y))
+		quad.call(bl0, el0, el1, bl1)
+		quad.call(er0, br0, br1, er1)
 		# The bottom (face down).
-		quad.call(bl0, bl1, br1, br0, uv.call(bl0), uv.call(bl1), uv.call(br1), uv.call(br0))
+		quad.call(bl0, bl1, br1, br0)
 	# The sawn ends: the end's section, from the bottom edge up over the worn arrises to the top's middle.
 	for e in 2:
 		var k := 0 if e == 0 else PLANK_STATIONS
@@ -745,8 +990,7 @@ static func _plank_mesh(w: float, t: float, length: float, rng: RandomNumberGene
 			var b: Vector3 = ring[(q + 1) % ring.size()]
 			var tri := [c, b, a] if e == 0 else [c, a, b]
 			for p in tri:
-				st.set_uv(Vector2((p as Vector3).x, (p as Vector3).y))
-				st.add_vertex(p)
+				put.call(p)
 	st.generate_normals()
 	st.generate_tangents()
 	return st.commit()
@@ -759,12 +1003,11 @@ const PLANKS_SHADER := preload("res://scripts/world/planks.gdshader")
 func _timber(key: String, params: Dictionary) -> Material:
 	if layout.style != "pinewood":
 		return _mat("pw_" + key, params.get("wood", Color(0.55, 0.44, 0.32)))
-	var k := "timber_" + key + str(params.get("length_m", ""))
+	var k := "timber_" + key + str(params)
 	if not _mats.has(k):
 		var m := ShaderMaterial.new()
 		m.shader = PLANKS_SHADER
 		var w := "res://assets/textures/planks/weathered_planks/weathered_planks"
-		m.set_shader_parameter("use_scan", true)
 		m.set_shader_parameter("scan_albedo", load(w + "_diff_2k.jpg"))
 		m.set_shader_parameter("scan_normal", load(w + "_nor_gl_2k.jpg"))
 		m.set_shader_parameter("scan_arm", load(w + "_arm_2k.jpg"))
@@ -773,48 +1016,3 @@ func _timber(key: String, params: Dictionary) -> Material:
 			m.set_shader_parameter(p, params[p])
 		_mats[k] = m
 	return _mats[k]
-
-
-func _box(body: Node3D, c: Vector3, b: Basis, size: Vector3, m: Material, solid: bool) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
-	mi.material_override = m
-	mi.transform = Transform3D(b, c)
-	add_child(mi)
-	if solid:
-		var cs := CollisionShape3D.new()
-		var sh := BoxShape3D.new()
-		sh.size = size
-		cs.shape = sh
-		cs.transform = Transform3D(b, c)
-		body.add_child(cs)
-	return mi
-
-
-func _rod(a: Vector3, b: Vector3, r: float, m: Material) -> void:
-	var mi := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = r
-	cm.bottom_radius = r
-	cm.height = a.distance_to(b)
-	cm.radial_segments = 10
-	mi.mesh = cm
-	mi.material_override = m
-	mi.transform = Transform3D(_basis_along(b - a), (a + b) * 0.5)
-	add_child(mi)
-
-
-## A thin disc facing `n`.
-func _disc(c: Vector3, n: Vector3, r: float, m: Material) -> void:
-	var mi := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = r
-	cm.bottom_radius = r
-	cm.height = 0.004
-	cm.radial_segments = 20
-	mi.mesh = cm
-	mi.material_override = m
-	mi.transform = Transform3D(_basis_along(n), c)
-	add_child(mi)
