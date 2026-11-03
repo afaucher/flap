@@ -29,6 +29,7 @@ const FRIEND := Color(0.35, 0.92, 0.85)  ## cool: your side
 
 var launcher: Launcher
 var world: CombatWorld
+var drew_lead := false     ## (tests) whether the last frame drew a lead mark
 var note := ""             ## a line under the tally (the range shows target evasion on/off)
 var home: Variant = null   ## your base's perch (world), for the way home
 var _font: Font
@@ -45,6 +46,7 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
+	drew_lead = false
 	if FlightHud.style != "dev":
 		_draw_styled()
 		return
@@ -53,7 +55,7 @@ func _draw() -> void:
 		return
 	var l := launcher
 	var sight := l.muzzle() + l.aim() * 25.0
-	var sight_ok := not cam.is_position_behind(sight)
+	var sight_ok := l.can_aim() and not cam.is_position_behind(sight)   # (perched: no aiming, so no sight, lead or lock)
 	var sp := cam.unproject_position(sight)
 	if sight_ok:
 		draw_arc(sp, 12.0, 0, TAU, 32, INK, 2.0)
@@ -77,7 +79,10 @@ func _draw() -> void:
 			_bar(Rect2(tp.x - r, tp.y + r + 5, r * 2.0, 4), float(t.telemetry().health), 0)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_text(tp + Vector2(r + 6, -r + 30), "%+.0f" % closing, DIM, 13)
-			if l.weapon == Launcher.Weapon.ROCKETS:
+			if not l.can_aim():
+				pass
+			elif l.weapon == Launcher.Weapon.ROCKETS:
+				drew_lead = true
 				var lead := l.lead_point(t)
 				if not cam.is_position_behind(lead):
 					var lp := cam.unproject_position(lead)
@@ -247,7 +252,7 @@ func _draw_styled() -> void:
 		return
 	var l := launcher
 	var sight := l.muzzle() + l.aim() * 25.0
-	var sight_ok := not cam.is_position_behind(sight)
+	var sight_ok := l.can_aim() and not cam.is_position_behind(sight)   # (perched: no aiming, so no sight, lead or lock)
 	var sp := cam.unproject_position(sight)
 	if sight_ok:
 		for pass_i in 2:
@@ -272,7 +277,10 @@ func _draw_styled() -> void:
 			_bracket(tp, r, LOCKED if l.locked() else ENEMY, 2.5)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)
-			if l.weapon == Launcher.Weapon.ROCKETS:
+			if not l.can_aim():
+				pass
+			elif l.weapon == Launcher.Weapon.ROCKETS:
+				drew_lead = true
 				var lead := l.lead_point(t)
 				if not cam.is_position_behind(lead):
 					var lp := cam.unproject_position(lead)

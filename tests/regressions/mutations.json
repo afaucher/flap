@@ -1982,5 +1982,33 @@
     "replace": "\tvar knock := D.hit(D.tone(0.3, D.sweep(rng.randf_range(100.0, 125.0), 85.0)), 0.002, 0.05)"
    }
   ]
+ },
+ {
+  "id": "lock-while-perched",
+  "bug": "Perched, a bird can't aim, so no seeker lock may build (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tif weapon != Weapon.SEEKERS or not can_aim():",
+    "replace": "\tif weapon != Weapon.SEEKERS:"
+   }
+  ]
+ },
+ {
+  "id": "lead-mark-while-perched",
+  "bug": "The HUD showed the rocket lead mark (where to shoot) on a perched bird that can't aim or fire (2026-11-02, user feedback).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
+    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
+   }
+  ]
  }
 ]

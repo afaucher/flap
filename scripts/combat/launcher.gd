@@ -119,8 +119,13 @@ func bearing(b: Bird) -> Vector2:
 	return Vector2(rad_to_deg(aim().angle_to(to)), to.length())
 
 
+## Can the bird aim (and so fire, and build a lock)? Only in flight: the launcher points along the flight path.
+func can_aim() -> bool:
+	return bird.state == Bird.State.FLYING
+
+
 func _update_lock(dt: float) -> void:
-	if weapon != Weapon.SEEKERS:
+	if weapon != Weapon.SEEKERS or not can_aim():
 		lock = 0.0
 		lock_target = null
 		return
