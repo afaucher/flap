@@ -201,7 +201,7 @@ func _physics_process(dt: float) -> void:
 		return
 	if bird == null:
 		return
-	arena.show_candidate(bird.candidate, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
+	arena.show_candidate(bird.candidate, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
 	if trail_on:
 		_trail.append([bird.global_position, bird.state])
 		if _trail.size() > 2400:

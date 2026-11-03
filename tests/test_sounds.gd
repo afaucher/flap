@@ -85,6 +85,10 @@ func _recipes() -> void:
 		check(SoundDsp.rms(b, 0.0, 0.03) > SoundDsp.rms(b, 0.1, 0.4) * 3.0, "burst %d hits at once and dies away" % take)
 	var r := SoundRecipes.render("rocket_launch")
 	check(SoundDsp.rms(r, 0.2) < SoundDsp.rms(r, 0.0, 0.2) * 0.15, "a rocket launch is over in 0.2 s")
+	for take in 3:
+		var low := SoundDsp.lowpass(SoundRecipes.render("bonk", take), 300.0, 2)
+		var ring := SoundDsp.rms(low, 0.08, 0.25) / maxf(SoundDsp.rms(low, 0.0, 0.03), 1e-6)
+		check(ring < 0.04, "bonk %d is a thud with no low ring after it (a held tone sounds like a honk): %.3f" % [take + 1, ring])
 	var lengths := {}
 	for take in SoundRecipes.files_of("perch_catch").size():
 		var c := SoundRecipes.render("perch_catch", take)

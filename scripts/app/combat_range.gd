@@ -240,6 +240,14 @@ func _on_downed(b: Bird) -> void:
 		camera.snap()
 
 
+## The landing bar on the perch ahead while catch is held, as in the game.
+func _physics_process(_dt: float) -> void:
+	if bird == null or not is_instance_valid(bird):
+		return
+	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
+	arena.show_candidate(mark, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
+
+
 func _process(_dt: float) -> void:
 	if bird != null and is_instance_valid(bird):
 		flight_hud.gamepad = player_ctl.using_gamepad

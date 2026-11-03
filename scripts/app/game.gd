@@ -163,7 +163,7 @@ func _physics_process(_dt: float) -> void:
 		return
 	var p0 := Perf.t()
 	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
-	arena.show_candidate(mark, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
+	arena.show_candidate(mark, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
 	Perf.add("game.candidate", p0)
 
 

@@ -313,10 +313,15 @@ func _ground_land(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
 	return D.mix(s, D.lowpass(_grains(rng, 35, 0.14, 1200.0, 4000.0, 0.6), 3500.0))
 
 
-## Hitting a trunk or branch: a dull bark thud, bark crumbling, needles pattering down.
+## Hitting a trunk or branch: a dull thud with no ring to it (a held low tone read as a honk): low noise dying in
+## 25 ms, a knock whose pitch drops by half in 40 ms, the bird's own body thumping into it, a crack of bark, then bark
+## crumbling and needles pattering down.
 func _bonk(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
-	var s := _knock(rng.randf_range(100.0, 125.0), 0.05, 0.3)
-	s = D.mix(s, D.noise_hit(rng, 0.12, 900.0, 400.0, 1.0, 0.001, 0.03), 0.0, -3.0)
+	var s := D.hit(D.lowpass(D.white(rng, 0.2), 320.0, 2), 0.002, 0.025)
+	var knock := D.hit(D.tone(0.1, D.sweep(rng.randf_range(150.0, 175.0), 70.0)), 0.001, 0.015)
+	s = D.mix(s, knock, 0.0, -4.0)
+	s = D.mix(s, D.noise_hit(rng, 0.1, 1400.0, 600.0, 0.8, 0.002, 0.02), 0.0, -6.0)
+	s = D.mix(s, _crack(rng, 2000.0, 0.004), 0.0, -9.0)
 	s = D.mix(s, _grains(rng, 12, 0.2, 1000.0, 3500.0, 0.25), 0.01)
 	return D.mix(s, _grains(rng, 20, 0.7, 3000.0, 7000.0, 0.08), 0.15)
 
