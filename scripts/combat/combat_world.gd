@@ -1,7 +1,8 @@
 class_name CombatWorld
 extends Node3D
 ## The fight: registered birds and their launchers, projectiles in flight, and what happens when one bursts.
-## Steps everything in _physics_process; draws projectiles, their smoke, bursts and feather puffs in _process, at the
+## Steps everything in _physics_process; draws projectiles and their smoke in _process (bursts and knocked-out
+## feathers: CombatFx, `fx`), at the
 ## moment the frame draws the birds (Bird.drawn_lag: between the last two ticks, as physics interpolation draws them).
 ##
 ## A burst hurts every bird within `blast` m but its shooter: a short stun (no control, as when hitting a tree)
@@ -44,10 +45,9 @@ var player: Launcher = null
 
 var _next_id := 0
 var _smoke: Array = []      ## [{id, pts: [[pos, t]], open}]
-var _fx: Array = []         ## bursts and feathers: dictionaries with a "type"
+var fx: CombatFx            ## what a burst and a hit look like
 var _clock := 0.0
 var _smoke_mesh: ImmediateMesh
-var _fx_mesh: ImmediateMesh
 var _bodies: Array = []     ## MeshInstance3D per live projectile (pooled)
 var _rocket_mesh: Mesh
 var _seeker_mesh: Mesh
@@ -58,9 +58,9 @@ var _red: StandardMaterial3D
 func _ready() -> void:
 	_rng.seed = 7
 	_smoke_mesh = ImmediateMesh.new()
-	_fx_mesh = ImmediateMesh.new()
 	add_child(_mesh_node(_smoke_mesh, _fx_material(false)))
-	add_child(_mesh_node(_fx_mesh, _fx_material(true)))
+	fx = CombatFx.new()
+	add_child(fx)
 	_brass = StandardMaterial3D.new()
 	_brass.albedo_color = Color(0.78, 0.62, 0.3)
 	_brass.metallic = 0.7
@@ -130,6 +130,7 @@ func spawn(p: Projectile) -> void:
 
 func _physics_process(dt: float) -> void:
 	_clock += dt
+	fx.clock = _clock
 	for l in launchers:
 		if is_instance_valid(l.bird):
 			l.step(dt, self)
@@ -141,12 +142,9 @@ func _physics_process(dt: float) -> void:
 		if not ev.is_empty():
 			if trail != null:
 				trail.open = false
-			_burst(ev.burst, p.shooter, String(ev.why))
+			_burst(ev.burst, p.shooter, String(ev.why), p.kind)
 	projectiles = projectiles.filter(func(q): return q.alive)
-	for f in _fx:
-		if f.type == "feather":
-			f.vel = f.vel * exp(-2.5 * dt) + Vector3.DOWN * 0.6 * dt
-			f.pos += f.vel * dt
+	fx.step(dt, self)
 
 
 ## `b`'s team's base, or null.
@@ -256,8 +254,8 @@ func _trail(id: int) -> Variant:
 	return null
 
 
-func _burst(at: Vector3, by: Variant, why: String) -> void:   # (by: the shooter, possibly freed by now)
-	_fx.append({"type": "burst", "pos": at, "t": _clock, "why": why})
+func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKET) -> void:   # (by: the shooter, possibly freed by now)
+	fx.burst(at, why, kind)
 	burst.emit(at, why)
 	if why == "expired":
 		return
@@ -290,8 +288,8 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	away = away.normalized() if away.length() > 0.01 else Vector3.UP
 	b.model.velocity += away * SHOVE * (0.4 + 0.6 * strength)
 	b.stun = maxf(b.stun, HIT_STUN)
-	b.lose_feathers(at, feathers_for(strength))
-	_feathers(b, away)
+	var keys := b.lose_feathers(at, feathers_for(strength))
+	fx.knocked_out(b, at, keys, away)
 	if was_up and b.is_down():
 		b.stun = DOWN_STUN
 		if by_player:
@@ -299,15 +297,6 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 		if is_instance_valid(by) and teams.has(by) and not friends(by, b):
 			score[teams[by]] = int(score.get(teams[by], 0)) + 1
 		downed.emit(b)
-
-
-func _feathers(b: Bird, away: Vector3) -> void:
-	var col := Color(0.35, 0.3, 0.27)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(_clock)
-	for i in 10:
-		var v := (away + Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.5, 1), rng.randf_range(-1, 1))).normalized() * rng.randf_range(1.0, 3.0)
-		_fx.append({"type": "feather", "pos": b.global_position, "vel": b.model.velocity * 0.3 + v, "t": _clock, "spin": rng.randf_range(-6, 6), "col": col.lightened(rng.randf_range(0.0, 0.4))})
 
 
 # --- Drawing ----------------------------------------------------------------------------------------------
@@ -318,10 +307,9 @@ func _process(_delta: float) -> void:
 	var lag := Bird.drawn_lag()
 	var heads := _draw_bodies(lag)
 	_draw_smoke(eye, _clock - lag, heads)
-	_draw_fx(eye, _clock - lag, lag)
+	fx.draw(eye, _clock - lag, lag)
 	# Forget what has faded.
 	_smoke = _smoke.filter(func(s): return s.open or (s.pts.size() > 0 and _clock - float(s.pts[-1][1]) < SMOKE_LIFE))
-	_fx = _fx.filter(func(f): return _clock - float(f.t) < (1.8 if f.type == "feather" else 0.6))
 
 
 ## Each projectile where it is at the drawn moment: between its last two ticks, as the birds are (placed here each
@@ -419,63 +407,6 @@ func _smoke_col(age: float, seeker: bool) -> Color:
 
 ## Bursts (a flash disc and a ring of sparks) and drifting feathers, all camera-facing, as of `now` (the drawn moment,
 ## `lag` behind the last tick).
-func _draw_fx(eye: Vector3, now: float, lag: float) -> void:
-	_fx_mesh.clear_surfaces()
-	var live := _fx.filter(func(f): return float(f.t) <= now)   # (a burst this tick shows once the frame draws its moment)
-	if live.is_empty():
-		return
-	_fx_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for f in live:
-		var age := now - float(f.t)
-		var pos: Vector3 = f.pos
-		if f.type == "feather":
-			pos -= (f.vel as Vector3) * lag
-		var to_eye := (eye - pos).normalized()
-		var right := to_eye.cross(Vector3.UP).normalized()
-		if right.length() < 0.1:
-			right = Vector3.RIGHT
-		var up := right.cross(to_eye).normalized()
-		if f.type == "burst":
-			var k := clampf(age / 0.18, 0.0, 1.0)
-			var r := 0.25 + 1.1 * k
-			var core := Color(1.0, 0.85, 0.45, 0.9 * (1.0 - k))
-			_disc(pos, right, up, r * 0.6, core)
-			var sk := clampf(age / 0.5, 0.0, 1.0)
-			var spark := Color(1.0, 0.6, 0.2, 1.0 - sk)
-			for i in 14:
-				var ang := TAU * i / 14.0
-				var dir := right * cos(ang) + up * sin(ang)
-				var p0 := pos + dir * (Projectile.fuse * sk)   # the ring spreads to the fuse radius
-				var p1 := p0 + dir * 0.18
-				var w := (up * cos(ang) - right * sin(ang)) * 0.025
-				_quad(_fx_mesh, p0 - w, p0 + w, p1 + w, p1 - w, spark, spark, spark, spark)
-		else:
-			var fade: float = clampf(1.0 - age / 1.8, 0.0, 1.0)
-			var c: Color = f.col
-			c.a = fade
-			var spin := float(f.spin) * age
-			var ax := right * cos(spin) + up * sin(spin)
-			var ay := up * cos(spin) - right * sin(spin)
-			_quad(_fx_mesh, pos - ax * 0.06 - ay * 0.015, pos + ax * 0.06 - ay * 0.015, pos + ax * 0.06 + ay * 0.015, pos - ax * 0.06 + ay * 0.015, c, c, c, c)
-	_fx_mesh.surface_end()
-
-
-func _disc(c: Vector3, right: Vector3, up: Vector3, r: float, col: Color) -> void:
-	var n := 12
-	for i in n:
-		var a0 := TAU * i / n
-		var a1 := TAU * (i + 1) / n
-		var p0 := c + (right * cos(a0) + up * sin(a0)) * r
-		var p1 := c + (right * cos(a1) + up * sin(a1)) * r
-		var edge := Color(col.r, col.g, col.b, 0.0)
-		_fx_mesh.surface_set_color(col)
-		_fx_mesh.surface_add_vertex(c)
-		_fx_mesh.surface_set_color(edge)
-		_fx_mesh.surface_add_vertex(p0)
-		_fx_mesh.surface_set_color(edge)
-		_fx_mesh.surface_add_vertex(p1)
-
-
 static func _quad(m: ImmediateMesh, a: Vector3, b: Vector3, c: Vector3, d: Vector3, ca: Color, cb: Color, cc: Color, cd: Color) -> void:
 	for v in [[a, ca], [b, cb], [c, cc], [a, ca], [c, cc], [d, cd]]:
 		m.surface_set_color(v[1])
