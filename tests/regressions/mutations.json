@@ -2660,5 +2660,19 @@
     "replace": "\t\tmi.transform = Transform3D(frame, at.call(x0 + w * 0.5, -o.thickness * 0.3, 0.0))"
    }
   ]
+ },
+ {
+  "id": "perched-legs-crossed",
+  "bug": "The perched pose (RigPoses folded) put each foot to the world's left or right, not the bird's: a bird turned round on its perch (the menu's, facing the camera) stood with its legs crossed (2026-11-03).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/rig_poses.gd",
+    "find": "\t\t\t\tvar grip_world: Vector3 = Vector3(r.position.x, top, r.position.z) + side * BirdRig.SIDES[i] * r._L * 0.04",
+    "replace": "\t\t\t\tvar grip_world: Vector3 = Vector3(r.position.x, top, r.position.z) + Vector3.RIGHT * BirdRig.SIDES[i] * r._L * 0.04"
+   }
+  ]
  }
 ]
