@@ -3,6 +3,10 @@ extends TestCase
 ##   - a rocket fired at FireControl.lead hits a real bird crossing left or right, and one fired at the bird itself
 ##     misses -- what the solution predicted, both ways;
 ##   - with a trunk in the lane the AI holds fire, without it it fires;
+##   - a rocket that would pass outside the fuse (if inside the blast) is held: it never goes off near the bird --
+##     fly it and see;
+##   - a target that breaks only as the round arrives is still hit; one that broke from the launch is missed (the
+##     solution breaks the target when it would see the round coming, not before);
 ##   - seekers: fired at a crow tail-on or a sparrow crossing (no level break beats one here), held for a bird off
 ##     the seeker's gimbal or beyond its reach.
 
@@ -16,6 +20,9 @@ func setup() -> void:
 		await _real_shot(side, true)
 		await _real_shot(side, false)
 	await _lane()
+	for side in [1.0, -1.0]:
+		await _outside_fuse(side)
+		_late_break(side)
 	_seekers()
 	finish()
 
@@ -78,6 +85,62 @@ func _lane() -> void:
 		d.cleanup()
 		d.queue_free()
 		await frames(2)
+
+
+## The gunsight a little off the lead, so the rocket would pass a crow crossing 20 m out between the fuse and the
+## blast's reach: the AI holds it -- and fired anyway, it passes without going off.
+func _outside_fuse(side: float) -> void:
+	var d := Duel.new()
+	add_child(d)
+	d.setup(ArenaLayout.new())
+	await frames(1)
+	var them: Dictionary = d.add_bird("crow", 1, ScriptedInput.new(), null, Vector3(-side * 5.0, 12, -20), Vector3(side, 0, 0))
+	var tb: Bird = them.bird
+	var muzzle0 := Vector3(0, 12, 0)
+	var lead := FireControl.lead(muzzle0, Vector3.FORWARD * BirdProfile.sparrow().v_best, tb.global_position, tb.model.velocity)
+	# Raise the gunsight until the predicted pass is 1.6-2 m off: outside the fuse, inside fuse + blast.
+	var me: Dictionary = d.add_ai("sparrow", 0, muzzle0, lead - muzzle0)
+	var l: Launcher = me.launcher
+	var mb: Bird = me.bird
+	var predicted := 0.0
+	for k in 60:
+		mb.fly_from(muzzle0, (lead + Vector3.UP * 0.05 * k - muzzle0).normalized(), mb.profile.v_best)
+		predicted = FireControl.miss(Projectile.Kind.ROCKET, l.muzzle(), mb.model.velocity, l.aim(), tb.global_position, tb.model.velocity)
+		if predicted > 1.6:
+			break
+	var tr := CombatSense.Track.new()
+	tr.bird = tb
+	tr.pos = tb.global_position
+	tr.vel = tb.model.velocity
+	tr.visible = true
+	var what := "crossing %s, the rocket passing %.2f m off" % ["right" if side > 0 else "left", predicted]
+	print(what)
+	check(predicted > Projectile.fuse * 1.4 and predicted < FireControl.reach(), "%s: outside the fuse, inside the blast's reach" % what)
+	check(not (l.controller as AICombat)._would_hit(l, tr), "%s: held" % what)
+	d.world.spawn(Projectile.launch(Projectile.Kind.ROCKET, l.muzzle(), me.bird.model.velocity, l.aim(), me.bird))
+	for f in 70:
+		await get_tree().physics_frame
+	check(int(d.world.hits.get(tb, 0)) == 0, "%s: fired anyway, it doesn't go off near it" % what)
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
+
+
+## A rocket at the lead of a crow crossing 20 m out: if it breaks hard only 0.1 s before the pass it is still hit,
+## if it broke at the launch it is missed -- both ways round.
+func _late_break(side: float) -> void:
+	var muzzle := Vector3(0, 12, 0)
+	var v0 := Vector3.FORWARD * 9.0
+	var t_pos := Vector3(-side * 5.0, 12, -20)
+	var crow := CombatStyle.of(BirdProfile.crow())
+	var t_vel := Vector3(side * crow.v_best, 0, 0)
+	var aim := FireControl.lead(muzzle, v0, t_pos, t_vel) - muzzle
+	for turn in [crow.corner_rate, -crow.corner_rate]:
+		var late := FireControl.miss(Projectile.Kind.ROCKET, muzzle, v0, aim, t_pos, t_vel, turn, null, 0.1)
+		var early := FireControl.miss(Projectile.Kind.ROCKET, muzzle, v0, aim, t_pos, t_vel, turn, null, 0.0)
+		var what := "crossing %s, breaking %s" % ["right" if side > 0 else "left", "right" if turn > 0 else "left"]
+		check(late < Projectile.fuse, "%s 0.1 s before the pass: still hit (%.2f m)" % [what, late])
+		check(early > Projectile.fuse * 1.5, "%s from the launch: missed (%.2f m)" % [what, early])
 
 
 ## A seeker locked on: a crow tail-on at 15 m, or a sparrow crossing at 20 m, is caught whichever way it breaks; one

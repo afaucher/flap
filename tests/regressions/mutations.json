@@ -1940,5 +1940,114 @@
     "replace": "var surface := \"trunk\" if pos.y <= ArenaLayout.GROUND_Y else \"ground\""
    }
   ]
+ },
+ {
+  "id": "combat-rocket-fuse-plus-blast",
+  "bug": "Rocket fire control fired when the predicted pass was inside fuse + blast (2.3 m); a rocket passing beyond the 1 m fuse never goes off near the bird, so those shots were wasted (2026-11-02).",
+  "tests": [
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "l.aim(), t.pos, t.vel) < Projectile.fuse * quality",
+    "replace": "l.aim(), t.pos, t.vel) < FireControl.reach() * quality"
+   }
+  ]
+ },
+ {
+  "id": "combat-sense-no-dead-reckoning",
+  "bug": "Combat sense tracks sat where the target was a reaction time ago instead of carried on along its seen velocity: the AI aimed and judged shots 2-3 m behind a moving bird (2026-11-02).",
+  "tests": [
+   "test_combat_sense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_sense.gd",
+    "find": "tr.pos = pos + tr.vel * minf(skill.reaction, clock - float(past[0]))",
+    "replace": "tr.pos = pos"
+   }
+  ]
+ },
+ {
+  "id": "combat-bank-not-lift-limited",
+  "bug": "The combat AI banked to skill.bank_frac of the bank limit at any speed: a sustained over-banked turn bled its speed into a stall spiral (2026-11-02).",
+  "tests": [
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\t\tintent.opts.bank_frac = minf(float(intent.opts.get(\"bank_frac\", skill.bank_frac)), style.lift_bank(bird.model.speed) / style.max_bank)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "combat-lead-uncorrected",
+  "bug": "The rocket lead was the quick constant-speed estimate, not corrected by where a real rocket passes: crossing and turning targets were missed (2026-11-02).",
+  "tests": [
+   "test_combat_geometry",
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/fire_control.gd",
+    "find": "t_turn := 0.0, iterations := 3) -> Vector3:",
+    "replace": "t_turn := 0.0, iterations := 0) -> Vector3:"
+   }
+  ]
+ },
+ {
+  "id": "combat-seeker-break-at-launch",
+  "bug": "Seeker fire control judged the shot against a target breaking from the moment of launch, which no bird can do (it sees the seeker late): good shots were held (2026-11-02).",
+  "tests": [
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/fire_control.gd",
+    "find": "var turning := break_tgo <= 0.0",
+    "replace": "var turning := true"
+   }
+  ]
+ },
+ {
+  "id": "combat-brain-strong-launcher",
+  "bug": "CombatBrain held its launcher strongly; the launcher holds AICombat, which holds the brain: a reference cycle that leaked every AI bird's brain and launcher (2026-11-02).",
+  "tests": [
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\t\treturn _launcher.get_ref() if _launcher != null else null",
+    "replace": "\t\treturn _launcher"
+   },
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "var _launcher: WeakRef",
+    "replace": "var _launcher: Launcher"
+   },
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\t_launcher = weakref(l)",
+    "replace": "\t_launcher = l"
+   }
+  ]
+ },
+ {
+  "id": "combat-blackboard-set-value",
+  "bug": "The combat tree's blackboard was seeded with set_value() before the tree entered the scene; Beehave's Blackboard._ready wipes it, so every leaf read a null brain (2026-11-02).",
+  "tests": [
+   "test_fire_control"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\ttree.blackboard.blackboard = {\"brain\": brain}",
+    "replace": "\ttree.blackboard.set_value(\"brain\", brain)"
+   }
+  ]
  }
 ]

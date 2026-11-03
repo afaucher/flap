@@ -4,7 +4,10 @@ extends TestCase
 ##     and down it within 40 s;
 ##   - against the target breaking when shot at, it lands more hits than the range's old demo shooter
 ##     (CircuitPilot's chase + the trigger-finger AICombat);
-##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this.
+##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this;
+##   - in a long turning fight with a sparrow that breaks and turns (an AI with nothing to shoot), it banks no
+##     harder than its lift holds at the speed it has: it never stalls, nor spirals down (a hawk and a sparrow,
+##     the target turning either way).
 
 const ARENA_SEED := 7
 
@@ -26,6 +29,9 @@ func setup() -> void:
 	print("against the evading target: the combat AI %d hits (%d shots), the old demo shooter %d hits (%d shots)" % [ai.hits, ai.shots, demo.hits, demo.shots])
 	check(ai.hits > demo.hits, "the combat AI lands more hits on the evading target than the old demo shooter (%d vs %d)" % [ai.hits, demo.hits])
 	await _rearms_at_base()
+	for id in ["hawk", "sparrow"]:
+		for dir in [1.0, -1.0]:
+			await _turning_fight(id, dir)
 	finish()
 
 
@@ -95,6 +101,35 @@ func _rearms_at_base() -> void:
 	check(landed_at == home, "out of rounds: it lands on its own base")
 	check(rearmed_at > 0.0, "and rearms there")
 	check(took_off_full, "then goes back up")
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
+
+
+## 40 s chasing a sparrow AI that turns and breaks (no rounds on either side: only the flying counts).
+func _turning_fight(id: String, dir: float) -> void:
+	var d := Duel.new()
+	add_child(d)
+	d.setup(ArenaLayout.new())
+	await frames(1)
+	var them: Dictionary = d.add_ai("sparrow", 1, Vector3(7, 20, 0), Vector3(0, 0, dir), CombatSkill.preset("pilot"), 2)
+	var me: Dictionary = d.add_ai(id, 0, Vector3(-25, 24, 0), Vector3.RIGHT, CombatSkill.preset("pilot"), 4)
+	for e in [them, me]:
+		var l: Launcher = e.launcher
+		l.capacity[l.weapon] = 0
+		l.ammo[l.weapon] = 0
+	var b: Bird = me.bird
+	var stalled := 0
+	var low := INF
+	for f in 60 * 40:
+		await get_tree().physics_frame
+		if f > 60:
+			low = minf(low, b.global_position.y)
+			stalled += 1 if b.model.stalled else 0
+	var what := "%s in a turning fight (the sparrow turning %s)" % [id, "right" if dir > 0 else "left"]
+	print("%s: stalled %d ticks, lowest %.1f m, modes %s" % [what, stalled, low, (me.brain as CombatBrain).stats.modes])
+	check(stalled == 0, "%s: never stalls (%d ticks)" % [what, stalled])
+	check(low > 9.0, "%s: doesn't spiral down (lowest %.1f m, from 24)" % [what, low])
 	d.cleanup()
 	d.queue_free()
 	await frames(2)
