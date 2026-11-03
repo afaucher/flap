@@ -23,7 +23,7 @@ var arena: ArenaBuilder
 var bird: Bird
 var camera: ChaseCamera
 var hud: FlightHud
-var audio: FlightAudio
+var audio: GameAudio
 var player := PlayerController.new()
 var autopilot: AIPilot
 var ai_birds: Array[Bird] = []
@@ -73,7 +73,7 @@ func _ready() -> void:
 	add_child(layer)
 	hud = FlightHud.new()
 	layer.add_child(hud)
-	audio = FlightAudio.new()
+	audio = GameAudio.new()
 	add_child(audio)
 	_spawn_player(profile_id, layout.start_perch())
 
@@ -88,6 +88,7 @@ func _ready() -> void:
 		if rider and Tack.RIDDEN.has(pid):
 			Tack.fit(b.rig, b)
 		b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
+		audio.watch(b)
 		ai_birds.append(b)
 
 	var perf := Boot.arg_value(args, "--perf")
@@ -150,6 +151,8 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	if rider and Tack.RIDDEN.has(pid):
 		Tack.fit(bird.rig, bird)   # (crows, falcons and hawks carry a rider and the war tack)
 	bird.perch_at(at)
+	audio.player = bird
+	audio.watch(bird)
 	camera.bird = bird
 	camera.snap()
 	hud.autopilot = use_autopilot
@@ -160,7 +163,7 @@ func _physics_process(_dt: float) -> void:
 		return
 	var p0 := Perf.t()
 	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
-	arena.show_candidate(mark, bird.candidate_status, bird.profile.grab_radius, bird.candidate_grip)
+	arena.show_candidate(mark, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
 	Perf.add("game.candidate", p0)
 
 

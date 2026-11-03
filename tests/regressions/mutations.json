@@ -1424,8 +1424,8 @@
   "edits": [
    {
     "file": "scripts/combat/launcher.gd",
-    "find": "if bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch)):",
-    "replace": "if bird.state == Bird.State.PERCHED:"
+    "find": "return bird.state == Bird.State.PERCHED and (rearm_perch < 0 or (bird.perch != null and bird.perch.id == rearm_perch))",
+    "replace": "return bird.state == Bird.State.PERCHED"
    }
   ]
  },
@@ -1779,6 +1779,221 @@
     "file": "scripts/ai/ai_pilot.gd",
     "find": "\t\t_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "feathers-fall-like-stones",
+  "bug": "Knocked-out feathers drift down slowly, slipping side to side; they mustn't drop like stones (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "const FALL_SPEED := 1.0 ",
+    "replace": "const FALL_SPEED := 30.0 "
+   }
+  ]
+ },
+ {
+  "id": "ruffle-missing",
+  "bug": "The coverts over a lost flight feather stand up out of the wing (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\tif not lost.is_empty() and _ruffled(i, f):",
+    "replace": "\t\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "burst-light-lingers",
+  "bug": "A burst's light dies within LIGHT_TIME; it mustn't stay lit (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "\t\tvar e := clampf(1.0 - age / LIGHT_TIME, 0.0, 1.0)\n\t\tl.light_energy",
+    "replace": "\t\tvar e := 1.0\n\t\tl.light_energy"
+   },
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "\t\tif age >= LIGHT_TIME:\n\t\t\tl.visible = false",
+    "replace": "\t\tif age >= LIGHT_TIME * 50.0:\n\t\t\tl.visible = false"
+   }
+  ]
+ },
+ {
+  "id": "whole-bird-sheds",
+  "bug": "Only a badly damaged bird sheds coverts in flight (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "const SHED_HEALTH := 0.5",
+    "replace": "const SHED_HEALTH := 1.0"
+   }
+  ]
+ },
+ {
+  "id": "covert-keys-collide",
+  "bug": "The hand's and the forearm's greater coverts need their own keys (they share indices) (2026-11-02).",
+  "tests": [
+   "test_combat_fx"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tfi += 50\n",
+    "replace": "\t\tfi += 0\n"
+   }
+  ]
+ },
+ {
+  "id": "owl-wingbeat-loud",
+  "bug": "An owl's wingbeat as loud as a crow's (owls fly silently: their fringed flight feathers) (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/flight_audio.gd",
+    "find": "\t\"owl\": [70.0, 0.1, 0.02, 0.1],",
+    "replace": "\t\"owl\": [70.0, 0.1, 0.18, 0.1],"
+   }
+  ]
+ },
+ {
+  "id": "burst-sounds-swapped",
+  "bug": "A burst on the ground sounded like one on a trunk and the other way round (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\t\t\"ground\":\n\t\t\tcue(\"burst_ground\", at)\n\t\t\"trunk\":\n\t\t\tcue(\"burst_wood\", at)",
+    "replace": "\t\t\"ground\":\n\t\t\tcue(\"burst_wood\", at)\n\t\t\"trunk\":\n\t\t\tcue(\"burst_ground\", at)"
+   }
+  ]
+ },
+ {
+  "id": "rack-clinks-off-base",
+  "bug": "The rearm clinks played on any perch, not only the base, where nothing refills (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tif l.on_base() and not l.full():",
+    "replace": "\tif l.bird.state == Bird.State.PERCHED and not l.full():"
+   }
+  ]
+ },
+ {
+  "id": "lock-beeps-flat",
+  "bug": "The lock's beeps kept one pitch and pace however far the lock had built (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\t\t\t_lock_next = _t + lerpf(0.4, 0.09, l.lock)",
+    "replace": "\t\t\t_lock_next = _t + 0.25"
+   }
+  ]
+ },
+ {
+  "id": "incoming-warble-flat",
+  "bug": "The incoming warble kept one pace however close the round was (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "_incoming_next = _t + clampf(tgo * 0.3, 0.07, 0.4)",
+    "replace": "_incoming_next = _t + 0.25"
+   }
+  ]
+ },
+ {
+  "id": "burst-surface-swapped",
+  "bug": "A round must say what it burst on (the ground or a trunk), for its sound (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/projectile.gd",
+    "find": "var surface := \"ground\" if pos.y <= ArenaLayout.GROUND_Y else \"trunk\"",
+    "replace": "var surface := \"trunk\" if pos.y <= ArenaLayout.GROUND_Y else \"ground\""
+   }
+  ]
+ },
+ {
+  "id": "landing-mark-whole-branch",
+  "bug": "The landing mark lit the whole branch (and a ring the size of the catch reach) instead of a short bar where the bird would land (2026-11-02).",
+  "tests": [
+   "test_game_smoke"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\tvar half := grab_radius * MARK_HALF\n",
+    "replace": "\tvar half := n\n"
+   }
+  ]
+ },
+ {
+  "id": "landing-mark-slow-red",
+  "bug": "The landing mark could read 'too slow': only too fast is wrong (2026-11-02).",
+  "tests": [
+   "test_game_smoke"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\tand model.velocity.length() > profile.grab_speed_max)",
+    "replace": "\t\t\tand absf(model.velocity.length() - profile.grab_speed_max) > profile.grab_speed_max * 0.3)"
+   }
+  ]
+ },
+ {
+  "id": "bonk-honk",
+  "bug": "Hitting a tree sounded like a honk: the bonk's knock was a 110 Hz tone ringing for 0.2 s (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/sound_recipes.gd",
+    "find": "\tvar knock := D.hit(D.tone(0.1, D.sweep(rng.randf_range(150.0, 175.0), 70.0)), 0.001, 0.015)",
+    "replace": "\tvar knock := D.hit(D.tone(0.3, D.sweep(rng.randf_range(100.0, 125.0), 85.0)), 0.002, 0.05)"
+   }
+  ]
+ },
+ {
+  "id": "alarm-call-chopped",
+  "bug": "An alarm take ended by cutting its last call off mid-screech (a window shorter than the call) (2026-11-02).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/sound_recipes.gd",
+    "find": "[[OWL, 84.73, 85.6], [OWL, 46.74, 47.65]]",
+    "replace": "[[OWL, 84.73, 85.6], [OWL, 46.74, 47.2]]"
    }
   ]
  },

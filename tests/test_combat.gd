@@ -32,6 +32,7 @@ func _init() -> void:
 
 func setup() -> void:
 	_rockets()
+	_surfaces()
 	await _fuses()
 	await _seekers()
 	await _launcher()
@@ -488,6 +489,24 @@ func _far_base() -> void:
 	check(far != null and rails.has(far.id) and far != home, "the other base is an outpost's rail, not yours")
 	var d := Vector2(far.position.x - home.position.x, far.position.z - home.position.z).length()
 	check(d > best - 2.0, "and the farthest one (%.0f m of %.0f)" % [d, best])
+
+
+## A round says what it burst on: a rocket into the ground, "ground"; into a trunk, "trunk"; one that runs out, "air".
+func _surfaces() -> void:
+	var layout := ArenaLayout.lab()
+	var t: ArenaLayout.TreeData = layout.trees[0]
+	var trunk := Vector3(t.base.x, ArenaLayout.GROUND_Y + minf(t.height * 0.4, 3.0), t.base.y)
+	var cases := [["ground", Vector3(0, 3, 0) + Vector3(40, 0, 40), Vector3(0.2, -1, 0)],
+		["trunk", trunk + Vector3(-6, 0, 0), Vector3(1, 0, 0)],
+		["air", Vector3(0, 50, 0), Vector3(1, 0.3, 0)]]
+	for c in cases:
+		var p := Projectile.launch(Projectile.Kind.ROCKET, c[1], Vector3.ZERO, (c[2] as Vector3).normalized(), null)
+		var ev := {}
+		for i in 200:
+			ev = p.step(1.0 / 60.0, layout, [])
+			if not ev.is_empty():
+				break
+		eq(String(ev.get("surface", "?")), c[0], "a rocket %s bursts on %s" % [{"ground": "fired down", "trunk": "fired at a trunk", "air": "fired into the open"}[c[0]], c[0]])
 
 
 func _range() -> void:

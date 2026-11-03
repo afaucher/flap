@@ -49,7 +49,18 @@ A gamepad is the recommended way to fly: the left stick has a real centre (wings
 - `--hud dev` puts every instrument on screen (speed tape, pitch ladder, bank arc, stick); `--hud ring` wraps the
   status round the aim circle.
 
-**Audio.** The wind rises with speed. Each speed band boundary plays its own whoosh: rising when you speed up, falling when you slow down. When you drop under catch speed you hear it, and best glide has its own whoosh too. Wingbeats thump.
+**Audio.** The wind rises with speed. Each speed band boundary plays its own whoosh: rising when you speed up, falling when you slow down. When you drop under catch speed you hear it, and best glide has its own whoosh too. Wingbeats thump, each species its own (an owl's next to silent).
+
+Everything else (`GameAudio`, `docs/design/audio_plan.md`):
+- **Combat:** launches with motors that ride each round, bursts by what they hit, feather puffs, the downed flutter.
+- **Lock tones:** beeps that quicken and rise as a lock builds, a steady tone once locked, a low pulse when someone is
+  locking you, and a warble that speeds up as a seeker closes.
+- **The base:** a clink for each round restocked, then a chime.
+- **Perches and trees:** talons on the perch, take-off pushes, bonks.
+- **Calls:** each species' contact call and alarm.
+- **The forest:** canopy wind louder with height, insects near the ground, pinewood birdsong.
+
+The sounds are baked by `tools/bake_sounds.gd` from `SoundRecipes`; re-run it after changing a recipe.
 
 **Perching.** Approach the perch slower than the catch speed (the perch's gauge turns green): dive under it and swoop up. Hold catch on the way in.
 

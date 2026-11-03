@@ -31,6 +31,7 @@ var arena: ArenaBuilder
 var world: CombatWorld
 var trails: WingTrails
 var camera: ChaseCamera
+var audio: GameAudio
 var flight_hud: FlightHud
 var combat_hud: CombatHud
 var player_ctl := PlayerController.new()
@@ -85,6 +86,9 @@ func _ready() -> void:
 	world.layout = layout
 	add_child(world)
 	world.downed.connect(_on_downed)
+	audio = GameAudio.new()
+	add_child(audio)
+	audio.watch_world(world)
 	trails = WingTrails.new()
 	add_child(trails)
 	camera = ChaseCamera.new()
@@ -154,6 +158,7 @@ func restart() -> void:
 		weapons = AICombat.new()
 		(weapons as AICombat).prefer = Launcher.Weapon.SEEKERS if start_seekers else Launcher.Weapon.ROCKETS
 	bird = _spawn(bird_id, flight, "Player")
+	audio.player = bird
 	var w: Array = target_pilot.waypoints   # come in behind the target's first straight, a little high
 	var along := ((w[1] as Vector3) - (w[0] as Vector3)).normalized()
 	bird.fly_from((w[0] as Vector3) - along * 22.0 + Vector3.UP * 2.0, along, bird.profile.v_best)
@@ -199,6 +204,7 @@ func _spawn(id: String, ctl: Object, n: String) -> Bird:
 	add_child(b)
 	b.setup(BirdProfile.by_id(id), layout, ctl)
 	b.arena = arena
+	audio.watch(b)
 	return b
 
 
@@ -234,10 +240,20 @@ func _on_downed(b: Bird) -> void:
 		camera.snap()
 
 
+## The landing bar on the perch ahead while catch is held, as in the game.
+func _physics_process(_dt: float) -> void:
+	if bird == null or not is_instance_valid(bird):
+		return
+	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
+	arena.show_candidate(mark, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
+
+
 func _process(_dt: float) -> void:
 	if bird != null and is_instance_valid(bird):
 		flight_hud.gamepad = player_ctl.using_gamepad
-		flight_hud.set_state(bird.telemetry())
+		var t := bird.telemetry()
+		flight_hud.set_state(t)
+		audio.set_state(t)
 	camera.look_input = player_ctl.look
 	combat_hud.note = "target evades (T)" if evade else "target flies straight (T)"
 	# The pods show the rounds left.

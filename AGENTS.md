@@ -45,14 +45,20 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   range: you and a wingman v the target, your base by the clearing and theirs the farthest outpost. Warnings:
   `CombatWorld.warnings_for(bird)` (rounds coming at it, locks on it) -- what the HUD shows and all an AI may
   know of threats; `--return-fire` has the target shoot back.
-- HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, speed on the perch while
+- HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: the range,
   rockets or seekers; Lab). The scenes read `Boot.args()` (the command line plus the menu's choice).
-- `scripts/combat/`: the combat proof of concept (`.\range.ps1`).
+- `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
+  smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
+  and flutter to the ground; down; ruffled coverts; shedding.
 - `scripts/bird/leg_rig.gd`: `LegRig`, the detailed legs and feet, on by default (`LegRig.enabled`; trousers joined to the trunk,
   bare tarsus, foot pad, segmented toes fitted to the branch, claws; `leg_skin.gdshader` over `ScaleTile`'s baked
   scales; `docs/design/legs_and_feet.md`).
+- `scripts/audio/`: `GameAudio` (what plays when, from telemetry and the Bird / CombatWorld signals; `events` records every
+  cue for tests), `Sfx` (pooled cue players), `FlightAudio` (live wind, whooshes, wingbeats), `SoundRecipes` +
+  `SoundDsp` (every other sound, baked to `assets/audio/sfx/` by `tools/bake_sounds.gd`: re-run after changing a recipe;
+  `test_sounds` checks the stamp). Plan and status: `docs/design/audio_plan.md`.
 - `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
   game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
   ticks per frame, worst frames, the machine's load while it ran). Rules and numbers: `docs/design/performance.md`.
