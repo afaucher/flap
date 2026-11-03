@@ -93,4 +93,24 @@ func setup() -> void:
 	var omega := fly(mt, Vector2(stick_x, 0.0), 1.0)
 	var expected := mt.load_factor * BirdProfile.G * sin(phi) / (mt.speed * cos(mt.path_angle))
 	near(omega, expected, expected * 0.1, "turn rate matches the lift's sideways share")
+
+	# Through a vertical climb the shown body keeps its back away from its heading however the path wobbles past
+	# straight up: the lift plane (from world up) changes side each time it does, and the body once flipped 180 deg
+	# with it. Just ahead of vertical, then just behind, tick by tick.
+	for p in BirdProfile.all():
+		var mv := FlightModel.new(p)
+		mv.launch(Vector3(0, 300, 0), Vector3(0.0, 1.0, -0.3), p.v_best)
+		var last := mv.body_basis().get_rotation_quaternion()
+		var worst_back := -INF
+		var worst_turn := 0.0
+		for i in 20:
+			var s := 1.0 if i % 2 == 0 else -1.0
+			mv.velocity = Vector3(0.0, 1.0, -0.04 * s).normalized() * p.v_best
+			mv.step(DT, FlightInput.new(Vector2.ZERO))
+			var q := mv.body_basis().get_rotation_quaternion()
+			worst_back = maxf(worst_back, mv.body_basis().y.dot(mv.heading_dir()))
+			worst_turn = maxf(worst_turn, rad_to_deg(last.angle_to(q)))
+			last = q
+		check(worst_back < 0.0, "%s straight up: the back faces away from the heading (worst %.2f)" % [p.id, worst_back])
+		check(worst_turn < 90.0, "%s straight up: the body doesn't flip as the path wobbles past vertical (worst %.0f deg a tick)" % [p.id, worst_turn])
 	finish()

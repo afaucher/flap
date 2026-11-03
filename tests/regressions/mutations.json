@@ -517,7 +517,7 @@
    {
     "file": "scripts/bird/leg_rig.gd",
     "find": "\t\tvar p := _onto_pad(first[j], -dirs[0], fr)\n",
-    "replace": "\t\tvar p := first[j] - dirs[0] * float(spec.pad_r) * L * 0.2\n"
+    "replace": "\t\tvar p: Vector3 = first[j] - dirs[0] * float(spec.pad_r) * L * 0.2\n"
    }
   ]
  },
@@ -615,7 +615,7 @@
    {
     "file": "scripts/bird/bird_rig.gd",
     "find": "\tm.set_shader_parameter(\"fray\", 1.0 if outline_down else 0.0)\n",
-    "replace": "\tm.next_pass = ShaderMaterial.new()\n"
+    "replace": "\tm.set_shader_parameter(\"fray\", 1.0 if outline_down else 0.0)\n\tm.next_pass = ShaderMaterial.new()\n"
    }
   ]
  },
@@ -735,7 +735,8 @@
   "id": "vertical-body-flip",
   "bug": "Climbing near vertical, the body flipped 180 deg whenever the path wobbled past straight up (the lift plane from world up changing side) (2026-11-02).",
   "tests": [
-   "test_takeoff_pose"
+   "test_takeoff_pose",
+   "test_flight_controls"
   ],
   "edits": [
    {
