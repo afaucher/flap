@@ -10,9 +10,9 @@ extends Node3D
 const GRASS_IN := 5.0       ## m inside the posts the heath's grass reaches (to the last trees; drawn only)
 const HILLS_FROM := 130.0    ## m: where the hills mesh takes over from the ground plane and the escarpment's grid
 const HILLS_TO := 1100.0
-const WIRES := [1.5, 2.7]    ## m: the fence's two strands, up the posts
+const WIRES := [0.6, 1.15]   ## m: the fence's two strands, up the posts
 const WIRE_R := 0.012
-const WIRE_SAG := 0.09       ## m at mid span
+const WIRE_SAG := 0.07       ## m at mid span
 const ROCK_SHADER := preload("res://scripts/world/rock.gdshader")
 const HEATH_SHADER := preload("res://scripts/world/heath.gdshader")
 
@@ -98,9 +98,7 @@ func _rock() -> void:
 	rock = MeshInstance3D.new()
 	rock.name = "Escarpment"
 	rock.mesh = _grid_mesh(_rock_grid, thetas.size(), radii.size(), true)
-	var m := ShaderMaterial.new()
-	m.shader = ROCK_SHADER
-	rock.material_override = m
+	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.74, 0.77, 0.84), 1.0, true)
 	add_child(rock)
 	var faces := PackedVector3Array()
 	var v: PackedVector3Array = _rock_grid[0]
@@ -257,7 +255,7 @@ const FACE_BLOCK := Vector2(4.5, 14.0) ## m: a face block's length along the cli
 const MASS := 1.1                      ## m: how far a mass of blocks (tens of metres along) stands out or back
 const PROUD := Vector2(-0.08, 0.16)    ## m: and each block on its own, out of its mass's face (less than 0: set back)
 const BED := 0.45                      ## m: whole beds (a course's height, all along) standing out or back together
-const LIP := Vector3(0.5, 0.35, 0.8)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
+const LIP := Vector3(0.18, 0.3, 0.6)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
 
 
 ## Courses of blocks up every face of every tier: each column of blocks FACE_BLOCK long along the cliff, each block
@@ -661,9 +659,32 @@ func _heather_colour() -> Color:
 
 
 func _rock_mat_instanced() -> Material:
+	var m := _rock_mat("rock_boulder_dry", 2.4, Color(0.6, 0.65, 0.74), 0.0, false)
+	m.set_shader_parameter("veg_amount", 0.3)   # (a little moss on the blocks' tops, not a lawn)
+	return m
+
+
+## The rock's material: rock.gdshader on the photoscan `scan` (assets/textures/rock; assets/LICENSES.md) repeating
+## every `tile` m, toned by `tint`; with `scree`, gray_rocks on the gentle ground low down.
+static func _rock_mat(scan: String, tile: float, tint: Color, strata: float, scree: bool) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = ROCK_SHADER
-	m.set_shader_parameter("strata", 0.0)
+	var p := "res://assets/textures/rock/%s/%s" % [scan, scan]
+	m.set_shader_parameter("use_scan", true)
+	m.set_shader_parameter("scan_albedo", load(p + "_diff_2k.jpg"))
+	m.set_shader_parameter("scan_normal", load(p + "_nor_gl_2k.jpg"))
+	m.set_shader_parameter("scan_arm", load(p + "_arm_2k.jpg"))
+	m.set_shader_parameter("scan_tile", tile)
+	m.set_shader_parameter("scan_tint", tint)
+	m.set_shader_parameter("strata", strata)
+	if scree:
+		var g := "res://assets/textures/rock/gray_rocks/gray_rocks"
+		m.set_shader_parameter("use_ground", true)
+		m.set_shader_parameter("ground_albedo", load(g + "_diff_2k.jpg"))
+		m.set_shader_parameter("ground_normal", load(g + "_nor_gl_2k.jpg"))
+		m.set_shader_parameter("ground_tile", 1.8)
+		m.set_shader_parameter("ground_y", ArenaLayout.GROUND_Y)
+		m.set_shader_parameter("scree_top", Escarpment.SCREE_H + 0.6)
 	return m
 
 

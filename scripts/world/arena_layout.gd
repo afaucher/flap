@@ -26,8 +26,8 @@ enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 ## arena's edge posts (add_posts), solid like a trunk, its top a perch -- somewhere to rest at the edge.
 enum Kind { GENERIC, PINE, BROADLEAF, SAPLING, POST, ROCK }   ## (ROCK: the escarpment, standing in as its perches' "tree")
 const POST_COUNT := 48
-const POST_HEIGHT := 6.0     ## m
-const POST_RADIUS := 0.25    ## m
+const POST_HEIGHT := 1.4     ## m: fence height (as the heath concept's posts; still a perch on each top)
+const POST_RADIUS := 0.18    ## m
 
 const TIERS := [
 	{"tier": Tier.UNDERSTORY, "count": 90, "h": Vector2(4.0, 9.0), "r": Vector2(0.12, 0.22), "spacing": 5.5, "branch_len": Vector2(0.9, 1.8)},

@@ -22,14 +22,21 @@ the river and rival wood and the balloon line were set aside (`docs/design/...` 
   set back, harder beds jutting as lips with a shadow under them; and fallen into the scree, sorted by size as
   talus is (small against the foot, the biggest rolled out to the toe), the big ones solid. Height-field faces
   alone can't have a sharp corner or an overhang: the blocks are what make it read as rock.
+- **Its stone**: photoscans (assets/LICENSES.md) on triplanar in `rock.gdshader`, toned cooler and greyer than they
+  come: marble_cliff_05 on the faces, rock_boulder_dry on the blocks, gray_rocks on the scree's gentle ground; the
+  painted bedding, stains, lichen, joints and cracks laid lighter over them.
 - **Its dressing**: heather and small pines on the ledges, a few taller ones along the top, placed on the rock's grid
   as drawn.
-- **The heath**: past the posts the ground shader turns from needle litter to heath (`heath.gdshaderinc`: straw and
-  olive grass, heather patches, bare earth), with grass tufts and heather thick by the fence and thinning out to
-  130 m; low rolling hills from there to the horizon (`EdgeBuilder._hills`), with stands of pines on them.
+- **The heath**: from the last trees the ground shader turns from needle litter to heath (`heath.gdshaderinc`), under
+  a sward of grass tussocks (FoliageTex's painted grass on three crossed cards each) with heather in patches, thick by
+  the fence and thinning out to 130 m; low rolling hills from there to the horizon (`EdgeBuilder._hills`), with stands of pines on them.
 - **The fence**: two strands of wire from post to post, sagging between them.
 
 Only the rock is solid. The ledge pines, boulders, tufts, heather and far pines are drawn only.
+
+- **The fence**: the edge posts at fence height (1.4 m, still a perch on each top), weathered, two strands of wire.
+- **The light**: `ForestLight.LOOKS.clear` is the concepts' light (high-key midday, blue sky, thin air); the golden
+  default warms the rock to cream and hazes the heath. Compare: `probe_edge_view --look clear --heading cliff|fence`.
 
 ## Perches on the rock, and the wall
 
@@ -55,10 +62,8 @@ rock (90k triangles, one draw), the hills, and six instanced batches.
 
 ## Open
 
-- **The haze.** The golden look's volumetric fog turns everything past 50 m cream: the heath and hills read as in
-  the concept with the fog off (`tests/probe_edge_view.gd --no-fog`), the rock less so. The concept has clear
-  air and a blue sky. Matching it means less haze outside the wood (or a look change), which is a call for the look.
-- A limestone photoscan for the rock (Poly Haven has several) would do more than any more noise in its shader.
+- **The haze.** In the golden look the volumetric fog turns everything past 50 m cream; the clear look matches the
+  concepts. Which is the game's default is a call for the look.
 - The wood doesn't thin toward the heath (the concept's bottom right): that changes the layout the AI tests fly.
 - A wooden platform on a ledge, as in the concept: an outpost on the rock.
 
