@@ -29,15 +29,17 @@ const SCREE_H := 5.5                ## m: how high it piles at the foot
 const BED := Vector2(3.4, 0.5)     ## a bed's thickness: m (its median), and its spread (lognormal)
 const BED_DIP := 0.05               ## how the beds rise along the cliff (m per m: about 3 deg)
 const FAULT := Vector3(35.0, 70.0, 2.6)   ## fault blocks along the cliff: m long (least, most), the most a fault throws
+const FAULT_RAMP := 2.5             ## m along the cliff a fault's step takes
 const JOINTS := [Vector2(7.5, 0.55), Vector2(14.0, 0.6)]   ## two sets: spacing m along a bed (median), its spread
 const RUN_ON := 0.35                ## the chance a joint carries on into the bed above (most stop at the bedding)
-const SOFT := 1.2                   ## m a soft bed stands back behind a hard one (so a hard one over it juts)
-const PANEL := 0.55                 ## m each panel stands out or back on its own
+const SOFT := 0.8                   ## m a soft bed stands back behind a hard one (so a hard one over it juts)
+const PANEL := 1.0                 ## m each panel stands out or back on its own
 const LOSS := Vector2(0.11, 2.4)    ## the chance a panel's block is gone, and how deep the hole
-const PANEL_TILT := 0.07            ## the most a panel's face turns from the cliff's line (m per m along it)
+const PANEL_TILT := 0.14            ## the most a panel's face turns from the cliff's line (m per m along it)
 const LEAN := 0.045                 ## m the wall leans back per m up
 const BENCHES := [[9.0, 4.4], [17.0, 3.0]]   ## [height m, width m]: the beds nearest these heights are ledges
-const ROW_F := [0.03, 0.5, 0.97]    ## the sheet's rows up each bed (fractions: near its foot, its middle, its top)
+const ROW_F := [0.03, 0.27, 0.5, 0.73, 0.97]   ## the sheet's rows up each bed (fractions, foot to top)
+const BULGE := Vector2(0.4, 0.15)   ## m: a face's gentle swell over a few metres, and its roughness over one
 const SKYLINE := Vector3(24.0, 30.0, 44.0)    ## the top: m per stretch, its height (least, most)
 const GULLY := Vector3(28.0, 4.5, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const PLATEAU := 30.0               ## m past the top's edge it rises (the hills take over beyond)
@@ -101,7 +103,7 @@ func _lay() -> void:
 	var k := 0
 	while z < SKYLINE.z + 8.0:
 		_beds.append(z)
-		_hard.append(smoothstep(0.3, 0.7, _n1(k * 0.42 + 3.0)))   # (hard and soft come in runs: lips where they change)
+		_hard.append(smoothstep(0.3, 0.7, _n1(k * 0.28 + 3.0)))   # (hard and soft come in long runs: lips where they change)
 		var g := sqrt(-2.0 * log(maxf(_h(k * 5.1 + 0.9), 1e-4))) * cos(TAU * _h(k * 2.3 + 0.2))   # (a normal deviate)
 		z += clampf(BED.x * exp(BED.y * g), 0.9, 7.0)
 		k += 1
@@ -141,9 +143,12 @@ func _lay() -> void:
 
 ## How much the beds stand raised `arc` m along the cliff: the dip, a fault block's throw, a gentle warp.
 func _lift(arc: float) -> float:
-	var u := arc / lerpf(FAULT.x, FAULT.y, 0.5) + 0.35 * sin(arc * 0.031)
+	var len := lerpf(FAULT.x, FAULT.y, 0.5)
+	var u := arc / len + 0.35 * sin(arc * 0.031)
 	var cell := floorf(u)
-	var throw := FAULT.z * (_h(cell * 4.13 + 9.0) * 2.0 - 1.0)
+	# (a fault's throw taken up over FAULT_RAMP m: a steep step the wall's sheet can draw, not a sliver)
+	var k := smoothstep(1.0 - FAULT_RAMP / len, 1.0, u - cell)
+	var throw := FAULT.z * lerpf(_h(cell * 4.13 + 9.0) * 2.0 - 1.0, _h((cell + 1.0) * 4.13 + 9.0) * 2.0 - 1.0, k)
 	return BED_DIP * arc + throw + 0.8 * (_n1(arc / 19.0 + 3.0) - 0.5)
 
 
@@ -206,7 +211,9 @@ func _column(theta: float) -> PackedFloat32Array:
 		var back := _panel(b, arc) + _benches(b, arc) + cleft
 		for f in ROW_F:
 			var z := lerpf(z0, z1, f)
-			var r := r0 + maxf(back + LEAN * z + 0.12 * (_n1(arc * 0.7 + z * 0.45 + b) - 0.5), -0.6)
+			# (a face isn't a plane: it swells and hollows gently over a few metres, rougher over one)
+			var swell := BULGE.x * (_n1(arc / 2.6 + z / 2.1 + b * 3.1) - 0.5) * 2.0 + BULGE.y * (_n1(arc * 1.1 + z * 0.9 + b * 7.0) - 0.5) * 2.0
+			var r := r0 + maxf(back + LEAN * z + swell, -0.8)
 			if z > top:   # (above the top: none -- the rows close up on the top's edge)
 				z = top
 				r = last_r

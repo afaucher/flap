@@ -85,8 +85,11 @@ void vertex() {
 
 void fragment() {
 	vec3 n = normalize(wn);
-	if (cut_steep && n.y < 0.45) {
-		discard;
+	if (cut_steep) {   // (by the triangle's own slope, not the smoothed normal: no slivers of a step left standing)
+		vec3 face_n = normalize(cross(dFdx(wp), dFdy(wp)));
+		if (abs(face_n.y) < 0.6) {
+			discard;
+		}
 	}
 	float big = fbm3(wp * 0.07);
 	float mid = fbm3(wp * 0.45 + 5.0);

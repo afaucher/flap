@@ -118,7 +118,7 @@ func _rock() -> void:
 	rock = MeshInstance3D.new()
 	rock.name = "Escarpment"
 	rock.mesh = _grid_mesh(_rock_grid, thetas.size(), radii.size(), true)
-	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.74, 0.77, 0.84), 1.0, true)
+	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.9, 0.92, 0.97), 1.0, true)
 	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_steep", true)   # (the wall draws those)
 	add_child(rock)
 	var faces := PackedVector3Array()
@@ -213,7 +213,7 @@ func _wall() -> void:
 	wall = MeshInstance3D.new()
 	wall.name = "Wall"
 	wall.mesh = m
-	var mat := _rock_mat("marble_cliff_05", 7.0, Color(0.74, 0.77, 0.84), 1.0, false)
+	var mat := _rock_mat("marble_cliff_05", 7.0, Color(0.9, 0.92, 0.97), 1.0, false)
 	wall.material_override = mat
 	add_child(wall)
 
@@ -302,7 +302,7 @@ func _rock_dressing() -> void:
 				var tall := _rng.randf_range(9.0, 16.0)
 				tx_top.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall)), at))
 				tc_top.append(Color(1, 1, 1) * _rng.randf_range(0.85, 1.05))
-			elif not on_top and _rng.randf() < 0.1:
+			elif not on_top and _rng.randf() < 0.1 * smoothstep(0.62, 0.8, _vnoise(Vector2(at.x, at.z) * 0.08)):   # (a few, in clumps)
 				var tall := _rng.randf_range(2.0, 5.5)
 				var b := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall) * Vector3(_rng.randf_range(0.8, 1.2), 1.0, _rng.randf_range(0.8, 1.2)))
 				px.append(Transform3D(b, at))
@@ -390,6 +390,28 @@ func _scree_blocks(sets: Array) -> void:
 		cs.transform = b[0]
 		rock_body.add_child(cs)
 	scree_solid = solid.size()
+	# Heather and grass come up among the scree in patches, thickest out at its toe (more soil, less rock).
+	var hx := []
+	var hc := []
+	for n in 9000:
+		var theta := esc.at + _rng.randf_range(-1.0, 1.0) * Escarpment.HALF
+		if esc.taper(theta) < 0.1:
+			continue
+		var col := _column_near(theta)
+		if col.is_empty():
+			continue
+		var s := _rng.randf_range(-Escarpment.SCREE - 1.0, 0.0)
+		var r: float = col[6] + s
+		var p := Vector2(sin(theta), cos(theta)) * r
+		var toe := clampf(-s / Escarpment.SCREE, 0.0, 1.0)
+		if r < layout.boundary + 1.0 or _rng.randf() > toe * smoothstep(0.4, 0.7, _vnoise(p * 0.11 + Vector2(2.0, 5.0))):
+			continue
+		var at := Vector3(p.x, ArenaLayout.GROUND_Y + esc.height(p.x, p.y), p.y)
+		var size := _rng.randf_range(0.5, 1.2)
+		hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.3, size * 0.55, size * 1.3)), at))
+		hc.append(Color(0.62, 0.36, 0.5).lerp(Color(0.5, 0.55, 0.3), _rng.randf()) * _rng.randf_range(0.6, 0.95))
+	var mi := _batch("scree_growth", _tuft_cards(), hx, hc)
+	mi.material_override = _grass_mat()
 
 
 ## Heather and grass along every ledge, thick, as in the concept's green and purple bands: along each tier's ledge
@@ -406,7 +428,8 @@ func _ledge_growth(hx: Array, hc: Array) -> void:
 			continue
 		for l in esc.ledges(col, 0.8):
 			var depth: float = float(l[1]) - float(l[0])
-			if _rng.randf() < 0.25:
+			# (in patches along the ledge, not a hedge: thick where a slow noise is high, bare elsewhere)
+			if _rng.randf() > smoothstep(0.35, 0.65, _vnoise(Vector2(arc * 0.09, float(l[2]) * 0.3))):
 				continue
 			var r: float = float(l[0]) + _rng.randf_range(0.2, depth - 0.1)
 			var at := Vector3(sin(theta) * r, ArenaLayout.GROUND_Y + esc.height_in(col, r), cos(theta) * r)
@@ -732,7 +755,7 @@ func _heather_colour() -> Color:
 
 
 func _rock_mat_instanced() -> Material:
-	var m := _rock_mat("rock_boulder_dry", 2.4, Color(0.6, 0.65, 0.74), 0.0, false)
+	var m := _rock_mat("rock_boulder_dry", 2.4, Color(0.8, 0.83, 0.9), 0.0, false)
 	m.set_shader_parameter("veg_amount", 0.3)   # (a little moss on the blocks' tops, not a lawn)
 	return m
 
