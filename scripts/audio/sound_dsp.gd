@@ -20,6 +20,33 @@ static func silence(sec: float) -> PackedFloat32Array:
 
 # ---------------------------------------------------------------- recordings
 
+## Mono samples at RATE from a WAV or an MP3 (by extension).
+static func load_sound(path: String) -> PackedFloat32Array:
+	return load_mp3(path) if path.get_extension().to_lower() == "mp3" else load_wav(path)
+
+
+## Mono samples at RATE from an MP3 (Freesound's previews), decoded through its playback (as ..\cast decodes Ogg).
+## The source folders are .gdignore'd, so the file is read raw rather than imported.
+static func load_mp3(path: String) -> PackedFloat32Array:
+	var stream := AudioStreamMP3.load_from_file(path)
+	if stream == null:
+		push_error("SoundDsp: could not open " + path)
+		return PackedFloat32Array()
+	stream.loop = false
+	var pb := stream.instantiate_playback()
+	pb.start(0.0)
+	var src_rate := int(AudioServer.get_mix_rate())   # (the playback mixes at the server's rate, whatever the file's)
+	var out := PackedFloat32Array()
+	var total := int(stream.get_length() * src_rate) + 1
+	while out.size() < total and pb.is_playing():
+		var frames: PackedVector2Array = pb.mix_audio(1.0, mini(4096, total - out.size()))
+		if frames.is_empty():
+			break
+		for v in frames:
+			out.append((v.x + v.y) * 0.5)
+	return resample(out, float(src_rate) / RATE) if src_rate != RATE else out
+
+
 ## Mono samples at RATE from a WAV (8/16/24/32-bit PCM or 32-bit float), any channel count and rate.
 static func load_wav(path: String) -> PackedFloat32Array:
 	var f := FileAccess.open(path, FileAccess.READ)
