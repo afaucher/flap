@@ -42,7 +42,7 @@ func setup() -> void:
 		var per_down := []
 		var since := 0
 		var dists := []
-		r.world.burst.connect(func(at: Vector3, why: String):
+		r.world.burst.connect(func(at: Vector3, why: String, _kind: int, _surface: String):
 			if why != "expired" and is_instance_valid(r.target):
 				var d: float = (r.target as Bird).global_position.distance_to(at)
 				if d <= CombatWorld.blast:

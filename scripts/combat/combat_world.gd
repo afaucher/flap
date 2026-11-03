@@ -18,9 +18,9 @@ extends Node3D
 ## has downed (downing a teammate scores nothing).
 
 signal downed(bird: Bird)
-signal burst(at: Vector3, why: String)
+signal burst(at: Vector3, why: String, kind: int, surface: String)   ## surface: "bird" | "trunk" | "ground" | "air" (Projectile.step)
 signal launched(p: Projectile)        ## a round left its launcher (GameAudio: the launch and its motor)
-signal struck(bird: Bird, at: Vector3)   ## a burst hurt `bird` (GameAudio: the feather puff and its alarm call)
+signal struck(bird: Bird, at: Vector3, keys: Array)   ## a burst hurt `bird`, knocking out feathers `keys` (GameAudio: the puff and its call)
 
 static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.fuse)
 const SHOVE := 4.0          ## m/s, push from a burst at its centre
@@ -145,7 +145,7 @@ func _physics_process(dt: float) -> void:
 		if not ev.is_empty():
 			if trail != null:
 				trail.open = false
-			_burst(ev.burst, p.shooter, String(ev.why), p.kind)
+			_burst(ev.burst, p.shooter, String(ev.why), p.kind, String(ev.get("surface", "air")))
 	projectiles = projectiles.filter(func(q): return q.alive)
 	fx.step(dt, self)
 
@@ -257,9 +257,9 @@ func _trail(id: int) -> Variant:
 	return null
 
 
-func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKET) -> void:   # (by: the shooter, possibly freed by now)
+func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKET, surface := "bird") -> void:   # (by: the shooter, possibly freed by now)
 	fx.burst(at, why, kind)
-	burst.emit(at, why)
+	burst.emit(at, why, kind, surface)
 	if why == "expired":
 		return
 	for b in birds:
@@ -293,7 +293,7 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 	b.stun = maxf(b.stun, HIT_STUN)
 	var keys := b.lose_feathers(at, feathers_for(strength))
 	fx.knocked_out(b, at, keys, away)
-	struck.emit(b, at)
+	struck.emit(b, at, keys)
 	if was_up and b.is_down():
 		b.stun = DOWN_STUN
 		if by_player:

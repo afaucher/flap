@@ -1880,8 +1880,8 @@
   "edits": [
    {
     "file": "scripts/audio/game_audio.gd",
-    "find": "cue(\"burst_ground\" if world != null and at.y < 0.5 else \"burst_wood\", at)",
-    "replace": "cue(\"burst_wood\" if world != null and at.y < 0.5 else \"burst_ground\", at)"
+    "find": "\t\t\"ground\":\n\t\t\tcue(\"burst_ground\", at)\n\t\t\"trunk\":\n\t\t\tcue(\"burst_wood\", at)",
+    "replace": "\t\t\"ground\":\n\t\t\tcue(\"burst_wood\", at)\n\t\t\"trunk\":\n\t\t\tcue(\"burst_ground\", at)"
    }
   ]
  },
@@ -1924,6 +1924,20 @@
     "file": "scripts/audio/game_audio.gd",
     "find": "_incoming_next = _t + clampf(tgo * 0.3, 0.07, 0.4)",
     "replace": "_incoming_next = _t + 0.25"
+   }
+  ]
+ },
+ {
+  "id": "burst-surface-swapped",
+  "bug": "A round must say what it burst on (the ground or a trunk), for its sound (2026-11-02).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/projectile.gd",
+    "find": "var surface := \"ground\" if pos.y <= ArenaLayout.GROUND_Y else \"trunk\"",
+    "replace": "var surface := \"trunk\" if pos.y <= ArenaLayout.GROUND_Y else \"ground\""
    }
   ]
  }

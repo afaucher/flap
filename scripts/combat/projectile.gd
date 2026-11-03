@@ -54,7 +54,8 @@ static func velocity_of(o: Object) -> Vector3:
 
 
 ## Advance by dt. Returns {} while in flight, or the event that ended it:
-## {"burst": Vector3, "why": "fuse" | "impact" | "expired", "near": the bird that set off the fuse}.
+## {"burst": Vector3, "why": "fuse" | "impact" | "expired", "near": the bird that set off the fuse, "surface": what it
+## burst on -- "bird" (a fuse), "trunk" (wood: a trunk, a limb, an outpost), "ground", "air" (it ran out)}.
 func step(dt: float, layout: ArenaLayout, birds: Array) -> Dictionary:
 	if not alive:
 		return {}
@@ -88,14 +89,15 @@ func step(dt: float, layout: ArenaLayout, birds: Array) -> Dictionary:
 			if q.distance_to(bp) <= fuse:
 				alive = false
 				pos = q
-				return {"burst": q, "why": "fuse", "near": b}
+				return {"burst": q, "why": "fuse", "near": b, "surface": "bird"}
 	if pos.y <= ArenaLayout.GROUND_Y or (layout != null and not layout.segment_clear(prev, pos, 0.0)):
 		alive = false
+		var surface := "ground" if pos.y <= ArenaLayout.GROUND_Y else "trunk"
 		pos.y = maxf(pos.y, ArenaLayout.GROUND_Y + 0.05)
-		return {"burst": pos, "why": "impact"}
+		return {"burst": pos, "why": "impact", "surface": surface}
 	if age >= float(s.life):
 		alive = false
-		return {"burst": pos, "why": "expired"}
+		return {"burst": pos, "why": "expired", "surface": "air"}
 	return {}
 
 

@@ -150,10 +150,10 @@ func _game_audio() -> void:
 
 	# Bursts, by what they hit.
 	var n := ga.events.size()
-	world.burst.emit(Vector3(3, 0.1, 3), "impact")
-	world.burst.emit(Vector3(3, 6.0, 3), "impact")
-	world.burst.emit(Vector3(3, 30, 3), "fuse")
-	world.burst.emit(Vector3(3, 30, 3), "expired")
+	world.burst.emit(Vector3(3, 0.1, 3), "impact", Projectile.Kind.ROCKET, "ground")
+	world.burst.emit(Vector3(3, 6.0, 3), "impact", Projectile.Kind.ROCKET, "trunk")
+	world.burst.emit(Vector3(3, 30, 3), "fuse", Projectile.Kind.SEEKER, "bird")
+	world.burst.emit(Vector3(3, 30, 3), "expired", Projectile.Kind.ROCKET, "air")
 	eq(ga.events.slice(n).map(func(e: Dictionary) -> String: return e.cue), ["burst_ground", "burst_wood", "burst", "fizzle"],
 			"a burst sounds like what it hit: the ground, a trunk, a bird, or nothing")
 	# A hit: feathers and the species' alarm.

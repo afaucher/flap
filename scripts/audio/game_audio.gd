@@ -179,17 +179,20 @@ func _motors_tick() -> void:
 			(v[0] as Node3D).global_position = p.pos
 
 
-func _on_burst(at: Vector3, why: String) -> void:
-	match why:
-		"expired":
-			cue("fizzle", at)
-		"impact":
-			cue("burst_ground" if world != null and at.y < 0.5 else "burst_wood", at)
+func _on_burst(at: Vector3, why: String, _kind: int, surface: String) -> void:
+	if why == "expired":
+		cue("fizzle", at)
+		return
+	match surface:
+		"ground":
+			cue("burst_ground", at)
+		"trunk":
+			cue("burst_wood", at)
 		_:
 			cue("burst", at)
 
 
-func _on_struck(b: Bird, _at: Vector3) -> void:
+func _on_struck(b: Bird, _at: Vector3, _keys: Array) -> void:
 	cue("feather_puff", b.global_position)
 	_call(b, "alarm")
 
