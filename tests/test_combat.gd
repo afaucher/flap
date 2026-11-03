@@ -50,6 +50,7 @@ func setup() -> void:
 	await _teams()
 	_far_base()
 	await _warnings()
+	await _perched_aim()
 	if in_shard(1):
 		await _range()
 	finish()
@@ -477,6 +478,58 @@ func _warnings() -> void:
 		var centre := FlightHud.ring_centre if FlightHud.style != "dev" and FlightHud.ring_r > 0.0 else hud.size * 0.5
 		check(marks.size() == 1 and signf((marks[0][0] as Vector2).x - centre.x) == side, "a round from the %s is marked on the %s" % ["left" if side < 0 else "right", "left" if side < 0 else "right"])
 	world.projectiles = []
+	for n in [hud, cam, a, e]:
+		n.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
+## Perched, a bird can't aim: no lock builds on a bird ahead, and the HUD draws no lead mark; flying at the same bird,
+## it does both.
+func _perched_aim() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var a := Bird.new()
+	var e := Bird.new()
+	for b in [a, e]:
+		add_child(b)
+		(b as Bird).setup(BirdProfile.crow(), layout, null)
+	var perch: Perch = layout.perches[0]
+	a.perch_at(perch)
+	var ahead := a.global_position + a.facing * 15.0
+	e.fly_from(ahead, a.facing, 9.0)   # (held in place each frame below)
+	var l := world.add_bird(a, null, 0)
+	world.add_bird(e, null, 1)
+	var cam := Camera3D.new()
+	add_child(cam)
+	cam.current = true
+	var hud := CombatHud.new()
+	add_child(hud)
+	hud.world = world
+	hud.launcher = l
+	var drew := [false, false]
+	for flying in [false, true]:
+		if flying:
+			a.fly_from(ahead - a.facing * 15.0 + Vector3.UP * 0.0, (e.global_position - (ahead - a.facing * 15.0)).normalized(), 9.0)
+		for w in [Launcher.Weapon.SEEKERS, Launcher.Weapon.ROCKETS]:
+			l.weapon = w
+			for f in 75:
+				e.global_position = a.global_position + a.model.flight_dir() * 15.0 if flying else l.muzzle() + l.aim() * 15.0   # (perched: right where it would aim)
+				e.model.position = e.global_position
+				var d := Vector3(e.global_position.x - a.global_position.x, 0.0, e.global_position.z - a.global_position.z)
+				d = d.normalized() if d.length() > 0.1 else Vector3(a.facing.x, 0.0, a.facing.z).normalized()
+				cam.look_at_from_position(a.global_position - d * 3.0 + Vector3.UP * 0.5, a.global_position + d * 10.0)
+				await frames(1)
+				if w == Launcher.Weapon.ROCKETS:
+					drew[int(flying)] = drew[int(flying)] or hud.drew_lead
+			if w == Launcher.Weapon.SEEKERS:
+				if flying:
+					check(l.lock > 0.5, "flying at it, a lock builds (%.2f)" % l.lock)
+				else:
+					check(l.lock == 0.0 and l.lock_target == null, "perched, no lock builds on a bird ahead")
+	check(not drew[0], "perched, the HUD draws no lead mark")
+	check(drew[1], "flying, it does")
 	for n in [hud, cam, a, e]:
 		n.queue_free()
 	world.queue_free()
