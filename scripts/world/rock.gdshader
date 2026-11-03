@@ -9,7 +9,8 @@ render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
 uniform float strata = 1.0;   // the bedding bands and joints (0 for the blocks, which lie any way up)
 uniform float bump = 0.6;     // the procedural bump (without a scan)
-uniform float veg_amount = 1.0;   // how much grass and heather grows on what faces up
+uniform float veg_amount = 1.0;
+uniform bool cut_steep = false;   // the height field under the wall: its steep parts not drawn (the wall's sheet is)   // how much grass and heather grows on what faces up
 
 uniform bool use_scan = false;
 uniform sampler2D scan_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -84,6 +85,9 @@ void vertex() {
 
 void fragment() {
 	vec3 n = normalize(wn);
+	if (cut_steep && n.y < 0.45) {
+		discard;
+	}
 	float big = fbm3(wp * 0.07);
 	float mid = fbm3(wp * 0.45 + 5.0);
 	float fine = fbm3(wp * 3.1 + 11.0);

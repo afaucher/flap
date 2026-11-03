@@ -24,6 +24,7 @@ func setup() -> void:
 	var layout := Pinewood.generate(7)
 	check(not layout.escarpment.is_empty() and layout.rock != null, "the pine wood has an escarpment")
 	eq(Pinewood.generate(7).escarpment.at, layout.escarpment.at, "same seed, same escarpment")
+	EdgeBuilder.draw_always = true   # (the drawn-only parts too: they're what this test is about)
 	var arena := ArenaBuilder.new()
 	add_child(arena)
 	arena.build(layout)
@@ -34,6 +35,7 @@ func setup() -> void:
 	_rock(layout, edge)
 	_perches(layout, edge)
 	_blocks(layout, edge)
+	_sheet(edge)
 	await _wall(layout, edge)
 	_hills(edge)
 	_heath(layout, edge)
@@ -184,7 +186,10 @@ func _perches(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 		var down := space.intersect_ray(PhysicsRayQueryParameters3D.create(p.position + Vector3.UP * 2.0, p.position - Vector3.UP * 2.0))
 		if down.is_empty() or down.collider != edge.rock_body or absf(down.position.y - p.position.y) > 0.25:
 			floating += 1
-			print("EDGE perch %d at %s: the rock under it at %s" % [p.id, p.position, down.get("position", "none")])
+			var hs := []
+			for o in [Vector2.ZERO, Vector2(0.25, 0), Vector2(-0.25, 0), Vector2(0, 0.25), Vector2(0, -0.25)]:
+				hs.append(snappedf(layout.rock.height(p.position.x + o.x, p.position.z + o.y), 0.01))
+			print("EDGE perch %d at %s: the rock under it at %s (heights round it %s)" % [p.id, p.position, down.get("position", "none"), hs])
 		if _r(p.position) > layout.reach(Vector2(p.position.x, p.position.z)) - 4.0:
 			walled += 1
 	print("EDGE rock perches by height %s m: %s; %d near the top; %d not on the rock; %d at the soft wall" % [BANDS, counts, on_top, floating, walled])
@@ -213,6 +218,76 @@ func _perches(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 	check(routed >= tried - 1, "the AI can plan its way in to the low perches (%d of %d)" % [routed, tried])
 
 
+## The wall as drawn (its sheet, Escarpment.column's rows: ROW_F up each bed): hard beds jut over soft ones as lips
+## in many places; the joints along a bed come at uneven spacings, and stop (another bed's joints aren't the same);
+## the beds dip and step along the cliff.
+func _sheet(edge: EdgeBuilder) -> void:
+	var verts: PackedVector3Array = (edge.wall.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var esc := edge.esc
+	var nr := int(esc.column(esc.at)[4])
+	var nt := verts.size() / nr
+	var per := Escarpment.ROW_F.size()
+	var lipped := 0
+	var counted := 0
+	for i in nt:
+		var u := esc.off(atan2(verts[i * nr].x, verts[i * nr].z)) / Escarpment.HALF
+		if absf(u) > 0.5:
+			continue
+		counted += 1
+		for j in range(per, nr, per):   # (each bed's foot against the top of the bed under it)
+			var hi := verts[i * nr + j]
+			var lo := verts[i * nr + j - 1]
+			if hi.y - ArenaLayout.GROUND_Y > Escarpment.SCREE_H and hi.y - lo.y < 0.5 and _r(hi) < _r(lo) - 0.3:
+				lipped += 1
+				break
+	# Joints: along two beds' middles, high on the wall, where the wall steps in or out between neighbouring columns.
+	var steps := []
+	var c0 := esc.column(esc.at)   # (a bed about a third of the way up, in the middle; and the one above it)
+	var mid := 1
+	for j in range(1, nr, per):
+		if absf(c0[5 + j * 2] - 12.0) < absf(c0[5 + mid * 2] - 12.0):
+			mid = j
+	for j in [mid, mid + per * 2]:   # (a bed and the one two above it: a joint seldom runs through three)
+		var at := []
+		for i in range(1, nt):
+			var a := verts[(i - 1) * nr + j]
+			var b := verts[i * nr + j]
+			var arc := esc.off(atan2(b.x, b.z)) * esc.foot
+			if esc.gully(arc) > 0.0 or esc.gully(arc - 0.5) > 0.0:   # (the clefts cut every bed: not joints)
+				continue
+			if absf(arc) / (Escarpment.HALF * esc.foot) < 0.6 and absf(_r(b) - _r(a)) > 0.35:
+				at.append(i)
+		steps.append(at)
+	var gaps := []
+	for k in range(1, (steps[0] as Array).size()):
+		gaps.append(float(steps[0][k] - steps[0][k - 1]))
+	var mean := 0.0
+	for g in gaps:
+		mean += g
+	mean /= maxf(gaps.size(), 1.0)
+	var sd := 0.0
+	for g in gaps:
+		sd += (g - mean) * (g - mean)
+	sd = sqrt(sd / maxf(gaps.size(), 1.0))
+	var shared := 0
+	for i in steps[0]:
+		if (steps[1] as Array).has(i):
+			shared += 1
+	# The beds dip: one bed's foot's height along the middle half of the cliff.
+	var lo_z := INF
+	var hi_z := -INF
+	for i in nt:
+		var v := verts[i * nr + mid - 1]
+		if absf(esc.off(atan2(v.x, v.z))) / Escarpment.HALF < 0.5:
+			lo_z = minf(lo_z, v.y)
+			hi_z = maxf(hi_z, v.y)
+	print("EDGE wall: lips in %d of %d columns; joints along a bed %d, spaced %.1f +- %.1f columns, %d of them two beds up too; a bed's foot from %.1f to %.1f m" % [lipped, counted, (steps[0] as Array).size(), mean, sd, shared, lo_z, hi_z])
+	check(lipped > counted / 5, "hard beds jut over soft ones as lips, in many places (%d of %d columns)" % [lipped, counted])
+	check((steps[0] as Array).size() >= 10 and sd > mean * 0.35, "the joints come at uneven spacings (%d, %.1f +- %.1f)" % [(steps[0] as Array).size(), mean, sd])
+	check(shared < (steps[0] as Array).size() * 0.7, "and stop: two beds up they aren't the same (%d of %d shared)" % [shared, (steps[0] as Array).size()])
+	check(hi_z - lo_z > 4.0, "the beds dip and step along the cliff (a bed's foot over %.1f m)" % (hi_z - lo_z))
+
+
 ## The rock's blocks: set into its faces, and fallen into its scree sorted by size (the biggest out at the toe),
 ## none on the perch stones; the big ones solid.
 func _blocks(layout: ArenaLayout, edge: EdgeBuilder) -> void:
@@ -235,8 +310,7 @@ func _blocks(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 		return s / maxf(a.size(), 1.0)
 	var foot_m: float = mean.call(foot_side)
 	var toe_m: float = mean.call(toe_side)
-	print("EDGE blocks: %d set into the faces; %d in the scree, %.2f m across by the foot, %.2f m out at the toe; %d on the perch stones; %d solid" % [edge.face_count, edge.scree.size(), foot_m, toe_m, on_stones, edge.scree_solid])
-	check(edge.face_count > 60, "the faces are built of blocks (%d)" % edge.face_count)
+	print("EDGE blocks: %d in the scree, %.2f m across by the foot, %.2f m out at the toe; %d on the perch stones; %d solid" % [edge.scree.size(), foot_m, toe_m, on_stones, edge.scree_solid])
 	check(edge.scree.size() > 800 and toe_m > foot_m * 2.0, "the scree's blocks sorted down it, the biggest out at the toe (%.2f v %.2f m)" % [toe_m, foot_m])
 	check(on_stones == 0, "none on the perch stones (%d)" % on_stones)
 	# Solid: a ray down onto the biggest scree block stops on it, above the scree's own surface.

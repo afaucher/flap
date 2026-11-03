@@ -66,6 +66,17 @@ than they're high; the top tier's beds run on level from below, cut by the skyli
 height swings round the ring (its crest on a slant), a valley, a long far ridge; a fence post every 2.8 m (drawn
 only) between the edge posts; the grass thinning in among the last trees and ending at the hills' foot.
 
+## The wall from beds and joints (round seven)
+
+The research's first pick, built: `Escarpment` lays down beds (lognormal thicknesses, hard and soft in runs, all
+dipping together and stepped at faults) cut by two joint sets per bed at lognormal spacings, a third of the joints
+running on into the bed above (`RUN_ON`), the rest stopping; each panel (a bed between two joints) set back by its
+bed's softness, its own amount, a lost block now and then, a slight turn; two beds' tops are benches that come and
+go. The wall is drawn as its own sheet (`EdgeBuilder._wall`: radius against height, three rows up each bed), so
+hard beds overhang soft ones; the height field is the rock's envelope (the highest rock at each distance out,
+solid under the lips: collision, the AI, ledges and perches all read it) and draws only its gentle parts (the
+scree, ledges, top: `cut_steep`). The chamfered face blocks are gone; the scree's blocks stay.
+
 ## Next for the cliff (research, round six)
 
 What games and tools do (sources in the session notes: Houdini strata and fracture breakdowns on 80.lv, Gaea's

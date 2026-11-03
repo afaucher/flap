@@ -33,9 +33,10 @@ var ledge_pines: MultiMeshInstance3D
 var block_batches: Array[MultiMeshInstance3D] = []   ## the rock's blocks, one batch per shape (_blocks)
 var scree_solid := 0      ## how many of the scree's blocks are solid
 var wires: MeshInstance3D
+static var draw_always := false   ## build what's drawn only even with no screen (test_arena_edge)
 var placed := {}      ## key -> PackedVector3Array: where each batch's instances stand (_batch)
 var scree := []       ## the scree's blocks: [centre, size (m, its longest side), how far out to its toe 0..1]
-var face_count := 0   ## blocks set into the faces (with their lips)
+var wall: MeshInstance3D   ## the cliff's faces: the sheet of its beds and joints (Escarpment.column's rows)
 var _rock_grid := []   ## the rock's points and normals as drawn ([verts, normals]; _grid_verts)
 var _rng := RandomNumberGenerator.new()
 
@@ -46,12 +47,20 @@ func build(l: ArenaLayout) -> void:
 	_rng.seed = l.seed * 31 + 17
 	var t := Time.get_ticks_usec()
 	var times := {}
+	# (with no screen -- the headless tests' matches -- only what's solid: the rock and the scree's big blocks; what's
+	# drawn only would cost every match seconds for nothing. draw_always: build it all anyway, for tests of it.)
+	var drawn := draw_always or DisplayServer.get_name() != "headless"
 	if esc != null:
 		_rock()
+		if drawn:
+			_wall()
 		times.rock = Time.get_ticks_usec() - t
-		_rock_dressing()
+		if drawn:
+			_rock_dressing()
 		_blocks()
 		times.dressing = Time.get_ticks_usec() - t
+	if not drawn:
+		return
 	_hills()
 	times.hills = Time.get_ticks_usec() - t
 	_heath_cover()
@@ -110,6 +119,7 @@ func _rock() -> void:
 	rock.name = "Escarpment"
 	rock.mesh = _grid_mesh(_rock_grid, thetas.size(), radii.size(), true)
 	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.74, 0.77, 0.84), 1.0, true)
+	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_steep", true)   # (the wall draws those)
 	add_child(rock)
 	var faces := PackedVector3Array()
 	var v: PackedVector3Array = _rock_grid[0]
@@ -139,6 +149,73 @@ func _rock() -> void:
 	cs.shape = shape
 	rock_body.add_child(cs)
 	add_child(rock_body)
+
+
+## The wall: Escarpment.column's rows up every bed (its panels set back and forward by their beds and joints, hard
+## beds jutting over soft ones as overhanging lips), joined column to column into one sheet facing the wood. The height
+## field under it (_rock) draws only its gentle parts -- the scree, the ledges, the top -- so where the wall
+## overhangs, the sheet is what's seen. Its rows above the top close up on the top's edge.
+func _wall() -> void:
+	var thetas := _thetas(0.5, esc.foot)
+	var nt := thetas.size()
+	var cols := []
+	for t in thetas:
+		cols.append(esc.column(t))
+	var nr := 0
+	for c in cols:
+		if not (c as PackedFloat32Array).is_empty():
+			nr = int(c[4])
+			break
+	var verts := PackedVector3Array()
+	verts.resize(nt * nr)
+	for i in nt:
+		var c: PackedFloat32Array = cols[i]
+		var sn := sin(thetas[i])
+		var cs := cos(thetas[i])
+		for j in nr:
+			var z := 0.0
+			var r := esc.foot
+			if not c.is_empty():
+				z = c[5 + j * 2]
+				r = c[6 + j * 2]
+			verts[i * nr + j] = Vector3(sn * r, ArenaLayout.GROUND_Y + z, cs * r)
+	var normals := PackedVector3Array()
+	normals.resize(nt * nr)
+	for i in nt:
+		var inward := -Vector3(sin(thetas[i]), 0.0, cos(thetas[i]))
+		for j in nr:
+			var up := verts[i * nr + mini(j + 1, nr - 1)] - verts[i * nr + maxi(j - 1, 0)]
+			var side := verts[mini(i + 1, nt - 1) * nr + j] - verts[maxi(i - 1, 0) * nr + j]
+			var n := up.cross(side)
+			if n.length_squared() < 1e-8:   # (a closed-up row: no slope of its own)
+				n = inward
+			n = n.normalized()
+			normals[i * nr + j] = n if n.dot(inward) >= -0.2 else -n
+	var idx := PackedInt32Array()
+	for i in nt - 1:
+		if (cols[i] as PackedFloat32Array).is_empty() or (cols[i + 1] as PackedFloat32Array).is_empty():
+			continue
+		for j in nr - 1:
+			var q0 := i * nr + j
+			var q1 := (i + 1) * nr + j
+			var q2 := q1 + 1
+			var q3 := q0 + 1
+			if verts[q0].distance_squared_to(verts[q3]) + verts[q1].distance_squared_to(verts[q2]) < 1e-6:
+				continue   # (closed up above the top, or squeezed out under the ground)
+			idx.append_array(PackedInt32Array([q0, q1, q2, q0, q2, q3]))   # (facing the wood)
+	var surf := []
+	surf.resize(Mesh.ARRAY_MAX)
+	surf[Mesh.ARRAY_VERTEX] = verts
+	surf[Mesh.ARRAY_NORMAL] = normals
+	surf[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surf)
+	wall = MeshInstance3D.new()
+	wall.name = "Wall"
+	wall.mesh = m
+	var mat := _rock_mat("marble_cliff_05", 7.0, Color(0.74, 0.77, 0.84), 1.0, false)
+	wall.material_override = mat
+	add_child(wall)
 
 
 ## Angles across the sector, `step` m apart at radius `at_r`.
@@ -220,7 +297,7 @@ func _rock_dressing() -> void:
 			continue
 		elif n.y > 0.93 and h > Escarpment.SCREE_H + 2.0:   # (a ledge or the top)
 			var col := _column_near(theta)   # (the top: anywhere past where its last face ends, the plateau too)
-			var on_top := not col.is_empty() and s + esc.foot - col[1] > col[col.size() - 2] - 0.3
+			var on_top := not col.is_empty() and s + esc.foot > esc.top_start(col) - 0.3
 			if on_top and _rng.randf() < 0.0035:   # (about one every 8 m along it)   # (along the top: pines, taller than the ledges')
 				var tall := _rng.randf_range(9.0, 16.0)
 				tx_top.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall)), at))
@@ -250,9 +327,6 @@ func _blocks() -> void:
 	var sets := []   # per shape: [transforms, colours]
 	for k in BLOCK_SHAPES:
 		sets.append([[], []])
-	_face_blocks(sets)
-	for k in BLOCK_SHAPES:
-		face_count += (sets[k][0] as Array).size()
 	_scree_blocks(sets)
 	for k in BLOCK_SHAPES:
 		var mi := _batch("blocks_%d" % k, meshes[k], sets[k][0], sets[k][1])
@@ -261,80 +335,6 @@ func _blocks() -> void:
 
 
 const BLOCK_SHAPES := 4
-const FACE_BLOCK := Vector2(5.0, 15.0) ## m: a face block's length along the cliff (each course its own)
-const MASS := 1.1                      ## m: how far a mass of blocks (tens of metres along) stands out or back
-const PROUD := Vector2(-0.08, 0.16)    ## m: and each block on its own, out of its mass's face (less than 0: set back)
-const BED_TILT := 0.16                 ## the steepest a face block tilts with its bed (rise over run)
-const BED := 0.45                      ## m: whole beds (a course's height, all along) standing out or back together
-const LIP := Vector3(0.18, 0.3, 0.6)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
-
-
-## Courses of blocks up every face of every tier, following its beds: each tier's face split into courses at fixed
-## fractions of its height (so where the beds dip, the courses dip with them), each course laid along the cliff in
-## blocks of its own lengths (the joints staggered from course to course, not one seam all the way up), each block
-## tilted to its course's slope and set at the face where it stands, its mass and its bed PROUD of it or back.
-func _face_blocks(sets: Array) -> void:
-	for i in Escarpment.TIERS.size():
-		var mean_h: float = Escarpment.TIERS[i][0]
-		var n := clampi(roundi(mean_h / 4.2), 1, 6)
-		var cuts := [0.0]   # (the course boundaries, as fractions of the face's height)
-		for k in range(1, n):
-			cuts.append((k + _rng.randf_range(-0.25, 0.25)) / n)
-		cuts.append(1.0)
-		for k in n:
-			var t0: float = cuts[k]
-			var t1: float = cuts[k + 1]
-			var arc := -Escarpment.HALF * esc.foot + _rng.randf_range(0.0, FACE_BLOCK.y)
-			while arc < Escarpment.HALF * esc.foot:
-				var len := _rng.randf_range(FACE_BLOCK.x, FACE_BLOCK.y)
-				var a0 := arc
-				arc += len
-				var a1 := arc
-				if esc.gully(a0 + len * 0.5) > 0.2:   # (none in a cleft: it stays dark and deep)
-					continue
-				var c0 := esc.column(esc.at + a0 / esc.foot)
-				var c1 := esc.column(esc.at + a1 / esc.foot)
-				var cm := esc.column(esc.at + (a0 + len * 0.5) / esc.foot)
-				if c0.is_empty() or c1.is_empty() or cm.is_empty() or cm[0] < 0.08:
-					continue
-				var b := 3 + i * 6
-				var fh: float = cm[b + 2]
-				if fh < 1.0:
-					continue
-				var last := i == Escarpment.TIERS.size() - 1
-				# (the top tier's beds run on level from the rock below, mean_h apart, cut off where the skyline is
-				# lower; the others' at fractions of their own face, dipping with it)
-				var y0: float = cm[b + 4] + (mean_h * t0 if last else fh * t0)
-				var ch: float = mean_h * (t1 - t0) if last else fh * (t1 - t0)
-				ch = minf(ch, cm[b + 4] + fh - y0)
-				if ch < 0.4:
-					continue
-				var top_gap := 0.04 if (k == n - 1 or y0 + ch >= cm[b + 4] + fh - 0.01) else 0.0   # (the top course: just under the ledge)
-				# (its tilt: the bed's own slope here, a metre either way, never steeper than BED_TILT)
-				var ca := esc.column(esc.at + (a0 + len * 0.5 - 1.0) / esc.foot)
-				var cb := esc.column(esc.at + (a0 + len * 0.5 + 1.0) / esc.foot)
-				var slope := 0.0
-				if not last and not ca.is_empty() and not cb.is_empty():
-					slope = clampf(((cb[b + 4] + cb[b + 2] * t0) - (ca[b + 4] + ca[b + 2] * t0)) / 2.0, -BED_TILT, BED_TILT)
-				var theta := esc.at + (a0 + len * 0.5) / esc.foot
-				var out := Vector3(sin(theta), 0.0, cos(theta))   # (away from the wood, into the rock)
-				var along := Vector3.UP.cross(out).normalized()
-				var r: float = cm[1] + cm[b] + cm[b + 1] * (t0 + t1) * 0.5
-				var bed := BED * (esc._n1(float(i * 8 + k) * 1.7 + a0 / 60.0) - 0.5) * 2.0   # (a bed standing out or back, along a stretch)
-				var proud := MASS * (_mass(a0, i) - 0.5) * 2.0 + bed + _rng.randf_range(PROUD.x, PROUD.y)
-				var depth := 2.2 + MASS * 2.0
-				var centre := out * (r - proud + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + y0 + (ch - top_gap) * 0.5)
-				var basis := Basis(along * (len - _rng.randf_range(0.03, 0.15)), Vector3.UP * (ch - top_gap - _rng.randf_range(0.01, 0.05)), out * depth)
-				basis = Basis(out, atan(slope)) * Basis(Vector3.UP, _rng.randf_range(-0.03, 0.03)) * basis
-				var kk := _rng.randi() % BLOCK_SHAPES
-				sets[kk][0].append(Transform3D(basis, centre))
-				sets[kk][1].append(_stone_colour())
-				if top_gap == 0.0 and ch > 1.6 and _rng.randf() < LIP.x:   # (a harder bed: it juts, a shadow under it)
-					var lip_out := proud + LIP.z * _rng.randf_range(0.6, 1.3)
-					var lip_c := out * (r - lip_out + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + y0 + ch - LIP.y * 0.5)
-					var lip_b := Basis(out, atan(slope)) * Basis(along * (len * _rng.randf_range(0.5, 1.0)), Vector3.UP * LIP.y, out * depth)
-					sets[kk][0].append(Transform3D(lip_b, lip_c))
-					sets[kk][1].append(_stone_colour())
 
 
 ## The scree: blocks fallen from the faces, lying on its slope, sizes sorted down it (small against the foot, the
@@ -392,11 +392,6 @@ func _scree_blocks(sets: Array) -> void:
 	scree_solid = solid.size()
 
 
-## How far the mass of blocks at `arc` m along tier `i` stands out, 0..1: masses tens of metres long.
-func _mass(arc: float, i: int) -> float:
-	return esc._n1(arc / 23.0 + i * 3.7) * 0.7 + esc._n1(arc / 9.0 + i * 1.9 + 4.0) * 0.3
-
-
 ## Heather and grass along every ledge, thick, as in the concept's green and purple bands: along each tier's ledge
 ## every half metre or so, a mound or a tuft somewhere across it.
 func _ledge_growth(hx: Array, hc: Array) -> void:
@@ -409,12 +404,11 @@ func _ledge_growth(hx: Array, hc: Array) -> void:
 		var col := _column_near(theta)
 		if col.is_empty() or col[0] < 0.15:
 			continue
-		for i in Escarpment.TIERS.size() - 1:
-			var b := 3 + i * 6
-			var ledge: float = col[b + 3]
-			if ledge < 0.8 or _rng.randf() < 0.25:
+		for l in esc.ledges(col, 0.8):
+			var depth: float = float(l[1]) - float(l[0])
+			if _rng.randf() < 0.25:
 				continue
-			var r: float = col[1] + col[b] + col[b + 1] + _rng.randf_range(0.2, ledge - 0.2)
+			var r: float = float(l[0]) + _rng.randf_range(0.2, depth - 0.1)
 			var at := Vector3(sin(theta) * r, ArenaLayout.GROUND_Y + esc.height_in(col, r), cos(theta) * r)
 			if _rng.randf() < 0.55:
 				var size := _rng.randf_range(0.6, 1.7)
@@ -539,7 +533,7 @@ func _heath_cover() -> void:
 			continue
 		if r < layout.boundary and _rng.randf() > lerpf(0.3, 1.0, Pinewood.light(layout, Vector2(x, z))):
 			continue
-		if esc != null and esc.height_in(_column_near(theta), r) > 0.05:   # (on the rock)
+		if esc != null and esc.height(x, z) > 0.05:   # (on the rock)
 			continue
 		var h := hill(x, z)
 		# (out at the hills: thinning as the ground rises from the valley floor, along a ragged line, so the sward
