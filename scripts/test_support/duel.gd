@@ -15,6 +15,8 @@ var _respawn := {}               ## Bird -> physics ticks left until it comes ba
 
 func setup(l: ArenaLayout, bases := {}) -> void:
 	layout = l
+	if CombatWorld.calm_air:
+		l.air = AirField.new()
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	arena.build(l)

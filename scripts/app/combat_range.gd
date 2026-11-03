@@ -101,6 +101,8 @@ func _ready() -> void:
 		Game.add_environment(self)
 	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(7)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(7))
 	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
+	if CombatWorld.calm_air:
+		layout.air = AirField.new()
 	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)

@@ -228,6 +228,8 @@ func _fly(dt: float, inp: FlightInput) -> void:
 	_apply_assists()
 	model.position = global_position
 	model.ground_height = global_position.y - ArenaLayout.GROUND_Y - _radius
+	# The air it flies in (thermals, ridge lift), on the physics clock all birds share.
+	model.wind = layout.air.at(global_position, Engine.get_physics_frames() / float(Engine.physics_ticks_per_second)) if layout != null and layout.air != null else Vector3.ZERO
 	model.step(dt, ctl)
 	var col := move_and_collide(model.position - global_position)
 	if col != null:
@@ -539,6 +541,7 @@ func telemetry() -> Dictionary:
 		"stand_height": stand_y - ArenaLayout.GROUND_Y,   # (GROUNDED: how far above the ground it stands)
 		"position": global_position,
 		"velocity": m.velocity,
+		"air": m.wind,   # (the air's own velocity here: its .y the lift a thermal or a ridge gives)
 		"flight_dir": m.flight_dir(),
 		"candidate_grip": candidate_grip,
 		"facing": facing if state == State.PERCHED or state == State.GROUNDED else -global_basis.z,

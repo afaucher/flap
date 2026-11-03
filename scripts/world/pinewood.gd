@@ -124,7 +124,21 @@ static func generate(s: int) -> ArenaLayout:
 			placed += 1
 	_outposts(a, rng)
 	a.add_posts()
+	_thermals(a)
 	return a
+
+
+## The sun warms the open ground: a thermal over the clearing (the strongest: the widest patch of sunlit floor), the
+## glade, and each gap (weak: about a soaring bird's sink rate, so only the best soarers hold in them). Each is about
+## as wide as its opening: a crow's tightest comfortable circle (8-10 m) fits in the clearing's core.
+const THERMALS := {   ## kind -> [core lift m/s, radius as a share of the opening's, top m]
+	"clearing": [2.6, 1.0, 55.0], "glade": [2.0, 0.9, 45.0], "gap": [1.0, 0.8, 30.0],
+}
+static func _thermals(a: ArenaLayout) -> void:
+	for o in a.openings:
+		if THERMALS.has(o.kind):
+			var spec: Array = THERMALS[o.kind]
+			a.air.add_thermal(o.centre, float(o.r) * float(spec[1]), spec[0], spec[2])
 
 
 ## How far opening `o`'s edge lies from its centre toward `p` (irregular: no opening in a wood is round).

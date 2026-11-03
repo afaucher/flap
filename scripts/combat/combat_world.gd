@@ -43,6 +43,10 @@ var _next_team := 100       ## (the teams of birds added without one)
 const WARN_RANGE := 25.0    ## m: rounds closer than this, heading at a bird, are warned of
 const LANE := 1.3           ## m off the line of fire within which a teammate is in the way (a burst's reach)
 var _rng := RandomNumberGenerator.new()
+## The combat AI doesn't read the air yet (its aim and its stoops reckon on still air): the range and the duels fly
+## in still air until it does (Duel.setup, CombatRange). False: the arena's thermals, as in flight.
+static var calm_air := true
+
 var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
 var player: Launcher = null
 
