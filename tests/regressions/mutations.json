@@ -2570,5 +2570,67 @@
     "replace": "func feather_copy(key: int) -> Node3D:\n"
    }
   ]
+ },
+ {
+  "id": "timber-end-grain-smeared",
+  "bug": "The outposts' end faces (plank ends, beam ends, the rail's ends) took the planks scan by (across, along) like a long face, so with nothing changing along the grain they drew it smeared into streaks: no end grain (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\tbool end_face = abs(nl.y) > 0.6;",
+    "replace": "\tbool end_face = false;"
+   }
+  ]
+ },
+ {
+  "id": "timber-wide-face-stretched",
+  "bug": "A timber face wider than one board of the scan (the hangar's 0.42 m sides) took a single scan board clamped to its middle, so its edge texels stretched across the rest of the face (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tfloat nb = max(1.0, ceil(2.0 * cw / BOARD_USE - 0.001));",
+    "replace": "\t\tfloat nb = 1.0;"
+   },
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tfloat cc = x - (sub + 0.5) * sw;",
+    "replace": "\t\tfloat cc = clamp(x - (sub + 0.5) * sw, -0.084, 0.084);"
+   }
+  ]
+ },
+ {
+  "id": "brace-grain-across",
+  "bug": "The outpost's braces ran their grain across the piece (the bearer's material, grain_axis 0, on a cylinder along y) instead of along it (2026-11-03).",
+  "tests": [
+   "test_outpost_timber",
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\ttm.box(\"brace_r\" if e > 0.0 else \"brace_l\", xf, Vector3(bs, ln, bs), TimberMesh.Kind.BEAM, rng.randf(), heart.call())",
+    "replace": "\t\ttm.box(\"brace_r\" if e > 0.0 else \"brace_l\", Transform3D(Basis(xf.basis.y, -xf.basis.x, xf.basis.z), xf.origin), Vector3(ln, bs, bs), TimberMesh.Kind.BEAM, rng.randf(), heart.call())"
+   }
+  ]
+ },
+ {
+  "id": "scan-board-straddles-gap",
+  "bug": "Each plank took a strip of the planks scan that didn't line up with the scan's own boards (they start at u 0.0605, not 0), so a plank could show one of the scan's gaps as a dark line down its middle (2026-11-03).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "const float SCAN_GAP0 = 0.0605;",
+    "replace": "const float SCAN_GAP0 = 0.0;"
+   }
+  ]
  }
 ]
