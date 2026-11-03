@@ -1,7 +1,10 @@
 extends TestCase
 ## The combat AI in the pine wood (docs/design/combat_ai.md, 8), pilot skill:
-##   - against the range's racetrack target flying straight on, a rocket bird and a seeker bird each land hits
-##     and down it within 40 s (the hawk and the falcon, boom and zoom: test_combat_boom_zoom);
+##   - against the range's racetrack target flying straight on, a rocket bird and a seeker bird each land hits, down
+##     it and touch the trees rarely, 40 s in each of four pine woods (totals over the four, a few standard deviations
+##     short of what each does: one match is chaotic -- over 16 woods, 2026-11-03, both landed ~5 hits a match, sd
+##     1.3-1.5, downed it ~1.1-1.4 times and bonked 0.3-0.5; the hawk and the falcon, boom and zoom:
+##     test_combat_boom_zoom);
 ##   - (against the target breaking when shot at, it beats the range's old demo shooter: test_combat_vs_demo);
 ##   - out of rounds, it flies home, lands on its base and rearms; it doesn't touch trees much doing all this; a base
 ##     it finds no way in to, it heads for without planning a route again every tick (or wandering off to plan one to
@@ -19,7 +22,10 @@ extends TestCase
 ##     has no break to fly.
 
 const ARENA_SEED := 7
-const SHARDS := 3   ## (straight on and the resting perch; the ambush and resting; rearming, turning fights, pull-outs)
+const SHARDS := 4   ## (the rocket bird straight on and the resting perch; the ambush and resting; rearming, leaving the
+                    ## base, turning fights, pull-outs; the seeker bird straight on)
+const STRAIGHT_WOODS := [1, 2, 3, 4]
+const STRAIGHT := {"hits": 12, "downs": 2, "bonks": 6}   ## over the four woods (~20, ~4.5 and ~2 expected)
 
 
 func _init() -> void:
@@ -28,14 +34,10 @@ func _init() -> void:
 
 func setup() -> void:
 	if in_shard(0):
-		for id in ["sparrow", "crow"]:
-			var r: Dictionary = await _versus_racetrack(id, false, false)
-			var kind := "seekers" if CombatStyle.of(BirdProfile.by_id(id)).weapon == Launcher.Weapon.SEEKERS else "rockets"
-			print("%s (%s) vs the racetrack target, straight on: %d hits, downed %d, %d shots, %d bonks" % [id, kind, r.hits, r.downs, r.shots, r.bonks])
-			check(r.hits >= 3, "%s lands hits on a target flying straight on (%d)" % [id, r.hits])
-			check(r.downs >= 1, "%s downs it within 40 s" % id)
-			check(r.bonks <= 2, "%s touches trees rarely in the fight (%d bonks)" % [id, r.bonks])
+		await _straight_on("sparrow")
 		await _rest_holds()
+	if in_shard(3):
+		await _straight_on("crow")
 	if in_shard(1):
 		await _ambush()
 		await _rests_out_of_sight()
@@ -53,10 +55,25 @@ func setup() -> void:
 	finish()
 
 
+## `id` against the racetrack target flying straight on, 40 s in each of STRAIGHT_WOODS: hits, downs and bonks in all.
+func _straight_on(id: String) -> void:
+	var kind := "seekers" if CombatStyle.of(BirdProfile.by_id(id)).weapon == Launcher.Weapon.SEEKERS else "rockets"
+	var tot := {"hits": 0, "downs": 0, "shots": 0, "bonks": 0}
+	for s in STRAIGHT_WOODS:
+		var r: Dictionary = await _versus_racetrack(id, false, false, s)
+		for k in tot:
+			tot[k] += r[k]
+		print("%s (%s) vs the racetrack target, straight on, pine wood %d: %d hits, downed %d, %d shots, %d bonks" % [id, kind, s, r.hits, r.downs, r.shots, r.bonks])
+	var n := STRAIGHT_WOODS.size()
+	check(tot.hits >= int(STRAIGHT.hits), "%s lands hits on a target flying straight on (%d in %d woods)" % [id, tot.hits, n])
+	check(tot.downs >= int(STRAIGHT.downs), "%s downs it (%d times in %d woods)" % [id, tot.downs, n])
+	check(tot.bonks <= int(STRAIGHT.bonks), "%s touches trees rarely in the fight (%d bonks in %d woods)" % [id, tot.bonks, n])
+
+
 ## A bird (the combat AI, or with `demo` the range's old chase-and-trigger) against the range's racetrack target for
-## 40 s. Returns {hits, downs, shots, bonks}.
-func _versus_racetrack(id: String, evade: bool, demo: bool) -> Dictionary:
-	var layout := Pinewood.generate(ARENA_SEED)
+## 40 s in the pine wood of `arena_seed`. Returns {hits, downs, shots, bonks}.
+func _versus_racetrack(id: String, evade: bool, demo: bool, arena_seed := ARENA_SEED) -> Dictionary:
+	var layout := Pinewood.generate(arena_seed)
 	var home := CombatWorld.far_base(layout, Vector3(60, 0, 0))
 	var d := Duel.new()
 	add_child(d)
@@ -81,6 +98,8 @@ func _versus_racetrack(id: String, evade: bool, demo: bool) -> Dictionary:
 		CombatBrain.arm(me.launcher, CombatStyle.of(BirdProfile.by_id(id)))
 	else:
 		me = d.add_ai(id, 0, Vector3(-20, 22, 0), Vector3.RIGHT, CombatSkill.preset("pilot"), 11)
+	(me.bird as Bird).rig.visible = false   # (only the flying counts)
+	(target.bird as Bird).rig.visible = false
 	var out: Dictionary = await d.run(40.0)
 	var r := {"hits": int(d.world.hits.get(target.bird, 0)), "downs": int(out.birds[0].downs), "shots": int(out.birds[1].shots), "bonks": int(out.birds[1].bonks),   # (the target was added first)
 		"stoops": int((me.brain as CombatBrain).stats.get("stoops", 0)) if me.brain != null else 0}
