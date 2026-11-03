@@ -24,6 +24,7 @@ var disc := 0.0                 ## TREETOP: grip disc radius
 var position := Vector3.ZERO
 var facing := Vector3.FORWARD
 var thickness := 0.1            ## m, branch radius (visual, drop-off clearance)
+var fallback := false           ## an edge post's top: the AI rests there only when nothing else is in reach
 
 
 ## A branch perch: the grip line a..b along the top of the branch.

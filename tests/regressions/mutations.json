@@ -2679,5 +2679,61 @@
     "replace": "\t\tvar under: Perch = null"
    }
   ]
+ },
+ {
+  "id": "limb-perch-inside-thick-limb",
+  "bug": "A limb's perch sat at its solid chord's mean radius from where the straight stretch began: on a thick oak limb the grip line ran up to 18 cm inside the drawn wood near the trunk (the collar, the taper) and above it toward the tip (2026-11-03).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\t\t_limb_perch(a, t, br, at, rad, xp, xt - ArenaLayout.GRIP_TIP_GAP)",
+    "replace": "\t\t\t\t_limb_perch(a, t, br, at, func(_x: float, _c: bool) -> float: return br.radius, xb, xt - ArenaLayout.GRIP_TIP_GAP)"
+   }
+  ]
+ },
+ {
+  "id": "edge-posts-not-perches",
+  "bug": "The arena's edge posts had nothing to perch on: no perch on their tops (2026-11-03).",
+  "tests": [
+   "test_edge_posts"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\ttop.fallback = true\n\t\t_add_perch(top)",
+    "replace": "\t\ttop.fallback = true"
+   }
+  ]
+ },
+ {
+  "id": "edge-posts-not-solid",
+  "bug": "The edge posts were drawn only: a bird flew through them (2026-11-03).",
+  "tests": [
+   "test_edge_posts"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tbody.add_child(_post_mesh(t))",
+    "replace": "\t\t\tbody.add_child(_post_mesh(t))\n\t\t\tcs.disabled = true"
+   }
+  ]
+ },
+ {
+  "id": "camera-stuck-facing-away",
+  "bug": "The chase camera couldn't turn round to a bird facing exactly the other way (slerp between opposites has no axis): it stayed looking away, or threw axis errors (2026-11-03).",
+  "tests": [
+   "test_chase_camera_turn"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/chase_camera.gd",
+    "find": "\tif _look.dot(want_look) < -0.98:",
+    "replace": "\tif false:"
+   }
+  ]
  }
 ]

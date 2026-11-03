@@ -1,7 +1,8 @@
 class_name ArenaBuilder
 extends Node3D
 ## Greybox meshes and collision for an ArenaLayout: a gridded ground, trunks and branches (static bodies on
-## layer 1), a perch marker on every grip point, pale ground strips under the open lanes, boundary posts,
+## layer 1), a perch marker on every grip point, pale ground strips under the open lanes, the edge posts (solid,
+## perches on top: ArenaLayout.add_posts),
 ## and the landing mark: a short bar on the perch where the bird would land, green or red (show_candidate).
 
 const WORLD_LAYER := 1
@@ -16,14 +17,13 @@ var _mats := {}
 func build(l: ArenaLayout) -> void:
 	layout = l
 	_ground()
-	_boundary_posts()
 	if layout.style == "pinewood":
 		_pinewood()
 	else:
 		_lanes()
 		var tier_colors := [Color(0.34, 0.32, 0.30), Color(0.43, 0.41, 0.38), Color(0.52, 0.50, 0.47)]
 		for t in layout.trees:
-			_tree(t, tier_colors[t.tier])
+			_tree(t, POST_COLOR if t.kind == ArenaLayout.Kind.POST else tier_colors[t.tier])
 	if layout.style != "pinewood":   # (in the pine wood perches are just wood; the catch ring shows on approach)
 		for p in layout.perches:
 			_perch_marker(p)
@@ -105,20 +105,21 @@ func _strip(a: Vector3, b: Vector3, width: float, m: Material) -> MeshInstance3D
 	return mi
 
 
-func _boundary_posts() -> void:
-	var m := _mat("post", Color(0.62, 0.36, 0.30))
-	var n := 48
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.25
-	mesh.bottom_radius = 0.25
-	mesh.height = 6.0
-	for i in n:
-		var a := TAU * i / n
-		var mi := MeshInstance3D.new()
-		mi.mesh = mesh
-		mi.material_override = m
-		mi.position = Vector3(sin(a), 0.0, cos(a)) * (layout.boundary + 2.0) + Vector3.UP * 3.0
-		add_child(mi)
+const POST_COLOR := Color(0.62, 0.36, 0.30)
+
+
+## An edge post as drawn: a straight painted post (its body is the tree's: a cylinder of its radius and height).
+func _post_mesh(t: ArenaLayout.TreeData) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = t.radius
+	cyl.bottom_radius = t.radius
+	cyl.height = t.height
+	cyl.radial_segments = 16
+	mi.mesh = cyl
+	mi.material_override = _mat("post", POST_COLOR)
+	mi.position.y = t.height * 0.5
+	return mi
 
 
 func _tree(t: ArenaLayout.TreeData, color: Color) -> void:
@@ -126,11 +127,11 @@ func _tree(t: ArenaLayout.TreeData, color: Color) -> void:
 	body.name = "Tree%d" % t.id
 	body.collision_layer = WORLD_LAYER
 	body.position = Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
-	var mat := _mat("tier%d" % t.tier, color)
+	var mat := _mat("tier%d" % t.tier if t.kind != ArenaLayout.Kind.POST else "post", color)
 	var trunk := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.bottom_radius = t.radius
-	cyl.top_radius = t.radius * 0.75
+	cyl.top_radius = t.radius * (0.75 if t.kind != ArenaLayout.Kind.POST else 1.0)
 	cyl.height = t.height
 	cyl.radial_segments = 10
 	trunk.mesh = cyl
@@ -292,6 +293,11 @@ func _pinewood() -> void:
 		var oak: bool = t.kind == ArenaLayout.Kind.BROADLEAF
 		var seed := fmod(t.id * 0.6180339, 1.0)
 		var cell := Vector2i(floori(t.base.x / 32.0), floori(t.base.y / 32.0))
+		if t.kind == ArenaLayout.Kind.POST:
+			body.add_child(_post_mesh(t))
+			add_child(body)
+			tree_bodies.append(body)
+			continue
 		_trunk(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
 		for lb in t.limbs:
 			_tube(_cell(cells, cell, lb[2]), lb[0], lb[1], 9 if float(lb[1][0]) > 0.05 else 6, _TILE[lb[2]], fmod(seed + (lb[0] as PackedVector3Array)[0].y * 0.37, 1.0))
