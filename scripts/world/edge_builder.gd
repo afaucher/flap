@@ -1,8 +1,9 @@
 class_name EdgeBuilder
 extends Node3D
 ## What lies beyond the arena's boundary (docs/design/arena_edge.md; the concept: docs/images/concepts/r5_edge_split.jpg,
-## its top left and bottom right): the escarpment along its sector (Escarpment: the rock as one mesh, solid; boulders
-## on its scree, heather and small pines on its ledges, pines along its top), open heath round the rest (grass tufts
+## its top left and bottom right): the escarpment along its sector (Escarpment: the rock as one mesh, solid; squared
+## blocks set into its faces in courses and fallen into its scree, heather and small pines on its ledges, pines along
+## its top), open heath round the rest (grass tufts
 ## and heather thinning with distance, low rolling hills out to the horizon with stands of pines on them), and a
 ## two-strand wire fence along the edge posts. All outside the boundary; only the rock is solid.
 
@@ -23,9 +24,12 @@ var tufts: MultiMeshInstance3D
 var heather: MultiMeshInstance3D
 var far_pines: MultiMeshInstance3D
 var ledge_pines: MultiMeshInstance3D
-var boulders: MultiMeshInstance3D
+var block_batches: Array[MultiMeshInstance3D] = []   ## the rock's blocks, one batch per shape (_blocks)
+var scree_solid := 0      ## how many of the scree's blocks are solid
 var wires: MeshInstance3D
 var placed := {}      ## key -> PackedVector3Array: where each batch's instances stand (_batch)
+var scree := []       ## the scree's blocks: [centre, size (m, its longest side), how far out to its toe 0..1]
+var face_count := 0   ## blocks set into the faces (with their lips)
 var _rock_grid := []   ## the rock's points and normals as drawn ([verts, normals]; _grid_verts)
 var _rng := RandomNumberGenerator.new()
 
@@ -40,6 +44,7 @@ func build(l: ArenaLayout) -> void:
 		_rock()
 		times.rock = Time.get_ticks_usec() - t
 		_rock_dressing()
+		_blocks()
 		times.dressing = Time.get_ticks_usec() - t
 	_hills()
 	times.hills = Time.get_ticks_usec() - t
@@ -181,15 +186,15 @@ func _grid_mesh(grid: Array, nt: int, nr: int, skip_flat: bool) -> ArrayMesh:
 	return m
 
 
-## Boulders on the scree and at the foot, heather and small pines on the ledges, pines along the top: placed on
-## points of the rock's own grid (its heights and normals as drawn).
+## Heather and small pines on the ledges, pines along the top: placed on points of the rock's own grid (its
+## heights and normals as drawn).
 func _rock_dressing() -> void:
 	var v: PackedVector3Array = _rock_grid[0]
 	var nn: PackedVector3Array = _rock_grid[1]
-	var bx := []
-	var bc := []
 	var px := []
 	var pc := []
+	var tx_top := []
+	var tc_top := []
 	var hx := []
 	var hc := []
 	for k in 16000:
@@ -201,17 +206,17 @@ func _rock_dressing() -> void:
 		if esc.taper(theta) < 0.05:
 			continue
 		var s := Vector2(at.x, at.z).length() - esc.foot
-		if s < 1.0 and h < Escarpment.SCREE_H * 1.2:   # (the scree)
-			if h < 0.05 or _rng.randf() > 0.55:
-				continue
-			var size := _rng.randf_range(0.6, 2.6) * (1.0 if _rng.randf() < 0.75 else 2.0)
-			var b := Basis.from_euler(Vector3(_rng.randf() * TAU, _rng.randf() * TAU, _rng.randf() * TAU)).scaled(Vector3(size, size * _rng.randf_range(0.5, 0.8), size * _rng.randf_range(0.7, 1.1)))
-			bx.append(Transform3D(b, at - n * size * 0.2))
-			bc.append(Color(0.72, 0.7, 0.66) * _rng.randf_range(0.8, 1.05))
+		if s < 1.0 and h < Escarpment.SCREE_H * 1.2:   # (the scree: its blocks, _scree_blocks)
+			continue
 		elif n.y > 0.93 and h > Escarpment.SCREE_H + 2.0:   # (a ledge or the top)
-			var on_top := h > esc.top(theta) - 1.5
-			if _rng.randf() < (0.045 if on_top else 0.1):
-				var tall := _rng.randf_range(8.0, 15.0) if on_top else _rng.randf_range(2.0, 5.5)
+			var col := _column_near(theta)   # (the top: anywhere past where its last face ends, the plateau too)
+			var on_top := not col.is_empty() and s + esc.foot - col[1] > col[col.size() - 2] - 0.3
+			if on_top and _rng.randf() < 0.0035:   # (about one every 8 m along it)   # (along the top: pines, taller than the ledges')
+				var tall := _rng.randf_range(9.0, 16.0)
+				tx_top.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall)), at))
+				tc_top.append(Color(1, 1, 1) * _rng.randf_range(0.85, 1.05))
+			elif not on_top and _rng.randf() < 0.1:
+				var tall := _rng.randf_range(2.0, 5.5)
 				var b := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall) * Vector3(_rng.randf_range(0.8, 1.2), 1.0, _rng.randf_range(0.8, 1.2)))
 				px.append(Transform3D(b, at))
 				pc.append(Color(1, 1, 1) * _rng.randf_range(0.85, 1.05))
@@ -219,10 +224,207 @@ func _rock_dressing() -> void:
 				var size := _rng.randf_range(0.5, 1.4)
 				hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size * 0.45, size)), at))
 				hc.append(_heather_colour())
-	boulders = _batch("boulders", _boulder_mesh(), bx, bc)
-	boulders.material_override = _rock_mat_instanced()
 	ledge_pines = _batch("ledge_pines", _rock_pine_mesh(), px, pc)
+	_batch("top_pines", _rock_pine_mesh(), tx_top, tc_top)
 	_heather_batch(hx, hc, "ledge_heather")
+
+
+## The rock's blocks (limestone breaks along its bedding and its joints into squared blocks, edges sharp, a few
+## corners knocked off): set into the faces in courses, each a little proud of or back from its neighbours, and
+## fallen into the scree below, the biggest rolled furthest, out to its toe. Solid where a bird could meet them.
+func _blocks() -> void:
+	var meshes := []
+	for k in BLOCK_SHAPES:
+		meshes.append(_block_mesh(k))
+	var sets := []   # per shape: [transforms, colours]
+	for k in BLOCK_SHAPES:
+		sets.append([[], []])
+	_face_blocks(sets)
+	for k in BLOCK_SHAPES:
+		face_count += (sets[k][0] as Array).size()
+	_scree_blocks(sets)
+	for k in BLOCK_SHAPES:
+		var mi := _batch("blocks_%d" % k, meshes[k], sets[k][0], sets[k][1])
+		mi.material_override = _rock_mat_instanced()
+		block_batches.append(mi)
+
+
+const BLOCK_SHAPES := 4
+const COURSE := Vector2(1.2, 3.6)      ## m: a course's height on the faces
+const FACE_BLOCK := Vector2(4.5, 14.0) ## m: a face block's length along the cliff (beds longer than they're high)
+const MASS := 1.1                      ## m: how far a mass of blocks (tens of metres along) stands out or back
+const PROUD := Vector2(-0.08, 0.16)    ## m: and each block on its own, out of its mass's face (less than 0: set back)
+const LIP := Vector3(0.3, 0.35, 0.75)  ## a bedding lip on top of a course, the chance of one, its height, how far it overhangs
+
+
+## Courses of blocks up every face of every tier: each column of blocks FACE_BLOCK long along the cliff, each block
+## COURSE high, set at the face where it stands at that height, PROUD of it or back.
+func _face_blocks(sets: Array) -> void:
+	var arc := -Escarpment.HALF * esc.foot
+	while arc < Escarpment.HALF * esc.foot:
+		var len := _rng.randf_range(FACE_BLOCK.x, FACE_BLOCK.y)
+		var theta := esc.at + (arc + len * 0.5) / esc.foot
+		arc += len
+		var col := esc.column(theta)
+		if col.is_empty() or col[0] < 0.08:
+			continue
+		var out := Vector3(sin(theta), 0.0, cos(theta))   # (away from the wood, into the rock)
+		var along := Vector3.UP.cross(out).normalized()
+		for i in Escarpment.TIERS.size():
+			var b := 3 + i * 6
+			var e: float = col[b]
+			var face: float = col[b + 1]
+			var face_h: float = col[b + 2]
+			var h0: float = col[b + 4]
+			if face_h < 1.0 or esc.gully(arc - len * 0.5) > 0.2:   # (none in a cleft: it stays dark and deep)
+				continue
+			var y := 0.0
+			while y < face_h - 0.4:
+				var ch := minf(_rng.randf_range(COURSE.x, COURSE.y), face_h - y)
+				var t := (y + ch * 0.5) / face_h   # (where the face stands at this height)
+				var r := col[1] + e + face * t
+				var proud := MASS * (_mass(arc, i) - 0.5) * 2.0 + _rng.randf_range(PROUD.x, PROUD.y)
+				var depth := 2.2 + MASS * 2.0
+				var top_gap := 0.04 if y + ch >= face_h - 0.01 else 0.0   # (the top course: just under the ledge)
+				var centre := out * (r - proud + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + h0 + y + (ch - top_gap) * 0.5)
+				var basis := Basis(along * (len - _rng.randf_range(0.02, 0.12)), Vector3.UP * (ch - top_gap - _rng.randf_range(0.01, 0.04)), out * depth)
+				basis = Basis(Vector3.UP, _rng.randf_range(-0.03, 0.03)) * Basis(along, _rng.randf_range(-0.02, 0.02)) * basis
+				var k := _rng.randi() % BLOCK_SHAPES
+				sets[k][0].append(Transform3D(basis, centre))
+				sets[k][1].append(_stone_colour())
+				if top_gap == 0.0 and ch > 2.0 and _rng.randf() < LIP.x:   # (a harder bed: it juts, a shadow under it)
+					var lip_out := proud + LIP.z * _rng.randf_range(0.6, 1.3)
+					var lip_c := out * (r - lip_out + depth * 0.5) + Vector3.UP * (ArenaLayout.GROUND_Y + h0 + y + ch - LIP.y * 0.5)
+					var lip_b := Basis(along * (len * _rng.randf_range(0.5, 1.0)), Vector3.UP * LIP.y, out * depth)
+					sets[k][0].append(Transform3D(lip_b, lip_c))
+					sets[k][1].append(_stone_colour())
+				y += ch
+
+
+## The scree: blocks fallen from the faces, lying on its slope, sizes sorted down it (small against the foot, the
+## biggest out at the toe), a few big ones out on the heath's edge; none on the perch stones or across the way in
+## to them from the wood. The bigger ones solid.
+func _scree_blocks(sets: Array) -> void:
+	var stones := esc.stones()
+	var solid := []
+	for n in 5200:
+		var theta := esc.at + _rng.randf_range(-1.0, 1.0) * Escarpment.HALF
+		var w := esc.taper(theta)
+		if w < 0.05 or _rng.randf() > w:
+			continue
+		var col := _column_near(theta)
+		if col.is_empty():
+			continue
+		var s := _rng.randf_range(-Escarpment.SCREE - 1.2, 0.4)
+		var r: float = col[1] + s
+		var p := Vector2(sin(theta), cos(theta)) * r
+		var clear := true
+		for st in stones:
+			var c: Vector2 = st[0]
+			var to_wood := -c.normalized()
+			var rel := p - c
+			var along := rel.dot(to_wood)
+			if rel.length() < float(st[1]) + 2.2 or (along > 0.0 and along < 8.0 and absf(rel.dot(Vector2(-to_wood.y, to_wood.x))) < 2.0):
+				clear = false
+		if not clear or r < layout.boundary + 1.5:
+			continue
+		var toe := clampf(-s / Escarpment.SCREE, 0.0, 1.2)   # (0 at the foot, 1 at the toe)
+		var size := lerpf(0.5, 2.6, toe) * _rng.randf_range(0.6, 1.35) * (1.8 if _rng.randf() < 0.08 else 1.0) * lerpf(0.6, 1.0, w)
+		var dims := Vector3(size, size * _rng.randf_range(0.4, 0.75), size * _rng.randf_range(0.55, 1.0))
+		var h := esc.height_in(col, r)
+		var at := Vector3(p.x, ArenaLayout.GROUND_Y + h, p.y)
+		var nrm := esc.normal(p.x, p.y, 0.4)
+		var up := (nrm + Vector3(_rng.randf_range(-1, 1), 0.0, _rng.randf_range(-1, 1)) * 0.25).normalized()
+		var fwd := Vector3(sin(theta), 0.0, cos(theta)).rotated(Vector3.UP, _rng.randf_range(-0.9, 0.9))
+		var x := up.cross(fwd).normalized()
+		var z := x.cross(up).normalized()
+		var basis := Basis(x * dims.x, up * dims.y, z * dims.z)
+		var centre := at + up * dims.y * _rng.randf_range(0.15, 0.4)   # (bedded into the scree, some sitting high: a heap)
+		var k := _rng.randi() % BLOCK_SHAPES
+		sets[k][0].append(Transform3D(basis, centre))
+		sets[k][1].append(_stone_colour())
+		scree.append([centre, maxf(dims.x, dims.z), toe])
+		if size > 1.3:   # (a bird skimming the scree meets these; the small ones only scuff)
+			solid.append([Transform3D(Basis(x, up, z), centre), dims])
+	for b in solid:   # (boxes a little inside the drawn block: its chamfers and knocked-off corners)
+		var cs := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = (b[1] as Vector3) * 0.92
+		cs.shape = box
+		cs.transform = b[0]
+		rock_body.add_child(cs)
+	scree_solid = solid.size()
+
+
+## How far the mass of blocks at `arc` m along tier `i` stands out, 0..1: masses tens of metres long.
+func _mass(arc: float, i: int) -> float:
+	return esc._n1(arc / 23.0 + i * 3.7) * 0.7 + esc._n1(arc / 9.0 + i * 1.9 + 4.0) * 0.3
+
+
+func _stone_colour() -> Color:
+	return Color(1, 1, 1).lerp(Color(1.06, 1.02, 0.94), _rng.randf()) * _rng.randf_range(0.78, 1.12)
+
+
+## A squared block, unit size: its edges chamfered narrow, each corner pulled in a little by its own amount and one
+## or two knocked right off, so no two shapes are quite the same (`variant`). Flat faces, sharp edges.
+func _block_mesh(variant: int) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 911 + variant * 17
+	var bevel := 0.035
+	var corners := []
+	var pull := []
+	for i in 8:
+		var c := Vector3(0.5 if i & 1 else -0.5, 0.5 if i & 2 else -0.5, 0.5 if i & 4 else -0.5)
+		corners.append(c)
+		var knock := 0.18 if rng.randf() < 0.22 else rng.randf_range(0.0, 0.06)
+		pull.append(Vector3(rng.randf_range(0.0, 1.0), rng.randf_range(0.0, 1.0), rng.randf_range(0.0, 1.0)) * knock)
+	# P(c, a): corner c's point on the face across axis a (the other two coordinates drawn in by the chamfer and the
+	# corner's own pull).
+	var pt := func(i: int, a: int) -> Vector3:
+		var c: Vector3 = corners[i]
+		var q := c
+		for ax in 3:
+			var inward := -signf(c[ax])
+			var d: float = (pull[i] as Vector3)[ax]
+			q[ax] += inward * (d if ax == a else bevel + d)
+		return q
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var tri := func(a: Vector3, b: Vector3, c: Vector3) -> void:
+		var g := (b - a).cross(c - a)
+		if g.length_squared() < 1e-10:
+			return
+		if g.dot((a + b + c) / 3.0) > 0.0:   # (front faces wind clockwise seen from outside: the cross points in)
+			var t := b
+			b = c
+			c = t
+		var n := -(b - a).cross(c - a).normalized()
+		for v in [a, b, c]:
+			st.set_normal(n)
+			st.add_vertex(v)
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+		tri.call(a, b, c)
+		tri.call(a, c, d)
+	for a in 3:   # the six faces
+		for sgn in [-1, 1]:
+			var ids := []
+			for i in 8:
+				if signf((corners[i] as Vector3)[a]) == float(sgn):
+					ids.append(i)
+			var b1 := (a + 1) % 3
+			var b2 := (a + 2) % 3
+			ids.sort_custom(func(p, q): return atan2((corners[p] as Vector3)[b2], (corners[p] as Vector3)[b1]) < atan2((corners[q] as Vector3)[b2], (corners[q] as Vector3)[b1]))
+			quad.call(pt.call(ids[0], a), pt.call(ids[1], a), pt.call(ids[2], a), pt.call(ids[3], a))
+	for i in 8:   # the edges' chamfers and the corners
+		for a in 3:
+			var j := i ^ (1 << a)
+			if j < i:
+				continue
+			var b1 := (a + 1) % 3
+			var b2 := (a + 2) % 3
+			quad.call(pt.call(i, b1), pt.call(j, b1), pt.call(j, b2), pt.call(i, b2))
+		tri.call(pt.call(i, 0), pt.call(i, 1), pt.call(i, 2))
+	return st.commit()
 
 
 # --- The heath ------------------------------------------------------------------------------
@@ -425,28 +627,6 @@ func _rock_mat_instanced() -> Material:
 	m.shader = ROCK_SHADER
 	m.set_shader_parameter("strata", 0.0)
 	return m
-
-
-## A boulder: a low sphere with its vertices pushed in and out (unit size).
-func _boulder_mesh() -> ArrayMesh:
-	var s := SphereMesh.new()
-	s.radius = 0.5
-	s.height = 1.0
-	s.radial_segments = 9
-	s.rings = 5
-	var arr := s.get_mesh_arrays()
-	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	for i in v.size():
-		var p := v[i]
-		var k := 0.8 + 0.4 * fposmod(sin(floorf(p.x * 9.0) * 12.9 + floorf(p.y * 9.0) * 78.2 + floorf(p.z * 9.0) * 37.7) * 43758.5, 1.0)
-		v[i] = p * k
-	arr[Mesh.ARRAY_VERTEX] = v
-	arr[Mesh.ARRAY_NORMAL] = null
-	arr[Mesh.ARRAY_TANGENT] = null
-	var st := SurfaceTool.new()
-	st.create_from_arrays(arr)
-	st.generate_normals()
-	return st.commit()
 
 
 ## A grass tuft: blades fanning up and out from a point (unit size, vertex colour darker at the root).

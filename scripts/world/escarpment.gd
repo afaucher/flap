@@ -20,10 +20,13 @@ extends RefCounted
 const HALF := deg_to_rad(52.0)      ## the sector's half width
 const RAKE := deg_to_rad(50.0)      ## how far round from straight away from the sun its middle stands (so the sun
                                     ## rakes across the face and every block casts a shadow)
-const FOOT := 12.0                  ## m past the boundary: the cliff's foot (the scree starts SCREE inside that)
-const SCREE := 9.0                  ## m: the scree's width, out to the foot
-const SCREE_H := 4.0                ## m: how high it piles at the foot
-const TIERS := [[6.0, 3.5], [8.5, 2.5], [5.5, 4.0], [9.0, 3.0], [6.0, 0.0]]   ## [face height, ledge width] m, foot to top
+const FOOT := 14.0                  ## m past the boundary: the cliff's foot (the scree starts SCREE inside that)
+const SCREE := 11.0                 ## m: the scree's width, out to the foot
+const SCREE_H := 5.5                ## m: how high it piles at the foot
+## [face height, ledge width] m, foot to top: as in the concept, a lower broken tier and its heathery ledge, a
+## second short one, then the tall wall to the top.
+const TIERS := [[5.5, 4.5], [6.0, 3.0], [19.0, 0.0]]
+const GULLY := Vector3(28.0, 4.5, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const BLOCK := Vector2(7.0, 1.5)    ## m: a tier's blocks' mean width along it, and how much wider each tier up
 const FACE := 0.9                   ## m: how far a face leans back, bottom to top (steep: about 80 deg)
 const RECESS := 2.4                 ## m: the most a block stands back from its tier's line
@@ -33,7 +36,7 @@ const REACH := 24.0                 ## m past the foot: the soft wall in its sec
 const STONES := 9                   ## flat-topped stones on the scree, perches
 const STONE_R := Vector2(0.9, 1.6)  ## m: their tops' radius
 const STONE_H := Vector2(1.6, 3.2)  ## m: their tops' height
-const PERCH_EVERY := [11.0, 22.0, 45.0, 90.0]   ## m along the cliff between perches on each tier's ledge, foot up
+const PERCH_EVERY := [11.0, 26.0]   ## m along the cliff between perches on each tier's ledge, foot up
                                                 ## (none on the top tier: nothing up there to settle on)
 const PERCH_DISC := 0.45            ## m: a ledge perch's footing (Perch.treetop's disc)
 
@@ -87,6 +90,7 @@ func column(theta: float) -> PackedFloat32Array:
 	var h := SCREE_H * w
 	var e := 0.0   # where the current tier's face starts, m past the foot
 	var arc := off(theta) * foot   # (m along the cliff)
+	var cleft := gully(arc) * GULLY.y * w
 	for i in TIERS.size():
 		var tier: Array = TIERS[i]
 		# (block widths vary: the joint lines wander, so the blocks run from about half to half again the mean)
@@ -95,7 +99,7 @@ func column(theta: float) -> PackedFloat32Array:
 		var b2 := _h(cell * 3.71 + i * 5.3 + 0.25)
 		var last := i == TIERS.size() - 1   # (the top tier's blocks stand more nearly level: a skyline, not teeth)
 		var face_h := float(tier[0]) * w * ((0.85 + 0.3 * b2) if last else (0.7 + 0.6 * b2)) * (0.85 + 0.3 * _n1(theta * (13.0 + i * 5.0) + i * 11.0))
-		e += RECESS * b1 * w
+		e += RECESS * b1 * w + (cleft if i == 0 else 0.0)
 		var face := FACE * (0.7 + 0.6 * b2)
 		var ledge := float(tier[1]) * (0.5 + _n1(theta * (17.0 + i * 3.0) + i * 5.0)) * (1.0 - 0.6 * b1)
 		col.append_array([e, face, face_h, ledge, h, 0.35 + 0.3 * _n1(theta * 23.0 + i * 7.0)])
@@ -155,6 +159,17 @@ func normal(x: float, z: float, step := 0.25) -> Vector3:
 	var hx := height(x + step, z) - height(x - step, z)
 	var hz := height(x, z + step) - height(x, z - step)
 	return Vector3(-hx, 2.0 * step, -hz).normalized()
+
+
+## 1 in the middle of a cleft at `arc` m along the cliff, falling to 0 out of it (the clefts: GULLY apart along it,
+## give or take, not every one there).
+func gully(arc: float) -> float:
+	var cell := roundf(arc / GULLY.x)
+	if _h(cell * 7.31 + 2.0) < 0.3:
+		return 0.0
+	var centre := (cell + (_h(cell * 3.1) - 0.5) * 0.5) * GULLY.x
+	var half := GULLY.z * (0.6 + 0.8 * _h(cell * 5.7 + 1.0))
+	return 1.0 - smoothstep(half, half + 1.0, absf(arc - centre))
 
 
 ## The cliff's top height at full height (the scree, every face at its mean, every ledge's rise).

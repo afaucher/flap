@@ -9,6 +9,7 @@ uniform float bump = 0.6;
 
 varying vec3 wp;
 varying vec3 wn;
+varying vec3 tint;   // (each block's own shade: the instance colour; white on the cliff's mesh)
 
 float hash13(vec3 p) {
 	p = fract(p * 0.1031);
@@ -38,6 +39,7 @@ float fbm3(vec3 p) {
 void vertex() {
 	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	tint = COLOR.rgb;
 }
 
 void fragment() {
@@ -46,7 +48,8 @@ void fragment() {
 	float mid = fbm3(wp * 0.45 + 5.0);
 	float fine = fbm3(wp * 3.1 + 11.0);
 	// (albedo in the wood's own range -- its litter is about 0.15 -- and a little cool: the sun is warm and strong)
-	vec3 col = mix(vec3(0.11, 0.115, 0.125), vec3(0.24, 0.245, 0.255), smoothstep(0.25, 0.8, big * 0.6 + mid * 0.5));
+	// (cooler still than neutral: under the golden sun it reads as the concept's grey)
+	vec3 col = mix(vec3(0.1, 0.112, 0.135), vec3(0.23, 0.25, 0.285), smoothstep(0.25, 0.8, big * 0.6 + mid * 0.5));
 	col = mix(col, vec3(0.24, 0.225, 0.2), smoothstep(0.55, 0.8, fbm3(wp * 0.12 + 21.0)) * 0.4);   // warmer patches
 	// Bedding: thin darker bands, wavering.
 	float bed = sin(wp.y * 1.6 + big * 7.0);
@@ -71,7 +74,7 @@ void fragment() {
 	vec3 green = mix(vec3(0.1, 0.13, 0.05), vec3(0.13, 0.08, 0.09), smoothstep(0.45, 0.65, fbm3(wp * 0.3 + 61.0)));
 	col = mix(col, green * (0.8 + 0.3 * fine), veg);
 	col *= 0.88 + 0.24 * fine;
-	ALBEDO = col;
+	ALBEDO = col * tint;
 	ROUGHNESS = mix(0.88, 0.95, veg);
 	SPECULAR = 0.3;
 	// Bump from the same noise (surface gradient).

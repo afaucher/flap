@@ -1,6 +1,6 @@
 extends TestCase
 ## Beyond the pine wood's boundary (EdgeBuilder, Escarpment; docs/design/arena_edge.md), as built and drawn:
-##   - nothing of it inside the playable circle (the rock, its boulders, the heath's tufts and heather, the far pines),
+##   - nothing of it inside the playable circle (the rock, its blocks, the heath's tufts and heather, the far pines),
 ##     so it changes no flying in the wood;
 ##   - the escarpment stands well above the wood in the middle of its sector and comes down to the heath at both ends
 ##     (left and right), its tiers leaving level ledges between steep faces, its faces lit with the sun across them,
@@ -33,6 +33,7 @@ func setup() -> void:
 	_outside(layout, edge)
 	_rock(layout, edge)
 	_perches(layout, edge)
+	_blocks(layout, edge)
 	await _wall(layout, edge)
 	_hills(edge)
 	_heath(layout, edge)
@@ -53,7 +54,7 @@ func _outside(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 			closest = minf(closest, _r(v))
 	print("EDGE the rock's nearest raised point: %.1f m out (boundary %.0f)" % [closest, b])
 	check(closest >= b + 2.0, "no rock within 2 m of the boundary (nearest %.1f m)" % closest)
-	for pair in [["boulders", b + 1.0], ["tufts", b], ["heather", b], ["ledge_heather", b + 2.0], ["ledge_pines", b + 5.0], ["far_pines", 140.0]]:
+	for pair in [["blocks_0", b + 1.0], ["blocks_1", b + 1.0], ["blocks_2", b + 1.0], ["blocks_3", b + 1.0], ["tufts", b], ["heather", b], ["ledge_heather", b + 2.0], ["ledge_pines", b + 5.0], ["far_pines", 140.0]]:
 		var at: PackedVector3Array = edge.placed[pair[0]]
 		var near := INF
 		for p in at:
@@ -202,6 +203,44 @@ func _perches(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 			routed += 1
 	print("EDGE the AI plans its way in to %d of the %d lowest rock perches" % [routed, tried])
 	check(routed >= tried - 1, "the AI can plan its way in to the low perches (%d of %d)" % [routed, tried])
+
+
+## The rock's blocks: set into its faces, and fallen into its scree sorted by size (the biggest out at the toe),
+## none on the perch stones; the big ones solid.
+func _blocks(layout: ArenaLayout, edge: EdgeBuilder) -> void:
+	var foot_side := []
+	var toe_side := []
+	var on_stones := 0
+	for b in edge.scree:
+		var t: float = b[2]
+		if t < 0.33:
+			foot_side.append(b[1])
+		elif t > 0.66:
+			toe_side.append(b[1])
+		for st in edge.esc.stones():
+			if Vector2(b[0].x, b[0].z).distance_to(st[0]) < float(st[1]) + 0.5:
+				on_stones += 1
+	var mean := func(a: Array) -> float:
+		var s := 0.0
+		for x in a:
+			s += float(x)
+		return s / maxf(a.size(), 1.0)
+	var foot_m: float = mean.call(foot_side)
+	var toe_m: float = mean.call(toe_side)
+	print("EDGE blocks: %d set into the faces; %d in the scree, %.2f m across by the foot, %.2f m out at the toe; %d on the perch stones; %d solid" % [edge.face_count, edge.scree.size(), foot_m, toe_m, on_stones, edge.scree_solid])
+	check(edge.face_count > 120, "the faces are built of blocks (%d)" % edge.face_count)
+	check(edge.scree.size() > 800 and toe_m > foot_m * 2.0, "the scree's blocks sorted down it, the biggest out at the toe (%.2f v %.2f m)" % [toe_m, foot_m])
+	check(on_stones == 0, "none on the perch stones (%d)" % on_stones)
+	# Solid: a ray down onto the biggest scree block stops on it, above the scree's own surface.
+	var big: Array = edge.scree[0]
+	for b in edge.scree:
+		if float(b[1]) > float(big[1]):
+			big = b
+	var c: Vector3 = big[0]
+	var space := edge.get_world_3d().direct_space_state
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(c + Vector3.UP * 8.0, c - Vector3.UP * 8.0))
+	var ground := ArenaLayout.GROUND_Y + edge.esc.height(c.x, c.z)
+	check(not hit.is_empty() and hit.position.y > ground + 0.2, "the biggest scree block (%.1f m) is solid" % float(big[1]))
 
 
 ## Gliding out from just past the posts at 15 m: toward the cliff's middle the soft wall leaves the bird be (it

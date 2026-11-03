@@ -2963,8 +2963,36 @@
   "edits": [
    {
     "file": "scripts/world/escarpment.gd",
-    "find": "const PERCH_EVERY := [11.0, 22.0, 45.0, 90.0]",
-    "replace": "const PERCH_EVERY := [90.0, 45.0, 22.0, 11.0]"
+    "find": "const PERCH_EVERY := [11.0, 26.0]   ## m along the cliff between perches on each tier's ledge, foot up",
+    "replace": "const PERCH_EVERY := [26.0, 11.0]"
+   }
+  ]
+ },
+ {
+  "id": "edge-scree-unsorted",
+  "bug": "The scree's blocks all one size range down its slope: real talus sorts, the biggest blocks rolling furthest out to its toe (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/edge_builder.gd",
+    "find": "\t\tvar size := lerpf(0.5, 2.6, toe)",
+    "replace": "\t\tvar size := lerpf(0.5, 2.6, 0.5)"
+   }
+  ]
+ },
+ {
+  "id": "edge-blocks-on-perch-stones",
+  "bug": "Scree blocks fell anywhere, on top of the flat perch stones and across the way in to them (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/edge_builder.gd",
+    "find": "\t\tif not clear or r < layout.boundary + 1.5:",
+    "replace": "\t\tif r < layout.boundary + 1.5:"
    }
   ]
  }

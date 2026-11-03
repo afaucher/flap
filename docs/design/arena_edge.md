@@ -10,16 +10,20 @@ the river and rival wood and the balloon line were set aside (`docs/design/...` 
 
 ## What's there
 
-- **The escarpment** (`Escarpment`, built by `EdgeBuilder._rock`): one sector of the ring, 104 deg wide, its foot
-  12 m past the boundary. It stands on the side away from the sun, turned 50 deg round (`RAKE`) so the light falls
-  across its face and every block casts a shadow (head-on light made it a flat cream wall). Out from the wood: a
-  scree slope with flat stones on it, then five tiers, each a steep face and a ledge set back behind it, up to a
-  top about 45 m up (the tallest pines are 32 m), then a plateau that levels off and runs into the hills. Each tier
-  is broken into blocks 4-10 m wide that stand proud or set back (the vertical joints), and toward the sector's
-  ends it comes down tier by tier into the heath. It is one height field over a polar grid: the mesh, its
-  collision (the same grid), the AI's clearance queries and the tests all read `Escarpment.height`.
-- **Its dressing**: boulders on the scree, heather and small pines on the ledges, a thin row of pines along the
-  top, all placed on the rock's grid as drawn.
+- **The escarpment** (`Escarpment`, built by `EdgeBuilder._rock` and `_blocks`): one sector of the ring, 104 deg wide,
+  its foot 14 m past the boundary. It stands on the side away from the sun, turned 50 deg round (`RAKE`) so the light
+  falls across its face and every block casts a shadow (head-on light made it a flat cream wall). As in the concept:
+  a scree heap with flat stones on it, a lower broken tier and its heathery ledge, a second short tier, then the
+  tall wall to a top about 40 m up (the tallest pines are 32 m), cleft by deep gullies every 30 m or so; then a
+  plateau that levels off and runs into the hills. Underneath it is one height field over a polar grid -- the
+  mesh, its collision (the same grid), the AI's clearance queries and the tests all read `Escarpment.height` --
+  and over it, the rock as limestone breaks: squared, sharp-edged blocks (chamfered, corners knocked off;
+  `_block_mesh`) set into the faces in courses, longer than they're high, whole masses of them standing proud or
+  set back, harder beds jutting as lips with a shadow under them; and fallen into the scree, sorted by size as
+  talus is (small against the foot, the biggest rolled out to the toe), the big ones solid. Height-field faces
+  alone can't have a sharp corner or an overhang: the blocks are what make it read as rock.
+- **Its dressing**: heather and small pines on the ledges, a few taller ones along the top, placed on the rock's grid
+  as drawn.
 - **The heath**: past the posts the ground shader turns from needle litter to heath (`heath.gdshaderinc`: straw and
   olive grass, heather patches, bare earth), with grass tufts and heather thick by the fence and thinning out to
   130 m; low rolling hills from there to the horizon (`EdgeBuilder._hills`), with stands of pines on them.
@@ -33,9 +37,9 @@ In the escarpment's sector the soft wall stands 24 m past the cliff's foot (`Are
 just past the top's edge, so birds can fly in to the rock. The rock has perches (`Escarpment.perch_spots`, added by
 `ArenaLayout.add_rock` under one `Kind.ROCK` entry in `trees`):
 
-- the flat stones on the scree, 2-3 m up (9);
-- spots just back from the ledges' lips, `PERCH_EVERY` apart along each tier: every 11 m on the lowest ledge,
-  22 m, 45 m, 90 m higher up, none on the top tier (seed 7: 10 at about 9 m, 3 at 19 m, 2 at 27 m, none above).
+- the flat stones on the scree, 2-3 m up (9; no scree block falls on them or across the way in from the wood);
+- spots just back from the ledges' lips, `PERCH_EVERY` apart along each tier: every 11 m on the lowest ledge, 26 m
+  on the second, none on the wall or the top (seed 7: 9 at about 10 m, 3 at 18 m, none above).
 
 Many low and few high, on purpose: the cliff is somewhere to drop in on and duck behind, not a gallery to sit
 above the fight. A perch keeps a metre clear of a joint between blocks (the ledge level either side of it).
