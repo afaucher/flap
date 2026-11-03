@@ -10,7 +10,10 @@ extends TestCase
 ##   - an owl (the ambusher) away from the racetrack target settles on a perch above where it flies, waits, drops on
 ##     it as it passes below and lands hits;
 ##   - tired, a crow comes down to rest well away from the target (on a perch, or on the ground when it can't make one
-##     in reach), then goes back up rested.
+##     in reach), then goes back up rested;
+##   - diving steeply with its target up behind it to one side, it pulls out and turns without stalling (both sides);
+##   - resting on a perch, it stays put while an enemy flies at it nose-on (with nothing fired at it): a perched bird
+##     has no break to fly.
 
 const ARENA_SEED := 7
 
@@ -33,6 +36,10 @@ func setup() -> void:
 			await _turning_fight(id, dir)
 	await _ambush()
 	await _rests_out_of_sight()
+	for side in [1.0, -1.0]:
+		for dive in [1.2, 2.0]:
+			await _pull_out(side, dive)
+	await _rest_holds()
 	finish()
 
 
@@ -211,6 +218,61 @@ func _rests_out_of_sight() -> void:
 	check(landed_on != "", "tired, it comes down to rest")
 	check(back_up and b.model.energy.stamina >= 0.55, "and goes back up rested (stamina %.2f)" % b.model.energy.stamina)
 	check(nearest > 25.0, "resting well away from the target (never nearer than %.1f m)" % nearest)
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
+
+
+## A sparrow diving at 50 or 63 deg (`dive`: drop per metre forward), its target behind it, up and to one side: the
+## pull out of the dive and the turn share the lift, and it comes round without stalling.
+func _pull_out(side: float, dive: float) -> void:
+	var d := Duel.new()
+	add_child(d)
+	d.setup(ArenaLayout.new())
+	await frames(1)
+	d.add_bird("crow", 1, ScriptedInput.new(), null, Vector3(side * 12.0, 32, 12), Vector3.BACK)
+	var me: Dictionary = d.add_ai("sparrow", 0, Vector3(0, 30, 0), Vector3.FORWARD, CombatSkill.preset("pilot"), 4)
+	(me.launcher as Launcher).ammo[(me.launcher as Launcher).weapon] = 0
+	(me.launcher as Launcher).capacity[(me.launcher as Launcher).weapon] = 0
+	var b: Bird = me.bird
+	b.fly_from(Vector3(0, 30, 0), Vector3(0, -dive, -1.0).normalized(), b.profile.v_best)
+	var stalled := 0
+	for f in 60 * 4:
+		await get_tree().physics_frame
+		stalled += 1 if b.model.stalled else 0
+	var what := "a sparrow pulling out of a %.0f deg dive, its target up behind to the %s" % [rad_to_deg(atan(dive)), "right" if side > 0 else "left"]
+	print("%s: stalled %d ticks, path angle now %.0f deg" % [what, stalled, rad_to_deg(b.model.path_angle)])
+	check(stalled == 0, "%s: never stalls (%d ticks)" % [what, stalled])
+	d.cleanup()
+	d.queue_free()
+	await frames(2)
+
+
+## A tired crow resting on a perch; an enemy flies straight at it from 30 m, nose on, and fires nothing: it stays
+## perched (a bird in firing position is a reason to break in flight, not to leave a perch).
+func _rest_holds() -> void:
+	var layout := Pinewood.generate(ARENA_SEED)
+	var d := Duel.new()
+	add_child(d)
+	d.setup(layout)
+	await frames(1)
+	var perch: Perch = null
+	for p in layout.perches:
+		if p.position.y > 12.0 and p.position.y < 20.0 and layout.segment_clear(p.position + Vector3.UP * 0.5, p.position + Vector3(0, 1.5, 30), 0.0, p.tree_id):
+			perch = p
+			break
+	var me: Dictionary = d.add_ai("crow", 0, Vector3.ZERO, Vector3.FORWARD, CombatSkill.preset("pilot"), 5, perch)
+	var b: Bird = me.bird
+	b.model.energy.stamina = 0.2
+	var them: Dictionary = d.add_bird("crow", 1, ScriptedInput.new(), null, perch.position + Vector3(0, 1.5, 30), Vector3.FORWARD)
+	(them.launcher as Launcher).ammo = {Launcher.Weapon.ROCKETS: 0, Launcher.Weapon.SEEKERS: 0}
+	var left_at := -1.0
+	for f in 60 * 2:
+		await get_tree().physics_frame
+		if b.state != Bird.State.PERCHED and left_at < 0.0:
+			left_at = f / 60.0
+	print("resting crow, an enemy coming at it nose-on: %s" % ("left its perch at %.2f s" % left_at if left_at >= 0.0 else "stayed perched"))
+	check(left_at < 0.0, "resting, it stays on its perch while an enemy noses at it (left at %.2f s)" % left_at)
 	d.cleanup()
 	d.queue_free()
 	await frames(2)
