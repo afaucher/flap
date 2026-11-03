@@ -69,8 +69,8 @@ static func _floor(brain: CombatBrain, p: Vector3) -> Vector3:
 
 # --- Conditions -------------------------------------------------------------------------------------
 
-## A round coming that will hit or nearly, a lock on me, or an enemy's nose on my tail close in -- or a break
-## still being flown.
+## A round coming that will hit or nearly, a lock on me, or an enemy in firing position (its nose on me, close in or
+## behind me out to lock range) -- or a break still being flown.
 class Threatened extends ConditionLeaf:
 	func tick(_actor: Node, bb: Blackboard) -> int:
 		var br := CombatTree._brain(bb)
@@ -84,7 +84,7 @@ class Threatened extends ConditionLeaf:
 		if pic.locked:
 			return SUCCESS
 		for t in pic.enemies():
-			if t.visible and br.attacking(t, br.bird) and t.pos.distance_to(br.bird.global_position) < 30.0:
+			if br.in_firing_position(t):
 				return SUCCESS
 		return FAILURE
 
@@ -155,8 +155,15 @@ class InEnvelope extends ConditionLeaf:
 
 # --- Actions ----------------------------------------------------------------------------------------
 
-## Break across the threat: a seeker (late, at its break time; before that, run from it), a rocket (sidestep
-## its line), a lock (turn across the attacker's line of sight), a nose on my tail (break toward its side).
+## Defend, before the round is in the air where it can (a level break doesn't beat a locked seeker in this flight model,
+## nor a rocket fired from inside ~15 m):
+##   a seeker coming -- drag it past a trunk (skill.tree_drag): fly to put the trunk between us, so its lead pursuit
+##     cuts through the wood; with no trunk in reach, fly across its line (off its gimbal) and break at the style's
+##     break time;
+##   a rocket coming close -- sidestep across its line at 0.5 s to go;
+##   a lock on me, or an enemy in firing position -- jink: hard turns across its line of sight, each a random
+##     0.35-0.7 s, alternating sides and up and down, the first toward its side (its nose can't follow; it can't hold
+##     the lock cone, or a lead on a bird that keeps changing its mind).
 class Defend extends ActionLeaf:
 	func tick(actor: Node, bb: Blackboard) -> int:
 		var br := CombatTree._brain(bb)
@@ -167,14 +174,23 @@ class Defend extends ActionLeaf:
 		i.opts.flap = "sprint"
 		var pos := b.global_position
 		var fd := b.model.flight_dir()
-		if br.clock < br.defend_until:
-			i.aim = CombatTree._toward(b, br.defend_dir)
-			return SUCCESS
 		var worst: Variant = null
 		for th in br.picture.threats:
 			if worst == null or float(th.tgo) < float(worst.tgo):
 				worst = th
+		if worst != null and worst.guided and br.skill.tree_drag:
+			var cover := CombatTree._trunk_cover(br, worst)
+			if cover != Vector3.INF:
+				br.defend_until = 0.0
+				i.aim = cover
+				i.opts.gamma = 0.0
+				return SUCCESS
+		if br.clock < br.defend_until:
+			i.aim = CombatTree._toward(b, br.defend_dir)
+			i.opts.gamma = br.defend_gamma
+			return SUCCESS
 		if worst != null:
+			br.jink_side = 0.0
 			var vdir: Vector3 = (worst.vel as Vector3).normalized()
 			var rel: Vector3 = pos - (worst.pos as Vector3)
 			var off := rel - vdir * rel.dot(vdir)
@@ -184,28 +200,85 @@ class Defend extends ActionLeaf:
 			var break_at: float = br.style.seeker_break_tgo if worst.guided else 0.5
 			if float(worst.tgo) <= break_at + noise:
 				br.defend_dir = side
+				br.defend_gamma = deg_to_rad(8.0)
 				br.defend_until = br.clock + 0.6
-				i.opts.gamma = deg_to_rad(8.0)
+				i.opts.gamma = br.defend_gamma
 				i.aim = CombatTree._toward(b, side)
 			elif worst.guided:
-				i.aim = CombatTree._toward(b, Vector3(rel.x, 0.0, rel.z))   # (drag it: run, so it burns out)
+				i.aim = CombatTree._toward(b, side)   # (across its line: off its gimbal, if it can't turn with me)
 			else:
 				i.aim = CombatTree._toward(b, fd)
 			return SUCCESS
 		var from: Vector3 = br.picture.locked_from if br.picture.locked else Vector3.INF
 		if from == Vector3.INF:
 			for t in br.picture.enemies():
-				if t.visible and br.attacking(t, b):
+				if br.in_firing_position(t):
 					from = t.pos
 					break
-		if from != Vector3.INF:
-			var side := CombatTree._across(fd) * Engagement.side_of(pos, fd, from)   # (toward its side: its nose can't follow)
-			br.defend_dir = side
-			br.defend_until = br.clock + 0.8
-			i.aim = CombatTree._toward(b, side)
-		else:
+		if from == Vector3.INF:
+			br.jink_side = 0.0
 			i.aim = CombatTree._toward(b, fd)
+			return SUCCESS
+		# Break into it: turn toward its side, so its nose has to come across mine; re-picked every segment.
+		var go := Engagement.side_of(pos, fd, from)
+		br.jink_side = go
+		br.defend_dir = CombatTree._across(fd) * go
+		br.defend_gamma = deg_to_rad(br.rng.randf_range(4.0, 12.0)) * (1.0 if br.rng.randf() < 0.5 else -1.0)
+		if pos.y < br.style.height_band.x:
+			br.defend_gamma = absf(br.defend_gamma)   # (low down: never jink toward the ground)
+		br.defend_until = br.clock + br.rng.randf_range(0.35, 0.7)
+		i.aim = CombatTree._toward(b, br.defend_dir)
+		i.opts.gamma = br.defend_gamma
 		return SUCCESS
+
+
+## Where to fly to drag seeker `th` past a trunk, if one stands within reach -- ahead of me, one I can pass before the
+## seeker catches me -- else Vector3.INF. The trunk, once picked, is kept while the seeker comes. The way: close past
+## its edge on the side I'm heading for, hook in behind it (as seen from the seeker), then on along that line, so the seeker's lead
+## pursuit, cutting the corner, runs into the wood.
+static func _trunk_cover(br: CombatBrain, th: Dictionary) -> Vector3:
+	var layout := br.world.layout
+	if layout == null:
+		return Vector3.INF
+	var b := br.bird
+	var pos := b.global_position
+	var sp: Vector3 = th.pos
+	var tree: ArenaLayout.TreeData = layout.trees[br.cover_tree] if br.cover_tree >= 0 and br.cover_tree < layout.trees.size() else null
+	if tree == null or Vector2(pos.x, pos.z).distance_to(tree.base) > 16.0:
+		tree = null
+		var fd := b.model.flight_dir()
+		var fh := Vector3(fd.x, 0.0, fd.z).normalized()
+		var s_speed := maxf((th.vel as Vector3).length(), 1.0)
+		var best_t := INF
+		for t in layout.trees_near_segment(pos, pos + fh * 10.0, 8.0):
+			if t.top().y < pos.y + 1.0:
+				continue
+			var to := Vector3(t.base.x - pos.x, 0.0, t.base.y - pos.z)
+			var d := to.length()
+			if d < 1.0 or d > 14.0 or fh.angle_to(to) > deg_to_rad(60.0):
+				continue
+			var mine := d / maxf(b.model.speed, 1.0)   # (past it before the seeker catches me)
+			if mine < best_t and mine < sp.distance_to(pos) / maxf(s_speed - b.model.speed, 5.0):
+				best_t = mine
+				tree = t
+	if tree == null:
+		br.cover_tree = -1
+		return Vector3.INF
+	if tree.id != br.cover_tree:
+		br.cover_side = 0.0
+	br.cover_tree = tree.id
+	var c := Vector3(tree.base.x, pos.y, tree.base.y)
+	var away := Vector3(c.x - sp.x, 0.0, c.z - sp.z).normalized()
+	var behind := (pos - c).dot(away)
+	if behind < -tree.radius:
+		# Not yet abeam: to just past its edge, on the side I'm heading for (where I'd be by the time I could roll the
+		# other way; kept once picked).
+		var lat := CombatTree._across(away)
+		if br.cover_side == 0.0:
+			var ahead := pos + b.model.velocity * (0.2 + 2.0 * br.style.roll90) - c
+			br.cover_side = signf(lat.dot(ahead)) if absf(lat.dot(ahead)) > 0.05 else 1.0
+		return c + lat * br.cover_side * (tree.radius + 1.2) + away * 1.5
+	return c + away * (tree.radius + 3.0 if behind < tree.radius + 2.0 else 15.0)
 
 
 class HoldLevel extends ActionLeaf:

@@ -2049,5 +2049,33 @@
     "replace": "\ttree.blackboard.set_value(\"brain\", brain)"
    }
   ]
+ },
+ {
+  "id": "combat-defend-break-away",
+  "bug": "Defending against a bird on its tail, the AI turned away from the attacker's side (or jinked back and forth across its nose): the attacker's nose followed and it locked and fired anyway. Breaking into its side denies the lock (2026-11-02).",
+  "tests": [
+   "test_combat_defense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\tvar go := Engagement.side_of(pos, fd, from)",
+    "replace": "\t\tvar go := -Engagement.side_of(pos, fd, from)"
+   }
+  ]
+ },
+ {
+  "id": "combat-no-tree-drag",
+  "bug": "Against an incoming seeker the AI only broke in the open, which never beats a locked seeker in this flight model; dragging it past a trunk does (2026-11-02).",
+  "tests": [
+   "test_combat_defense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\tif worst != null and worst.guided and br.skill.tree_drag:",
+    "replace": "\t\tif false:"
+   }
+  ]
  }
 ]

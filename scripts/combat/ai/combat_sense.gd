@@ -24,6 +24,7 @@ class Track:
 	var seen_at := -INF       ## clock when last actually seen
 	var visible := false
 	var enemy := true
+	var seekers := false      ## it carries seekers (its pods show it), not rockets
 
 
 class Picture:
@@ -89,6 +90,9 @@ func update(dt: float) -> Picture:
 		if tr == null:
 			tr = Track.new()
 			tr.bird = b
+			for l in world.launchers:
+				if l.bird == b:
+					tr.seekers = int(l.capacity.get(Launcher.Weapon.SEEKERS, 0)) > 0
 			_tracks[b] = tr
 		tr.enemy = not world.friends(me, b)
 		var to := pos - my_pos

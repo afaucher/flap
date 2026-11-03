@@ -44,6 +44,10 @@ var _mode_since := 0.0
 var extend_until := 0.0
 var defend_until := 0.0
 var defend_dir := Vector3.ZERO
+var defend_gamma := 0.0
+var jink_side := 0.0            ## the way the last break into an attacker went (+1 right, -1 left; 0: none)
+var cover_tree := -1            ## the trunk it is dragging a seeker past
+var cover_side := 0.0           ## the side it passes that trunk on (across the seeker's line; 0: not picked)
 var stats := {"modes": {}}
 
 
@@ -132,6 +136,23 @@ func attacking(t: CombatSense.Track, victim: Bird) -> bool:
 	var vp := victim.global_position
 	var d := t.pos.distance_to(vp)
 	return d < 35.0 and t.vel.length() > 1.0 and Engagement.ata(t.pos, t.vel.normalized(), vp) < deg_to_rad(30.0)
+
+
+## Does the bird of track `t` sit where it could shoot me: its nose within 25 deg of me, inside 30 m from any side,
+## or -- carrying seekers -- out to lock range from behind me? (Seen, as a player sees a bird behind them lining up,
+## and the pods on its saddle.) A rocket bird further back can't reach me; turning into it would only close the range.
+func in_firing_position(t: CombatSense.Track) -> bool:
+	if picture.clock - t.seen_at > RECALL or t.vel.length() < 1.0:   # (seen just now, or a moment ago: a bird on my tail is still there between looks)
+		return false
+	var me := bird.global_position
+	var d := t.pos.distance_to(me)
+	if d > FIRING_RANGE or Engagement.ata(t.pos, t.vel.normalized(), me) > deg_to_rad(25.0):
+		return false
+	return d < 30.0 or (t.seekers and Engagement.ata(me, bird.model.flight_dir(), t.pos) > deg_to_rad(100.0))
+
+
+const FIRING_RANGE := 42.0
+const RECALL := 1.0             ## s a bird seen in firing position is still taken to be there
 
 
 ## Give a launcher that isn't armed from mounts the style's one kind of round: six rockets or four seekers.
