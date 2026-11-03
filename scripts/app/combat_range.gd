@@ -357,6 +357,7 @@ func _unhandled_input(e: InputEvent) -> void:
 	if not is_loaded:
 		return
 	player_ctl.handle_event(e)
+	PlayerCombat.handle_event(e, Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)   # (before capturing: that click doesn't fire)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):

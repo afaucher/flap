@@ -2869,5 +2869,19 @@
     "replace": "\t\talpha_target = damped"
    }
   ]
+ },
+ {
+  "id": "capture-click-fires",
+  "bug": "In the range, the click that captured the mouse also fired the weapon (left mouse is fire, read straight from the input state), wasting a round; so did a click a panel took while the mouse was free (2026-11-03).",
+  "tests": [
+   "test_capture_click"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/player_combat.gd",
+    "find": "\tif _swallowed or (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not captured):",
+    "replace": "\tif false:"
+   }
+  ]
  }
 ]

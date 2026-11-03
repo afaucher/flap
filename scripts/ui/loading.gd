@@ -38,6 +38,7 @@ func _ready() -> void:
 	_root = Control.new()
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.theme = MenuStyle.theme()
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE   # (it shows; it takes no clicks: the scene below gets them as it fades)
 	add_child(_root)
 	var bg := ColorRect.new()   # (a dark leather ground, lighter in the middle)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -107,6 +108,8 @@ func _ready() -> void:
 	tip.add_theme_font_size_override("font_size", 14)
 	tip.add_theme_color_override("font_color", MenuStyle.DIM)
 	box.add_child(tip)
+	for c in _root.find_children("*", "Control", true, false):
+		(c as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_show("", 0.0)
 
 
