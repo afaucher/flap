@@ -21,8 +21,9 @@
 #     imported files through junctions), -Jobs test processes at a time across them.
 #   - Fail fast: a test's output is read as it comes, and the first line that fails it under the runner's rule
 #     (test_lib.ps1's FlapTestProc.FailLine) decides the entry: its other test processes are stopped there.
-#   - The killer first: test_logs\mutation_kills.csv remembers which test (which shard) killed each entry and how
-#     soon; that one runs alone first, the entry's other tests only if it passes. Longest entries start first.
+#   - The killer first: flap-mutation-kills.csv (in the git common dir, so every worktree shares it) remembers which
+#     test (which shard) killed each entry and how soon; that one runs alone first, the entry's other tests only if it
+#     passes. Longest entries start first.
 #   - Baseline: the named tests must pass on the unmutated tree, or a failure proves nothing. Those that
 #     test_runner.ps1 passed on this very tree (test_logs\passed.txt, keyed by the tree's git hash) are not run
 #     again; the rest run alongside the entries, and a baseline failure stops the check.
@@ -166,11 +167,15 @@ try {
         }
 
         $durations = Read-TestDurations $root
-        $kills = @{}
-        $killSrc = Find-TestLog $root "mutation_kills.csv"
-        if ($killSrc) {
-            foreach ($line in Get-Content $killSrc) { $f = $line -split ","; if ($f.Count -ge 3) { $kills[$f[0]] = @{ Label = $f[1]; Sec = [double]$f[2] } } }
+        $killFile = Join-Path (git -C $root rev-parse --path-format=absolute --git-common-dir) "flap-mutation-kills.csv"
+        function Read-Kills {
+            $k = @{}
+            if (Test-Path $killFile) {
+                foreach ($line in Get-Content $killFile) { $f = $line -split ","; if ($f.Count -ge 3) { $k[$f[0]] = @{ Label = $f[1]; Sec = [double]$f[2] } } }
+            }
+            return $k
         }
+        $kills = Read-Kills
         function Get-Dur($label) { if ($durations.ContainsKey($label)) { return [double](($durations[$label] -split ",")[0]) } return 60.0 }
 
         # A job: the baseline or one entry, its test runs in order; Released of them may start (the rest wait for the
@@ -277,12 +282,12 @@ try {
 
         if ($env:FLAP_MUT_DEBUG) { $runLog | Set-Content (Join-Path $root "test_logs\mutation_runs.csv") }
         Write-Host ("Test processes busy {0:P0} of {1} slots over {2:F0} s." -f ($procSec / [Math]::Max(1, $slots * $loop.Elapsed.TotalSeconds)), $slots, $loop.Elapsed.TotalSeconds) -ForegroundColor DarkGray
-        # Remember the killers for next time (this checkout's test_logs).
+        # Remember the killers for next time, over what other checkouts have written since (only a hint: last one wins).
+        $kills = Read-Kills
         foreach ($id in $newKills.Keys) { $kills[$id] = $null }
         $rows = @($kills.Keys | Where-Object { $kills[$_] } | ForEach-Object { "$_,$($kills[$_].Label),$($kills[$_].Sec)" }) +
             @($newKills.Keys | ForEach-Object { "$_,$($newKills[$_])" })
-        New-Item -ItemType Directory -Force -Path (Join-Path $root "test_logs") | Out-Null
-        $rows | Sort-Object | Set-Content -Path (Join-Path $root "test_logs\mutation_kills.csv")
+        $rows | Sort-Object | Set-Content -Path $killFile
     }
 } finally {
     if ($Keep) {
