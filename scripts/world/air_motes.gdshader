@@ -8,8 +8,9 @@ render_mode blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_di
 uniform float size_m = 0.035;       // the quad's true size (AirFx.MOTE_SIZE)
 uniform float min_px = 2.0;         // never drawn smaller than this on screen
 uniform vec3 glint : source_color = vec3(1.0, 0.93, 0.76);
-uniform float energy = 1.2;         // the sun's light it sends on (times the forward scatter)
-uniform float scatter_g = 0.35;     // Henyey-Greenstein: 0 the same every way, toward 1 all forward
+uniform float energy = 1.8;         // the sun's light it sends on (times the scatter)
+uniform float scatter_g = 0.4;      // Henyey-Greenstein: 0 the same every way, toward 1 all forward
+uniform float scatter_even = 0.7;   // the share sent every way alike (fluff glints with the sun behind you too)
 uniform float shade = 0.03;         // what's left of it in the shade
 uniform vec2 fade_far = vec2(40.0, 75.0);   // m: gone by the far blur (ForestLight.FAR_BLUR_FROM 45 m), which spreads
                                               // a bright speck into a pale bokeh blot
@@ -51,10 +52,10 @@ void fragment() {
 
 void light() {
 	if (LIGHT_IS_DIRECTIONAL) {
-		// Forward scatter: brightest where the view runs on toward the sun.
+		// Brightest where the view runs on toward the sun (forward scatter), still a glint with the sun behind.
 		float c = dot(-VIEW, LIGHT);
 		float g = scatter_g;
 		float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5);
-		DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * hg * energy;
+		DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * mix(hg, 1.0, scatter_even) * energy;
 	}
 }

@@ -26,7 +26,7 @@ func setup() -> void:
 	cam.fov = 70.0
 	vp.add_child(cam)
 	cam.current = true
-	var views := [["low", Vector3(4, 6, 3), Vector3(-8, 8, -9)], ["inside", Vector3(6, 30, 4), Vector3(-4, 26, -12)], ["edge", Vector3(26, 24, 18), Vector3(0, 22, 0)], ["above", Vector3(10, 48, 10), Vector3(0, 25, 0)]]
+	var views := [["low", Vector3(4, 6, 3), Vector3(-8, 8, -9)], ["low, sun behind", Vector3(-4, 6, -4), Vector3(8, 6, 9)], ["inside", Vector3(6, 30, 4), Vector3(-4, 26, -12)], ["edge", Vector3(26, 24, 18), Vector3(0, 22, 0)], ["above", Vector3(10, 48, 10), Vector3(0, 25, 0)]]
 	for v in views:
 		cam.position = v[1]
 		cam.look_at(v[2])
