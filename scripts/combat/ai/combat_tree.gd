@@ -83,6 +83,8 @@ class Threatened extends ConditionLeaf:
 		var pic := br.picture
 		var reach := FireControl.reach()
 		for th in pic.threats:
+			if th.kind == Projectile.Kind.GUN:
+				continue   # (bullets: too fast to dodge -- the bird firing them, lined up on it, is the reason to break)
 			if th.guided or float(th.miss) < reach * 1.5:
 				return SUCCESS
 		if pic.locked:
@@ -188,7 +190,7 @@ class Defend extends ActionLeaf:
 		var fd := b.model.flight_dir()
 		var worst: Variant = null
 		for th in br.picture.threats:
-			if worst == null or float(th.tgo) < float(worst.tgo):
+			if th.kind != Projectile.Kind.GUN and (worst == null or float(th.tgo) < float(worst.tgo)):
 				worst = th
 		if worst != null and worst.guided and br.skill.tree_drag:
 			var cover := CombatTree._trunk_cover(br, worst)
@@ -501,8 +503,8 @@ class Attack extends ActionLeaf:
 		var d := pos.distance_to(t.pos)
 		var close := Engagement.closure(pos, b.model.velocity, t.pos, t.vel)
 		var aim: Vector3
-		if br.launcher.weapon == Launcher.Weapon.ROCKETS:
-			aim = br.rocket_lead(t)
+		if br.launcher.weapon != Launcher.Weapon.SEEKERS:
+			aim = br.lead_for(t)   # (rockets, the gun: unguided, so fly the lead)
 		else:
 			aim = t.pos
 		if d < 10.0 and close > 4.0:
@@ -513,7 +515,7 @@ class Attack extends ActionLeaf:
 		else:
 			# Range control (4.4): hold the weapon's band -- seekers far enough out to keep a jinking bird in the lock
 			# cone (and past the lock's 6 m minimum), rockets close enough for a short flight -- by speed.
-			var band: Vector2 = SEEKER_BAND if br.launcher.weapon == Launcher.Weapon.SEEKERS else ROCKET_BAND
+			var band: Vector2 = {Launcher.Weapon.SEEKERS: SEEKER_BAND, Launcher.Weapon.GUN: GUN_BAND}.get(br.launcher.weapon, ROCKET_BAND)
 			var dv := 1.5 if d > band.y else (-2.0 if d < band.x else 0.0)
 			i.opts.flap = "hold"
 			i.opts.speed = clampf(t.vel.length() + dv, br.style.v_best * 0.85, br.style.v_best * 1.4)
@@ -528,6 +530,7 @@ class Attack extends ActionLeaf:
 
 const SEEKER_BAND := Vector2(12.0, 28.0)   ## m behind a target an attacker with seekers holds
 const ROCKET_BAND := Vector2(8.0, 22.0)    ## ... with rockets
+const GUN_BAND := Vector2(6.0, 18.0)       ## ... with the gun: bullets scatter (Launcher.GUN_SPREAD) and die at ~40 m
 
 
 ## Boom and zoom (docs/design/combat_ai.md, 4.4 and 5), for the birds that can't turn with their targets:
@@ -561,7 +564,7 @@ class BoomAndZoom extends ActionLeaf:
 			else:
 				i.mode = "attack"
 				i.fire = true
-				var aim := CombatTree._overlead(br, br.rocket_lead(t))
+				var aim := CombatTree._overlead(br, br.lead_for(t))
 				i.aim = aim
 				i.opts.gamma = clampf(atan2(aim.y - pos.y, maxf(Vector2(aim.x - pos.x, aim.z - pos.z).length(), 1.0)), deg_to_rad(-60.0), deg_to_rad(10.0))
 				i.opts.flap = "none"
@@ -584,7 +587,7 @@ class BoomAndZoom extends ActionLeaf:
 			br.stats.stoops = int(br.stats.get("stoops", 0)) + 1
 			i.mode = "attack"
 			i.fire = true
-			i.aim = br.rocket_lead(t)
+			i.aim = br.lead_for(t)
 			i.opts.flap = "none"
 			return SUCCESS
 		if flat < ROOM and ata > deg_to_rad(60.0):

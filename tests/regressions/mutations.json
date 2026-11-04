@@ -2070,8 +2070,8 @@
   "edits": [
    {
     "file": "scripts/combat/ai/fire_control.gd",
-    "find": "t_turn := 0.0, iterations := 3) -> Vector3:",
-    "replace": "t_turn := 0.0, iterations := 0) -> Vector3:"
+    "find": "\tfor i in iterations:\n\t\tvar r := _fly(kind, muzzle,",
+    "replace": "\tfor i in 0:\n\t\tvar r := _fly(kind, muzzle,"
    }
   ]
  },
@@ -2235,8 +2235,8 @@
   "edits": [
    {
     "file": "scripts/combat/ai/combat_brain.gd",
-    "find": "FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel, t.turn) - t.pos",
-    "replace": "FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel) - t.pos"
+    "find": "t.pos, t.vel, t.turn, 3, kind) - t.pos",
+    "replace": "t.pos, t.vel, 0.0, 3, kind) - t.pos"
    }
   ]
  },
@@ -3160,8 +3160,8 @@
   "edits": [
    {
     "file": "scripts/combat/ai/combat_skill.gd",
-    "find": "\tfor k in mini(roundi(seeker_share * ids.size()), order.size()):",
-    "replace": "\tfor k in mini(roundi(2.0 / 3.0 * ids.size()), order.size()):"
+    "find": "\tvar n_seek := mini(roundi(seeker_share * ids.size()), order.size())",
+    "replace": "\tvar n_seek := mini(roundi(2.0 / 3.0 * ids.size()), order.size())"
    }
   ]
  },
@@ -3584,6 +3584,34 @@
     "file": "scripts/flight/flight_model.gd",
     "find": "const CLIMB_MIN_SPEED := 1.0\n",
     "replace": "const CLIMB_MIN_SPEED := 0.0\n"
+   }
+  ]
+ },
+ {
+  "id": "gun-ai-holds-fire",
+  "bug": "Guard for the AI's gun: fire control held every gun shot (the gun branch's placeholder), so an AI bird with the gun never fired (2026-11-04).",
+  "tests": [
+   "test_gun_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\t\treturn FireControl.miss(Projectile.Kind.GUN, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, t.turn) < take",
+    "replace": "\t\treturn false"
+   }
+  ]
+ },
+ {
+  "id": "weapon-mix-gun-at-any-skill",
+  "bug": "Guard for the gun in the enemy mix: the AI's weakest weapon against a defending bird, it must go only to an easy side; a mix handing it out at every skill would arm an ace side with it (2026-11-04).",
+  "tests": [
+   "test_weapon_mix"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_skill.gd",
+    "find": "\tfor k in mini(roundi(gun_share * ids.size()), rest.size()):",
+    "replace": "\tfor k in mini(roundi(1.0 / 3.0 * ids.size()), rest.size()):"
    }
   ]
  }

@@ -651,3 +651,15 @@ third of its birds, pilot two thirds (the range's mix as before), ace all -- see
 (crow, owl), then the sparrow; the energy fighters (hawk, falcon) always rockets. The range match arms the enemy so
 (`combat_range.gd`); your wingmen fly their species' rounds. Per-pod loadouts and the machine gun will let the mix go
 per pod; the AI flies one weapon per bird until it learns to switch.
+
+**The machine gun** (2026-11-04). The AI flies the bullet's lead pursuit (`CombatBrain.lead_for`: FireControl.lead with
+the round's kind) in `GUN_BAND` (6-18 m), and fires a burst when one has a fair chance: the aimed bullet's miss within
+the target's hit radius, plus two of the scatter's spreads at that range, plus `AICombat.GUN_TRACK` (0.5 m) of the
+sight's wander, all scaled by the skill's `min_quality`. Bullets in the air aren't a reason to break (too fast to
+dodge: the bird lined up on it is). Measured (`probe_gun_straight`, a crow, 40 s, woods 1-4): against the racetrack
+target flying straight on the gun lands 48-60 hits from 286-341 rounds (0.16-0.21 a round) and downs as many birds as
+rockets or seekers; against a defending crow that breaks (`probe_weapon_skill`) 0-1 hits from 36-57 rounds -- the
+nose never tracks a breaking bird to within its hit radius (aimed misses: median ~4 m, best tenth ~1.5 m). So in the AI's
+hands the gun is the weakest weapon against a bird that defends, and the mix gives it only to an easy side
+(`CombatSkill.gun_share`: recruit a third, pilot and ace none; the rocket birds first, never the energy fighters).
+Not yet: switching between two kinds on mixed pods (the AI flies the one it's armed with), gun passes in boom and zoom.

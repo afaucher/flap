@@ -22,11 +22,15 @@ var decide_every := 0.15    ## s between target and mode decisions
 ## (probe_weapon_skill, 2026-11-04: ~0.85 hits a round against 0.08 at recruit and pilot, 0.40 at ace), so an easier
 ## side carries more rockets, a harder one more seekers.
 var seeker_share := 2.0 / 3.0
+## Share carrying the gun: the AI's weakest weapon against a bird that breaks (0-0.02 hits a round; against one flying
+## straight on it hits as well as the others), so only an easy side carries it.
+var gun_share := 0.0
 
 
 ## The weapon each of a side's birds (species `ids`) carries at this skill: seeker_share of them seekers, given first to
-## the birds built for them (CombatStyle.weapon), then to any that can fight with them; the energy fighters (hawk,
-## falcon: CombatStyle.prefers_height) always rockets -- boom and zoom is a rocket pass.
+## the birds built for them (CombatStyle.weapon), then to any that can fight with them; gun_share of them the gun, from
+## the rest, the rocket birds first; the others rockets. The energy fighters (hawk, falcon: CombatStyle.prefers_height)
+## always rockets -- boom and zoom is a rocket pass.
 func weapons(ids: Array) -> Array:
 	var out := []
 	var order := []   # [rank, index]: who gets seekers first
@@ -36,8 +40,13 @@ func weapons(ids: Array) -> Array:
 		if not st.prefers_height:
 			order.append([0 if st.weapon == Launcher.Weapon.SEEKERS else 1, i])
 	order.sort()
-	for k in mini(roundi(seeker_share * ids.size()), order.size()):
+	var n_seek := mini(roundi(seeker_share * ids.size()), order.size())
+	for k in n_seek:
 		out[order[k][1]] = Launcher.Weapon.SEEKERS
+	var rest := order.slice(n_seek)
+	rest.sort_custom(func(a, b): return a[0] > b[0] or (a[0] == b[0] and a[1] < b[1]))   # (rocket birds first)
+	for k in mini(roundi(gun_share * ids.size()), rest.size()):
+		out[rest[k][1]] = Launcher.Weapon.GUN
 	return out
 
 
@@ -48,7 +57,7 @@ static func preset(n: String) -> CombatSkill:
 		"recruit":
 			s.reaction = 0.45; s.view_deg = 220.0; s.scan_every = 1.5; s.aim_error_deg = 4.0; s.min_quality = 1.6
 			s.break_error = 0.35; s.bank_frac = 0.7; s.yoyos = false; s.tree_drag = false; s.rest_at = 0.4
-			s.ambush_patience = 12.0; s.watch_range = 20.0; s.seeker_share = 1.0 / 3.0
+			s.ambush_patience = 12.0; s.watch_range = 20.0; s.seeker_share = 1.0 / 3.0; s.gun_share = 1.0 / 3.0
 			s.decide_every = 0.25
 		"ace":
 			s.reaction = 0.12; s.view_deg = 320.0; s.scan_every = 0.3; s.aim_error_deg = 0.5; s.min_quality = 0.9

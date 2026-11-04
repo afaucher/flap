@@ -23,12 +23,12 @@ static func miss(kind: int, muzzle: Vector3, carrier_vel: Vector3, aim: Vector3,
 	return float(_fly(kind, muzzle, carrier_vel, aim, t_pos, t_vel, t_turn, layout, break_tgo).miss)
 
 
-## Where to point to hit it with a rocket: the quick lead (Engagement.lead_point) corrected by where a real
-## rocket passes it, a few times over. Returns the aim point (a world position to fly the gunsight onto).
-static func lead(muzzle: Vector3, carrier_vel: Vector3, t_pos: Vector3, t_vel: Vector3, t_turn := 0.0, iterations := 3) -> Vector3:
+## Where to point to hit it with a rocket (or `kind`'s round: a bullet): the quick lead (Engagement.lead_point)
+## corrected by where a real round of that kind passes it, a few times over. Returns the aim point (a world position to fly the gunsight onto).
+static func lead(muzzle: Vector3, carrier_vel: Vector3, t_pos: Vector3, t_vel: Vector3, t_turn := 0.0, iterations := 3, kind := Projectile.Kind.ROCKET) -> Vector3:
 	var at := Engagement.lead_point(muzzle, carrier_vel.length(), t_pos, t_vel)
 	for i in iterations:
-		var r := _fly(Projectile.Kind.ROCKET, muzzle, carrier_vel, at - muzzle, t_pos, t_vel, t_turn, null)
+		var r := _fly(kind, muzzle, carrier_vel, at - muzzle, t_pos, t_vel, t_turn, null)
 		if r.miss == INF:
 			break
 		at += (r.target as Vector3) - (r.round as Vector3)   # (shift the aim by how far it missed, at the moment it passed)
