@@ -211,10 +211,10 @@ static func arm(l: Launcher, st: CombatStyle) -> void:
 	arm_with(l, st.weapon)
 
 
-## Load `l` with one weapon, full.
+## Load `l` with one weapon, full (Launcher.AMMO: two pods of that kind), nothing else.
 static func arm_with(l: Launcher, weapon: int) -> void:
-	var rockets := weapon == Launcher.Weapon.ROCKETS
-	l.capacity = {Launcher.Weapon.ROCKETS: Launcher.AMMO[Launcher.Weapon.ROCKETS] if rockets else 0, Launcher.Weapon.SEEKERS: 0 if rockets else Launcher.AMMO[Launcher.Weapon.SEEKERS]}
+	l.capacity = {Launcher.Weapon.ROCKETS: 0, Launcher.Weapon.SEEKERS: 0, Launcher.Weapon.GUN: 0}
+	l.capacity[weapon] = int(Launcher.AMMO[weapon])
 	l.ammo = l.capacity.duplicate()
 	l.weapon = weapon
 

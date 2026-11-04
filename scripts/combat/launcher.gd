@@ -1,9 +1,13 @@
 class_name Launcher
 extends RefCounted
 ## A saddle-mounted launcher (Hedgerow Aces, docs/design/concept_briefs.html): bolted on facing forward, so
-## you aim it by flying the bird, like a First World War fighter. Two weapons:
-##   ROCKETS  6 rounds, 4 a second while fire is held; unguided, so you fly the gunsight onto the lead marker.
-##   SEEKERS  3 rounds; hold a target inside the LOCK_CONE for LOCK_TIME to lock, then fire. The seeker head sees
+## you aim it by flying the bird, like a First World War fighter. A pod each side (Saddle), each one of three kinds;
+## what's carried is summed over the pods (two of a kind: AMMO), and Q / RB switches between the kinds carried:
+##   ROCKETS  3 a pod, 4 a second while fire is held; unguided, so you fly the gunsight onto the lead marker.
+##   GUN      GUN_POD rounds a pod, GUN_RATE a second while fire is held (a tap fires a GUN_BURST burst); fast, short-
+##            lived bullets (Projectile GUN) that must hit the bird itself, each taking about a feather: it chips, rockets
+##            and seekers down. Aimed like rockets, at the lead marker (a bullet's flight is far shorter); a little spread.
+##   SEEKERS  2 a pod; hold a target inside the LOCK_CONE for LOCK_TIME to lock, then fire. The seeker head sees
 ##            along a straight line: wood cutting it (a trunk, a branch, an outpost's deck; not leaves) stops the lock
 ##            building, and past LOS_GRACE drains it -- so among the trunks a lock is hard to hold, and a bird can
 ##            break one by putting a trunk between itself and the shooter.
@@ -11,10 +15,17 @@ extends RefCounted
 ## (the range sets an outpost's rail; unset, any perch does).
 ## Stepped by CombatWorld; reads the bird's public state only (state, model, global transform).
 
-enum Weapon { ROCKETS, SEEKERS }
+enum Weapon { ROCKETS, SEEKERS, GUN }
 
-const AMMO := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 4}
-const COOLDOWN := {Weapon.ROCKETS: 0.25, Weapon.SEEKERS: 0.6}
+const KIND_NAMES := {Weapon.ROCKETS: "rockets", Weapon.SEEKERS: "seekers", Weapon.GUN: "gun"}   ## Saddle's pod kinds
+const GUN_POD := 40           ## rounds in a gun pod's belt (Saddle.POD_ROUNDS)
+const GUN_RATE := 10.0        ## rounds a second while fire is held
+const GUN_BURST := 3          ## the fewest rounds a press fires (a tap is a short burst)
+const GUN_SPREAD := 0.7       ## deg, each bullet's scatter off the aim (sd, each way)
+const AMMO := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 4, Weapon.GUN: 2 * GUN_POD}   ## two pods of the kind
+const COOLDOWN := {Weapon.ROCKETS: 0.25, Weapon.SEEKERS: 0.6, Weapon.GUN: 1.0 / GUN_RATE}
+## A launcher not armed from mounts (tests, the AI's CombatBrain.arm) carries six rockets and four seekers, no gun.
+const UNMOUNTED := {Weapon.ROCKETS: 6, Weapon.SEEKERS: 4, Weapon.GUN: 0}
 const LOCK_CONE := 15.0       ## deg off the aim to start and build a lock
 const LOCK_KEEP := 25.0       ## deg off the aim before a lock is dropped
 const LOCK_TIME := 1.0        ## s inside the cone to lock
@@ -23,12 +34,13 @@ const LOS_GRACE := 0.25       ## s the wood may cut the line before the lock dra
 const LOS_DRAIN := 1.5        ## lock lost per s while the wood cuts the line, past the grace
 const TARGET_RANGE := 60.0    ## m, the furthest bird the HUD will bracket
 const RESTOCK_TIME := 2.0     ## s perched to rearm
+const GUN_SPEED := 92.0       ## m/s over the carrier's, a bullet's average over its first ~30 m (for the lead)
 
 var bird: Bird
 var controller: Object = null   ## has sample(launcher: Launcher, dt: float) -> CombatInput
 var weapon := Weapon.ROCKETS
-var capacity := AMMO.duplicate()   ## rounds when full: AMMO, or what the bird's mounts carry (set_mounts)
-var ammo := AMMO.duplicate()
+var capacity := UNMOUNTED.duplicate()   ## rounds when full: UNMOUNTED, or what the bird's mounts carry (set_mounts)
+var ammo := UNMOUNTED.duplicate()
 ## Where round i of a weapon leaves from, world space: Callable(weapon: int, i: int) -> Vector3 (the saddle's
 ## pods: Tack.muzzle_world). Unset: muzzle().
 var mount := Callable()
@@ -37,16 +49,59 @@ var lock := 0.0               ## 0..1 lock progress on lock_target
 var cooldown := 0.0
 var shots := 0
 var dry_fires := 0             ## fire pressed with the weapon empty (GameAudio: the dry click)
+var burst_left := 0            ## gun rounds still to come of the burst a press started
 var rearm_perch := -1          ## the base's perch (Perch.id): the only place to rearm and mend (-1: any perch)
 var _perched := 0.0
 var _blocked := 0.0            ## s the wood has cut the line to lock_target
 var _birds: Array = []
 var _world: CombatWorld = null
+var _rng := RandomNumberGenerator.new()   ## (the gun's scatter)
 
 
 func _init(b: Bird, ctl: Object = null) -> void:
 	bird = b
 	controller = ctl
+	_rng.seed = 5
+
+
+## The weapon for a Saddle pod kind ("rockets" | "seekers" | "gun"), or -1.
+static func weapon_of(kind: String) -> int:
+	for w in KIND_NAMES:
+		if KIND_NAMES[w] == kind:
+			return w
+	return -1
+
+
+## The projectile a weapon fires.
+static func kind_of(w: int) -> int:
+	return Projectile.Kind.GUN if w == Weapon.GUN else (Projectile.Kind.SEEKER if w == Weapon.SEEKERS else Projectile.Kind.ROCKET)
+
+
+## Rounds of weapon `w` carried when full, and left now (0 for a kind not carried).
+func carried(w: int) -> int:
+	return int(capacity.get(w, 0))
+
+
+func left(w: int) -> int:
+	return int(ammo.get(w, 0))
+
+
+## The weapons carried, in Weapon order.
+func kinds() -> Array:
+	var out := []
+	for w in [Weapon.ROCKETS, Weapon.SEEKERS, Weapon.GUN]:
+		if carried(w) > 0:
+			out.append(w)
+	return out
+
+
+## What Q / RB switches to: the next kind carried after the selected one (itself if it's the only one).
+func next_weapon() -> int:
+	var ks := kinds()
+	if ks.is_empty():
+		return weapon
+	var i := ks.find(weapon)
+	return ks[(i + 1) % ks.size()]
 
 
 ## Where the launcher points: along the flight path (the bird's nose follows it to within the angle of attack).
@@ -58,14 +113,19 @@ func muzzle() -> Vector3:
 	return bird.global_position + aim() * bird.profile.body_length * 0.6 + Vector3.UP * bird.profile.body_length * 0.1
 
 
-## Arm from the bird's mounts: `rockets` / `seekers` rounds when full (0: none of that weapon), each fired
-## from where `at` says.
-func set_mounts(rockets: int, seekers: int, at: Callable) -> void:
-	capacity = {Weapon.ROCKETS: rockets, Weapon.SEEKERS: seekers}
+## Arm from the bird's mounts: `rockets` / `seekers` / `gun` rounds when full (0: none of that weapon), each fired
+## from where `at` says. The selected weapon stays if it's carried, else the first carried.
+func set_mounts(rockets: int, seekers: int, at: Callable, gun := 0) -> void:
+	capacity = {Weapon.ROCKETS: rockets, Weapon.SEEKERS: seekers, Weapon.GUN: gun}
 	ammo = capacity.duplicate()
 	mount = at
-	if int(capacity[weapon]) == 0 and int(capacity[Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS]) > 0:
-		weapon = Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
+	if carried(weapon) == 0 and not kinds().is_empty():
+		weapon = kinds()[0]
+
+
+## Arm from a bird's tack: what its pods hold, each round from its own pod's muzzle (Tack.muzzle_world).
+func set_tack(t: Tack) -> void:
+	set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(KIND_NAMES[w], i), t.capacity("gun"))
 
 
 func locked() -> bool:
@@ -77,11 +137,11 @@ func step(dt: float, world: CombatWorld) -> void:
 	_world = world
 	cooldown = maxf(0.0, cooldown - dt)
 	var inp: CombatInput = controller.sample(self, dt) if controller != null else CombatInput.new()
-	var other := Weapon.SEEKERS if weapon == Weapon.ROCKETS else Weapon.ROCKETS
-	if inp.weapon_next and int(capacity[other]) > 0:   # (a bird carrying one kind has nothing to switch to)
-		weapon = other
+	if inp.weapon_next and next_weapon() != weapon:   # (a bird carrying one kind has nothing to switch to)
+		weapon = next_weapon()
 		lock = 0.0
 		lock_target = null
+		burst_left = 0
 	_update_lock(dt)
 	if on_base():
 		_perched += dt
@@ -91,11 +151,16 @@ func step(dt: float, world: CombatWorld) -> void:
 				bird.mend()
 	else:
 		_perched = 0.0
-	var want := inp.fire_pressed or (weapon == Weapon.ROCKETS and inp.fire_held)
-	if want and cooldown <= 0.0 and int(ammo[weapon]) > 0 and bird.state == Bird.State.FLYING:
+	var gun := weapon == Weapon.GUN
+	if gun and inp.fire_pressed:
+		burst_left = maxi(burst_left, GUN_BURST)
+	var want := inp.fire_pressed or (weapon != Weapon.SEEKERS and inp.fire_held) or (gun and burst_left > 0)
+	if want and cooldown <= 1e-6 and left(weapon) > 0 and bird.state == Bird.State.FLYING:   # (1e-6: the gun's 1/10 s is 6 ticks)
 		fire(world)
-	elif inp.fire_pressed and int(ammo[weapon]) == 0:
+	elif inp.fire_pressed and left(weapon) == 0:
 		dry_fires += 1
+	if gun and (left(weapon) == 0 or bird.state != Bird.State.FLYING):
+		burst_left = 0
 
 
 ## Sitting on the base's perch, where the rack refills and feathers grow back.
@@ -112,9 +177,16 @@ func fire(world: CombatWorld) -> Projectile:
 	ammo[weapon] = int(ammo[weapon]) - 1
 	cooldown = float(COOLDOWN[weapon])
 	shots += 1
-	var k := Projectile.Kind.ROCKET if weapon == Weapon.ROCKETS else Projectile.Kind.SEEKER
+	var k := kind_of(weapon)
 	var from: Vector3 = mount.call(weapon, int(ammo[weapon])) if mount.is_valid() else muzzle()   # (the round just gone)
-	var p := Projectile.launch(k, from, bird.model.velocity, aim(), bird, lock_target if locked() else null)
+	var dir := aim()
+	if k == Projectile.Kind.GUN:
+		burst_left = maxi(burst_left - 1, 0)
+		var side := dir.cross(Vector3.UP if absf(dir.y) < 0.95 else Vector3.RIGHT).normalized()
+		var up := side.cross(dir).normalized()
+		var sd := deg_to_rad(GUN_SPREAD)
+		dir = (dir + side * tan(_rng.randfn(0.0, sd)) + up * tan(_rng.randfn(0.0, sd))).normalized()
+	var p := Projectile.launch(k, from, bird.model.velocity, dir, bird, lock_target if locked() else null)
 	world.spawn(p)
 	return p
 
@@ -194,13 +266,13 @@ func target() -> Bird:
 	return best
 
 
-## Where to point the launcher so a rocket meets `t`: its future position after the rocket's flight time,
-## raised by the rocket's drop under gravity over that time.
+## Where to point the launcher so a round of the selected weapon (a rocket, or a bullet) meets `t`: its future
+## position after the round's flight time, raised by the round's drop under gravity over that time.
 func lead_point(t: Bird) -> Vector3:
 	var from := muzzle()
 	var tp := t.global_position
 	var tv := Projectile.velocity_of(t)
-	var spd := bird.model.velocity.length() + 34.0   # a rocket's average speed over its first ~30 m
+	var spd := bird.model.velocity.length() + (GUN_SPEED if weapon == Weapon.GUN else 34.0)   # (a rocket averages 34 m/s over its first ~30 m)
 	var flight := from.distance_to(tp) / spd
 	for i in 3:
 		flight = from.distance_to(tp + tv * flight) / spd

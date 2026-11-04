@@ -7,7 +7,9 @@ extends Node
 ##   - Every watched bird: perch catch, take-off push, ground landing, bonk; its species' alarm call when hurt or bonked
 ##     hard, now and then its contact call.
 ##   - Combat: each round's launch and its motor (a loop riding the round, Doppler from the camera), its burst (on a
-##     bird, a trunk, the ground, or a fizzle), feather puffs, the downed flutter.
+##     bird, a trunk, the ground, or a fizzle), feather puffs, the downed flutter. The gun (Projectile GUN) has no cues
+##     of its own yet: each shot is a quiet, high rocket_launch (GUN_SHOT), no motor; a bullet striking wood or the ground
+##     a quiet, high burst_wood / burst_ground (GUN_STRIKE); one hitting a bird only its feather puff (struck).
 ##   - Your launcher: the lock building (beeps faster and higher with the lock), the locked tone, the dry click, the
 ##     weapon switch, "hold fire" when you shoot with a teammate in the line, the rack refilling on the base (a clink a
 ##     round, then a chime); what the HUD warns you of (CombatWorld.warnings_for): a lock on you (a low pulse) and a
@@ -20,6 +22,9 @@ const INSECT_TOP := 10.0      ## m: the insects fade out by here
 const CALL_GAP := 0.8         ## s: the least time between one bird's calls
 const CHATTER := Vector2(8.0, 20.0)   ## s between a watched AI bird's contact calls
 const RACK_FILL := 0.9        ## of Launcher.RESTOCK_TIME: the clinks are spread over this much of it
+const GUN_SHOT := [-12.0, 1.9]    ## dB, pitch: a gun's shot, on rocket_launch until it has its own cue
+const GUN_STRIKE := [-16.0, 2.2]  ## dB, pitch: a bullet on wood or the ground, on the burst cues likewise
+const BELT_CLINK := 10        ## gun rounds a rearm clink stands for
 
 var sfx: Sfx
 var flight: FlightAudio
@@ -162,6 +167,9 @@ func _call(b: Bird, kind: String) -> void:
 # --- combat ---------------------------------------------------------------------------------------
 
 func _on_launched(p: Projectile) -> void:
+	if p.kind == Projectile.Kind.GUN:
+		cue("rocket_launch", p.pos, GUN_SHOT[0], GUN_SHOT[1])
+		return
 	var seeker := p.kind == Projectile.Kind.SEEKER
 	cue("seeker_launch" if seeker else "rocket_launch", p.pos)
 	var m := "seeker_motor" if seeker else "rocket_motor"
@@ -179,7 +187,11 @@ func _motors_tick() -> void:
 			(v[0] as Node3D).global_position = p.pos
 
 
-func _on_burst(at: Vector3, why: String, _kind: int, surface: String) -> void:
+func _on_burst(at: Vector3, why: String, kind: int, surface: String) -> void:
+	if kind == Projectile.Kind.GUN:
+		if why == "impact":
+			cue("burst_ground" if surface == "ground" else "burst_wood", at, GUN_STRIKE[0], GUN_STRIKE[1])
+		return
 	if why == "expired":
 		cue("fizzle", at)
 		return
@@ -229,7 +241,8 @@ func _launcher_tick(l: Launcher) -> void:
 	# The rack refilling on the base: a clink a missing round over the restock, then a chime.
 	var missing := 0
 	for w: int in l.capacity:
-		missing += int(l.capacity[w]) - int(l.ammo[w])
+		var gone := l.carried(w) - l.left(w)
+		missing += ceili(float(gone) / BELT_CLINK) if w == Launcher.Weapon.GUN else gone
 	if l.on_base() and not l.full():
 		if _rack.is_empty():
 			_rack = {"missing": maxi(missing, 1), "ticked": 0, "t": 0.0}

@@ -12,6 +12,11 @@ extends Node3D
 ## lands, and they'd otherwise down a bird before it could do a thing about it (each hit restarts the window).
 ## Bird.DOWN_FEATHERS lost downs a bird (a long stun; it drops) and `downed` is emitted -- the scene decides what
 ## happens next.
+## A bullet (Projectile GUN) hurts only the bird it hits: no stun, a nudge (GUN_SHOVE), and GUN_FEATHERS feather. Inside
+## the recovery window a bullet takes GUN_CHIP of a feather instead (summed per bird, a feather each time the sum
+## reaches one), so a stream of hits chips a bird down at about a feather a second rather than downing it in one:
+## RECOVER_FEATHERS alone wouldn't bite on a round that takes one anyway. Its tracer is drawn as a bright streak (no
+## smoke); it sparks on wood and the ground, and one that runs out just goes (no burst, no signal).
 
 ## Teams: each bird is on one (add_bird's `team`; unset, a team of its own, so everyone is an enemy). Locks and
 ## the HUD's target pick only enemies; bursts still hurt anyone but the shooter (friendly fire stays on). Each
@@ -21,7 +26,7 @@ extends Node3D
 
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String, kind: int, surface: String)   ## surface: "bird" | "trunk" | "ground" | "air" (Projectile.step)
-signal launched(p: Projectile)        ## a round left its launcher (GameAudio: the launch and its motor)
+signal launched(p: Projectile)        ## a round left its launcher (GameAudio: the launch and its motor; p.kind GUN: a shot)
 signal struck(bird: Bird, at: Vector3, keys: Array)   ## a burst hurt `bird`, knocking out feathers `keys` (GameAudio: the puff and its call)
 
 static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.fuse)
@@ -30,6 +35,10 @@ const HIT_STUN := 0.5       ## s
 const FEATHERS_PER_HIT := 2.5   ## on average, within a fuse's reach (Projectile.fuse)
 static var recover := 1.0   ## s after a hit in which another knocks out at most RECOVER_FEATHERS (0: off)
 const RECOVER_FEATHERS := 1
+const GUN_FEATHERS := 1         ## a bullet's, outside the recovery window
+const GUN_CHIP := 1.0 / 3.0     ## of a feather, a bullet's inside the recovery window (see the header)
+const GUN_SHOVE := 0.6          ## m/s, a bullet's nudge
+const TRACER_LEN := 0.012       ## s of a bullet's flight its streak covers (about 1.3 m)
 const DOWN_STUN := 2.5      ## s
 const SMOKE_EVERY := 0.025  ## s between smoke points
 const SMOKE_LIFE := 2.2     ## s
@@ -52,6 +61,7 @@ var _rng := RandomNumberGenerator.new()
 static var calm_air := true
 
 var _last_hit := {}         ## Bird -> _clock at its last hit (the recovery window)
+var _chip := {}             ## Bird -> bullets' feather fractions summed inside the window
 var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
 var player: Launcher = null
 
@@ -60,6 +70,7 @@ var _smoke: Array = []      ## [{id, pts: [[pos, t]], open}]
 var fx: CombatFx            ## what a burst and a hit look like
 var _clock := 0.0
 var _smoke_mesh: ImmediateMesh
+var _tracer_mesh: ImmediateMesh
 var _bodies: Array = []     ## MeshInstance3D per live projectile (pooled)
 var _rocket_mesh: Mesh
 var _seeker_mesh: Mesh
@@ -71,6 +82,8 @@ func _ready() -> void:
 	_rng.seed = 7
 	_smoke_mesh = ImmediateMesh.new()
 	add_child(_mesh_node(_smoke_mesh, _fx_material(false)))
+	_tracer_mesh = ImmediateMesh.new()
+	add_child(_mesh_node(_tracer_mesh, CombatFx._material(true)))
 	fx = CombatFx.new()
 	add_child(fx)
 	_brass = StandardMaterial3D.new()
@@ -125,6 +138,7 @@ func add_bird(b: Bird, controller: Object = null, team := -1) -> Launcher:
 func remove_bird(b: Bird) -> void:
 	birds.erase(b)
 	_last_hit.erase(b)
+	_chip.erase(b)
 	hits.erase(b)
 	teams.erase(b)
 	for l in launchers.duplicate():
@@ -136,7 +150,10 @@ func spawn(p: Projectile) -> void:
 	p.id = _next_id
 	_next_id += 1
 	projectiles.append(p)
-	_smoke.append({"id": p.id, "pts": [[p.pos, _clock]], "open": true, "kind": p.kind})
+	if p.kind == Projectile.Kind.GUN:
+		fx.muzzle_flash(p.pos, p.vel - (Projectile.velocity_of(p.shooter) if is_instance_valid(p.shooter) else Vector3.ZERO))
+	else:
+		_smoke.append({"id": p.id, "pts": [[p.pos, _clock]], "open": true, "kind": p.kind})
 	if player != null and p.shooter == player.bird:
 		stats.shots += 1
 	launched.emit(p)
@@ -156,7 +173,7 @@ func _physics_process(dt: float) -> void:
 		if not ev.is_empty():
 			if trail != null:
 				trail.open = false
-			_burst(ev.burst, p.shooter, String(ev.why), p.kind, String(ev.get("surface", "air")))
+			_burst(ev.burst, p.shooter, String(ev.why), p.kind, String(ev.get("surface", "air")), ev.get("near"))
 	projectiles = projectiles.filter(func(q): return q.alive)
 	fx.step(dt, self)
 
@@ -268,7 +285,15 @@ func _trail(id: int) -> Variant:
 	return null
 
 
-func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKET, surface := "bird") -> void:   # (by: the shooter, possibly freed by now)
+func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKET, surface := "bird", near: Variant = null) -> void:   # (by: the shooter, possibly freed by now)
+	if kind == Projectile.Kind.GUN:
+		if why == "expired":
+			return   # (a bullet that ran out just goes)
+		fx.burst(at, why, kind)
+		burst.emit(at, why, kind, surface)
+		if why == "hit" and is_instance_valid(near) and birds.has(near):
+			hit(near, at, 1.0, by, kind)
+		return
 	fx.burst(at, why, kind)
 	burst.emit(at, why, kind, surface)
 	if why == "expired":
@@ -291,8 +316,21 @@ func feathers_for(strength: float) -> int:
 	return int(floor(FEATHERS_PER_HIT + _rng.randf()))
 
 
-## Apply a hit to `b` from a burst at `at` (strength 0..1).
-func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
+## How many feathers a bullet hitting `b` now knocks out: GUN_FEATHERS, or inside its recovery window GUN_CHIP of
+## one (the fractions summed: a feather each time they make one).
+func gun_feathers(b: Bird) -> int:
+	if recover <= 0.0 or _clock - float(_last_hit.get(b, -INF)) >= recover:
+		_chip[b] = 0.0
+		return GUN_FEATHERS
+	var c := float(_chip.get(b, 0.0)) + GUN_CHIP
+	var n := floori(c + 1e-6)
+	_chip[b] = c - n
+	return n
+
+
+## Apply a hit to `b` from a burst at `at` (strength 0..1), or (kind GUN) a bullet striking it there.
+func hit(b: Bird, at: Vector3, strength: float, by: Variant = null, kind := Projectile.Kind.ROCKET) -> void:
+	var gun := kind == Projectile.Kind.GUN
 	hits[b] = int(hits.get(b, 0)) + 1
 	if is_instance_valid(by) and by != b and teams.has(by) and friends(by, b):
 		friendly_hits += 1
@@ -302,10 +340,11 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null) -> void:
 		stats.hits += 1
 	var away: Vector3 = (b.global_position - at)
 	away = away.normalized() if away.length() > 0.01 else Vector3.UP
-	b.model.velocity += away * SHOVE * (0.4 + 0.6 * strength)
-	b.stun = maxf(b.stun, HIT_STUN)
-	var n := feathers_for(strength)
-	if recover > 0.0 and _clock - float(_last_hit.get(b, -INF)) < recover:
+	b.model.velocity += away * (GUN_SHOVE if gun else SHOVE * (0.4 + 0.6 * strength))
+	if not gun:
+		b.stun = maxf(b.stun, HIT_STUN)
+	var n := gun_feathers(b) if gun else feathers_for(strength)
+	if not gun and recover > 0.0 and _clock - float(_last_hit.get(b, -INF)) < recover:
 		n = mini(n, RECOVER_FEATHERS)
 	_last_hit[b] = _clock
 	var keys := b.lose_feathers(at, n)
@@ -328,6 +367,7 @@ func _process(_delta: float) -> void:
 	var lag := Bird.drawn_lag()
 	var heads := _draw_bodies(lag)
 	_draw_smoke(eye, _clock - lag, heads)
+	_draw_tracers(eye, heads)
 	fx.draw(eye, _clock - lag, lag)
 	# Forget what has faded.
 	_smoke = _smoke.filter(func(s): return s.open or (s.pts.size() > 0 and _clock - float(s.pts[-1][1]) < SMOKE_LIFE))
@@ -350,6 +390,10 @@ func _draw_bodies(lag: float) -> Dictionary:
 			mi.visible = false
 			continue
 		var p: Projectile = projectiles[i]
+		if p.kind == Projectile.Kind.GUN:   # (a bullet: its tracer streak, _draw_tracers)
+			mi.visible = false
+			heads[p.id] = p.last_pos.lerp(p.pos, f)
+			continue
 		mi.visible = true
 		mi.mesh = _rocket_mesh if p.kind == Projectile.Kind.ROCKET else _seeker_mesh
 		mi.material_override = _brass if p.kind == Projectile.Kind.ROCKET else _red
@@ -361,6 +405,34 @@ func _draw_bodies(lag: float) -> Dictionary:
 		heads[p.id] = at
 		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)).scaled(Vector3.ONE * grow), at)   # capsule's long axis is Y
 	return heads
+
+
+## Bullets: a hot streak each, from where it's drawn back along its flight (TRACER_LEN s of it, no further back than
+## where it left the gun), facing the camera, a little wider far off so it still reads as a line.
+func _draw_tracers(eye: Vector3, heads: Dictionary) -> void:
+	_tracer_mesh.clear_surfaces()
+	var started := false
+	for p: Projectile in projectiles:
+		if p.kind != Projectile.Kind.GUN or not heads.has(p.id):
+			continue
+		var a: Vector3 = heads[p.id]
+		var back := p.vel * TRACER_LEN
+		if back.length() > p.travelled:
+			back = back.normalized() * p.travelled
+		var b := a - back
+		var seg := a - b
+		if seg.length() < 1e-3:
+			continue
+		var side := seg.cross(eye - a).normalized()
+		var w := clampf(eye.distance_to(a) * 0.0022, 0.006, 0.08)   # (about 1.5 px wide at any range)
+		var head := Color(2.6, 1.7, 0.7, 1.0)
+		var tail := Color(1.2, 0.5, 0.15, 0.0)
+		if not started:
+			_tracer_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+			started = true
+		_quad(_tracer_mesh, b - side * w * 0.5, b + side * w * 0.5, a + side * w, a - side * w, tail, tail, head, head)
+	if started:
+		_tracer_mesh.surface_end()
 
 
 ## Smoke ribbons: each trail's points as a camera-facing strip that widens and fades with age, as of `now` (the drawn

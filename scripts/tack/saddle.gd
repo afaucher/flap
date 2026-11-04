@@ -18,8 +18,8 @@ extends Node3D
 ## Layers: a sheepskin pad, the leather skirt (stitched, with knee rolls), the quilted seat with its pommel and
 ## cantle, brass fittings (D-rings, buckles, keepers, the breast ring), a canvas kit roll, the footrest (blued
 ## struts, a brass bar), the controls on the pommel (a handlebar with firing buttons, a dash), and a mount each side of
-## the rider: a pod of three rockets or a rail of two seekers, raised on pylons and tilted in a trunnion. The
-## rounds in them show what's left (set_ammo).
+## the rider: a pod of three rockets, a rail of two seekers or a belt-fed machine gun, raised on pylons and tilted in a
+## trunnion. The rounds in them (the gun's: the cartridges on its belt) show what's left (set_ammo).
 
 const FREE_ELEVATION := 50.0   ## deg: the saddle stays above this elevation round the trunk (wings: <= ~35)
 var wide := 1.0                ## the panels' width, 1 or less on a back too narrow for them (build sets it)
@@ -425,13 +425,15 @@ static func _basis_y(n: Vector3) -> Basis:
 # --- Weapons --------------------------------------------------------------------------------------------------
 
 ## The weapons ride on two mounts, one each side of the rider, raised on pylons so the line of fire passes over
-## the bird's head; each mount carries a pod -- "rockets" (three tubes) or "seekers" (two on a rail) -- in a
+## the bird's head; each mount carries a pod -- "rockets" (three tubes), "seekers" (two on a rail) or "gun" (a belt-fed
+## machine gun: POD_ROUNDS rounds on its belt, all from its one muzzle) -- in a
 ## trunnion that tilts it (mount_tilt, deg nose up; a brass quadrant and locking pin show the setting). Ahead of
 ## the rider, on the pommel: the controls -- a handlebar, a firing button on each grip, a dash of gauges -- and
 ## the hand loops for standing. Each round knows where it leaves from (round_muzzle).
-const POD_KINDS := ["rockets", "seekers"]
-const POD_ROUNDS := {"rockets": 3, "seekers": 2}
-const DEFAULT_LOADOUT: Array[String] = ["rockets", "rockets"]   ## left, right (a bird carries one kind: six rockets or four seekers)
+const POD_KINDS := ["rockets", "seekers", "gun"]
+const POD_ROUNDS := {"rockets": 3, "seekers": 2, "gun": Launcher.GUN_POD}
+const DEFAULT_LOADOUT: Array[String] = ["rockets", "rockets"]   ## left, right (each side any kind: rockets, seekers or gun)
+const BELT_SHOWN := 9           ## cartridges drawn on a gun's belt, between its box and its feed
 const DEFAULT_TILT := 3.0       ## deg
 const MOUNT_X := 44.0           ## real cm out from the spine: clear of the rider's elbows and knees
 const MOUNT_Z := -38.0          ## real cm, the trunnion: beside the rider's shoulders in the tuck
@@ -443,7 +445,9 @@ var loadout: Array[String] = DEFAULT_LOADOUT.duplicate()
 var mount_tilt := DEFAULT_TILT
 var mounts: Array = []          ## per side (0 left, 1 right): {kind, side, pivot: Transform3D (tilted), rounds, muzzles}
 var clamp_loops: Array = []    ## each pod band's centre line (saddle space) with [.., pod frame, kind, z], for tests
-var round_order := {"rockets": [], "seekers": []}   ## [mount index, round index] in firing order
+var round_order := {"rockets": [], "seekers": [], "gun": []}   ## [mount index, muzzle index] in firing order (the gun's: one
+                                ## turn of the pods, repeated round after round)
+var belts: Array = [[], []]     ## per mount: a gun's belt cartridges (MeshInstance3D), box end first
 
 
 ## Where round `i` (0-based, in firing order: set_ammo hides from the end) of `kind` leaves from, saddle space.
@@ -451,8 +455,14 @@ func round_muzzle(kind: String, i: int) -> Vector3:
 	var o: Array = round_order[kind]
 	if o.is_empty():
 		return muzzle
-	var mr: Array = o[clampi(i, 0, o.size() - 1)]
+	var mr: Array = _order_at(kind, i)
 	return (mounts[mr[0]].muzzles as Array)[mr[1]]
+
+
+## round_order's entry for round `i` of `kind`: its own (rockets, seekers), or (a gun's) the pods in turn.
+func _order_at(kind: String, i: int) -> Array:
+	var o: Array = round_order[kind]
+	return o[posmod(i, o.size())] if kind == "gun" else o[clampi(i, 0, o.size() - 1)]
 
 
 ## Where round `i` of `kind` starts its flight, saddle space: its muzzle, unless the bird's head is in the way
@@ -461,11 +471,14 @@ func round_launch(kind: String, i: int) -> Vector3:
 	var o: Array = round_order[kind]
 	if o.is_empty():
 		return muzzle
-	var mr: Array = o[clampi(i, 0, o.size() - 1)]
+	var mr: Array = _order_at(kind, i)
 	return (mounts[mr[0]].launch as Array)[mr[1]]
 
 
+## Rounds the mounts hold of `kind`.
 func capacity(kind: String) -> int:
+	if kind == "gun":
+		return (round_order.gun as Array).size() * int(POD_ROUNDS.gun)
 	return (round_order[kind] as Array).size()
 
 
@@ -516,7 +529,7 @@ func _launcher() -> void:
 		var bp: Vector3 = grips[i] - grip_dirs[i] * 2.5 * k + up_g * 1.6 * k
 		brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.1 * k, 0.0), Vector2(1.1 * k, 0.5 * k), Vector2(0.0, 0.5 * k)]), 12, Transform3D(_basis_y(up_g), bp))
 		var kind: String = loadout[i] if i < loadout.size() else DEFAULT_LOADOUT[i]
-		_tm("red" if kind == "rockets" else "nickel").lathe(_ball(0.75 * k), 10, Transform3D(_basis_y(up_g).scaled(Vector3(1.0, 0.6, 1.0)), bp + up_g * 0.4 * k))
+		_tm({"rockets": "red", "seekers": "nickel", "gun": "olive"}.get(kind, "nickel")).lathe(_ball(0.75 * k), 10, Transform3D(_basis_y(up_g).scaled(Vector3(1.0, 0.6, 1.0)), bp + up_g * 0.4 * k))
 		buttons[i] = bp + up_g * 0.9 * k
 	# The dash: a blued plate on the column's head, tilted to the rider, three brass-rimmed dials.
 	var dash := Basis(Vector3.RIGHT, deg_to_rad(-35.0))
@@ -548,15 +561,18 @@ func _launcher() -> void:
 	# The mounts, left and right.
 	mounts.clear()
 	clamp_loops.clear()
-	round_order = {"rockets": [], "seekers": []}
+	round_order = {"rockets": [], "seekers": [], "gun": []}
+	belts = [[], []]
 	for i in 2:
 		var kind: String = loadout[i] if i < loadout.size() and POD_KINDS.has(loadout[i]) else DEFAULT_LOADOUT[i]
 		mounts.append(_mount(-1.0 if i == 0 else 1.0, kind, lx))
-	# Firing order: alternate sides round by round.
+		if kind == "gun":
+			belts[i] = mounts[i].rounds
+	# Firing order: alternate sides round by round (a gun has one muzzle: the gun pods take turns).
 	for kind in POD_KINDS:
 		for r in 3:
 			for i in 2:
-				if mounts[i].kind == kind and r < (mounts[i].rounds as Array).size():
+				if mounts[i].kind == kind and r < (mounts[i].muzzles as Array).size():
 					round_order[kind].append([i, r])
 	rockets.clear()
 	seekers.clear()
@@ -657,10 +673,12 @@ func _mount(s: float, kind: String, lx: Callable) -> Dictionary:
 	var rounds: Array = []
 	if kind == "rockets":
 		rounds = _rocket_pod(pod)
+	elif kind == "gun":
+		rounds = _gun_pod(pod, s)
 	else:
 		rounds = _seeker_pod(pod)
 	_clamp(pod, kind, 0.0)
-	_clamp(pod, kind, -30.0 if kind == "rockets" else -22.0)
+	_clamp(pod, kind, {"rockets": -30.0, "seekers": -22.0, "gun": -9.0}[kind])
 	# The firing cable from the box's side, drooping, to the pod's breech.
 	var c0: Vector3 = lx.call(s * 1.5, -2.0, -15.0)
 	var c1: Vector3 = pod * (Vector3(-s * 3.0, -3.0, 14.0) * k)
@@ -691,6 +709,8 @@ func _pod_muzzles(kind: String) -> Array:
 	if kind == "rockets":
 		for c in _rocket_tubes():
 			out.append(Vector3(c.x, c.y, -73.0))
+	elif kind == "gun":
+		out.append(Vector3(0.0, 0.0, -57.0))
 	else:
 		for x in [-3.6, 3.6]:
 			out.append(Vector3(x, -3.0, -50.0))
@@ -711,6 +731,10 @@ func _pod_outline(kind: String) -> PackedVector2Array:
 	if kind == "rockets":
 		for c in _rocket_tubes():
 			circ.call(c, 4.2)
+	elif kind == "gun":
+		# The receiver (a rounded box) and the feed cover on it.
+		for q in [Vector2(-3.4, -3.4), Vector2(-2.6, -4.2), Vector2(2.6, -4.2), Vector2(3.4, -3.4), Vector2(3.4, 3.6), Vector2(-3.4, 3.6), Vector2(-3.0, 5.5), Vector2(3.0, 5.5)]:
+			pts.append(q)
 	else:
 		for x in [-3.6, 3.6]:
 			circ.call(Vector2(x, -3.0), 2.6)
@@ -809,6 +833,117 @@ func _rocket_pod(pod: Transform3D) -> Array:
 	# stand behind it).
 	blued.sweep(PackedVector3Array([pod * (Vector3(0.0, 10.1, 12.0) * k), pod * (Vector3(0.0, 10.1, -52.0) * k)]), PackedVector3Array([pod.basis.y]), PackedVector2Array([Vector2(1.8, 0.0) * k, Vector2(-1.8, 0.0) * k, Vector2(-1.8, 1.0) * k, Vector2(1.8, 1.0) * k]), true)
 	return rounds
+
+
+## A belt-fed machine gun, a Vickers' look at the rider's scale (pod frame, real cm, -Z forward): a blued receiver
+## with a hinged feed cover, rivets and a brass maker's plate, a rounded back cap with a brass knob; the barrel in a
+## corrugated brass water jacket between blued rings, a blued front cap and a flared muzzle booster; a ring foresight
+## and a blade backsight; a cocking lever, brass-knobbed, outboard; the firing solenoid at the breech, inboard, where
+## the cable comes in; an ejection chute below. Its ammunition box hangs outboard beside the jacket (painted, a
+## leather strap with a brass buckle round it), and the canvas belt climbs from it into the feed block with brass
+## cartridges in it: those are the rounds returned (the belt runs short as the box empties, set_ammo).
+func _gun_pod(pod: Transform3D, s: float) -> Array:
+	var k := 1.0 / cm
+	var blued := _tm("blued")
+	var brass := _tm("brass")
+	var px := func(x: float, y: float, z: float) -> Vector3:
+		return pod * (Vector3(x, y, z) * k)
+	var fwd := pod.basis * Basis(Vector3.RIGHT, -PI * 0.5)   # (lathe +Y -> pod -Z)
+	var aft := pod.basis * Basis(Vector3.RIGHT, PI * 0.5)    # (lathe +Y -> pod +Z)
+	# The receiver, its feed cover hinged on a brass pin at the back, rivets along its lower edges, a maker's plate.
+	_rbox(blued, px.call(0.0, 0.1, -2.0), Vector3(6.8, 8.6, 28.0) * k, 1.0 * k, pod.basis)
+	_rbox(blued, px.call(0.0, 4.9, -5.0), Vector3(6.0, 1.2, 15.0) * k, 0.5 * k, pod.basis)
+	brass.sweep(PackedVector3Array([px.call(-3.3, 4.8, 2.6), px.call(3.3, 4.8, 2.6)]), PackedVector3Array([pod.basis.y]), TackMesh.circle(0.55 * k, 8), true)
+	for e in [-1.0, 1.0]:
+		for j in 6:
+			brass.lathe(_ball(0.35 * k), 6, Transform3D(pod.basis * _basis_y(Vector3(e, 0.0, 0.0)), px.call(e * 3.35, -2.9, 9.0 - j * 4.6)))
+	_rbox(brass, px.call(s * 3.45, 0.9, 5.5), Vector3(0.3, 2.6, 5.0) * k, 0.12 * k, pod.basis)
+	# The back cap and its knob.
+	blued.lathe(PackedVector2Array([Vector2(3.0 * k, 0.0), Vector2(3.0 * k, 1.4 * k), Vector2(2.4 * k, 2.4 * k), Vector2(1.4 * k, 3.0 * k), Vector2(0.0, 3.1 * k)]), 16, Transform3D(aft, px.call(0.0, 0.1, 12.0)))
+	brass.lathe(_ball(0.9 * k), 10, Transform3D(aft, px.call(0.0, 0.1, 15.0)))
+	# The firing solenoid, inboard at the breech (the cable from the controls ends at its back).
+	brass.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.1 * k, 0.0), Vector2(1.2 * k, 0.4 * k), Vector2(1.2 * k, 4.0 * k), Vector2(1.1 * k, 4.4 * k), Vector2(0.0, 4.4 * k)]), 12, Transform3D(aft, px.call(-s * 3.7, -3.0, 9.0)))
+	# The water jacket: corrugated brass between blued rings; the front cap and the muzzle booster.
+	var jk := PackedVector2Array()
+	for j in 21:
+		jk.append(Vector2((3.05 if j % 2 == 0 else 3.3) * k, (1.2 + 27.6 * j / 20.0) * k))
+	brass.lathe(jk, 18, Transform3D(fwd, px.call(0.0, 0.0, -16.0)))
+	for z in [-16.0, -43.0]:
+		blued.lathe(PackedVector2Array([Vector2(2.9 * k, 0.0), Vector2(3.45 * k, 0.2 * k), Vector2(3.45 * k, 1.3 * k), Vector2(2.9 * k, 1.5 * k)]), 18, Transform3D(fwd, px.call(0.0, 0.0, z)))
+	blued.lathe(PackedVector2Array([Vector2(3.45 * k, 0.0), Vector2(3.45 * k, 1.0 * k), Vector2(2.6 * k, 2.4 * k), Vector2(1.5 * k, 3.0 * k)]), 18, Transform3D(fwd, px.call(0.0, 0.0, -44.5)))
+	blued.lathe(PackedVector2Array([Vector2(1.3 * k, 0.0), Vector2(1.3 * k, 1.2 * k), Vector2(1.95 * k, 5.6 * k), Vector2(1.75 * k, 6.2 * k), Vector2(0.85 * k, 6.2 * k), Vector2(0.85 * k, 5.6 * k)]), 16, Transform3D(fwd, px.call(0.0, 0.0, -47.5)))
+	_tm("dark").lathe(PackedVector2Array([Vector2(0.85 * k, 5.7 * k), Vector2(0.0, 5.7 * k)]), 12, Transform3D(fwd, px.call(0.0, 0.0, -47.5)))
+	# Sights: a brass ring on a post at the jacket's front, a blade on the feed cover.
+	blued.sweep(PackedVector3Array([px.call(0.0, 3.2, -44.0), px.call(0.0, 5.4, -44.0)]), PackedVector3Array([pod.basis.z]), PackedVector2Array([Vector2(0.35, -0.6) * k, Vector2(-0.35, -0.6) * k, Vector2(-0.35, 0.6) * k, Vector2(0.35, 0.6) * k]), true)
+	brass.torus(1.6 * k, 0.22 * k, Transform3D(fwd, px.call(0.0, 7.0, -44.0)), 20, 6)
+	_rbox(brass, px.call(0.0, 6.0, -9.0), Vector3(1.8, 1.2, 0.4) * k, 0.12 * k, pod.basis)
+	# The cocking lever, outboard, and the ejection chute under the receiver.
+	blued.sweep(PackedVector3Array([px.call(s * 3.3, 0.6, 6.5), px.call(s * 5.0, -0.8, 8.8)]), PackedVector3Array([pod.basis.y]), TackMesh.circle(0.45 * k, 6), true)
+	brass.lathe(_ball(0.85 * k), 8, Transform3D(pod.basis * _basis_y(Vector3(s, -0.4, 0.4).normalized()), px.call(s * 5.0, -0.8, 8.8)))
+	blued.sweep(PackedVector3Array([px.call(0.0, -3.6, -7.0), px.call(0.0, -6.2, -8.0)]), PackedVector3Array([pod.basis.z]), TackMesh.circle(1.0 * k, 10), true)
+	# The ammunition box, outboard beside the jacket on a bracket; its lid, clasp, strap and buckle.
+	var bx := s * 7.7
+	_rbox(blued, px.call(s * 4.0, -1.0, -20.5), Vector3(1.6, 4.0, 7.0) * k, 0.3 * k, pod.basis)
+	_rbox(_tm("olive"), px.call(bx, -1.1, -20.5), Vector3(6.0, 9.0, 12.0) * k, 0.6 * k, pod.basis)
+	_rbox(blued, px.call(bx, 3.75, -20.5), Vector3(6.4, 0.8, 12.4) * k, 0.3 * k, pod.basis)
+	_rbox(brass, px.call(s * 10.8, 2.6, -20.5), Vector3(0.4, 1.8, 2.2) * k, 0.12 * k, pod.basis)
+	var loop := PackedVector3Array()
+	var ups := PackedVector3Array()
+	var hx := 3.15
+	var hy := 4.65
+	for q in 4:   # (round the box in the pod's x-y plane: four rounded corners)
+		var cx := hx - 0.6 if q == 0 or q == 3 else -(hx - 0.6)
+		var cy := hy - 0.6 if q < 2 else -(hy - 0.6)
+		for j in 4:
+			var a := PI * 0.5 * q + PI * 0.5 * j / 3.0
+			var d := Vector2(cos(a), sin(a))
+			loop.append(px.call(bx + cx + d.x * 0.6, -1.1 + cy + d.y * 0.6, -24.0))
+			ups.append(pod.basis * Vector3(d.x, d.y, 0.0))
+	var sec: Array = _tm("strap").strap_section(2.2 * k, 0.35 * k)
+	_tm("strap").sweep(loop, ups, sec[0], true, sec[1], sec[2], PackedFloat32Array([0.5]), false)
+	_rbox(brass, px.call(bx + s * 3.3, -1.6, -24.0), Vector3(0.35, 2.4, 2.8) * k, 0.12 * k, pod.basis)
+	# The feed block on the receiver's outboard side, and the canvas belt climbing to it from the box.
+	_rbox(blued, px.call(s * 4.0, 2.4, -13.5), Vector3(1.4, 3.2, 5.0) * k, 0.3 * k, pod.basis)
+	var p0 := Vector2(s * 8.6, 4.0)
+	var p1 := Vector2(s * 7.0, 7.8)
+	var p2 := Vector2(s * 4.6, 3.4)
+	var zb := -15.0
+	var bez := func(t: float) -> Vector2:
+		return p0.lerp(p1, t).lerp(p1.lerp(p2, t), t)
+	var belt := PackedVector3Array()
+	var bups := PackedVector3Array()
+	for j in 13:
+		var t := j / 12.0
+		var c: Vector2 = bez.call(t)
+		var tan2: Vector2 = (bez.call(minf(t + 0.02, 1.0)) as Vector2) - (bez.call(maxf(t - 0.02, 0.0)) as Vector2)
+		var n2 := Vector2(-tan2.y, tan2.x).normalized() * signf(s)
+		belt.append(px.call(c.x, c.y, zb))
+		bups.append(pod.basis * Vector3(n2.x, n2.y, 0.0))
+	var bsec: Array = _tm("canvas").strap_section(3.0 * k, 0.25 * k)
+	_tm("canvas").sweep(belt, bups, bsec[0], true, bsec[1], bsec[2], PackedFloat32Array([0.3]))
+	var rounds := []
+	for j in BELT_SHOWN:
+		var c: Vector2 = bez.call(lerpf(0.06, 0.94, j / float(BELT_SHOWN - 1)))
+		rounds.append(_cartridge(Transform3D(fwd, px.call(c.x, c.y, zb + 1.8)), k))
+	return rounds
+
+
+## One cartridge on a gun's belt (its own MeshInstance, hidden as the belt runs short): a brass case with its rim
+## and shoulder, a nickel bullet. `xf`: its base, the axis +Y forward.
+func _cartridge(xf: Transform3D, k: float) -> MeshInstance3D:
+	var case := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	case.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.62 * k, 0.0), Vector2(0.62 * k, 0.3 * k), Vector2(0.52 * k, 0.4 * k), Vector2(0.56 * k, 2.3 * k), Vector2(0.42 * k, 2.6 * k), Vector2(0.42 * k, 2.9 * k)]), 10, xf)
+	var tip := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	tip.lathe(PackedVector2Array([Vector2(0.41 * k, 2.9 * k), Vector2(0.38 * k, 3.3 * k), Vector2(0.24 * k, 3.75 * k), Vector2(0.0, 3.95 * k)]), 10, xf)
+	var m := case.commit()
+	m = tip.commit(m)
+	m.surface_set_material(0, TackMaterials.get_mat("brass"))
+	m.surface_set_material(1, TackMaterials.get_mat("nickel"))
+	var mi := MeshInstance3D.new()
+	mi.name = "Cartridge"
+	mi.mesh = m
+	add_child(mi)
+	return mi
 
 
 ## A rail with two seekers slung under it side by side on launch shoes; a cover plate over the rail.
@@ -947,9 +1082,20 @@ func _disc(tm: TackMesh, c: Vector3, n: Vector3, r: float, t: float) -> void:
 	tm.grid(rows, uv, uv2, [], true, true)
 
 
-## Show the rounds left.
-func set_ammo(n_rockets: int, n_seekers: int) -> void:
+## Show the rounds left (`n_gun` < 0: leave the guns' belts as they are). A gun's belt shows its pod's share of
+## `n_gun` (the pods take turns), a cartridge per POD_ROUNDS / BELT_SHOWN rounds, running short from the box end.
+func set_ammo(n_rockets: int, n_seekers: int, n_gun := -1) -> void:
 	for i in rockets.size():
 		rockets[i].visible = i < n_rockets
 	for i in seekers.size():
 		seekers[i].visible = i < n_seekers
+	if n_gun < 0 or (round_order.gun as Array).is_empty():
+		return
+	var per := [0, 0]
+	for j in n_gun:
+		per[_order_at("gun", j)[0]] += 1
+	for i in 2:
+		var belt: Array = belts[i]
+		var shown := ceili(float(per[i]) / float(POD_ROUNDS.gun) * belt.size() - 1e-6)
+		for j in belt.size():
+			(belt[j] as MeshInstance3D).visible = j >= belt.size() - shown

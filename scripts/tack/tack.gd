@@ -3,8 +3,9 @@ extends Node3D
 ## A bird's war tack: the Saddle (with its harness and launcher) and its Rider, fitted to one BirdRig and
 ## riding on it (a child of the rig, so rig space). Reads only the rig's pose and, when it has one, the Bird's
 ## state and velocity: visual only, like the rig.
-##   var tack := Tack.fit(bird.rig, bird, ["rockets", "seekers"])   # or Tack.fit(rig) in a gallery, setting `sitting` / `wind`
-##   tack.set_ammo(rockets, seekers)
+##   var tack := Tack.fit(bird.rig, bird, ["rockets", "gun"])   # left, right: rockets | seekers | gun; or Tack.fit(rig) in a
+##                                                              # gallery, setting `sitting` / `wind`
+##   tack.set_ammo(rockets, seekers, gun)
 ##   tack.muzzle_world("rockets", i)   # where round i leaves from
 
 const RIDER_HEIGHT := 0.085   ## m: a 1.75 m man at 1:20.6 -- the largest every species carries (probe_rider_scale)
@@ -43,11 +44,11 @@ static func fit(r: BirdRig, b: Bird = null, pods: Array = [], tilt := Saddle.DEF
 	return t
 
 
-func set_ammo(rockets: int, seekers: int) -> void:
-	saddle.set_ammo(rockets, seekers)
+func set_ammo(rockets: int, seekers: int, gun := -1) -> void:
+	saddle.set_ammo(rockets, seekers, gun)
 
 
-## Rounds the mounts hold of `kind` ("rockets" / "seekers").
+## Rounds the mounts hold of `kind` ("rockets" / "seekers" / "gun").
 func capacity(kind: String) -> int:
 	return saddle.capacity(kind)
 
