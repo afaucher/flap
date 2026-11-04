@@ -15,6 +15,7 @@ var invert_pitch := false       ## both devices: push forward = nose up instead
 var stick := Vector2.ZERO       ## mouse virtual stick
 var look := Vector2.ZERO        ## right stick, -1..1 (x: look right, y: look down)
 var using_gamepad := false
+var assist := FlightAssist.new()   ## novice flying's landing assist (FlightAssist.novice; off: the input as it is)
 
 
 func handle_event(e: InputEvent) -> void:
@@ -41,7 +42,7 @@ static func shape(v: Vector2) -> Vector2:
 	return v / v.length() * r * (0.35 + 0.65 * r)
 
 
-func sample(_bird: Bird, dt: float) -> FlightInput:
+func sample(bird: Bird, dt: float) -> FlightInput:
 	if Input.is_action_just_pressed("center_stick"):
 		stick = Vector2.ZERO
 	stick.x *= exp(-return_rate.x * dt)
@@ -54,5 +55,6 @@ func sample(_bird: Bird, dt: float) -> FlightInput:
 		if invert_pitch:
 			s.y = -s.y
 		stick = Vector2.ZERO
-	return FlightInput.new(s, Input.is_action_just_pressed("flap"), Input.is_action_pressed("flap"),
+	var inp := FlightInput.new(s, Input.is_action_just_pressed("flap"), Input.is_action_pressed("flap"),
 		Input.is_action_just_pressed("catch"), Input.is_action_pressed("catch"))
+	return assist.apply(bird, inp, dt)

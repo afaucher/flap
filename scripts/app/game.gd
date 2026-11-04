@@ -22,6 +22,7 @@ extends Node3D
 ##                      F6 steps through them in game)
 ##   --hud <style>      classic (default) | ring | dev: the HUD's layout (FlightHud.style)
 ##   --calm             still air: no thermals (AirField.enabled)
+##   --flying <mode>    realistic (default) | novice: a landing assist while catch is held, more stamina (FlightAssist)
 ##   --no-taa           no temporal anti-aliasing (Antialias; F7 toggles in game)
 ## The mouse wheel zooms the chase camera in and out.
 ## The arena grows behind a loading screen (Loading): the layout on a worker thread, the wood built a step a frame,
@@ -57,6 +58,7 @@ func _ready() -> void:
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
 	AirField.enabled = not args.has("--calm")
+	FlightAssist.configure(args)   # (--flying novice: the landing assist, more stamina)
 	Antialias.apply(self, args)
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
@@ -179,6 +181,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	add_child(bird)
 	bird.setup(BirdProfile.by_id(pid), layout, autopilot if use_autopilot else player)
 	bird.arena = arena
+	FlightAssist.fit(bird)   # (novice: perches highlighted from further out)
 	if rider and Tack.RIDDEN.has(pid):
 		Tack.fit(bird.rig, bird)   # (crows, falcons and hawks carry a rider and the war tack)
 	bird.perch_at(at)

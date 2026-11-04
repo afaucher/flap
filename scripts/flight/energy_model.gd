@@ -13,6 +13,8 @@ extends RefCounted
 ##
 ## The wingbeat period (FlightModel) caps how fast flaps come, and flap thrust fades to nothing at
 ## flap_speed_cap, so flapping can't make you infinitely fast either.
+##
+## Novice flying (FlightAssist.novice) scales the stamina's wingbeats, its recovery and the burst's refill.
 
 const HIGH_G := 2.0          ## load factor where pulling starts to cost burst
 const HIGH_G_DRAIN := 1.0    ## flaps/s per g above HIGH_G
@@ -35,7 +37,7 @@ func burst_cap() -> float:
 ## Spend one flap; returns its strength (1 = full).
 func spend_flap() -> float:
 	var strength := 1.0
-	var stamina_cost := 1.0 / profile.stamina_flaps
+	var stamina_cost := 1.0 / (profile.stamina_flaps * FlightAssist.stamina_scale())
 	if burst >= 1.0:
 		burst -= 1.0
 	else:
@@ -51,10 +53,10 @@ func tick(dt: float, driving: bool, load_factor: float, perched: bool) -> void:
 	if load_factor > HIGH_G and not perched:
 		burst = maxf(0.0, burst - (load_factor - HIGH_G) * HIGH_G_DRAIN * dt)
 	if not driving:
-		var rate := profile.burst_regen * (0.05 + 0.95 * stamina) * (2.0 if perched else 1.0)
+		var rate := profile.burst_regen * FlightAssist.burst_regen_scale() * (0.05 + 0.95 * stamina) * (2.0 if perched else 1.0)
 		burst = minf(burst_cap(), burst + rate * dt)
 		var regen := profile.stamina_regen_perch if perched else profile.stamina_regen_glide
-		stamina = minf(1.0, stamina + regen * dt)
+		stamina = minf(1.0, stamina + regen * FlightAssist.recovery_scale() * dt)
 	burst = minf(burst, burst_cap())
 
 

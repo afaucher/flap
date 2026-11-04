@@ -19,6 +19,8 @@ enum State { FLYING, LANDING, PERCHED, GROUNDED }
 
 const BIRD_LAYER := 2
 const APPROACH_RADIUS := 8.0   ## perches this close (and ahead) are candidates
+const ASSIST_REACH := 6.0      ## m from the candidate the perch assist starts
+const ASSIST_FULL := 2.5       ## m from it the assist is fully on (scaled with a further reach)
 const GRAB_BUFFER := 0.25      ## s a quick CATCH tap stays live (holding catch keeps it live indefinitely)
 const RELEASE_LOCK := 0.6      ## s before the perch just left can be caught again
 const STUN_TIME := 0.35        ## s of no control after hitting a tree
@@ -46,12 +48,24 @@ var candidate: Perch = null
 var candidate_status := Perch.Catch.OUT_OF_RANGE
 var candidate_distance := INF
 var candidate_grip := Vector3.ZERO   ## the candidate's grip point nearest the bird
+## The perch assist's perch: the nearest perch ahead in a cone round the flight direction (unless a further one is in
+## reach), as the candidate was picked before it followed the predicted path, so the assist's flare and pull work as
+## they always have (the AI's flying, the combat AI's above all, is tuned on them). Only a novice landing (catch held,
+## novice_landing) has the assist work on the candidate, the perch the path heads for.
+var _ahead: Perch = null
+var _ahead_grip := Vector3.ZERO
+var _ahead_distance := INF
 var perch_grip := Vector3.ZERO       ## where the feet hold on (landing on / sitting on `perch`)
 var _land_facing := Vector3.FORWARD
 var sit_pitch_deg := 0.0             ## body pitch when perched (+ = upright); per species (BirdRig.POSE)
 var ground_pitch_deg := 0.0          ## ... and standing on the ground
 var stand_y := ArenaLayout.GROUND_Y  ## m: what a GROUNDED bird stands on (the ground, a deck, a hangar roof)
 var perch_assist := 0.6        ## 0..1: auto-flare and a gentle pull toward a perch in the last few metres
+var approach_radius := APPROACH_RADIUS   ## m: perches this close (and ahead) are candidates (FlightAssist.fit: further for a novice)
+## Novice flying's landing help (FlightAssist.fit): while catch is held, the perch assist works from further out
+## (FlightAssist.ASSIST_REACH), at least at FlightAssist.PERCH_ASSIST, and its flare brakes for the height over the
+## perch as well as the speed.
+var novice_landing := false
 var bonks := 0
 var stun := 0.0
 ## Battle damage: the flight feathers a hit knocked out (BirdRig.feather_key -> true), up to DOWN_FEATHERS; they
@@ -252,50 +266,187 @@ func candidate_too_fast() -> bool:
 			and model.velocity.length() > profile.grab_speed_max)
 
 
+## The landing candidate: the perch the bird's predicted flight path (predicted_path: its sink and its turn, not
+## the nose, which rides above the path) passes closest to, its grip where the path passes it (where the bird would
+## land), a perch above the path counting worse than one as far below it (the feet reach down, barely up), a nearer
+## one winning a tie. A perch in reach now wins over any that isn't, the nearest of them (the feet close on it first;
+## a branch just out of reach must not hide the treetop the feet can close on).
 func _update_candidate() -> void:
 	candidate = null
 	candidate_status = Perch.Catch.OUT_OF_RANGE
 	candidate_distance = INF
+	_ahead = null
+	_ahead_distance = INF
+	var ahead_in_reach := false
+	var near := layout.perches_near(global_position, approach_radius)
+	if near.is_empty():
+		return
 	var dir := model.flight_dir()
-	for p in layout.perches_near(global_position, APPROACH_RADIUS):
+	var path := PackedVector3Array()   # (predicted when first needed)
+	var seat_h := Perch.seat_at(Vector3.ZERO, profile).y   # (the path should carry the body this far above the grip)
+	var best_score := INF
+	for p in near:
 		if p.id == _released_perch_id and _release_lock > 0.0:
 			continue
-		# Aim at the grip point straight ahead on the flight path, not merely the nearest one.
+		if (p.position - global_position).dot(dir) < -p.reach() - profile.grab_radius:
+			continue   # (all of it behind)
+		# In reach right now, at the grip straight ahead (the nearest of those wins: the feet close on it first)?
 		var grip := p.aim_grip(global_position, dir, profile.grab_radius * AIM_AHEAD)
+		var status := p.catch_status(profile, global_position, model.velocity, grip)
+		if not ahead_in_reach and p.distance_to(global_position) <= APPROACH_RADIUS:
+			var ta := grip - global_position
+			var da := ta.length()
+			if da <= profile.grab_radius or dir.dot(ta / maxf(da, 1e-4)) >= 0.5:
+				if _ahead == null or status != Perch.Catch.OUT_OF_RANGE:
+					_ahead = p
+					_ahead_grip = grip
+					_ahead_distance = da
+				ahead_in_reach = status != Perch.Catch.OUT_OF_RANGE
+		var score := 0.0
+		if status == Perch.Catch.OUT_OF_RANGE:
+			# Not yet: where the path passes it, and how near.
+			if path.is_empty():
+				path = predicted_path()
+			var hit := _path_pass(p, path)
+			var miss: Vector3 = hit[0] + Vector3.UP * seat_h - hit[1]   # (+y: the perch is above where the path goes)
+			var side := Vector2(miss.x, miss.z).length()
+			score = Vector2(side, miss.y * (PATH_ABOVE_COST if miss.y > 0.0 else 1.0)).length() + PATH_NEAR_COST * float(hit[2])
+			grip = hit[0]
+			status = p.catch_status(profile, global_position, model.velocity, grip)
 		var to := grip - global_position
 		var d := to.length()
 		if d > profile.grab_radius and dir.dot(to / maxf(d, 1e-4)) < 0.5:
 			continue   # behind or off to the side: not where we're headed
-		var status := p.catch_status(profile, global_position, model.velocity, grip)
-		# The nearest perch ahead is the candidate, unless a further one is actually in reach: that one wins
-		# (a branch just out of reach must not hide the treetop the feet can close on).
-		if candidate == null or (candidate_status == Perch.Catch.OUT_OF_RANGE and status != Perch.Catch.OUT_OF_RANGE):
+		if status != Perch.Catch.OUT_OF_RANGE:
+			score = IN_REACH_SCORE + d
+		if candidate == null or score < best_score:
 			candidate = p
 			candidate_grip = grip
 			candidate_distance = d
 			candidate_status = status
-		if candidate_status != Perch.Catch.OUT_OF_RANGE:
-			return
+			best_score = score
+
+
+const IN_REACH_SCORE := -1000.0   ## (a perch in reach scores below any that isn't)
+const PATH_ABOVE_COST := 2.5  ## a perch above the predicted path counts this much further off than one below
+const PATH_NEAR_COST := 0.1    ## per metre along the path: of two on it, the nearer
+const PREDICT_TIME := 2.0      ## s of flight path predicted at most (to past the approach radius)
+const PREDICT_CHORDS := 8
+
+
+## Where the bird is going (world points from here, PREDICT_CHORDS chords out to about approach_radius + a catch
+## radius, or PREDICT_TIME): a point mass flown on, the bank easing to what the stick asks for at the roll rate and
+## the angle of attack to the stick's at the pitch rate, with FlightModel.step's turn assist and phugoid damper on
+## it (the extra pull a bank gets, the lift added while sinking), lift and drag from FlightModel's own
+## coefficients, gravity, in the air it is in now. So a slow bird's path sinks under its nose and a banked one
+## curves; no flaps (a wingbeat lifts it above this) and no perch assist.
+func predicted_path() -> PackedVector3Array:
+	var m := model
+	var p := profile
+	var pts := PackedVector3Array([global_position])
+	var v := m.velocity
+	var pos := global_position
+	var horizon := minf(PREDICT_TIME, (approach_radius + p.grab_radius) / maxf(v.length(), 1.0))
+	var h := horizon / (PREDICT_CHORDS * 2)
+	var alpha := m.alpha
+	var bank := m.bank
+	var stick := last_input.stick.clamp(Vector2(-1, -1), Vector2(1, 1))
+	var alpha_stick := m.alpha_for_stick(stick.y)
+	var bank_to := stick.x * deg_to_rad(p.max_bank_deg)
+	var authority := 1.0 - minf(1.0, absf(stick.y) * 1.5)
+	var area := m.wing_area_eff if m.wing_area_eff > 0.0 else p.wing_area
+	var drag := 0.0
+	for i in PREDICT_CHORDS * 2:
+		bank = move_toward(bank, bank_to, deg_to_rad(p.roll_rate_deg) * h)
+		var air := v - m.wind
+		var s := air.length()
+		var d := air / s if s > 0.05 else m.flight_dir()
+		# The angle of attack the model would command (FlightModel.step): the stick's, the turn assist's extra in a
+		# bank, the damper's from the along-path acceleration.
+		var alpha_to := alpha_stick
+		if alpha_to > 0.0 and alpha_to < p.alpha_stall:
+			alpha_to = minf(p.alpha_stall * 0.97, alpha_to * (1.0 + m.turn_assist * (1.0 / maxf(cos(bank), 0.35) - 1.0)))
+		if m.pitch_damping > 0.0:
+			var a_along := -BirdProfile.G * d.y - drag
+			var damped := alpha_to + m.pitch_damping * 2.0 * p.alpha_best * clampf(a_along / BirdProfile.G, -0.5, 0.5) * authority
+			alpha_to = minf(damped, maxf(alpha_to, p.alpha_stall * 0.97))
+		alpha = move_toward(alpha, alpha_to, deg_to_rad(p.alpha_rate_deg) * h)
+		var acc := Vector3(0.0, -BirdProfile.G, 0.0)
+		drag = 0.0
+		if s > 0.5:
+			var up := Vector3.UP - d * d.y
+			up = up.normalized() if up.length_squared() > 1e-6 else m.lift_dir
+			var lift_dir := (up * cos(bank) + d.cross(up).normalized() * sin(bank)).normalized()
+			var c_l := m.lift_coefficient(alpha)
+			var q := 0.5 * BirdProfile.RHO * s * s * area / p.mass
+			drag = q * m.drag_coefficient(c_l, alpha, m.fold)
+			acc += lift_dir * q * c_l - d * drag
+		v += acc * h
+		pos += v * h
+		if i % 2 == 1:
+			pts.append(pos)
+	return pts
+
+
+## Where `path` (predicted_path) passes `p` closest: [the grip point, the path's point there, metres along the path].
+func _path_pass(p: Perch, path: PackedVector3Array) -> Array:
+	var best := INF
+	var out := [p.closest_grip(path[0]), path[0], 0.0]
+	var along := 0.0
+	for i in path.size() - 1:
+		var a := path[i]
+		var b := path[i + 1]
+		var on_path: Vector3
+		var grip: Vector3
+		if p.kind == Perch.Kind.TREETOP:
+			on_path = Geometry3D.get_closest_point_to_segment(p.a, a, b)
+			grip = p.closest_grip(on_path)
+		else:
+			var pair := Geometry3D.get_closest_points_between_segments(a, b, p.a, p.b)
+			on_path = pair[0]
+			grip = pair[1]
+		var dd := on_path.distance_squared_to(grip)
+		if dd < best:
+			best = dd
+			out = [grip, on_path, along + a.distance_to(on_path)]
+		along += a.distance_to(b)
+	return out
 
 
 ## Perch assist (auto-flare + a gentle pull onto the perch line) and the arena's soft walls.
 func _apply_assists() -> void:
 	var push := Vector3.ZERO
 	model.flare = 0.0
-	if candidate != null and perch_assist > 0.0 and candidate_distance < 6.0:
-		var to := candidate_grip - global_position
-		var d := maxf(candidate_distance, 0.01)
-		var near_k := smoothstep(6.0, 2.5, d)
+	var landing := novice_landing and last_input.catch_held
+	var reach := FlightAssist.ASSIST_REACH if landing else ASSIST_REACH
+	var assist := maxf(perch_assist, FlightAssist.PERCH_ASSIST) if landing and perch_assist > 0.0 else perch_assist
+	var on_candidate := landing   # (a novice landing: the candidate; else _ahead, as always)
+	var aim: Perch = candidate if on_candidate else _ahead
+	var aim_grip := candidate_grip if on_candidate else _ahead_grip
+	var aim_d := candidate_distance if on_candidate else _ahead_distance
+	if aim != null and assist > 0.0 and aim_d < reach:
+		var to := aim_grip - global_position
+		var d := maxf(aim_d, 0.01)
+		var near_k := smoothstep(reach, ASSIST_FULL * reach / ASSIST_REACH, d)
 		var closing := model.velocity.dot(to / d)
 		var target := profile.grab_speed_max * 0.8
+		var flare := 0.0
 		if closing > target:
-			model.flare = clampf((closing - target) / (profile.grab_speed_max * 0.5), 0.0, 1.0) * perch_assist * near_k
+			flare = clampf((closing - target) / (profile.grab_speed_max * 0.5), 0.0, 1.0)
+		if landing:
+			# (Novice.) Brake for the height over the perch too: the energy over the catch's (per kg)
+			# over the metres left is the braking it needs, the flare's drag (FlightModel: 1.2 q S / m at full) gives it.
+			var spd := model.speed
+			var excess := 0.5 * (spd * spd - target * target) + BirdProfile.G * maxf(0.0, global_position.y - Perch.seat_at(aim_grip, profile).y)
+			var full := 1.2 * 0.5 * BirdProfile.RHO * spd * spd * maxf(model.wing_area_eff, 1e-3) / profile.mass
+			flare = maxf(flare, clampf(excess / d / maxf(full, 1e-3), 0.0, 1.0))
+		model.flare = flare * assist * near_k
 		# Steer the flight line onto where the body sits once perched (just above the grip), so the bird
 		# arrives level with or a little above the branch, feet reaching down -- the catch envelope's sweet spot.
 		var dir := model.flight_dir()
-		var to_seat := Perch.seat_at(candidate_grip, profile) - global_position
+		var to_seat := Perch.seat_at(aim_grip, profile) - global_position
 		var lateral := to_seat - dir * to_seat.dot(dir)
-		push += lateral * 4.0 * perch_assist * near_k
+		push += lateral * 4.0 * assist * near_k
 	if _push_left > 0.0:   # (the leap: the legs extending speed the bird up over the push, not in one tick)
 		push += _leap / PUSH_TIME
 	var horiz := Vector2(global_position.x, global_position.z)

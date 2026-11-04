@@ -233,8 +233,8 @@
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "if candidate == null or (candidate_status == Perch.Catch.OUT_OF_RANGE and status != Perch.Catch.OUT_OF_RANGE):",
-    "replace": "if candidate == null:"
+    "find": "\t\t\tscore = IN_REACH_SCORE + d\n",
+    "replace": "\t\t\tscore = INF\n"
    }
   ]
  },
@@ -287,7 +287,7 @@
  },
  {
   "id": "assist-gain-strong",
-  "bug": "A stronger flare-assist gain braked the hawk short of its perches.",
+  "bug": "A stronger flare-assist gain braked the hawk short of its perches. (Twice as strong was the bug; since the catch also tests the grip where the predicted path passes, 2026-11-04, a hawk braked that hard still sinks into a catch, so the replay is five times as strong.)",
   "tests": [
    "test_perching",
    "test_ai_flight"
@@ -295,8 +295,8 @@
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "/ (profile.grab_speed_max * 0.5), 0.0, 1.0) * perch_assist",
-    "replace": "/ (profile.grab_speed_max * 0.25), 0.0, 1.0) * perch_assist"
+    "find": "flare = clampf((closing - target) / (profile.grab_speed_max * 0.5), 0.0, 1.0)",
+    "replace": "flare = clampf((closing - target) / (profile.grab_speed_max * 0.1), 0.0, 1.0)"
    }
   ]
  },
@@ -3668,6 +3668,146 @@
     "file": "scripts/audio/game_audio.gd",
     "find": "\t\t\tcue(\"bullet_zip\", c)\n\t\t\t_bullets[p.id] = false\n",
     "replace": "\t\t\tcue(\"bullet_zip\", c)\n"
+   }
+  ]
+ },
+ {
+  "id": "perch-highlight-nearest-not-path",
+  "bug": "The highlighted landing candidate was the nearest perch in a 60-degree cone round the flight direction, so a perch the nose pointed at (alpha above the path) or one the path would sink or turn away from was shown, usually above where the bird could reach; now the perch the predicted path passes closest (2026-11-04).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\tscore = Vector2(side, miss.y * (PATH_ABOVE_COST if miss.y > 0.0 else 1.0)).length() + PATH_NEAR_COST * float(hit[2])",
+    "replace": "\t\t\tscore = global_position.distance_to(hit[0])"
+   }
+  ]
+ },
+ {
+  "id": "perch-highlight-straight-path",
+  "bug": "The candidate's predicted path went straight along the present velocity: a slow bird's sink and a banked bird's turn were ignored, so the perch on the line it was moving along was shown rather than the one it would reach (2026-11-04).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tv += acc * h\n",
+    "replace": "\t\tv += acc * 0.0\n"
+   }
+  ]
+ },
+ {
+  "id": "perch-candidate-in-reach-at-path-grip-only",
+  "bug": "With the path pick, a perch in the feet's reach straight ahead was tested only at the grip where the path passes it closest (further on), so it read as out of reach and the bird flew on past the catch (2026-11-04).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tvar status := p.catch_status(profile, global_position, model.velocity, grip)\n\t\tif not ahead_in_reach",
+    "replace": "\t\tvar status := Perch.Catch.OUT_OF_RANGE\n\t\tif not ahead_in_reach"
+   }
+  ]
+ },
+ {
+  "id": "landing-assist-no-blend",
+  "bug": "Novice landing assist: the player's input passed through unblended, so approaches from too high or off the line missed as in realistic (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, held,",
+    "replace": "FlightInput.new(inp.stick, inp.flap_pressed, inp.flap_held,"
+   }
+  ]
+ },
+ {
+  "id": "landing-assist-in-realistic",
+  "bug": "The landing assist steered in realistic flying too (not gated on FlightAssist.novice) (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tvar on := novice and strength > 0.0 and inp.catch_held",
+    "replace": "\tvar on := strength > 0.0 and inp.catch_held"
+   }
+  ]
+ },
+ {
+  "id": "landing-assist-strength-zero-not-off",
+  "bug": "FlightAssist.strength 0 left the novice perch assist (further reach, height braking) on: the knob didn't turn the assist off (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tvar on := novice and strength > 0.0\n",
+    "replace": "\tvar on := novice\n"
+   }
+  ]
+ },
+ {
+  "id": "novice-no-height-brake",
+  "bug": "Novice perch assist braked only for speed, not for the height over the perch: an approach from too high came in too fast to catch (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tif landing:\n",
+    "replace": "\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "novice-stamina-unscaled",
+  "bug": "Novice flying didn't scale the stamina's wingbeats: a novice bird tired as fast as a realistic one (2026-11-04).",
+  "tests": [
+   "test_energy"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/energy_model.gd",
+    "find": "(profile.stamina_flaps * FlightAssist.stamina_scale())",
+    "replace": "(profile.stamina_flaps * 1.0)"
+   }
+  ]
+ },
+ {
+  "id": "novice-recovery-unscaled",
+  "bug": "Novice flying didn't scale the stamina's recovery (2026-11-04).",
+  "tests": [
+   "test_energy"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/energy_model.gd",
+    "find": "regen * FlightAssist.recovery_scale() * dt",
+    "replace": "regen * dt"
+   }
+  ]
+ },
+ {
+  "id": "perch-assist-on-path-candidate-unasked",
+  "bug": "With the candidate following the predicted path, the perch assist (flare and pull) worked on it: a combat bird stooping through the wood was pulled toward branches on its path (the falcon's bonks 3 -> 12 in test_combat_boom_zoom), and a too-strong flare gain no longer showed in test_perching. Except a novice landing, the assist keeps the nearest perch ahead, as before (2026-11-04).",
+  "tests": [
+   "test_combat_boom_zoom"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar on_candidate := landing   #",
+    "replace": "\tvar on_candidate := true   #"
    }
   ]
  }
