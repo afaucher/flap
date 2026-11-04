@@ -66,6 +66,9 @@ var approach_radius := APPROACH_RADIUS   ## m: perches this close (and ahead) ar
 ## (FlightAssist.ASSIST_REACH), at least at FlightAssist.PERCH_ASSIST, and its flare brakes for the height over the
 ## perch as well as the speed.
 var novice_landing := false
+## The landing assist's perch, held from when it engaged (FlightAssist): kept as the candidate while it stays within
+## LOCK_CONE_DEG of the path, so the assist's own turn can't hand it a different tree mid-approach. null: none held.
+var candidate_lock: Perch = null
 var bonks := 0
 var stun := 0.0
 ## Battle damage: the flight feathers a hit knocked out (BirdRig.feather_key -> true), up to DOWN_FEATHERS; they
@@ -269,8 +272,12 @@ func candidate_too_fast() -> bool:
 ## The landing candidate: the perch the bird's predicted flight path (predicted_path: its sink and its turn, not
 ## the nose, which rides above the path) passes closest to, its grip where the path passes it (where the bird would
 ## land), a perch above the path counting worse than one as far below it (the feet reach down, barely up), a nearer
-## one winning a tie. A perch in reach now wins over any that isn't, the nearest of them (the feet close on it first;
-## a branch just out of reach must not hide the treetop the feet can close on).
+## one winning a tie, and one off to the side of the path counting worse than one along it (OFF_PATH_COST). Only
+## perches within CONE_DEG of the path qualify (measured from the path's chord out to the perch's distance, so a turn
+## the stick holds carries the cone round with it; within NEAR_SIDE m to the side, any angle), and a perch in reach now
+## wins over any that isn't, the nearest of them (the feet close on it first; a branch just out of reach must not hide
+## the treetop the feet can close on). The landing assist's held perch (candidate_lock) wins over all while it stays
+## within LOCK_CONE_DEG.
 func _update_candidate() -> void:
 	candidate = null
 	candidate_status = Perch.Catch.OUT_OF_RANGE
@@ -282,7 +289,7 @@ func _update_candidate() -> void:
 	if near.is_empty():
 		return
 	var dir := model.flight_dir()
-	var path := PackedVector3Array()   # (predicted when first needed)
+	var path := predicted_path()
 	var seat_h := Perch.seat_at(Vector3.ZERO, profile).y   # (the path should carry the body this far above the grip)
 	var best_score := INF
 	for p in near:
@@ -305,8 +312,6 @@ func _update_candidate() -> void:
 		var score := 0.0
 		if status == Perch.Catch.OUT_OF_RANGE:
 			# Not yet: where the path passes it, and how near.
-			if path.is_empty():
-				path = predicted_path()
 			var hit := _path_pass(p, path)
 			var miss: Vector3 = hit[0] + Vector3.UP * seat_h - hit[1]   # (+y: the perch is above where the path goes)
 			var side := Vector2(miss.x, miss.z).length()
@@ -315,10 +320,16 @@ func _update_candidate() -> void:
 			status = p.catch_status(profile, global_position, model.velocity, grip)
 		var to := grip - global_position
 		var d := to.length()
-		if d > profile.grab_radius and dir.dot(to / maxf(d, 1e-4)) < 0.5:
+		var off := _off_path(to, path)   # (rad off the path's way out to it)
+		var locked := p == candidate_lock
+		var cone := deg_to_rad(LOCK_CONE_DEG if locked else CONE_DEG)
+		if d > profile.grab_radius and off > cone and Vector2(to.x, to.z).length() * sin(minf(off, PI * 0.5)) > NEAR_SIDE:
 			continue   # behind or off to the side: not where we're headed
+		score += OFF_PATH_COST * off * d
 		if status != Perch.Catch.OUT_OF_RANGE:
-			score = IN_REACH_SCORE + d
+			score = IN_REACH_SCORE + d + OFF_PATH_COST * off * d
+		if locked:
+			score = LOCK_SCORE
 		if candidate == null or score < best_score:
 			candidate = p
 			candidate_grip = grip
@@ -328,6 +339,11 @@ func _update_candidate() -> void:
 
 
 const IN_REACH_SCORE := -1000.0   ## (a perch in reach scores below any that isn't)
+const LOCK_SCORE := -2000.0       ## (the landing assist's held perch, below all)
+const CONE_DEG := 25.0         ## a candidate is at most this far off the path's way (a perch beside it, not the next tree)
+const LOCK_CONE_DEG := 35.0    ## ... the assist's held perch, before it lets it go
+const NEAR_SIDE := 0.6         ## m to the side of the path that passes at any angle (a perch right beside the bird)
+const OFF_PATH_COST := 0.5     ## score per metre out per radian off the path (of two the path misses alike, the one ahead)
 const PATH_ABOVE_COST := 2.5  ## a perch above the predicted path counts this much further off than one below
 const PATH_NEAR_COST := 0.1    ## per metre along the path: of two on it, the nearer
 const PREDICT_TIME := 2.0      ## s of flight path predicted at most (to past the approach radius)
@@ -386,6 +402,31 @@ func predicted_path() -> PackedVector3Array:
 		if i % 2 == 1:
 			pts.append(pos)
 	return pts
+
+
+## How far (rad, sideways: in plan, as the bird would turn for it) `to` (from the bird) is off the predicted path's way:
+## its chord from here to the point as far along the path as `to` is long (so a curving path carries the angle round
+## with it). How far above or below the path a perch is, the path's miss already counts.
+func _off_path(to: Vector3, path: PackedVector3Array) -> float:
+	var d := to.length()
+	if d < 1e-4:
+		return 0.0
+	var at := path[path.size() - 1]
+	var left := d
+	for i in path.size() - 1:
+		var seg := path[i].distance_to(path[i + 1])
+		if seg >= left:
+			at = path[i].lerp(path[i + 1], left / maxf(seg, 1e-6))
+			break
+		left -= seg
+	var chord := Vector2(at.x - path[0].x, at.z - path[0].z)
+	if chord.length() < 1e-3:
+		var f := model.flight_dir()
+		chord = Vector2(f.x, f.z)
+	var flat := Vector2(to.x, to.z)
+	if flat.length() < 1e-3 or chord.length() < 1e-3:
+		return 0.0   # (right over or under it, or flying straight up or down)
+	return absf(chord.angle_to(flat))
 
 
 ## Where `path` (predicted_path) passes `p` closest: [the grip point, the path's point there, metres along the path].

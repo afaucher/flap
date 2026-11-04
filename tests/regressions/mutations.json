@@ -3810,5 +3810,90 @@
     "replace": "\tvar on_candidate := true   #"
    }
   ]
+ },
+ {
+  "id": "perch-cone-wide",
+  "bug": "A perch up to 60 deg off the bird's way could be the landing candidate (the old cos 0.5 cone), so the novice landing assist swung the bird round onto the next tree (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_perch_highlight",
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "const CONE_DEG := 25.0",
+    "replace": "const CONE_DEG := 60.0"
+   }
+  ]
+ },
+ {
+  "id": "perch-off-path-free",
+  "bug": "Being off to the side of the path cost a candidate nothing: of a perch ahead and one beside the path that it passes a little nearer, the one beside won (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tscore += OFF_PATH_COST * off * d\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "assist-lock-ignored",
+  "bug": "The landing assist's perch wasn't held: its own turn could hand the candidate to another tree mid-approach (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tvar locked := p == candidate_lock\n",
+    "replace": "\t\tvar locked := false\n"
+   }
+  ]
+ },
+ {
+  "id": "assist-bank-uncapped",
+  "bug": "The landing assist could take the bank all the way from the player's stick (75% of it), making turns the player didn't ask for (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tstick.x = clampf(stick.x, inp.stick.x - MAX_BANK_ADD, inp.stick.x + MAX_BANK_ADD)   # (it nudges the turn, never makes it)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "assist-lock-cone-wide",
+  "bug": "The landing assist held its perch however far round it fell, so it kept pulling for a perch the player had turned away from (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "const LOCK_CONE_DEG := 35.0",
+    "replace": "const LOCK_CONE_DEG := 90.0"
+   }
+  ]
+ },
+ {
+  "id": "assist-lock-kept-on-release",
+  "bug": "The landing assist's held perch outlived catch being released, so the next approach started on a stale perch (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\t\tbird.candidate_lock = null\n\t\treturn inp",
+    "replace": "\t\treturn inp"
+   }
+  ]
  }
 ]
