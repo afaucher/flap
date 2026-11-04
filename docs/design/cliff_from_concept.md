@@ -12,7 +12,10 @@ rows within tolerance -- every cross-section row but the overhang share; along t
 still too short. Lit, it reads as a stepped, leaning wall with ledges at many heights, the talus heaped in places
 and thin between, faceted boulders on stony dirt -- but the face still reads as one wall with fine bedding lines,
 not the concept's big joint-bounded blocks (`now_concept_front_trunks.jpg`: the concept, our front view, our view
-from among the trunks). On hold while the heath is worked on.
+from among the trunks). **On hold** while the heath is worked on: off by default (`Pinewood.cliff`), the heath running
+all the way round; `--cliff` turns it on in the game and the range (`.un.ps1 --cliff`), and its own test and probes
+turn it on themselves (`test_arena_edge`, `probe_cliff_plan`, `probe_cliff_edges`, and `probe_edge_view`'s cliff,
+ortho, top, top_aligned and extents headings), so `cliff_measure.ps1` works as before.
 
 ## The concept
 

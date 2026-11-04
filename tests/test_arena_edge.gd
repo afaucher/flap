@@ -21,8 +21,11 @@ func _init() -> void:
 
 
 func setup() -> void:
+	Pinewood.cliff = false
+	check(Pinewood.generate(7).rock == null, "on hold: by default the wood has no cliff, the heath runs all the way round")
+	Pinewood.cliff = true   # (on hold in the game, but this is its test)
 	var layout := Pinewood.generate(7)
-	check(not layout.escarpment.is_empty() and layout.rock != null, "the pine wood has an escarpment")
+	check(not layout.escarpment.is_empty() and layout.rock != null, "with the cliff on, the pine wood has an escarpment")
 	eq(Pinewood.generate(7).escarpment.at, layout.escarpment.at, "same seed, same escarpment")
 	EdgeBuilder.draw_always = true   # (the drawn-only parts too: they're what this test is about)
 	var arena := ArenaBuilder.new()

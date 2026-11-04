@@ -16,6 +16,7 @@ func setup() -> void:
 	var args := OS.get_cmdline_user_args()
 	var out := Boot.arg_value(args, "--out")
 	var seed_arg := Boot.arg_value(args, "--seed")
+	Pinewood.cliff = true   # (the escarpment is what this measures)
 	var layout := Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
 	var esc := layout.rock
 	var meta := {"boundary": layout.boundary, "at": esc.at, "half": Escarpment.HALF, "foot": esc.foot, "grids": {}}

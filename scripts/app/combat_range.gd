@@ -95,6 +95,7 @@ func _ready() -> void:
 		ForestLight.setup(self)
 	else:
 		Game.add_environment(self)
+	Pinewood.cliff = args.has("--cliff")   # (the escarpment at the edge: on hold, off unless asked for)
 	layout = Pinewood.generate(7) if pinewood else ArenaLayout.generate(7)
 	HdrOutput.add(self)
 	arena = ArenaBuilder.new()

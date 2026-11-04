@@ -19,6 +19,7 @@ func setup() -> void:
 	get_window().size = Vector2i(1376, 768)   # (the main window, as the game draws it: a SubViewport loses the sky)
 	var root := Node3D.new()
 	add_child(root)
+	Pinewood.cliff = args.has("--cliff") or heading in ["cliff", "ortho", "top", "top_aligned", "extents"]   # (the cliff's views need it)
 	var layout := Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
 	ForestLight.setup(root)
 	if args.has("--no-fog"):   # (diagnostic: how much of what we see far off is the haze)
@@ -117,7 +118,7 @@ func setup() -> void:
 	if heading == "fence":   # (as the heath concept is framed: low, just inside the posts, looking along them, the
 		# wood on the left and the heath on the right, the falcon flying ahead low over the fence line; on the far
 		# side of the ring from the escarpment)
-		var ca := float(layout.escarpment.at) + PI * 0.8
+		var ca := (float(layout.escarpment.at) if not layout.escarpment.is_empty() else atan2(-sun_h.x, -sun_h.z) + Escarpment.RAKE) + PI * 0.8
 		d = Vector3(sin(ca), 0.0, cos(ca))
 		var fwd := Vector3.UP.cross(d).normalized().rotated(Vector3.UP, deg_to_rad(-14.0))
 		var cam_at := d * (edge - 1.8) + Vector3.UP * 3.8

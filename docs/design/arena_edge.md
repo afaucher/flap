@@ -8,6 +8,9 @@ The concept: `docs/images/concepts/r5_edge_split.jpg` (Gemini, from our own chas
 its top left (a broken limestone escarpment) and bottom right (open heath). Of the four edges tried, those two;
 the river and rival wood and the balloon line were set aside (`docs/design/...` round five in the session notes).
 
+**Now:** the escarpment is on hold (`Pinewood.cliff`, off; `--cliff` turns it on): the heath runs all the way round
+the wood. The cliff's design and where it got to: `cliff_from_concept.md`.
+
 ## What's there
 
 - **The escarpment** (`Escarpment`, built by `EdgeBuilder._rock` and `_blocks`): one sector of the ring, 104 deg wide,

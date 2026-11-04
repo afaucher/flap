@@ -28,7 +28,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   draws end grain on end faces and maps the planks scan at its true scale). Collision: deck box, rail capsule,
   hangar box only. Look with `tests/probe_timber.gd` (close-ups, `--warm`) and `tests/probe_outpost_concept.gd`
   (the menu's outpost framed like the concept, `--view`, `--warm`). The arena's edge (`Escarpment`, `EdgeBuilder`;
-  `docs/design/arena_edge.md`): after changing the cliff, `.\tools\cliff_measure.ps1` scores it against its concept
+  `docs/design/arena_edge.md`; on hold: off unless `--cliff`, `Pinewood.cliff`, the heath all round): after changing the cliff, `.\tools\cliff_measure.ps1` scores it against its concept
   (`docs/design/cliff_from_concept.md`: the process, what it measures and how far to trust each number).
 - `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
