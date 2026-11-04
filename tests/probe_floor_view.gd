@@ -45,6 +45,17 @@ func setup() -> void:
 			if l > hi:
 				hi = l
 				lit = p
+	# A moss patch (the floor field's moss signal well over its edge) near the lit spot, for a close look.
+	var moss_at := lit
+	var ff := layout.floor_field
+	var best := INF
+	for j in range(0, ff.n, 3):
+		for i in range(0, ff.n, 3):
+			var k := (j * ff.n + i) * 4
+			var p := ff.origin + Vector2(i, j) * FloorField.RES
+			if ff.data[k + 1] > 0.8 and ff.data[k + 3] == 0.0 and p.length() < layout.boundary - 10.0 and p.distance_to(lit) < best:
+				best = p.distance_to(lit)
+				moss_at = p
 	var glade: Dictionary = layout.openings[1]
 	var gc: Vector2 = glade.centre
 	var views := [
@@ -54,8 +65,10 @@ func setup() -> void:
 		["looking down from 12 m", _v3(shade, 12.0) + Vector3(6, 0, 6), _v3(shade, 0.0) - Vector3(4, 0, 4)],
 		["across the glade, 2 m", _v3(gc - gc.normalized() * float(glade.r) * 1.1, 2.0), _v3(gc, 0.5)],
 		["the clearing's edge, 3 m", _v3(Vector2(0, layout.clearing_radius + 6.0), 3.0), _v3(Vector2(0, 0), 0.0)],
+		["moss, from 0.8 m", _v3(moss_at, 0.8) + Vector3(1.2, 0, 1.2), _v3(moss_at, 0.0) - Vector3(0.3, 0, 0.3)],
+		["moss, from 3 m", _v3(moss_at, 3.0) + Vector3(3, 0, 3), _v3(moss_at, 0.0)],
 	]
-	var sheet := Image.create(CELL.x * 2, CELL.y * 3, false, Image.FORMAT_RGB8)
+	var sheet := Image.create(CELL.x * 2, CELL.y * 4, false, Image.FORMAT_RGB8)
 	for i in views.size():
 		var v: Array = views[i]
 		cam.look_at_from_position(v[1], v[2], Vector3.UP)

@@ -22,6 +22,15 @@ uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, r
 uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float scan_tile = 2.0;
 uniform vec3 scan_tint : source_color = vec3(1.0);
+// The moss's photoscan (forest_leaves_02, assets/LICENSES.md: moss cushions with twigs and fallen leaves), when given:
+// at `moss_tile` m, two scales and rotations blended by noise, toned greener by `moss_tint`.
+uniform bool use_moss_scan = false;
+uniform sampler2D moss_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D moss_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D moss_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float moss_tile = 3.0;
+uniform vec3 moss_tint : source_color = vec3(0.62, 0.85, 0.42);
+
 // The floor's field (FloorField.image): r the mounds' height, g moss, b dirt (each -1..1 about its edge), a the openings.
 uniform sampler2D field : filter_linear, repeat_disable;
 uniform vec2 field_origin = vec2(0.0);
@@ -141,6 +150,19 @@ void fragment() {
 	float tone = fbm3(p * 1.7 + 4.0);
 	vec3 mcol = mix(moss, moss_hi, tone * 0.6 + dome * 0.4);
 	mcol *= mix(1.0, 0.6 + 0.5 * dome + 0.3 * vnoise(p * 70.0), keep);
+	vec3 mscan_n = vec3(0.5, 0.5, 1.0);
+	float mscan_r = 0.85;
+	if (use_moss_scan) {
+		vec2 m1 = p / moss_tile + 0.21;
+		vec2 m2 = mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p / (moss_tile * 1.31) + 0.63;
+		float mw = smoothstep(0.35, 0.65, fbm3(p * 0.21 + 31.0));
+		vec3 sc = mix(texture(moss_albedo, m1).rgb, texture(moss_albedo, m2).rgb, mw);
+		float lum = dot(sc, vec3(0.3, 0.59, 0.11));
+		sc = mix(vec3(lum), sc, 1.25) * moss_tint;   // (more colour, greener: it reads as moss under the warm sun)
+		mcol = sc * (0.8 + 0.4 * tone);
+		mscan_n = mix(texture(moss_normal, m1).rgb, texture(moss_normal, m2).rgb, mw);
+		mscan_r = mix(texture(moss_arm, m1).g, texture(moss_arm, m2).g, mw);
+	}
 	// (needles fallen on the moss near its edges)
 	float rim = smoothstep(0.0, 0.5, moss_m) * (1.0 - smoothstep(0.5, 1.0, moss_m));
 	mcol = mix(mcol, col, rim * 0.6);
@@ -161,14 +183,14 @@ void fragment() {
 	col = mix(col, dcol, dirt_m);
 	col = mix(col, scol, open_m);
 	ALBEDO = col;
-	ROUGHNESS = mix(mix(mix(rough, 0.8, moss_m), 0.97, dirt_m), 0.9, open_m);
+	ROUGHNESS = mix(mix(mix(rough, mscan_r, moss_m), 0.97, dirt_m), 0.9, open_m);
 	SPECULAR = 0.25;
 	// Relief: the scan's on the litter; the moss its cushions; the dirt its grit; the sward nearly flat.
 	float e = 0.02;
 	float hmx = fbm3((p + vec2(e, 0.0)) * 4.5 + 7.0) * 0.7 + fbm3((p + vec2(e, 0.0)) * 13.0 + 2.0) * 0.3;
 	float hmz = fbm3((p + vec2(0.0, e)) * 4.5 + 7.0) * 0.7 + fbm3((p + vec2(0.0, e)) * 13.0 + 2.0) * 0.3;
 	vec3 mn = normalize(vec3((cush - hmx) / e * 0.06, (cush - hmz) / e * 0.06, 1.0)) * 0.5 + 0.5;
-	nrm = mix(nrm, mix(vec3(0.5, 0.5, 1.0), mn, keep), moss_m);
+	nrm = mix(nrm, use_moss_scan ? mscan_n : mix(vec3(0.5, 0.5, 1.0), mn, keep), moss_m);
 	nrm = mix(nrm, vec3(0.5 + (grit - 0.5) * 0.2 * keep, 0.5, 1.0), dirt_m);
 	nrm = mix(nrm, vec3(0.5, 0.5 + (blades - 0.5) * 0.25 * keep, 1.0), open_m);
 	NORMAL_MAP = nrm;

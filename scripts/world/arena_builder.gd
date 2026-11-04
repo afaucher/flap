@@ -81,6 +81,11 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
+		var mo := "res://assets/textures/ground/forest_leaves_02/forest_leaves_02"   # (the moss: assets/LICENSES.md)
+		sm.set_shader_parameter("use_moss_scan", true)
+		sm.set_shader_parameter("moss_albedo", load(mo + "_diff_4k.jpg"))
+		sm.set_shader_parameter("moss_normal", load(mo + "_nor_gl_4k.jpg"))
+		sm.set_shader_parameter("moss_arm", load(mo + "_arm_4k.jpg"))
 		var ff := layout.floor_field
 		if ff != null:
 			sm.set_shader_parameter("use_field", true)
