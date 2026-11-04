@@ -2666,6 +2666,7 @@
   "id": "combat-picture-stale-between-looks",
   "bug": "With the brain looking every other tick, the picture between looks was a tick old: fire control and the defence read where birds and rounds had been (2026-11-03).",
   "tests": [
+   "test_combat_sense",
    "test_fire_control",
    "test_combat_defense"
   ],
@@ -2681,6 +2682,7 @@
   "id": "combat-history-at-look-rate",
   "bug": "Sense recorded the birds' history only when it looked (every other tick): what it read a reaction time back was up to a tick older, enough to lose a seeker drag past a trunk and a turning shot (2026-11-03).",
   "tests": [
+   "test_combat_sense",
    "test_fire_control",
    "test_combat_defense"
   ],
@@ -2956,6 +2958,20 @@
     "file": "scripts/combat/ai/combat_brain.gd",
     "find": "posmod(_ticks + _phase, THINK_EVERY)",
     "replace": "posmod(Engine.get_physics_frames() + _phase, THINK_EVERY)"
+   }
+  ]
+ },
+ {
+  "id": "patrol-turns-at-centre",
+  "bug": "A combat bird patrolling at the very middle of its patrol circle aimed 0.6 rad round from a bearing it didn't have: it turned hard right whatever its heading, so a defence that started from patrol (the tree drag) worked one way and not the other (2026-11-03).",
+  "tests": [
+   "test_combat_defense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\tif rel.length() < PATROL_RADIUS * 0.5:",
+    "replace": "\t\tif false:"
    }
   ]
  }
