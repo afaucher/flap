@@ -6,6 +6,8 @@ extends TestCase
 ##    the scan smeared into streaks running one way, as an end face once was.
 ##  - A hangar wall shows its boards: the grain varying across every part of it, the dark gaps between the
 ##    boards; a face wider than a scan board is laid as several boards with grooves, not one stretched.
+##  - The hangar's opening, looked into with the sun behind the hangar: its inside reads through it, dim (a fraction
+##    of the wall outside: its paler, unweathered wood would be brighter than the wall in the open sky), not black.
 ##  - The grain runs along a brace (as along a plank): the picture varies less along the piece than across it,
 ##    the piece turned either way on screen.
 ##  - A plank's top is one scan board, no gap line down its middle.
@@ -100,7 +102,13 @@ func setup() -> void:
 		print("%s end: rings %d up, %d across" % [name, up_r, across_r])
 		check(up_r >= 4 and across_r >= 4, "%s: its end shows rings both ways across it (%d up, %d across)" % [name, up_r, across_r])
 
-	# The hangar's back wall: boards with gaps, the grain varying across all of it.
+	# The hangar's back wall: boards with gaps, the grain varying across all of it. The hangar is hollow, so its walls must
+	# shade its inside (the game's sun casts shadows; elsewhere here the sun needn't): through its gaps, its dim inside.
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL   # (one map over the few metres seen, fine enough for
+	sun.directional_shadow_max_distance = 3.0                           # 16 mm boards)
+	sun.shadow_bias = 0.01
+	sun.shadow_normal_bias = 0.3
 	var back: Array = pieces["hangar_board_nz_0"]
 	var bxf: Transform3D = world.call(back[0])
 	var n_out := bxf.basis.z.normalized()
@@ -112,6 +120,38 @@ func setup() -> void:
 	var wimg := await _shot(Vector3(wall_c.x, 1.0 + 0.235, wall_c.z), n_out, Vector3.UP, 0.42)
 	var band := Rect2i(int(PX * 0.1), int(PX * 0.5 - 0.115 / 0.42 * PX), int(PX * 0.8), int(0.23 / 0.42 * PX))
 	_boards(wimg, band, "the hangar's back wall", 3)
+
+	# The hangar's opening, looked into square on with the sun behind the hangar (sky light only on what's seen): the
+	# inside reads through it, dim as a shed's -- the far wall's inner face a fraction of the outer wall beside the
+	# opening, not black (a dark card or a dark box) and not as bright as outdoors (the sky kept out).
+	var S := ArenaBuilder.HANGAR_SIZE
+	var op := ArenaBuilder.HANGAR_OPENING
+	var mesh_pt := func(x: float, y: float, z: float) -> Vector3:   # (deck frame -> world: the mesh's z is deck z negated)
+		return fm.global_transform * Vector3(x, y, -z)
+	var hx := ArenaBuilder._hangar_x(o)
+	var hz := ArenaBuilder._hangar_z(o)
+	var out_n := (fm.global_basis * Vector3(ArenaBuilder.HANGAR_SIDE, 0, 0)).normalized()
+	var oc: Vector3 = mesh_pt.call(hx + ArenaBuilder.HANGAR_SIDE * S.x * 0.5, op.get_center().y, hz + op.get_center().x)
+	var view := 0.42
+	var oimg := await _shot(oc, out_n, Vector3.UP, view, 0.25, out_n)
+	var mpp := view / PX   # (metres a pixel)
+	var region := func(dx: float, dy: float, w: float, h: float) -> Rect2i:   # (metres from the opening's middle: across the screen, up)
+		return Rect2i(int(PX * 0.5 + (dx - w * 0.5) / mpp), int(PX * 0.5 - (dy + h * 0.5) / mpp), int(w / mpp), int(h / mpp))
+	var lum_in := func(r: Rect2i) -> float:
+		var t := 0.0
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				t += _lum(oimg, x, y)
+		return t / maxf(r.get_area(), 1.0)
+	var dim_in: float = lum_in.call(region.call(0.0, -0.035, 0.1, 0.08))   # (below the slats)
+	var wall_l: float = lum_in.call(region.call(-0.145, 0.0, 0.05, 0.12))
+	var wall_r: float = lum_in.call(region.call(0.145, 0.0, 0.05, 0.12))
+	var outside := (wall_l + wall_r) * 0.5
+	print("hangar opening: inside %.3f, the wall beside it %.3f (%.2f of it)" % [dim_in, outside, dim_in / maxf(outside, 1e-4)])
+	check(dim_in > 0.1 * outside, "the hangar's inside reads through its opening, not black (%.3f, the wall %.3f)" % [dim_in, outside])
+	check(dim_in < 0.85 * outside, "the inside is dimmer than the wall outside it, the sky kept out (its paler unweathered wood unshaded would be twice the wall) (%.3f, %.2f of the wall beside it)" % [dim_in, dim_in / maxf(outside, 1e-4)])
+
+	sun.shadow_enabled = false
 
 	# A face wider than a scan board (0.5 m): laid as several boards, grooves between, nothing stretched.
 	var tm := TimberMesh.new()

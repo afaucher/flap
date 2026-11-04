@@ -97,7 +97,32 @@ func _quad(xf: Transform3D, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: V
 ## A square-sawn piece: `size` (across, along, through) about the frame's origin.
 func box(name: String, xf: Transform3D, size: Vector3, kind: int, sd: float, pith := Vector2.ZERO, board := -1, flags := 0) -> void:
 	_begin(name, xf, size, kind, sd, pith, board, flags)
+	_block(xf, -size * 0.5, size * 0.5)
+
+
+## A square-sawn board with a hole sawn through it: `hole` (its across, along extents in the piece's frame) cut
+## out of the box `box()` would draw. One piece, its frame and grain the whole board's, so the scan runs on unbroken
+## round the hole; the hole's sides are the board's sawn faces (end grain above and below it). A hole that misses
+## the board leaves it whole.
+func box_with_hole(name: String, xf: Transform3D, size: Vector3, hole: Rect2, kind: int, sd: float, pith := Vector2.ZERO, board := -1, flags := 0) -> void:
+	_begin(name, xf, size, kind, sd, pith, board, flags)
 	var h := size * 0.5
+	var x0 := clampf(hole.position.x, -h.x, h.x)
+	var x1 := clampf(hole.end.x, -h.x, h.x)
+	var y0 := clampf(hole.position.y, -h.y, h.y)
+	var y1 := clampf(hole.end.y, -h.y, h.y)
+	if x1 - x0 < 1e-5 or y1 - y0 < 1e-5:
+		_block(xf, -h, h)
+		return
+	for b in [[-h.x, x0, -h.y, h.y], [x1, h.x, -h.y, h.y], [x0, x1, -h.y, y0], [x0, x1, y1, h.y]]:   # (beside it, under and over it)
+		if b[1] - b[0] > 1e-5 and b[3] - b[2] > 1e-5:
+			_block(xf, Vector3(b[0], b[2], -h.z), Vector3(b[1], b[3], h.z))
+
+
+## The six faces of the box from `lo` to `hi` (the piece's frame).
+func _block(xf: Transform3D, lo: Vector3, hi: Vector3) -> void:
+	var h := (hi - lo) * 0.5
+	var m := (hi + lo) * 0.5
 	for ax in 3:
 		for sg: float in [-1.0, 1.0]:
 			var n := Vector3.ZERO
@@ -106,7 +131,7 @@ func box(name: String, xf: Transform3D, size: Vector3, kind: int, sd: float, pit
 			u[(ax + 1) % 3] = h[(ax + 1) % 3]
 			var v := Vector3.ZERO
 			v[(ax + 2) % 3] = h[(ax + 2) % 3]
-			var c := n * h[ax]
+			var c := m + n * h[ax]
 			_quad(xf, c - u - v, c + u - v, c + u + v, c - u + v, n)
 
 

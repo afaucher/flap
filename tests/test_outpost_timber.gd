@@ -9,6 +9,8 @@ extends TestCase
 ##    corners on every ammo box;
 ##  - the hangar stands at the back, on the right seen from the rail (as in the concept); the props (coil,
 ##    windsock) are at the other end, drawn only: the outpost's collision is its deck, rail and hangar;
+##  - the hangar's opening is sawn through its outer wall into a hollow inside with a board floor (rays through the
+##    drawn triangles), the wall solid round it; the frame's material knows the inside (where the sky's kept out);
 ##  - the outpost is a handful of draw calls (its planks and one frame mesh), one mesh for the outposts of a size.
 
 
@@ -202,6 +204,38 @@ func setup() -> void:
 			if absf(absf(lp.x) - cs.x * 0.5) < 0.008 and absf(absf(lp.y) - cs.y * 0.5) < 0.008 and absf(absf(lp.z) - cs.z * 0.5) < 0.008:
 				corners += 1
 		eq(corners, 8, "ammo box %d: brass at its eight corners" % i)
+
+	# The hangar's opening: sawn through its outer wall into a hollow inside (a ray in through its middle passes the wall
+	# and meets the far wall's inner face), not a dark card on a solid wall; just off it (below, either side, above)
+	# the wall is solid; a floor inside. In the mesh's frame (deck z negated), rays against its drawn triangles.
+	var S := ArenaBuilder.HANGAR_SIZE
+	var hx := ArenaBuilder._hangar_x(o)
+	var hz := ArenaBuilder._hangar_z(o)
+	var op := ArenaBuilder.HANGAR_OPENING
+	var inward := Vector3(-ArenaBuilder.HANGAR_SIDE, 0.0, 0.0)
+	var wall_x: float = hx + ArenaBuilder.HANGAR_SIDE * S.x * 0.5
+	var first_hit := func(from: Vector3, dir: Vector3) -> float:
+		var best := INF
+		for i in range(0, pos.size(), 3):
+			var h: Variant = Geometry3D.ray_intersects_triangle(from, dir, pos[i], pos[i + 1], pos[i + 2])
+			if h == null:
+				h = Geometry3D.ray_intersects_triangle(from, dir, pos[i], pos[i + 2], pos[i + 1])
+			if h != null:
+				best = minf(best, from.distance_to(h))
+		return best
+	var at_wall := func(along: float, up: float) -> float:   # (from 0.1 m outside the outer wall, straight in)
+		return first_hit.call(Vector3(wall_x - inward.x * 0.1, up, -(hz + along)), inward)
+	var through: float = at_wall.call(op.get_center().x, op.get_center().y)
+	near(through, 0.1 + S.x - ArenaBuilder.HANGAR_BOARD_T, 0.004, "in through the hangar's opening: past its wall to the far wall's inside (%.3f m in)" % through)
+	for off: Array in [["under its sill", op.get_center().x, op.position.y - 0.04], ["beside it (back)", op.position.x - 0.04, op.get_center().y], ["beside it (front)", op.end.x + 0.04, op.get_center().y], ["over it", op.get_center().x, op.end.y + 0.05]]:
+		var d: float = at_wall.call(off[1], off[2])
+		check(d < 0.1 + ArenaBuilder.HANGAR_BOARD_T + 0.002, "the hangar's wall is solid %s (hit %.3f m in)" % [off[0], d])
+	var floor_d: float = first_hit.call(Vector3(hx, 0.3, -hz), Vector3.DOWN)
+	near(0.3 - floor_d, 0.01, 0.003, "a board floor inside the hangar, on the deck (its top %.3f m up)" % (0.3 - floor_d))
+	var inside := ArenaBuilder.hangar_inside(o)
+	check(inside.has_point(Vector3(wall_x + inward.x * (ArenaBuilder.HANGAR_BOARD_T + 0.002), op.get_center().y, -(hz + op.get_center().x))) and not inside.has_point(Vector3(wall_x - inward.x * 0.002, op.get_center().y, -(hz + op.get_center().x))), "the shader's hangar inside starts at the outer wall's inner face")
+	var fmat := fm.material_override as ShaderMaterial
+	check(fmat.get_shader_parameter("hut_lo") == inside.position and fmat.get_shader_parameter("hut_hi") == inside.end, "the frame's material knows the hangar's inside")
 
 	# Draw calls: the planks and the frame; a second outpost of the same size (on the same trunk) shares the frame's mesh.
 	var meshes := 0

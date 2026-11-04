@@ -9,8 +9,10 @@
 //    sawn plank, so they read as arcs; inside a squared beam; on the axis of a round rail), dark latewood,
 //    radial checks, faint saw marks, coloured from the board's own scan, relief by a derivative bump (an end
 //    face has no useful tangent frame);
-//  - iron (bolts, washers, plates: dark, rusting), brass and olive paint (the ammo boxes), the dark inside of
-//    the hangar, and rope (coiled round the rail).
+//  - iron (bolts, washers, plates: dark, rusting), brass and olive paint (the ammo boxes), dark seams, and rope
+//    (coiled round the rail).
+// The hangar is hollow: inside it (`hut_lo` .. `hut_hi`) the sky's light is a small share (INSIDE_SKY), the sun's
+// whole, so its inside reads dim through its opening and the chinks between its boards.
 // A roundel can be painted (flag PAINTED): weathered, chipped along the grain, the grain and board gaps
 // showing through. Nail heads where the planks cross the bearers (`nail_at`, along the plank).
 shader_type spatial;
@@ -37,12 +39,20 @@ uniform bool nails = false;
 uniform vec3 roundel_c = vec3(0.0);      // model space: the roundel's centre, its axis, radius
 uniform vec3 roundel_n = vec3(1.0, 0.0, 0.0);
 uniform float roundel_r = 0.13;
+uniform vec3 hut_lo = vec3(1e6);         // model space: the hangar's inside, its floor to over its roof's underside
+uniform vec3 hut_hi = vec3(-1e6);        // between its walls' inner faces (ArenaBuilder.hangar_inside; none: empty)
 uniform vec3 paint_ring : source_color = vec3(0.66, 0.48, 0.15);
 uniform vec3 paint_blue : source_color = vec3(0.07, 0.13, 0.4);
 uniform vec3 crate_paint : source_color = vec3(0.68, 0.53, 0.2);
 
 // The scan's boards: nine across, the first gap at u = SCAN_GAP0, one board every SCAN_PITCH; its two rows of
 // nails at v = 0.293 and 0.70 (stepped over: our nails are where our bearers are).
+// Inside the hangar the walls and roof keep out most of the sky: only the opening and the chinks between the boards
+// see it (an opening of 0.04 m^2 in about 1.1 m^2 of inside: some 8% of the sky from the back wall), and the light
+// that gets in bounces round the pale wood inside (which the renderer doesn't follow): this share of the sky's
+// light, enough that the inside reads, dim, through the opening -- as in the concept -- and not as a black card.
+const float INSIDE_SKY = 0.3;
+
 const float SCAN_GAP0 = 0.0605;
 const float SCAN_PITCH = 0.1113;
 const float BOARD_USE = 0.205;           // m of a scan board clear of its gaps (one board: 0.223 m)
@@ -439,9 +449,17 @@ void fragment() {
 			}
 		}
 	}
+	// Inside the hangar: the sky's light there a small share, the sun's not (it falls in through the opening, and the
+	// shadows say where). Its walls' inner faces, the roof's underside and the floor; not the roof's top over it.
+	float ao_light = 0.35;
+	if (all(greaterThan(mp, hut_lo - 0.001)) && all(lessThan(mp, hut_hi + 0.001)) && (normalize(mn).y < 0.5 || mp.y < hut_lo.y + 0.05)) {
+		ao *= INSIDE_SKY;
+		ao_light = 0.0;
+		spec *= INSIDE_SKY;   // (nothing bright in there to see reflected but the opening)
+	}
 	ALBEDO = col;
 	AO = ao;
-	AO_LIGHT_AFFECT = 0.35;
+	AO_LIGHT_AFFECT = ao_light;
 	ROUGHNESS = rough;
 	METALLIC = metal;
 	SPECULAR = spec;

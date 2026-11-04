@@ -839,7 +839,8 @@ func _outpost(o: ArenaLayout.OutpostData) -> void:
 	fm.name = "Outpost%d_Frame" % o.id
 	fm.mesh = fr[0]
 	fm.set_meta("pieces", fr[1])
-	fm.material_override = _timber("frame", {"weather": 0.5, "roundel_c": Vector3(hx, ROUNDEL_Y, -(hz + HANGAR_SIZE.z * 0.5)), "roundel_n": Vector3(0.0, 0.0, -1.0), "roundel_r": ROUNDEL_R})
+	fm.material_override = _timber("frame", {"weather": 0.5, "roundel_c": Vector3(hx, ROUNDEL_Y, -(hz + HANGAR_SIZE.z * 0.5)), "roundel_n": Vector3(0.0, 0.0, -1.0), "roundel_r": ROUNDEL_R,
+		"hut_lo": hangar_inside(o).position, "hut_hi": hangar_inside(o).end})
 	fm.transform = Transform3D(frame, o.centre)
 	add_child(fm)
 
@@ -848,6 +849,8 @@ const PLANKS := 12                       ## planks across the deck
 const PLANK_T := 0.05                    ## m: their thickness (the deck's collision box is o.thickness)
 const PLANK_GAP := Vector2(0.01, 0.017)  ## m: the gaps between them, least and most
 const HANGAR_SIZE := ArenaLayout.HANGAR_SIZE   ## the hangar's box (its collision), deck frame
+const HANGAR_BOARD_T := 0.016   ## m: the hangar's boards
+const HANGAR_OPENING := Rect2(-0.045, 0.11, 0.15, 0.27)   ## the opening in its outer side: along the wall (deck z) from its middle, up from the deck
 const HANGAR_SIDE := ArenaLayout.HANGAR_SIDE   ## which end of the deck it stands at (deck x): -1, on the right seen from the rail
 const ROUNDEL_Y := 0.27
 const ROUNDEL_R := 0.16
@@ -858,6 +861,14 @@ static func _hangar_x(o: ArenaLayout.OutpostData) -> float:
 
 static func _hangar_z(o: ArenaLayout.OutpostData) -> float:
 	return ArenaLayout.hangar_z(o)
+
+
+## The hangar's inside in the frame mesh's own frame (deck z negated): from its floor (the deck's top) up to over its
+## roof's underside, between its walls' inner faces -- where planks.gdshader keeps the sky out.
+static func hangar_inside(o: ArenaLayout.OutpostData) -> AABB:
+	var c := Vector3(_hangar_x(o), 0.0, -_hangar_z(o))
+	var half := Vector3(HANGAR_SIZE.x * 0.5 - HANGAR_BOARD_T, 0.0, HANGAR_SIZE.z * 0.5 - HANGAR_BOARD_T)
+	return AABB(c - half, half * 2.0 + Vector3(0.0, HANGAR_SIZE.y + 0.05, 0.0))
 
 
 ## The bearers' z in the deck frame (out from its middle): the outer one under the plank ends by the rail, the
@@ -975,10 +986,12 @@ func _outpost_frame(o: ArenaLayout.OutpostData) -> Array:
 	return out
 
 
-## The hangar (in the deck frame by `d`): a dark box inside, walls of vertical boards with gaps, battens nailed
-## across them low and high, corner boards; the front (toward the rail) carries the painted roundel, the outer
-## side a tall opening, framed, slatted across its top, over a landing board; a plank roof pitched to the back,
-## overhanging, with a fascia across the front and barge boards down the sides.
+## The hangar (in the deck frame by `d`): hollow, a board floor inside, walls of vertical boards with gaps, battens
+## nailed across them low and high, corner boards; the front (toward the rail) carries the painted roundel, the outer
+## side a tall opening sawn through its boards, framed, slatted across its top, over a landing board; a plank roof
+## pitched to the back, overhanging, with a fascia across the front and barge boards down the sides. The inside is
+## dim as a shed's is (planks.gdshader's hut box, hangar_inside(): little sky reaches in), the sun falling in through
+## the opening.
 func _hangar_frame(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumberGenerator, d: Callable) -> void:
 	var hx := _hangar_x(o)
 	var hz := _hangar_z(o)
@@ -986,12 +999,23 @@ func _hangar_frame(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumber
 	var X := Vector3.RIGHT
 	var Y := Vector3.UP
 	var Z := Vector3(0.0, 0.0, -1.0)
-	var bt := 0.016   # (board thickness)
+	var bt := HANGAR_BOARD_T
 	var pitch := tan(deg_to_rad(8.0))
 	var roof_y := func(z: float) -> float:   # the roof's underside over deck z
 		return S.y - 0.01 + (z - hz) * pitch
 	var outer := "px" if HANGAR_SIDE > 0.0 else "nx"   # (the wall over the deck's end)
-	tm.box("hangar_core", Transform3D(Basis(), d.call(hx, S.y * 0.48, hz)), Vector3(S.x - 0.02, S.y * 0.96, S.z - 0.02), TimberMesh.Kind.DARK, 0.0)
+	# The opening in the outer side (deck frame): its middle along the wall, width, height, sill.
+	var sx: float = hx + HANGAR_SIDE * S.x * 0.5
+	var oz: float = hz + HANGAR_OPENING.get_center().x
+	var ow: float = HANGAR_OPENING.size.x
+	var oh: float = HANGAR_OPENING.size.y
+	var oy: float = HANGAR_OPENING.position.y
+	# The floor: boards laid front to back on the deck, inside the walls.
+	var fw := S.x - bt * 2.0
+	var fl := S.z - bt * 2.0
+	for i in 3:
+		var x: float = hx - fw * 0.5 + fw * (i + 0.5) / 3.0
+		tm.box("hangar_floor", TimberMesh.frame_along(d.call(x, 0.005, hz - fl * 0.5), d.call(x, 0.005, hz + fl * 0.5), X), Vector3(fw / 3.0 - 0.004, fl, 0.01), TimberMesh.Kind.BOARD, 0.23 + 0.31 * i, Vector2(0.0, -0.2), -1, TimberMesh.GAPPED)   # (fixed seeds: the rest of the outpost draws as before)
 	# The walls: [name, outward normal (deck), the wall's middle, its width, whether it runs along deck z]
 	var walls := [
 		["px", Vector3(1, 0, 0), Vector3(hx + S.x * 0.5 - bt * 0.5, 0.0, hz), S.z, true],
@@ -1025,7 +1049,16 @@ func _hangar_frame(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumber
 			if xf.basis.z.dot(nmesh) < 0.0:   # (through the board: out of the wall)
 				xf.basis.x = -xf.basis.x
 				xf.basis.z = -xf.basis.z
-			tm.box("hangar_board_%s_%d" % [wall[0], i], xf, Vector3(bwid, top, bt), TimberMesh.Kind.BOARD, rng.randf(), Vector2(rng.randf_range(-0.1, 0.1), -rng.randf_range(0.12, 0.3)), -1, flags)
+			var nm_b := "hangar_board_%s_%d" % [wall[0], i]
+			var sd := rng.randf()
+			var pith := Vector2(rng.randf_range(-0.1, 0.1), -rng.randf_range(0.12, 0.3))
+			if wall[0] == outer:   # (the opening sawn through the boards it crosses)
+				var h0 := xf.affine_inverse() * (d.call(sx, oy, oz - ow * 0.5) as Vector3)
+				var h1 := xf.affine_inverse() * (d.call(sx, oy + oh, oz + ow * 0.5) as Vector3)
+				var hole := Rect2(Vector2(minf(h0.x, h1.x), minf(h0.y, h1.y)), (Vector2(h1.x, h1.y) - Vector2(h0.x, h0.y)).abs())
+				tm.box_with_hole(nm_b, xf, Vector3(bwid, top, bt), hole, TimberMesh.Kind.BOARD, sd, pith, -1, flags)
+			else:
+				tm.box(nm_b, xf, Vector3(bwid, top, bt), TimberMesh.Kind.BOARD, sd, pith, -1, flags)
 			pos += bwid + gap
 		# Battens across the boards, low and high, on the outside, nailed through to each board.
 		var bat_h := 0.04
@@ -1081,14 +1114,7 @@ func _hangar_frame(tm: TimberMesh, o: ArenaLayout.OutpostData, rng: RandomNumber
 		var a1: Vector3 = d.call(x, roof_y.call(zf) + rt - fh * 0.5, zf)
 		var bxf := TimberMesh.frame_along(a0, a1, Y)
 		tm.box("barge", bxf, Vector3(fh, a0.distance_to(a1), ft), TimberMesh.Kind.BOARD, rng.randf(), Vector2(0.0, 0.2))
-	# The opening in the outer side: dark inside, framed, three slats across its top, a landing board under it.
-	var sx: float = hx + HANGAR_SIDE * S.x * 0.5
-	var oz := hz + 0.03
-	var ow := 0.15
-	var oh := 0.27
-	var oy := 0.11
-	var on := Vector3(HANGAR_SIDE, 0, 0)   # (deck frame: out of that wall)
-	tm.box("door", Transform3D(Basis(), d.call(sx + HANGAR_SIDE * 0.001, oy + oh * 0.5, oz)), Vector3(0.004, oh, ow), TimberMesh.Kind.DARK, 0.0)
+	# The opening's frame: jambs, head and sill, three slats across its top, a landing board under it.
 	var jx: float = sx + HANGAR_SIDE * 0.007
 	for k: float in [-1.0, 1.0]:   # (the jambs)
 		var jz: float = oz + k * (ow * 0.5 + 0.012)

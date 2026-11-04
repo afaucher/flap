@@ -3091,5 +3091,63 @@
     "replace": "\treturn true"
    }
   ]
+ },
+ {
+  "id": "hut-window-black-card",
+  "bug": "The outpost hangar's opening was a flat black card stuck on a solid wall over a dark box filling the hut: an opaque black window, no inside (2026-11-04).",
+  "tests": [
+   "test_outpost_timber",
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t# The opening's frame: jambs, head and sill, three slats across its top, a landing board under it.\n",
+    "replace": "\t# The opening's frame: jambs, head and sill, three slats across its top, a landing board under it.\n\ttm.box(\"door\", Transform3D(Basis(), d.call(sx + HANGAR_SIDE * 0.001, oy + oh * 0.5, oz)), Vector3(0.004, oh, ow), TimberMesh.Kind.DARK, 0.0)\n\ttm.box(\"hangar_core\", Transform3D(Basis(), d.call(hx, S.y * 0.48, hz)), Vector3(S.x - 0.02, S.y * 0.96, S.z - 0.02), TimberMesh.Kind.DARK, 0.0)\n"
+   }
+  ]
+ },
+ {
+  "id": "hut-opening-not-sawn",
+  "bug": "The hangar's outer wall boards left whole behind its opening's frame: no way in to see (2026-11-04).",
+  "tests": [
+   "test_outpost_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tif wall[0] == outer:   # (the opening sawn through the boards it crosses)\n",
+    "replace": "\t\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "hut-inside-full-sky",
+  "bug": "The hollow hangar's inside lit by the whole sky (the shader not told where it is): its pale unweathered wood brighter through the opening than the wall outside (2026-11-04).",
+  "tests": [
+   "test_outpost_timber",
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": ",\n\t\t\"hut_lo\": hangar_inside(o).position, \"hut_hi\": hangar_inside(o).end})",
+    "replace": "})"
+   }
+  ]
+ },
+ {
+  "id": "hut-inside-sky-not-kept-out",
+  "bug": "The hangar's inside known to the shader but the sky not kept out there: the inside as bright as outdoors through the opening (2026-11-04).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tao *= INSIDE_SKY;\n",
+    "replace": ""
+   }
+  ]
  }
 ]
