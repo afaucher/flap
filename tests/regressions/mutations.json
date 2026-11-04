@@ -3149,5 +3149,33 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "weapon-mix-ignores-skill",
+  "bug": "Guard for the enemy weapon mix by difficulty: a mix that ignored the skill would hand a recruit side as many seekers (the AI's strong weapon) as an ace side (2026-11-04).",
+  "tests": [
+   "test_weapon_mix"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_skill.gd",
+    "find": "\tfor k in mini(roundi(seeker_share * ids.size()), order.size()):",
+    "replace": "\tfor k in mini(roundi(2.0 / 3.0 * ids.size()), order.size()):"
+   }
+  ]
+ },
+ {
+  "id": "range-match-ignores-mix",
+  "bug": "Guard for the range match's enemy mix: arming the enemy with each species' own round would make the --skill difficulty skew do nothing (2026-11-04).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/combat_range.gd",
+    "find": "\t\tvar kit: Array = skill.weapons(ids) if team == THEIR_TEAM else ids.map(",
+    "replace": "\t\tvar kit: Array = ids.map("
+   }
+  ]
  }
 ]

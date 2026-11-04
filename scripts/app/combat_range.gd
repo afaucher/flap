@@ -230,6 +230,8 @@ func _start_match() -> void:
 		var other: Perch = side[2]
 		var ids: Array = side[3]
 		var board := TeamBoard.new(team)
+		# Your wingmen fly their species' rounds; the other side carries the mix its skill gives (CombatSkill.weapons).
+		var kit: Array = skill.weapons(ids) if team == THEIR_TEAM else ids.map(func(s): return CombatStyle.of(BirdProfile.by_id(s)).weapon)
 		var out := Vector3(other.position.x - base.position.x, 0.0, other.position.z - base.position.z).normalized()
 		var across := Vector3(-out.z, 0.0, out.x)
 		for i in ids.size():
@@ -238,11 +240,12 @@ func _start_match() -> void:
 			var l := world.add_bird(b, null, team)
 			var brain := CombatBrain.new(b, world, l, skill, 100 + n)
 			brain.board = board
-			var kind := "seekers" if brain.style.weapon == Launcher.Weapon.SEEKERS else "rockets"
+			var weapon: int = kit[i]
+			var kind := "seekers" if weapon == Launcher.Weapon.SEEKERS else "rockets"
 			_arm(b, l, [kind, kind])
 			if not tacks.has(b):
-				CombatBrain.arm(l, brain.style)
-			l.weapon = brain.style.weapon
+				CombatBrain.arm_with(l, weapon)
+			l.weapon = weapon
 			var weapons := AICombat.new()
 			weapons.brain = brain
 			l.controller = weapons

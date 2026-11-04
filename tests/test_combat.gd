@@ -38,6 +38,7 @@ func setup() -> void:
 		if in_shard(1):
 			await _range()
 		if in_shard(2):
+			await _match_kits()
 			await _range_match()
 		finish()
 		return
@@ -664,6 +665,39 @@ func _range() -> void:
 ## each other and fight -- some engage or attack, and they fire rounds (MATCH_ROUNDS within MATCH_CAP s; it stops as
 ## soon as they have, since how long first contact takes across the wood varies a lot from wood to wood) -- each
 ## carrying its species' round. (This is the scene's wiring; how well the AI fights: test_combat_team, test_combat_ai.)
+## A match set up at recruit and at ace: each enemy carries what CombatSkill.weapons gives its side at that skill
+## (fewer seekers at recruit than at ace), each wingman its species' round.
+func _match_kits() -> void:
+	var seekers := {}
+	for skill in ["recruit", "ace"]:
+		var r: Node = load("res://scenes/combat_range.tscn").instantiate()
+		add_child(r)
+		if not r.is_loaded:
+			await r.loaded
+		await frames(2)
+		r.match_mode = true
+		r.match_skill = skill
+		r.match_enemy = ["crow", "sparrow", "owl"]
+		r.restart()
+		var ai: Array = r.match_birds
+		var theirs := ai.filter(func(b): return not r.world.friends(b, r.bird))
+		var kit: Array = CombatSkill.preset(skill).weapons(theirs.map(func(b): return (b as Bird).profile.id))
+		var ok := theirs.size() == 3
+		var n := 0
+		for l in r.world.launchers:
+			if theirs.has(l.bird):
+				var want: int = kit[theirs.find(l.bird)]
+				ok = ok and int(l.capacity[want]) > 0 and l.weapon == want
+				for w in l.capacity:
+					ok = ok and (w == want or int(l.capacity[w]) == 0)   # (that one only)
+				n += 1 if l.weapon == Launcher.Weapon.SEEKERS else 0
+		seekers[skill] = n
+		check(ok, "a %s match: each enemy carries its side's mix (%s)" % [skill, kit])
+		r.queue_free()
+		await frames(2)
+	check(seekers.recruit < seekers.ace, "fewer enemy seekers at recruit than at ace (%d, %d)" % [seekers.recruit, seekers.ace])
+
+
 const MATCH_ROUNDS := 2
 const MATCH_CAP := 90.0
 
@@ -682,11 +716,14 @@ func _range_match() -> void:
 	check(r.target == null, "and no racetrack target")
 	for b in ai + [r.bird]:
 		(b as Bird).rig.visible = false   # (only the fight counts here; the range's own look: _range)
+	# Yours carry their species' rounds; theirs the mix their skill gives (CombatSkill.weapons), in spawn order.
+	var theirs := ai.filter(func(b): return not mine.has(b))
+	var kit: Array = CombatSkill.preset(r.match_skill).weapons(theirs.map(func(b): return (b as Bird).profile.id))
 	var kinds_ok := true
 	for l in r.world.launchers:
 		if ai.has(l.bird):
-			var st := CombatStyle.of(l.bird.profile)
-			kinds_ok = kinds_ok and int(l.capacity[st.weapon]) > 0 and l.weapon == st.weapon
+			var want: int = CombatStyle.of(l.bird.profile).weapon if mine.has(l.bird) else kit[theirs.find(l.bird)]
+			kinds_ok = kinds_ok and int(l.capacity[want]) > 0 and l.weapon == want
 	var shots := 0
 	var engaged := {}   # mode -> seconds some AI bird first flew it ("engage", "attack")
 	var modes := {}     # mode -> bird-ticks in it
@@ -706,6 +743,6 @@ func _range_match() -> void:
 	print("range match: %d rounds fired by %.1f s (cap %.0f s), first engaged %s, bird-ticks by mode %s, score %s" % [shots, t, MATCH_CAP, engaged, modes, r.world.score])
 	check(not engaged.is_empty(), "the AI birds find each other: some engage or attack within %.0f s" % MATCH_CAP)
 	check(shots >= MATCH_ROUNDS, "the AI birds fight: %d rounds fired within %.0f s" % [shots, MATCH_CAP])
-	check(kinds_ok, "each AI bird carries its species' round")
+	check(kinds_ok, "each AI bird carries its round: a wingman its species', an enemy its side's mix")
 	r.queue_free()
 	await frames(2)
