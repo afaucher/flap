@@ -24,6 +24,7 @@ const SOUNDS := {
 	# combat
 	"rocket_launch": {"takes": 5}, "rocket_motor": {"loop": 0.6}, "seeker_launch": {"takes": 3},
 	"seeker_motor": {"loop": 0.8}, "burst": {"takes": 4}, "burst_wood": {"takes": 3}, "burst_ground": {"takes": 2},
+	"gun_shot": {"takes": 6}, "gun_strike_wood": {"takes": 4}, "gun_strike_ground": {"takes": 3}, "bullet_zip": {"takes": 3},
 	"fizzle": {"takes": 2}, "feather_puff": {"takes": 3}, "downed_flutter": {"takes": 2}, "empty_click": {},
 	"weapon_switch": {}, "friend_buzz": {}, "score_up": {}, "score_down": {}, "respawn": {},
 	# locks and warnings
@@ -171,6 +172,49 @@ func _burst_ground(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array
 	var s := D.lowpass(_bang(rng.randf_range(3.0, 5.0)), 3500.0)
 	s = D.mix(s, _knock(rng.randf_range(65.0, 80.0), 0.08, 0.35), 0.0, -1.0)
 	return D.mix(s, D.lowpass(_grains(rng, 30, 0.5, 600.0, 2500.0, 0.25), 2500.0), 0.03)
+
+
+## A shot of the riders' belt-fed gun: pencil-sized, so a cap gun's crack, not a rifle's boom -- the firework's bang
+## pitched up an octave and more and cut to a few ms, a crack on its front, a small knock of the receiver -- then the
+## bolt's clack-clack as it cycles (two tiny metal clicks, about 20 and 45 ms on). Over in 80 ms, so ten a second
+## (GUN_RATE) stay ten shots and don't run together.
+func _gun_shot(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
+	var s := D.gain(D.hit(D.cut(_bang(rng.randf_range(12.0, 15.0)), 0.0, 0.09), 0.0003, 0.01), -3.0)
+	s = D.mix(s, _crack(rng, 2600.0, 0.004), 0.0, -2.0)
+	s = D.mix(s, _knock(rng.randf_range(260.0, 310.0), 0.008, 0.06), 0.0, -8.0)
+	var clicks := [[rng.randf_range(0.018, 0.024), 1.0, -12.0], [rng.randf_range(0.04, 0.048), 0.85, -9.0]]   # (back, home)
+	for c: Array in clicks:
+		var f: float = rng.randf_range(3200.0, 3800.0) * float(c[1])
+		var clk := D.mix(D.noise_hit(rng, 0.02, f, f, 3.0, 0.0003, 0.002), D.modal(0.03, [f * 1.31, f * 2.07], [0.5, 0.3], [0.004, 0.003]), 0.0, -6.0)
+		s = D.mix(s, clk, float(c[0]), float(c[2]))
+	return D.fade(D.cut(s, 0.0, 0.085), 0.0, 0.012)
+
+
+## A bullet into a trunk: a sharp thwack -- a click and a short wooden knock -- splinters, a little bark pattering.
+func _gun_strike_wood(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
+	var s := _crack(rng, 1800.0, 0.003)
+	s = D.mix(s, _knock(rng.randf_range(320.0, 420.0), 0.012, 0.08), 0.0, -2.0)
+	s = D.mix(s, D.noise_hit(rng, 0.06, 1800.0, 900.0, 1.5, 0.0005, 0.008), 0.0, -6.0)
+	s = D.mix(s, _grains(rng, 8, 0.06, 2000.0, 5000.0, 0.4), 0.003)
+	return D.mix(s, _grains(rng, 10, 0.3, 1000.0, 3500.0, 0.12), 0.04)
+
+
+## A bullet into the needle litter: a dull thup and a puff of grit (darker than wood: no crack to speak of).
+func _gun_strike_ground(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
+	var s := D.hit(D.lowpass(D.white(rng, 0.1), 900.0, 2), 0.001, 0.012)
+	s = D.mix(s, _knock(rng.randf_range(130.0, 160.0), 0.015, 0.1), 0.0, -3.0)
+	s = D.mix(s, _crack(rng, 1500.0, 0.002), 0.0, -16.0)
+	return D.mix(s, D.lowpass(_grains(rng, 14, 0.18, 700.0, 2500.0, 0.3), 2500.0), 0.01)
+
+
+## A bullet going by you close. At 95 m/s it's under the speed of sound, so no supersonic crack: a zip, a short
+## whistle of noise falling in pitch as it passes (Doppler: (343 + 95) / (343 - 95), so down to about 0.56 of where it
+## started), swelling to the pass and gone in 0.15 s.
+func _bullet_zip(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
+	var sec := rng.randf_range(0.11, 0.15)
+	var f0 := rng.randf_range(5000.0, 6500.0)
+	var s := D.svf(D.white(rng, sec), D.sweep(f0, f0 * 0.56), 6.0, 1)
+	return D.shape(s, func(k: float) -> float: return pow(k / 0.45, 2.0) if k < 0.45 else pow((1.0 - k) / 0.55, 1.5))
 
 
 ## A round that burned out in the air: a small dull pop, plainly harmless.

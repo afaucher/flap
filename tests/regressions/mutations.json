@@ -3614,5 +3614,61 @@
     "replace": "\tfor k in mini(roundi(1.0 / 3.0 * ids.size()), rest.size()):"
    }
   ]
+ },
+ {
+  "id": "gun-shot-rocket-cue",
+  "bug": "The gun's shots played a quiet, high rocket launch, its placeholder, not the gun's own report (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\t\tcue(\"gun_shot\", p.pos)\n",
+    "replace": "\t\tcue(\"rocket_launch\", p.pos, -12.0, 1.9)\n"
+   }
+  ]
+ },
+ {
+  "id": "bullet-zip-own",
+  "bug": "Your own bullets zipping by your ears as you fire (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\t\tif p.kind != Projectile.Kind.GUN or not p.alive or p.shooter == me:\n",
+    "replace": "\t\tif p.kind != Projectile.Kind.GUN or not p.alive:\n"
+   }
+  ]
+ },
+ {
+  "id": "bullet-zip-far",
+  "bug": "Bullets zipping by however far off they pass (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "const ZIP_NEAR := 1.5 ",
+    "replace": "const ZIP_NEAR := 8.0 "
+   }
+  ]
+ },
+ {
+  "id": "bullet-zip-every-frame",
+  "bug": "A bullet passing close zipping again every frame it's near, not once (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\t\t\tcue(\"bullet_zip\", c)\n\t\t\t_bullets[p.id] = false\n",
+    "replace": "\t\t\tcue(\"bullet_zip\", c)\n"
+   }
+  ]
  }
 ]

@@ -99,6 +99,9 @@ Columns:
 | Burst, fuse | `CombatWorld.burst(at, "fuse")` | 3D | A firecracker crack. Within 5 m: a punch, a ducking pulse and a short high ring. Far: low-passed with a forest echo tail | sample | 1 |
 | Burst on a trunk | `burst` "impact" + what it hit | 3D | Crack + wood splinter + bark crumble | sample | 2 |
 | Burst on the ground | `burst` "impact", near the ground | 3D | Crack + dirt and needle thump | sample | 2 |
+| Gun shot | `launched`, `p.kind` GUN (10 a second held, a tap 3) | 3D at the pod | A cap gun's crack (the firework's bang an octave and more up, cut short), a small receiver knock, then the bolt's clack-clack; over in 85 ms so ten a second stay ten shots. 6 takes | sample | 1 |
+| Bullet on a trunk / the ground | `burst` "impact", kind GUN | 3D | Wood: a click and a short knock, splinters, bark pattering (a thwack). Ground: a dull thup and grit, darker | synth | 1 |
+| Bullet going by | someone else's bullet passing within 1.5 m of you (`GameAudio.ZIP_NEAR`) | 3D where it passed | A zip: subsonic at 95 m/s, so no crack; noise whistling down in pitch (Doppler), 0.15 s | synth | 1 |
 | Fizzle | `burst` "expired" | 3D | A small dull pop in the air, clearly harmless | sample | 2 |
 | Feathers knocked out | `CombatWorld.hit` / `lose_feathers` | 3D (2D if it's you) | A soft feather-puff swish, and the bird's distress call | sample | 1 |
 | Downed | `downed(bird)` | 3D | A long distress call and a ragged falling flutter. If it's you, the wind thins out | sample | 1 |
@@ -257,10 +260,10 @@ Still open:
 - UI is dry.
 
 **Sounds:**
-- `SoundRecipes` holds 46 sounds (92 takes), built on `SoundDsp` (filters, noise, tones, note lists, loops).
+- `SoundRecipes` holds 50 sounds (108 takes), built on `SoundDsp` (filters, noise, tones, note lists, loops).
 - `tools/bake_sounds.gd` bakes them into `assets/audio/sfx/` in about 4 s.
 - Everything is synthesized except two sounds:
-  - the bursts, built on the bang of the CC0 firework recording that ..\cast uses (Freesound 336008), pitched up
+  - the bursts (and the gun's shot, an octave and more higher still and cut to a crack), built on the bang of the CC0 firework recording that ..\cast uses (Freesound 336008), pitched up
     3-7 semitones;
   - the perch catch: the user's recording of nails on a cat tree (`assets/audio/recordings/`). The bake finds its
     dozen scratches (`SoundDsp.events`) and keeps the six loudest as takes, with the rumble cut and the hiss between
@@ -271,8 +274,12 @@ Still open:
   gated out between notes. An alarm is several calls strung together tighter and a little faster. The synthesized
   stand-ins went: the crow's caw sounded like a honk (user, 2026-11-02).
 
+- **The gun** (2026-11-04): its shot, its strikes on wood and the ground, and the zip of a bullet going by you close
+  (someone else's, once a bullet, where it passed; `GameAudio._zips_tick`). A rocket or seeker passing close still has
+  no whizz.
+
 **Not built yet:**
-- the near-miss whizz;
+- the near-miss whizz for rockets and seekers;
 - the canopy brush;
 - the out-of-stamina rasp;
 - trunk creaks and outpost life;

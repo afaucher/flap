@@ -60,7 +60,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   0.27 m, sparrow 0.09) and hurts only that bird: no stun, a nudge, one feather -- inside the recovery window a third
   of one (`CombatWorld.GUN_CHIP`), so a stream chips about a feather a second. Drawn as tracer streaks with muzzle
   flashes; sparks on wood and ground (`CombatFx`); `launched` / `burst` carry `kind` GUN (`burst` why `"hit"` on a bird,
-  `"impact"`; none when it runs out). `GameAudio` maps it to quiet, high rocket / burst cues until it has its own.
+  `"impact"`; none when it runs out). `GameAudio`: its own shot (crack and bolt clatter), strikes on wood and ground, and a zip for someone else's
+  bullet passing within `ZIP_NEAR` of you.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
   that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
