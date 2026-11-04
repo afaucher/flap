@@ -12,9 +12,13 @@ extends Node3D
 ## theirs the outpost farthest from it. A downed bird comes back at its side's base once its down stun is over
 ## (mended, rearmed), and the circuit birds fly out from there and back to their racetracks. The score: the
 ## enemy birds each side has downed.
-##   .\range.ps1 [--bird <id>] [--target <id>] [--seekers] [--no-evade] [--demo] [--shot <png> --shot-after <s>]
-## Every bird carries the war tack: a pod each side of the rider, both of one kind -- rockets (six) or, with
-## --seekers (or --loadout seekers), seekers (four) -- and each round leaves from its own tube.
+##   .\range.ps1 [--bird <id>] [--target <id>] [--loadout <left>,<right>] [--seekers] [--no-evade] [--demo]
+##       [--shot <png> --shot-after <s>]
+## Every bird carries the war tack: a pod each side of the rider. Yours are --loadout <left>,<right>, each rockets
+## (three), seekers (two) or gun (a machine gun, Launcher.GUN_POD rounds); one value arms both sides, and --seekers is
+## seekers,seekers (unset: rockets,rockets). Each round leaves from its own pod; Q / RB switches between the two kinds
+## when they differ, and you start on the left pod's. The target and the wingman carry the same, a gun swapped for
+## rockets (the AI doesn't fly the gun yet: ai_pods); the match's AI birds, their species' round.
 ## --look <name> sets the pine wood's look (ForestLight.LOOKS; F6 steps through them).
 ## --demo flies your bird for you (chasing the target and firing), for screenshots and the test.
 ## --match: a team match instead of the target (docs/design/combat_ai.md, 4.8): you and two combat-AI wingmen
@@ -47,7 +51,7 @@ var bird_id := "crow"
 var target_id := "crow"
 var start_seekers := false
 var evade := true            ## the target breaks when locked or shot at (T toggles)
-var loadout: Array = []      ## the pods, left and right: both of one kind (empty: Saddle.DEFAULT_LOADOUT)
+var loadout: Array = []      ## your pods, left and right (--loadout; empty: Saddle.DEFAULT_LOADOUT)
 var tacks := {}              ## Bird -> Tack
 var home: Perch              ## your base's perch: where you rearm and mend
 var their_base: Perch        ## the other side's
@@ -89,10 +93,10 @@ func _ready() -> void:
 	Antialias.apply(self, args)
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
-	if Boot.arg_value(args, "--loadout") == "seekers":
-		start_seekers = true
-	if start_seekers:
+	loadout = parse_loadout(Boot.arg_value(args, "--loadout"))
+	if start_seekers and loadout.is_empty():
 		loadout = ["seekers", "seekers"]
+	start_seekers = loadout.has("seekers")
 	var pinewood := Boot.arg_value(args, "--forest") != "greybox"   # (the pine wood in its light; --forest greybox: the old test arena)
 	var screen := Loading.new(("3 v 3 match, %s skill" % match_skill) if match_mode else "Target practice")
 	add_child(screen)
@@ -171,9 +175,10 @@ func restart() -> void:
 		chase.cruise = 1.1
 		flight = chase
 		weapons = AICombat.new()
-		(weapons as AICombat).prefer = Launcher.Weapon.SEEKERS if start_seekers else Launcher.Weapon.ROCKETS
+		(weapons as AICombat).prefer = Launcher.Weapon.SEEKERS if start_seekers else Launcher.weapon_of((loadout if not loadout.is_empty() else ["rockets"])[0])
 	bird = _spawn(bird_id, flight, "Player")
 	audio.player = bird
+	var mine := loadout if not loadout.is_empty() else Array(Saddle.DEFAULT_LOADOUT)
 	if target_pilot != null:
 		var w: Array = target_pilot.waypoints   # come in behind the target's first straight, a little high
 		var along := ((w[1] as Vector3) - (w[0] as Vector3)).normalized()
@@ -182,11 +187,10 @@ func restart() -> void:
 		var out := Vector3(their_base.position.x - home.position.x, 0.0, their_base.position.z - home.position.z).normalized()
 		bird.fly_from(home.position + out * 10.0 + Vector3.UP * 4.0, out, bird.profile.v_best)
 	world.player = world.add_bird(bird, weapons, YOUR_TEAM)
-	_arm(bird, world.player)
+	_arm(bird, world.player, mine)
 	world.player.rearm_perch = home.id
 	combat_hud.home = home.position
-	if start_seekers:
-		world.player.weapon = Launcher.Weapon.SEEKERS
+	world.player.weapon = Launcher.weapon_of(mine[0])   # (the left pod's)
 	camera.bird = bird
 	camera.snap()
 	combat_hud.launcher = world.player
@@ -203,7 +207,7 @@ func _start_target() -> void:
 	target = _spawn(target_id, target_pilot, "Target")
 	var tl := world.add_bird(target, AICombat.new() if return_fire else null, THEIR_TEAM)
 	tl.rearm_perch = their_base.id
-	_arm(target, tl)
+	_arm(target, tl, ai_pods())
 	trails.track(target, CombatHud.ENEMY)
 	_launch_target()
 	# Your wingman: a racetrack of its own, above the target's, half a lap round.
@@ -215,7 +219,7 @@ func _start_target() -> void:
 		wingman = _spawn(target_id, wingman_pilot, "Wingman")
 		var wl := world.add_bird(wingman, null, YOUR_TEAM)
 		wl.rearm_perch = home.id
-		_arm(wingman, wl)
+		_arm(wingman, wl, ai_pods())
 		trails.track(wingman, CombatHud.FRIEND)
 		_launch_wingman()
 
@@ -266,15 +270,32 @@ static func _ids(list: String, n: int) -> Array:
 	return ids.slice(0, n)
 
 
-## Saddle up a bird that can carry the tack, and arm its launcher from the mounts (`pods`: the range's loadout
-## unless given): the rounds they hold, each fired from its own tube.
+## Saddle up a bird that can carry the tack, and arm its launcher from the mounts (`pods`, left and right; empty:
+## Saddle.DEFAULT_LOADOUT): the rounds they hold, each fired from its own pod.
 func _arm(b: Bird, l: Launcher, pods: Array = []) -> void:
 	if not Tack.RIDDEN.has(b.profile.id):
 		return
-	var t := Tack.fit(b.rig, b, pods if not pods.is_empty() else loadout)
+	var t := Tack.fit(b.rig, b, pods)
 	tacks[b] = t
-	var kinds := {Launcher.Weapon.ROCKETS: "rockets", Launcher.Weapon.SEEKERS: "seekers"}
-	l.set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(kinds[w], i))
+	l.set_tack(t)
+
+
+## The target's and the circuit wingman's pods: yours, a gun pod swapped for rockets.
+func ai_pods() -> Array:
+	return loadout.map(func(p: String) -> String: return "rockets" if p == "gun" else p)
+
+
+## --loadout's pods, [left, right]: "<left>,<right>", each rockets | seekers | gun, or one kind for both sides; []
+## when unset or not understood.
+static func parse_loadout(arg: String) -> Array:
+	var parts := Array(arg.to_lower().split(",", false)).map(func(p: String) -> String: return p.strip_edges())
+	if parts.size() == 1:
+		parts.append(parts[0])
+	if parts.size() != 2 or not Saddle.POD_KINDS.has(parts[0]) or not Saddle.POD_KINDS.has(parts[1]):
+		if arg != "":
+			push_warning("--loadout %s: expected <left>,<right>, each rockets | seekers | gun" % arg)
+		return []
+	return parts
 
 
 ## Your base: the rail of the outpost nearest the clearing (the start perch where the layout has none).
@@ -354,7 +375,7 @@ func _process(_dt: float) -> void:
 	# The pods show the rounds left.
 	for l in world.launchers:
 		if tacks.has(l.bird) and is_instance_valid(l.bird):
-			(tacks[l.bird] as Tack).set_ammo(int(l.ammo[Launcher.Weapon.ROCKETS]), int(l.ammo[Launcher.Weapon.SEEKERS]))
+			(tacks[l.bird] as Tack).set_ammo(l.left(Launcher.Weapon.ROCKETS), l.left(Launcher.Weapon.SEEKERS), l.left(Launcher.Weapon.GUN))
 
 
 func _unhandled_input(e: InputEvent) -> void:

@@ -3,7 +3,7 @@ extends Control
 ## The start menu (run with no arguments): Flight (the game: the arena and its birds, no rider, no weapons),
 ## Fight and the Lab. A choice opens its scene with its options added to the command line's (Boot.extra).
 ## Keys: 1..4, or click.
-## Fight opens a second screen first: your bird, your weapon (six rockets or four seekers), the mode (the 3 v 3
+## Fight opens a second screen first: your bird, your weapons (a pod each side: rockets, seekers or a gun), the mode (the 3 v 3
 ## match, or target practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot |
 ## ace), with the rules of the mode chosen. Enter starts it, Esc goes back.
 ## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
@@ -18,13 +18,15 @@ const CHOICES := [
 	["Quit", "", []],
 ]
 const RANGE := "res://scenes/combat_range.tscn"
-const WEAPONS := [   ## [label, what it does]
-	["Six rockets", "Fly straight and burst beside a bird: aim at the lead mark ahead of your target."],
-	["Four seekers", "Hold an enemy in the sight for a second, 6 to 40 m off, to lock; then they steer themselves."],
+const POD_KINDS := ["rockets", "seekers", "gun"]   ## (Saddle.POD_KINDS)
+const WEAPONS := [   ## [label, what it does], in POD_KINDS order
+	["Rockets", "Rockets (three a pod) fly straight and burst beside a bird: aim at the lead mark ahead of your target."],
+	["Seekers", "Seekers (two a pod): hold an enemy in the sight for a second, 6 to 40 m off, to lock; then they steer themselves."],
+	["Gun", "The gun (40 rounds a pod) fires while held: fast bullets, 40 m at most, aimed at the lead mark. Each hit takes a feather, and fewer in quick succession: it wears a bird down."],
 ]
 const MODES := [   ## [label, rules]
 	["3 v 3 match", "You and two AI wingmen (teal) against three AI birds (warm), out from the far outpost.\n" +
-		"- A hit knocks out two or three flight feathers. The hurt wing loses lift and drops; lose eight and you're down.\n" +
+		"- A hit knocks out two or three flight feathers (a bullet, one). The hurt wing loses lift and drops; lose eight and you're down.\n" +
 		"- A downed bird comes back at its base a few seconds later, mended and rearmed.\n" +
 		"- Perch on your base's rail for two seconds to rearm and grow your feathers back. Nowhere else rearms.\n" +
 		"- Bursts hurt anyone, teammates too: a teal cross over your sight means a friend is in the line of fire.\n" +
@@ -40,13 +42,13 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 	["ace", "Ace", "Near-instant reactions, sees almost all round, fine aim; drags your seekers through the trunks."],
 ]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
-Left mouse / F: fire.  Esc: free the mouse."
+Left mouse / F: fire.  Q: switch weapon.  Esc: free the mouse."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
 
 static var fight_bird := "crow"   ## the Fight screen's choices (kept while the game runs)
-static var fight_seekers := false
+static var fight_pods: Array = ["rockets", "rockets"]   ## left, right (POD_KINDS)
 static var fight_match := true
 static var fight_skill := "pilot"
 
@@ -114,10 +116,11 @@ func _build_fight() -> void:
 			_refresh(), "Bird"))
 	_blurb = _note(COL_W)
 	pick.add_child(_blurb)
-	pick.add_child(_heading("Weapon"))
-	pick.add_child(_row(WEAPONS.map(func(w: Array) -> String: return w[0]), int(fight_seekers), func(i: int) -> void:
-		fight_seekers = i == 1
-		_refresh(), "Weapon"))
+	for side in 2:
+		pick.add_child(_heading(["Left pod", "Right pod"][side]))
+		pick.add_child(_row(WEAPONS.map(func(w: Array) -> String: return w[0]), POD_KINDS.find(fight_pods[side]), func(i: int) -> void:
+			fight_pods[side] = POD_KINDS[i]
+			_refresh(), ["Left", "Right"][side]))
 	_weapon_note = _note(COL_W)
 	pick.add_child(_weapon_note)
 	pick.add_child(_heading("Mode"))
@@ -183,9 +186,7 @@ func choose(i: int) -> void:
 
 ## The range's options for the Fight screen's choices.
 static func fight_options() -> PackedStringArray:
-	var o := PackedStringArray(["--bird", fight_bird])
-	if fight_seekers:
-		o.append("--seekers")
+	var o := PackedStringArray(["--bird", fight_bird, "--loadout", "%s,%s" % fight_pods])
 	if fight_match:
 		o.append_array(["--match", "--skill", fight_skill])
 	return o
@@ -208,7 +209,11 @@ func _show(p: String) -> void:
 
 func _refresh() -> void:
 	_blurb.text = BirdProfile.by_id(fight_bird).blurb
-	_weapon_note.text = WEAPONS[int(fight_seekers)][1]
+	var notes := []
+	for kind in POD_KINDS:
+		if fight_pods.has(kind):
+			notes.append(WEAPONS[POD_KINDS.find(kind)][1])
+	_weapon_note.text = "\n".join(notes) + ("" if fight_pods[0] == fight_pods[1] else "\nQ switches between them.")
 	_rules.text = MODES[0 if fight_match else 1][1]
 	_skill_box.visible = fight_match
 	for k in SKILLS:

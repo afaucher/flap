@@ -209,7 +209,7 @@ const RECALL := 1.0             ## s a bird seen in firing position is still tak
 ## Give a launcher that isn't armed from mounts the style's one kind of round: six rockets or four seekers.
 static func arm(l: Launcher, st: CombatStyle) -> void:
 	var rockets := st.weapon == Launcher.Weapon.ROCKETS
-	l.capacity = {Launcher.Weapon.ROCKETS: Launcher.AMMO[Launcher.Weapon.ROCKETS] if rockets else 0, Launcher.Weapon.SEEKERS: 0 if rockets else Launcher.AMMO[Launcher.Weapon.SEEKERS]}
+	l.capacity = {Launcher.Weapon.ROCKETS: Launcher.AMMO[Launcher.Weapon.ROCKETS] if rockets else 0, Launcher.Weapon.SEEKERS: 0 if rockets else Launcher.AMMO[Launcher.Weapon.SEEKERS], Launcher.Weapon.GUN: 0}
 	l.ammo = l.capacity.duplicate()
 	l.weapon = st.weapon
 

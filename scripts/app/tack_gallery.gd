@@ -2,11 +2,11 @@ extends Node3D
 ## Dev scene: one bird with its war tack (scripts/tack), posed in flight or perched, for looking at the saddle,
 ## harness, launcher and rider up close.
 ##   .\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird falcon] [--pose glide|flap|upstroke|folded|flare]
-##       [--shot <png> [--shot-after <s>]] [--sheet <png> [--label <text>]] [--ammo <rockets>,<seekers>]
+##       [--shot <png> [--shot-after <s>]] [--sheet <png> [--label <text>]] [--ammo <rockets>,<seekers>[,<gun>]]
 ## --sheet renders the standard set of views (flight, perched, close-ups of the rider, launcher, harness and
 ## leather) into one image, for before/after comparisons; with --macros, close-ups of the seat, face, boots and
 ## breast ring instead; with --heads, the face and helmet; with --mounts, the weapon mounts; with --placement,
-## the lines of fire. --loadout rockets,seekers (left, right) and --tilt <deg> set the mounts. Keys: Space next view, P pose.
+## the lines of fire. --loadout rockets,gun (left, right: rockets | seekers | gun) and --tilt <deg> set the mounts. Keys: Space next view, P pose.
 
 const MACROS := [
 	["Seat from behind", "glide", "seat", Vector3(0.2, 0.6, 1.0), 0.05],
@@ -32,6 +32,8 @@ const MOUNTS := [
 	["Perched, the scarf", "folded", "head", Vector3(0.8, -0.1, 0.9), 0.09],
 	["Riding, hands on the grips (from ahead)", "glide", "launcher", Vector3(0.35, 0.3, -1.0), 0.028],
 	["Riding, the boots", "glide", "heel", Vector3(1.0, 0.25, 0.3), 0.03],
+	["Left mount close, outside above", "glide", "mount0", Vector3(-1.0, 0.7, 0.2), 0.026],
+	["Left mount close, from behind", "glide", "mount0", Vector3(-0.45, 0.35, 1.0), 0.026],
 ]
 const PLACEMENT := [
 	# (with --placement: the line of fire from the drawn muzzle in red, where the combat code fires from in yellow)
@@ -81,7 +83,7 @@ func _ready() -> void:
 	var ammo := Boot.arg_value(args, "--ammo")
 	if ammo != "":
 		var p := ammo.split(",")
-		tack.set_ammo(int(p[0]), int(p[1]))
+		tack.set_ammo(int(p[0]), int(p[1]), int(p[2]) if p.size() > 2 else -1)
 	branch = MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.018
@@ -144,7 +146,7 @@ func _placement_markers() -> void:
 	mat.no_depth_test = true
 	im.surface_begin(Mesh.PRIMITIVE_LINES, mat)
 	for kind in Saddle.POD_KINDS:
-		for i in tack.capacity(kind):
+		for i in (tack.saddle.round_order[kind] as Array).size():
 			var m := tack.saddle.round_muzzle(kind, i) * tack.saddle.scale.x
 			im.surface_set_color(Color(0.9, 0.1, 0.1))
 			im.surface_add_vertex(m)

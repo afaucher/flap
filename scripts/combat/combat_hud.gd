@@ -2,12 +2,13 @@ class_name CombatHud
 extends Control
 ## The weapons layer of the HUD (docs/design/concept_briefs.html, "The HUD vocabulary"):
 ##   gunsight   a ring where the launcher points, 25 m out
-##   lead       ROCKETS: a small diamond where to put the gunsight so a rocket meets the target
+##   lead       ROCKETS, GUN: a small diamond where to put the gunsight so a rocket (a bullet) meets the target
 ##   lock       SEEKERS: the lock cone around the gunsight, and a diamond on the target closing in as the lock
 ##              builds; solid when locked
 ##   bracket    on the target: range and closing speed
 ##   arrow      at the screen edge when the target is off-screen or behind
-##   rack       bottom right: the rounds left of each weapon carried, the selected one bright
+##   rack       the selected weapon's name and rounds left (a pip a round; the gun's belt a bar and a count), and the
+##              other kind carried, dim, with the key that switches to it (dev: bottom right, a row each)
 ##   health     over the rack: your bird's feathers (Bird.health), a notch per feather it can lose; and a short bar
 ##              under the target's bracket
 ##   teams      enemies in ENEMY (the target's bracket; a small mark on the others), teammates a FRIEND caret above
@@ -81,7 +82,7 @@ func _draw() -> void:
 			_text(tp + Vector2(r + 6, -r + 30), "%+.0f" % closing, DIM, 13)
 			if not l.can_aim():
 				pass
-			elif l.weapon == Launcher.Weapon.ROCKETS:
+			elif l.weapon != Launcher.Weapon.SEEKERS:
 				drew_lead = true
 				var lead := l.lead_point(t)
 				if not cam.is_position_behind(lead):
@@ -229,7 +230,22 @@ func _edge_arrow(cam: Camera3D, world_pos: Vector3, col := INK, scale_by := 1.0)
 
 
 func _empty(l: Launcher) -> bool:
-	return int(l.ammo[Launcher.Weapon.ROCKETS]) + int(l.ammo[Launcher.Weapon.SEEKERS]) == 0
+	return l.left(Launcher.Weapon.ROCKETS) + l.left(Launcher.Weapon.SEEKERS) + l.left(Launcher.Weapon.GUN) == 0
+
+
+const NAMES := {Launcher.Weapon.ROCKETS: "rockets", Launcher.Weapon.SEEKERS: "seekers", Launcher.Weapon.GUN: "gun"}
+
+
+## What the rack shows (tests read it): [{weapon, name, left, of, selected}] for each kind carried, the selected first.
+func rack_rows(l: Launcher) -> Array:
+	var out := []
+	for w in l.kinds():
+		var row := {"weapon": w, "name": NAMES[w], "left": l.left(w), "of": l.carried(w), "selected": w == l.weapon}
+		if w == l.weapon:
+			out.push_front(row)
+		else:
+			out.append(row)
+	return out
 
 
 ## The way home: a house mark on the base, or an arrow at the screen's edge toward it, with the distance.
@@ -279,7 +295,7 @@ func _draw_styled() -> void:
 			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)
 			if not l.can_aim():
 				pass
-			elif l.weapon == Launcher.Weapon.ROCKETS:
+			elif l.weapon != Launcher.Weapon.SEEKERS:
 				drew_lead = true
 				var lead := l.lead_point(t)
 				if not cam.is_position_behind(lead):
@@ -290,26 +306,24 @@ func _draw_styled() -> void:
 				_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())
 	_teams(cam, l, t, sp if sight_ok else Vector2.INF)
 	_warnings(cam, l)
-	# Your health and rounds.
-	var kind := Launcher.Weapon.ROCKETS if int(l.capacity[Launcher.Weapon.ROCKETS]) > 0 else Launcher.Weapon.SEEKERS
-	var n := int(l.capacity[kind])
+	# Your health and rounds: the selected weapon's, and the other kind carried.
+	var rows := rack_rows(l)
 	var health := float(l.bird.telemetry().health)
 	if FlightHud.style == "ring":
 		_ring_health(health)
-		_ring_rounds(n, int(l.ammo[kind]))
+		if not rows.is_empty():
+			_ring_rounds(int(rows[0].of), int(rows[0].left))
 	else:
 		var o := FlightHud.status_anchor()
 		var w := 200.0
 		_bar(Rect2(o.x, o.y, w, 12), health, Bird.DOWN_FEATHERS)
 		_text(Vector2(o.x + w + 8, o.y + 11), "health", INK, 12)
-		var pip := Vector2(12, 16)
 		var y := o.y + 22
-		for k in n:
-			var rr := Rect2(o.x + k * (pip.x + 5), y, pip.x, pip.y)
-			draw_rect(rr.grow(1.0), Color(0, 0, 0, 0.5))
-			draw_rect(rr, INK if k < int(l.ammo[kind]) else Color(0, 0, 0, 0.0))
-			draw_rect(rr, DIM, false, 1.0)
-		_text(Vector2(o.x + n * (pip.x + 5) + 6, y + pip.y - 2), "rockets" if kind == Launcher.Weapon.ROCKETS else "seekers", INK, 12)
+		if not rows.is_empty():
+			var end := _rounds_row(Vector2(o.x, y), rows[0], true)
+			_text(Vector2(end + 6, y + 14), String(rows[0].name), INK, 12)
+		if rows.size() > 1:
+			_text(Vector2(o.x, y + 36), "Q: %s %d" % [rows[1].name, int(rows[1].left)], DIM, 12)
 	if home != null and l.bird.state != Bird.State.PERCHED and (_empty(l) or l.bird.health() < 1.0):
 		_home_marker(cam, home, l.bird.global_position.distance_to(home))
 	if world != null:
@@ -352,10 +366,37 @@ func _ring_health(h: float) -> void:
 		draw_arc(c, r, minf(s0, s1), maxf(s0, s1), 6, col, 4.0)
 
 
-## Rounds along the aim ring's bottom: a tick each, lit while loaded.
+## A weapon's rounds from `at` (a rack_rows row): a pip a round, or a gun's belt as a bar with the count. Returns the
+## x it ends at.
+func _rounds_row(at: Vector2, row: Dictionary, bright: bool) -> float:
+	var col := INK if bright else DIM
+	if int(row.weapon) == Launcher.Weapon.GUN:
+		var r := Rect2(at.x, at.y + 3, 84, 10)
+		draw_rect(r.grow(1.0), Color(0, 0, 0, 0.5))
+		draw_rect(Rect2(r.position, Vector2(r.size.x * float(row.left) / maxf(float(row.of), 1.0), r.size.y)), col)
+		draw_rect(r, DIM, false, 1.0)
+		_text(Vector2(r.end.x + 6, at.y + 14), "%d" % int(row.left), col, 12)
+		return r.end.x + 6 + _font.get_string_size("%d" % int(row.left), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	var pip := Vector2(12, 16)
+	var n := int(row.of)
+	for k in n:
+		var rr := Rect2(at.x + k * (pip.x + 5), at.y, pip.x, pip.y)
+		draw_rect(rr.grow(1.0), Color(0, 0, 0, 0.5))
+		draw_rect(rr, col if k < int(row.left) else Color(0, 0, 0, 0.0))
+		draw_rect(rr, DIM, false, 1.0)
+	return at.x + n * (pip.x + 5)
+
+
+## Rounds along the aim ring's bottom: a tick each, lit while loaded (a gun's belt: an arc, lit to what's left).
 func _ring_rounds(n: int, left: int) -> void:
 	var c := FlightHud.ring_centre
 	var r := FlightHud.ring_r
+	if n > 12:
+		var a0 := PI * 0.5 + 0.55
+		var a1 := PI * 0.5 - 0.55
+		draw_arc(c, r, a1, a0, 32, Color(0, 0, 0, 0.7), 9.0)
+		draw_arc(c, r, a0 - (a0 - a1) * float(left) / float(n), a0, 32, INK, 5.0)
+		return
 	for k in n:
 		var a := PI * 0.5 + (k - (n - 1) * 0.5) * 0.1
 		var p0 := c + Vector2(cos(a), sin(a)) * (r - 6.0)
@@ -376,22 +417,12 @@ func _bar(r: Rect2, h: float, notches: int) -> void:
 
 func _rack(l: Launcher) -> void:
 	var base := Vector2(size.x - 210, size.y - 64)
-	var rows := []
-	for row in [[Launcher.Weapon.ROCKETS, "ROCKETS"], [Launcher.Weapon.SEEKERS, "SEEKERS"]]:
-		if int(l.capacity[row[0]]) > 0:
-			rows.append(row)
+	var rows := rack_rows(l)
 	for i in rows.size():
-		var w: int = rows[i][0]
-		var sel := l.weapon == w
+		var sel: bool = rows[i].selected
 		var y := base.y + i * 24
-		_text(Vector2(base.x, y + 13), rows[i][1], INK if sel else DIM, 13)
-		var n := int(l.capacity[w])
-		for k in n:
-			var r := Rect2(base.x + 80 + k * 18, y + 1, 12, 14)
-			if k < int(l.ammo[w]):
-				draw_rect(r, INK if sel else DIM)
-			else:
-				draw_rect(r, DIM, false, 1.0)
+		_text(Vector2(base.x, y + 13), String(rows[i].name).to_upper(), INK if sel else DIM, 13)
+		_rounds_row(Vector2(base.x + 80, y), rows[i], sel)
 
 
 func _text(p: Vector2, s: String, c: Color, fs := 15, align := HORIZONTAL_ALIGNMENT_LEFT) -> void:

@@ -6,17 +6,24 @@ game's own (`Launcher`, `Projectile`, `CombatWorld`, `CombatStyle`) and what the
 
 ## 1. Your weapons
 
-Your rider's launcher is bolted to the saddle facing forward: **you aim by flying the bird**. A bird carries one kind
-of round.
+Your rider's launcher is bolted to the saddle facing forward: **you aim by flying the bird**. There's a pod each side,
+and you choose each: rockets, seekers or a gun. With two different kinds, **Q / RB switches** between them.
 
-**Rockets** (six; fire is held for four a second). Unguided. Each has a proximity fuse that bursts within about 1 m
+**Rockets** (three a pod; fire is held for four a second). Unguided. Each has a proximity fuse that bursts within about 1 m
 of a bird once it has flown 3 m. So a rocket has to *pass close*, not merely be near: fly the gunsight onto the lead
 marker, the point the target will be at when the rocket gets there.
 - Best from **8-22 m** behind: close enough that the target can't turn away during the flight, far enough that you
   aren't flying into it.
 - Against a turning target, lead *inside* its turn; the marker already does.
 
-**Seekers** (four). Guided: lock on, then fire.
+**Gun** (40 rounds a pod; ten a second while fire is held, a tap fires three). Fast bullets, about 40 m at most, aimed
+at the same lead marker as rockets (it sits much closer to the target: a bullet takes a fifth of a second to 20 m).
+- A bullet has no fuse: it has to **hit the bird itself**, so a hawk is far easier to hit than a sparrow.
+- Each hit takes a feather; more hits within a second take a third of one each. The gun **wears a bird down**
+  over a long burst; rockets and seekers finish it.
+- No stun: a bird you hit keeps flying, and keeps fighting.
+
+**Seekers** (two a pod). Guided: lock on, then fire.
 - Hold the target within **15°** of your nose for **1 s** to lock. Once building, the lock survives the target
   wandering out to **25°**; beyond that it's dropped.
 - Lock range **6-40 m**. Hang back at **12-28 m**: inside 12 m a jinking target sweeps out of the cone.
@@ -28,7 +35,8 @@ marker, the point the target will be at when the rocket gets there.
 
 A hit knocks out the flight feathers nearest it, about 2.5 at a time. That wing loses area and drops: **hold the stick
 against the roll**. Eight feathers down and you fall. Hits within a second of each other take at most one more
-feather, so a single salvo can't down you outright: break away after the first hit.
+feather (a bullet, a third of one), so a single salvo can't down you outright: break away after the first hit. A
+stream of bullets costs you about a feather a second: get out of its line.
 
 Sitting on **your team's base** (an outpost's rail) for 2 s rearms you and grows the feathers back. Any other perch
 only rests you.
