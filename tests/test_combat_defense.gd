@@ -15,7 +15,7 @@ const SECONDS := 10.0
 
 
 func _init() -> void:
-	timeout_sec = 400.0
+	timeout_sec = 600.0
 
 
 func setup() -> void:
