@@ -1,7 +1,7 @@
 extends TestCase
 ## The whole game scene runs: arena, player bird on its start perch, AI birds, camera, HUD. It loads behind a
 ## loading screen: up at once, its bar only ever filling, its step named, gone once the game is ready to fly. The
-## mouse wheel zooms the chase camera out (down) and in (up), within its range. The player's
+## mouse wheel zooms the chase camera out (down) and in (up), within its range. TAA is on; F7 toggles it. The player's
 ## bird is put on autopilot and flies for a while; every bird switch works.
 
 
@@ -11,6 +11,14 @@ func setup() -> void:
 	await _loading_screen(game)
 	await frames(5)
 	await _zoom(game)
+	check(game.get_viewport().use_taa, "temporal anti-aliasing is on")
+	var f7 := InputEventKey.new()
+	f7.keycode = KEY_F7
+	f7.pressed = true
+	game._unhandled_input(f7)
+	check(not game.get_viewport().use_taa, "F7 turns it off")
+	game._unhandled_input(f7)
+	check(game.get_viewport().use_taa, "and on again")
 	check(game.bird != null and game.bird.state == Bird.State.PERCHED, "player starts perched")
 	check(game.ai_birds.size() >= 1, "AI birds spawned")
 	check(not game.hud.t.is_empty(), "HUD has telemetry")

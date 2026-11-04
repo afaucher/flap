@@ -23,6 +23,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `EnergyModel` (burst + stamina), `FlightInput`, `AirField` (the air's movement: thermals over the clearings, ridge
   lift for a cliff; the bird flies through it, `FlightModel.wind`; `AirFx` draws it; `--calm`; the combat range
   is calm until the combat AI reads the air: `CombatWorld.calm_air`). The chase camera zooms with the mouse wheel.
+  TAA over 2x MSAA by default (`Antialias`; `--no-taa`, F7): it clears the speckle on feather cards' edges and fine
+  texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
   collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
   `TimberMesh` each (framing, ironwork, rail, the hangar back-right seen from the rail, ammo boxes, and drawn-only
