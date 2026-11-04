@@ -3,8 +3,8 @@ extends TestCase
 ## (Esc back): your bird and how it flies (Novice | Realistic, with what each means); Start asks for the game with
 ## that bird and no tack on any bird (without Flight's options the riders are back). Fight opens its own screen:
 ## your bird, each pod's weapon, how it flies (the same choice as Flight's), the mode and, for a match, the AI's
-## skill, each shown with what it means; Start opens the range as chosen -- that species, one kind of round (six
-## rockets or four seekers, nothing to switch to), the 3 v 3 match at that skill, or target practice with no match. Behind the menu, birds
+## skill, each shown with what it means; Start opens the range as chosen -- that species, what each pod carries (the left
+## pod's selected; Q switches to the right's when it differs), the 3 v 3 match at that skill, or target practice with no match. Behind the menu, birds
 ## perched on an outpost's rail, their feet on it (each under its own hip, the legs not crossed), idling: each looks about and, within a few seconds, moves its
 ## tail, wings, plumage or neck.
 
@@ -155,10 +155,10 @@ func _backdrop(menu: Menu) -> void:
 
 
 func _fights() -> void:
-	# [bird, seekers, match, skill]
-	for f in [["hawk", false, true, "ace"], ["sparrow", true, true, "recruit"], ["owl", false, false, "pilot"]]:
+	# [bird, pods (left, right), match, skill]
+	for f in [["hawk", ["rockets", "rockets"], true, "ace"], ["sparrow", ["seekers", "seekers"], true, "recruit"], ["owl", ["gun", "seekers"], false, "pilot"], ["crow", ["rockets", "gun"], false, "pilot"]]:
 		Menu.fight_bird = f[0]
-		Menu.fight_pods = ["seekers", "seekers"] if f[1] else ["rockets", "rockets"]
+		Menu.fight_pods = (f[1] as Array).duplicate()
 		Menu.fight_match = f[2]
 		Menu.fight_skill = f[3]
 		Boot.extra = Menu.fight_options()
@@ -167,18 +167,25 @@ func _fights() -> void:
 		if not r.is_loaded:
 			await r.loaded
 		await frames(3)
-		var what := "%s, %s, %s" % [f[0], "seekers" if f[1] else "rockets", ("match at " + f[3]) if f[2] else "practice"]
+		var pods: Array = f[1]
+		var what := "%s, %s, %s" % [f[0], ",".join(pods), ("match at " + f[3]) if f[2] else "practice"]
 		eq((r.bird as Bird).profile.id, f[0], what + ": you fly the bird picked")
 		var l: Launcher = r.world.player
-		var R := Launcher.Weapon.ROCKETS
-		var S := Launcher.Weapon.SEEKERS
-		var want := {R: 0, S: 4} if f[1] else {R: 6, S: 0}
-		check(int(l.capacity[R]) == want[R] and int(l.capacity[S]) == want[S], "%s: you carry %s (%s)" % [what, "four seekers" if f[1] else "six rockets", str(l.capacity)])
-		eq(l.weapon, S if f[1] else R, what + ": with that weapon selected")
-		var w := l.weapon
+		var want := {}
+		for w in Launcher.KIND_NAMES:
+			want[w] = 0
+			for p in pods:
+				if p == Launcher.KIND_NAMES[w]:
+					want[w] += int(Saddle.POD_ROUNDS[p])
+			eq(l.carried(w), int(want[w]), "%s: you carry %d %s" % [what, int(want[w]), Launcher.KIND_NAMES[w]])
+		eq(l.weapon, Launcher.weapon_of(pods[0]), what + ": with the left pod's weapon selected")
+		var w0 := l.weapon
 		l.controller = _Switch.new()
 		await frames(2)
-		eq(l.weapon, w, what + ": and nothing to switch to")
+		if pods[0] == pods[1]:
+			eq(l.weapon, w0, what + ": and nothing to switch to")
+		else:
+			eq(l.weapon, Launcher.weapon_of(pods[1]), what + ": and Q switches to the right pod's")
 		if f[2]:
 			check(r.target == null and r.match_birds.size() == 5, "%s: the 3 v 3 match (%d AI birds)" % [what, r.match_birds.size()])
 			var skills := {}

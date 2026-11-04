@@ -5,7 +5,9 @@ extends Node3D
 ##   burst          a one-frame white-hot flash (bright enough to bloom) and a short light on what's near (the bark,
 ##                  the bird and its rider); a brown-grey puff that swells to the blast's reach and drifts for a couple
 ##                  of seconds; embers flung out and falling. A seeker's is bigger than a rocket's. A fizzle (a round
-##                  that ran out) is a small dull pop, no light.
+##                  that ran out) is a small dull pop, no light. A bullet's strike (GUN) is a spark: a pinpoint flash, a
+##                  few embers and a wisp of dust or splinters' smoke, no light.
+##   muzzle flash   each bullet fired: a pinpoint flash at the gun's mouth for a frame or two.
 ##   knocked out    the feathers a hit took leave the wing where they were -- copies of the very cards the rig drew
 ##                  (BirdRig.feather_copy) -- and fall as feathers do: slowed hard by the air, tumbling, slipping from
 ##                  side to side, coming to rest on the ground, fading after a while.
@@ -25,6 +27,8 @@ const DOWN_TIME := 1.1
 const SHED_HEALTH := 0.5
 const SHED_RATE := 0.35        ## loose coverts a second, at or under SHED_HEALTH
 const MAX_LOOSE := 48
+const GUN_BIG := 0.22          ## a bullet's strike, as a fraction of a rocket's burst
+const MUZZLE_BIG := 0.08       ## a muzzle flash, likewise
 
 var bursts: Array = []         ## {pos, t, kind, why, embers: [[pos, vel]], puffs: [[offset, drift, size]]}
 var loose: Array = []          ## {node, pos, vel, t, spin, rock, phase, landed, ground}: falling feathers
@@ -66,22 +70,23 @@ static func _material(hot: bool) -> StandardMaterial3D:
 	return m
 
 
-## A round went off at `at` ("fuse" | "impact" | "expired"), a rocket or a seeker (Projectile.Kind).
+## A round went off at `at` ("fuse" | "hit" | "impact" | "expired"), a rocket, a seeker or a bullet (Projectile.Kind).
 func burst(at: Vector3, why: String, kind: int) -> void:
-	var big := 1.35 if kind == Projectile.Kind.SEEKER else 1.0
+	var gun := kind == Projectile.Kind.GUN
+	var big := 1.35 if kind == Projectile.Kind.SEEKER else (GUN_BIG if gun else 1.0)
 	var b := {"pos": at, "t": clock, "kind": kind, "why": why, "big": big, "embers": [], "puffs": []}
 	var rng := RandomNumberGenerator.new()   # (each burst's own shape, from where it is)
 	rng.seed = hash(Vector3i(at * 50.0))
 	if why != "expired":
-		for i in roundi(16 * big):
+		for i in (5 if gun else roundi(16 * big)):
 			var dir := Vector3(rng.randfn(), rng.randfn() * 0.8 + 0.25, rng.randfn()).normalized()
-			b.embers.append([at, dir * rng.randf_range(3.5, 8.5) * big, rng.randf_range(0.45, 1.0) * EMBER_TIME])
-		for i in 6:
+			b.embers.append([at, dir * rng.randf_range(3.5, 8.5) * maxf(big, 0.5), rng.randf_range(0.45, 1.0) * EMBER_TIME * (0.4 if gun else 1.0)])
+		for i in (2 if gun else 6):
 			var off := Vector3(rng.randfn(), rng.randfn() * 0.6, rng.randfn()) * 0.18 * big
 			var drift := Vector3(rng.randf_range(-0.15, 0.15), rng.randf_range(0.15, 0.4), rng.randf_range(-0.15, 0.15))
 			b.puffs.append([off, drift, rng.randf_range(0.7, 1.0)])
 	bursts.append(b)
-	if why == "expired":
+	if why == "expired" or gun:
 		return
 	var slot: Array = _lights[0]
 	for s in _lights:   # (the free one, else the oldest)
@@ -93,6 +98,11 @@ func burst(at: Vector3, why: String, kind: int) -> void:
 	slot[1] = b
 	(slot[0] as OmniLight3D).global_position = at
 	(slot[0] as OmniLight3D).visible = true
+
+
+## A bullet left a gun's mouth at `at`, flying along `dir`: a pinpoint flash (no smoke, no embers, no light).
+func muzzle_flash(at: Vector3, dir: Vector3) -> void:
+	bursts.append({"pos": at + dir.normalized() * 0.03, "t": clock, "kind": Projectile.Kind.GUN, "why": "muzzle", "big": MUZZLE_BIG, "embers": [], "puffs": []})
 
 
 ## A hit at `at` knocked out `keys` from `bird`: those feathers fall from where they were, and a puff of down.
@@ -162,7 +172,7 @@ func step(dt: float, world: CombatWorld) -> void:
 		for b in world.birds:
 			if is_instance_valid(b) and (b as Bird).state == Bird.State.FLYING and (b as Bird).health() <= SHED_HEALTH and _rng.randf() < SHED_RATE * dt:
 				_shed(b)
-	bursts = bursts.filter(func(q): return clock - float(q.t) < SMOKE_TIME)
+	bursts = bursts.filter(func(q): return clock - float(q.t) < (FLASH_TIME * 2.0 if q.why == "muzzle" else SMOKE_TIME))
 	down = down.filter(func(q): return clock - float(q.t) < DOWN_TIME)
 	var keep := []
 	for f in loose:

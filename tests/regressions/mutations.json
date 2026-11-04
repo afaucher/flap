@@ -1366,15 +1366,16 @@
  },
  {
   "id": "switch-to-empty-weapon",
-  "bug": "A bird carries one kind of round; switching weapon mustn't select the kind it has none of (2026-11-02).",
+  "bug": "A bird carries one kind of round; switching weapon mustn't select the kind it has none of (2026-11-02). With per-side loadouts (2026-11-04): Q cycles only through the kinds the pods carry.",
   "tests": [
-   "test_menu"
+   "test_menu",
+   "test_gun"
   ],
   "edits": [
    {
     "file": "scripts/combat/launcher.gd",
-    "find": "if inp.weapon_next and int(capacity[other]) > 0:",
-    "replace": "if inp.weapon_next:"
+    "find": "\tfor w in [Weapon.ROCKETS, Weapon.SEEKERS, Weapon.GUN]:\n\t\tif carried(w) > 0:\n\t\t\tout.append(w)",
+    "replace": "\tfor w in [Weapon.ROCKETS, Weapon.SEEKERS, Weapon.GUN]:\n\t\tif true:\n\t\t\tout.append(w)"
    }
   ]
  },
@@ -2012,8 +2013,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
-    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
+    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
+    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
    }
   ]
  },
@@ -3371,6 +3372,162 @@
     "file": "scripts/world/arena_layout.gd",
     "find": "\tvar see_rock := rock != null and ignore_tree != rock_tree and ignore_also != rock_tree",
     "replace": "\tvar see_rock := false"
+   }
+  ]
+ },
+ {
+  "id": "hud-rack-first-kind",
+  "bug": "The classic and ring HUD showed the rounds of the first kind carried (rockets if any), not the selected weapon's: with two kinds on the pods, switching to the other didn't change what the HUD counted (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\t\tif w == l.weapon:\n\t\t\tout.push_front(row)",
+    "replace": "\t\tif false:\n\t\t\tout.push_front(row)"
+   }
+  ]
+ },
+ {
+  "id": "gun-lead-at-rocket-speed",
+  "bug": "The gun's lead mark reckoned with a rocket's 34 m/s: it led a crossing bird about three times too far for a bullet (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "(GUN_SPEED if weapon == Weapon.GUN else 34.0)",
+    "replace": "34.0"
+   }
+  ]
+ },
+ {
+  "id": "gun-no-lead-mark",
+  "bug": "The HUD drew the lead mark for rockets only, so the gun had a sight but no mark to aim it by (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+   }
+  ]
+ },
+ {
+  "id": "gun-stream-downs-at-once",
+  "bug": "A bullet inside the recovery window took a whole feather (RECOVER_FEATHERS doesn't bite on a round that takes one): ten hits a second downed a bird in under a second (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tvar c := float(_chip.get(b, 0.0)) + GUN_CHIP",
+    "replace": "\tvar c := float(_chip.get(b, 0.0)) + 1.0"
+   }
+  ]
+ },
+ {
+  "id": "gun-bullet-blasts",
+  "bug": "A bullet striking a bird went off like a rocket: its blast hurt and stunned every bird within CombatWorld.blast (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tif kind == Projectile.Kind.GUN:\n\t\tif why == \"expired\":",
+    "replace": "\tif false:\n\t\tif why == \"expired\":"
+   }
+  ]
+ },
+ {
+  "id": "gun-bullet-stuns",
+  "bug": "A bullet stunned the bird it hit like a burst does: a stream kept it out of control for as long as it lasted (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\tif not gun:\n\t\tb.stun = maxf(b.stun, HIT_STUN)",
+    "replace": "\tif true:\n\t\tb.stun = maxf(b.stun, HIT_STUN)"
+   }
+  ]
+ },
+ {
+  "id": "gun-hit-at-fuse-reach",
+  "bug": "A bullet hit anything within a rocket's proximity fuse (1 m) instead of the bird's own size: a sparrow was as easy to hit as a hawk (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/projectile.gd",
+    "find": "\t\t\tif q.distance_to(bp) <= hit_radius(b) and d < best_d:",
+    "replace": "\t\t\tif q.distance_to(bp) <= fuse and d < best_d:"
+   }
+  ]
+ },
+ {
+  "id": "gun-from-one-pod",
+  "bug": "Two gun pods: every bullet left from the same pod's muzzle (the gun's rounds were looked up like a rocket's, clamped to the last), not the two in turn (2026-11-04).",
+  "tests": [
+   "test_gun",
+   "test_tack"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "\treturn o[posmod(i, o.size())] if kind == \"gun\" else o[clampi(i, 0, o.size() - 1)]",
+    "replace": "\treturn o[clampi(i, 0, o.size() - 1)]"
+   }
+  ]
+ },
+ {
+  "id": "gun-tap-one-round",
+  "bug": "A tap of fire sent one bullet (the gun fired only while held): the AI's one-tick trigger and a quick click wasted the gun (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\t\tburst_left = maxi(burst_left, GUN_BURST)",
+    "replace": "\t\tburst_left = maxi(burst_left, 1)"
+   }
+  ]
+ },
+ {
+  "id": "gun-belt-never-shrinks",
+  "bug": "The gun's belt showed every cartridge whatever was left in the box (2026-11-04).",
+  "tests": [
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/saddle.gd",
+    "find": "\t\t\t(belt[j] as MeshInstance3D).visible = j >= belt.size() - shown",
+    "replace": "\t\t\t(belt[j] as MeshInstance3D).visible = true"
+   }
+  ]
+ },
+ {
+  "id": "tack-arms-no-gun",
+  "bug": "Armed from its tack, a launcher left out the gun pods' rounds: a bird with a gun pod had nothing to fire from it (2026-11-04).",
+  "tests": [
+   "test_gun",
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tset_mounts(t.capacity(\"rockets\"), t.capacity(\"seekers\"), func(w: int, i: int) -> Vector3: return t.muzzle_world(KIND_NAMES[w], i), t.capacity(\"gun\"))",
+    "replace": "\tset_mounts(t.capacity(\"rockets\"), t.capacity(\"seekers\"), func(w: int, i: int) -> Vector3: return t.muzzle_world(KIND_NAMES[w], i), 0)"
    }
   ]
  }

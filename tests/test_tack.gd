@@ -461,7 +461,7 @@ func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
 	var hc: Vector3 = rig.neck_joints[3] + rig.head_offset
 	var hr: float = rig.body.head_r
 	for kind in Saddle.POD_KINDS:
-		for r in tack.capacity(kind):
+		for r in (sv.round_order[kind] as Array).size():
 			# Rounds leave from their muzzles; only a mount raised as high as it goes (an owl's) may start them
 			# further on, past the head.
 			var mr: Array = sv.round_order[kind][r]
@@ -500,22 +500,46 @@ func _launcher(id: String, rig: BirdRig, tack: Tack) -> void:
 	tack.set_ammo(3, 2)
 
 
-## Loadouts (a pod each side: rockets or seekers) and tilt, on fresh tack: what's carried adds up, each round
-## leaves from its own side, and the trunnion's tilt is the pod's measured pitch -- 0 and 8 deg, both sides.
+## Loadouts (a pod each side: rockets, seekers or a gun) and tilt, on fresh tack: what's carried adds up, each round
+## leaves from its own side (a gun's from its barrel's mouth, ahead of its drawn muzzle booster; two guns take turns),
+## every round's line of fire clears the head, and the trunnion's tilt is the pod's measured pitch -- 0 and 8 deg,
+## both sides.
 func _loadouts(id: String, rig: BirdRig) -> void:
-	for lo in [["rockets", "rockets"], ["seekers", "seekers"], ["seekers", "rockets"]]:
+	RigPoses.apply(rig, "glide", 0.0)
+	var hc: Vector3 = rig.neck_joints[3] + rig.head_offset
+	var hr: float = rig.body.head_r
+	for lo in [["rockets", "rockets"], ["seekers", "seekers"], ["seekers", "rockets"], ["gun", "rockets"], ["seekers", "gun"], ["gun", "gun"]]:
 		var pods: Array[String] = [lo[0], lo[1]]
 		var t := Tack.fit(rig, null, pods)
-		var n := {"rockets": 0, "seekers": 0}
+		var n := {"rockets": 0, "seekers": 0, "gun": 0}
 		for p in pods:
 			n[p] += int(Saddle.POD_ROUNDS[p])
-		eq(t.capacity("rockets"), int(n.rockets), "%s %s: rockets carried" % [id, str(lo)])
-		eq(t.capacity("seekers"), int(n.seekers), "%s %s: seekers carried" % [id, str(lo)])
+		for kind in Saddle.POD_KINDS:
+			eq(t.capacity(kind), int(n[kind]), "%s %s: %s carried" % [id, str(lo), kind])
+		var sv := t.saddle
+		var sc := sv.scale.x
 		for kind in Saddle.POD_KINDS:
 			for r in t.capacity(kind):
-				var mr: Array = t.saddle.round_order[kind][r]
-				var side: float = t.saddle.mounts[mr[0]].side
-				check(t.saddle.round_muzzle(kind, r).x * side > 0.0, "%s %s: %s round %d leaves from its own side" % [id, str(lo), kind, r])
+				var mr: Array = sv._order_at(kind, r)
+				var side: float = sv.mounts[mr[0]].side
+				check(sv.round_muzzle(kind, r).x * side > 0.0, "%s %s: %s round %d leaves from its own side" % [id, str(lo), kind, r])
+				var mz := sv.round_launch(kind, r) * sc
+				var rel := hc - mz
+				var miss := (rel - Vector3.FORWARD * rel.dot(Vector3.FORWARD)).length() - hr
+				check(rel.dot(Vector3.FORWARD) <= 0.0 or miss > 0.2 * hr, "%s %s: %s round %d's line of fire clears the head (%.2f cm)" % [id, str(lo), kind, r, miss * 100.0])
+		if pods[0] == "gun" and pods[1] == "gun":
+			check(sv.round_muzzle("gun", 0).x * sv.round_muzzle("gun", 1).x < 0.0, "%s: two guns take turns" % id)
+		for i in 2:
+			if pods[i] == "gun":
+				# The gun's muzzle: on its barrel's axis, just ahead of the drawn barrel's foremost point (its booster).
+				var pod: Transform3D = sv.mounts[i].pivot
+				var front := INF
+				for v in _verts(t, "blued"):
+					var q := pod.affine_inverse() * (sv.transform.affine_inverse() * v) * sv.cm
+					if absf(q.x) < 2.5 and absf(q.y) < 2.5:
+						front = minf(front, q.z)
+				var m := pod.affine_inverse() * (sv.mounts[i].muzzles[0] as Vector3) * sv.cm
+				check(absf(m.x) < 0.5 and absf(m.y) < 0.5 and m.z < front and m.z > front - 6.0, "%s %s: the gun's muzzle is just ahead of its barrel (%.1f real cm on)" % [id, str(lo), front - m.z])
 		t.free()
 	for tilt in [0.0, 8.0]:
 		var t := Tack.fit(rig, null, [], tilt)

@@ -45,13 +45,26 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
-  Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); a bird
-  carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube. A seeker lock
-  needs a clear line of sight (`Launcher.sees`: wood on the line stops it, past `LOS_GRACE` drains it).
+  Weapons: a pod each side of the rider (`Saddle` loadout, left and right, each `rockets` x3, `seekers` x2 or `gun`,
+  a belt-fed machine gun with `Launcher.GUN_POD` (40) rounds; tilted in a trunnion). `Launcher` carries each kind
+  summed over the pods (`set_tack`, `carried` / `left`), fires each round from its own pod's muzzle
+  (`Tack.muzzle_world`; two gun pods take turns), and Q / RB (`next_weapon`) switches between the two kinds when they
+  differ. `--loadout <left>,<right>` (one value: both; `--seekers` = seekers,seekers; `.\range.ps1 -Loadout gun,rockets`)
+  arms your bird; the menu's Fight screen picks each pod. The target and circuit wingman carry yours with a gun
+  swapped for rockets, the match's AI birds their species' round (the combat AI doesn't use the gun yet: with one
+  selected its fire control holds). A seeker lock needs a clear line of sight (`Launcher.sees`: wood on the line
+  stops it, past `LOS_GRACE` drains it).
+  The gun (`Projectile.Kind.GUN`): 10 rounds/s held (`GUN_RATE`; a tap fires a 3-round burst, `GUN_BURST`), 95 m/s
+  on the carrier's speed, 0.42 s life (about 40 m), 0.7 deg scatter; aimed at the lead mark like rockets
+  (`lead_point` at bullet speed). A bullet hits only within the bird's own size (`Projectile.hit_radius`: crow
+  0.27 m, sparrow 0.09) and hurts only that bird: no stun, a nudge, one feather -- inside the recovery window a third
+  of one (`CombatWorld.GUN_CHIP`), so a stream chips about a feather a second. Drawn as tracer streaks with muzzle
+  flashes; sparks on wood and ground (`CombatFx`); `launched` / `burst` carry `kind` GUN (`burst` why `"hit"` on a bird,
+  `"impact"`; none when it runs out). `GameAudio` maps it to quiet, high rocket / burst cues until it has its own.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
   that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
-  takes one feather at most, so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
+  takes one feather at most (a bullet a third of one), so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
   locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The
   HUD: enemies warm (`CombatHud.ENEMY`), teammates a teal caret (`FRIEND`), a teal cross over the gunsight while a

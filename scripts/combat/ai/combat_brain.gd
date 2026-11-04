@@ -214,7 +214,7 @@ static func arm(l: Launcher, st: CombatStyle) -> void:
 ## Load `l` with one weapon, full.
 static func arm_with(l: Launcher, weapon: int) -> void:
 	var rockets := weapon == Launcher.Weapon.ROCKETS
-	l.capacity = {Launcher.Weapon.ROCKETS: Launcher.AMMO[Launcher.Weapon.ROCKETS] if rockets else 0, Launcher.Weapon.SEEKERS: 0 if rockets else Launcher.AMMO[Launcher.Weapon.SEEKERS]}
+	l.capacity = {Launcher.Weapon.ROCKETS: Launcher.AMMO[Launcher.Weapon.ROCKETS] if rockets else 0, Launcher.Weapon.SEEKERS: 0 if rockets else Launcher.AMMO[Launcher.Weapon.SEEKERS], Launcher.Weapon.GUN: 0}
 	l.ammo = l.capacity.duplicate()
 	l.weapon = weapon
 
