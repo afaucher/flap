@@ -12,7 +12,7 @@ const GRASS_FULL := 3.0     ## m past the posts it's at its thickest
 const GRASS_TO := 300.0     ## m: as far out as it's sown; it ends where the ground rises into the hills (GRASS_RISE)
 const GRASS_RISE := Vector2(1.0, 7.0)   ## m above the valley floor: where it starts thinning, and where it's gone
 const HILLS_FROM := 150.0
-const HILLS_TO := 1100.0
+const HILLS_TO := 2600.0
 const WIRES := [0.6, 1.15]   ## m: the fence's two strands, up the posts
 const WIRE_R := 0.012
 const FENCE_EVERY := 2.8     ## m between fence posts (drawn only; every fourth or so an edge post, a perch)
@@ -84,15 +84,17 @@ func hill(x: float, z: float) -> float:
 	var r := Vector2(x, z).length()
 	if r < HILLS_FROM:
 		return 0.0
-	# (layered, as the heath concept's: a near ridge whose height swings round the ring, so its crest runs across the
-	# view on a slant; a lower valley behind it; a long far ridge, blue with distance; a little roughness over all)
+	# (layered, as the heath concept's: open heath rolling gently away from the fence; a low ridge out about half a
+	# kilometre whose height swings round the ring, so its crest runs across the view on a slant; and far hills one
+	# to two kilometres off, low on the horizon and blue with distance; a little roughness over all)
 	var dir := Vector2(x, z) / r   # (noise round the ring from the direction, not the angle: no seam where it wraps)
-	var k := smoothstep(HILLS_FROM, 210.0, r)
-	var near_h := 8.0 + 50.0 * _fbm(dir * 1.3 + Vector2(2.0, 0.0)) * _fbm(dir * 0.55 + Vector2(4.0, 7.0)) * 1.6
-	var near := near_h * exp(-pow((r - 240.0) / 85.0, 2.0))
-	var far := (40.0 + 45.0 * _fbm(dir * 0.8 + Vector2(9.0, 1.0))) * smoothstep(480.0, 820.0, r)
-	var rough := 10.0 * (_fbm(Vector2(x, z) * 0.012 + Vector2(5.0, 9.0)) - 0.4)
-	return k * maxf(0.0, near + far + rough + 4.0)
+	var k := smoothstep(HILLS_FROM, 260.0, r)
+	var swell := 12.0 * _fbm(Vector2(x, z) * 0.004 + Vector2(1.0, 3.0))   # (the heath's own long, low swells)
+	var mid_h := 8.0 + 40.0 * _fbm(dir * 1.3 + Vector2(2.0, 0.0)) * _fbm(dir * 0.55 + Vector2(4.0, 7.0)) * 1.6
+	var mid := mid_h * exp(-pow((r - 520.0) / 140.0, 2.0))
+	var far := (90.0 + 150.0 * _fbm(dir * 0.9 + Vector2(9.0, 1.0))) * smoothstep(950.0, 1700.0, r)
+	var rough := 6.0 * (_fbm(Vector2(x, z) * 0.012 + Vector2(5.0, 9.0)) - 0.4) * smoothstep(150.0, 400.0, r)
+	return k * maxf(0.0, swell + mid + far + rough + 1.5)
 
 
 
@@ -695,9 +697,9 @@ func _far_stands() -> void:
 	var cs := []
 	for k in 70:
 		var theta := _rng.randf() * TAU
-		var r := _rng.randf_range(160.0, 720.0)
+		var r := 260.0 + pow(_rng.randf(), 1.4) * 1300.0   # (few near, more far off: small in the view, as the concept's)
 		var c := Vector2(sin(theta), cos(theta)) * r
-		var n := _rng.randi_range(4, 22)
+		var n := _rng.randi_range(3, 12)
 		var spread := _rng.randf_range(8.0, 26.0) * (0.6 + r / 700.0)
 		for i in n:
 			var p := c + Vector2(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1)) * spread

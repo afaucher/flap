@@ -39,7 +39,7 @@ func setup() -> void:
 	print("(of which the edge, built again alone: %d ms)" % (Time.get_ticks_msec() - t1))
 	var cam := Camera3D.new()
 	cam.fov = 62.0
-	cam.far = 1500.0
+	cam.far = 4000.0   # (as the game's: the far hills lie 2-3 km off)
 	root.add_child(cam)
 	cam.current = true
 	# Which way we look out: with the sun behind us (away), across it (side), or into it (into).
