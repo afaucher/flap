@@ -3,7 +3,7 @@ extends RefCounted
 ## Novice flying (`--flying novice`; `--flying realistic`, the default, is the flight model as it is). Two helps:
 ##
 ## LANDING ASSIST, while catch is held with a perch highlighted (Bird.candidate):
-##   - the player's stick and flap are blended toward what the AI pilot flies to land there (AIPilot.steer with its
+##   - the player's stick is blended toward what the AI pilot flies to land there (AIPilot.steer with its
 ##     final-approach options: aim just above the grip, bleed speed, flap only when sinking below the perch, the wood
 ##     avoided). It eases in over ENGAGE_TIME and lets go at once when catch is released. The player keeps authority:
 ##     the result is a FlightInput (what any pilot produces), their own stick still `1 - strength` of it, and
@@ -87,8 +87,10 @@ func apply(bird: Bird, inp: FlightInput, dt: float) -> FlightInput:
 	var ai := approach(bird, dt)
 	last_assist = ai
 	var w := strength * engage
-	return FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, inp.flap_held or (ai.flap_held and w >= 0.5),
-		inp.catch_pressed, true)
+	# Flapping: the player's, and the approach's too once the assist has most of the say. (Flapping in, the climb trim,
+	# FlightModel.trim_alpha, would carry the bird up over the perch; the perch assist's height braking takes it down.)
+	var held := inp.flap_held or (ai.flap_held and w >= 0.5)
+	return FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, held, inp.catch_pressed, true)
 
 
 ## What the AI pilot flies onto the candidate perch from here: its final approach (AIPilot._fly), aimed at the grip

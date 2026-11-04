@@ -11,8 +11,8 @@ extends RefCounted
 ## target flies on or breaks either way at its corner rate (a sparrow that can beat it by breaking isn't shot at
 ## until the geometry is better). The last rounds wait for a better shot.
 ##
-## Without one (the range's --demo shooter): a trigger finger only -- seekers fire once locked, rockets when the
-## lead point is under 28 m away and within `rocket_tolerance` of the aim.
+## Without one (the range's --demo shooter): a trigger finger only -- seekers fire once locked, rockets (and the gun, a
+## burst a press) when the lead point is under 28 m away and within `rocket_tolerance` of the aim.
 
 var prefer := Launcher.Weapon.SEEKERS
 var rocket_tolerance := 5.0   ## deg off the lead point it will still fire at (no brain)
@@ -24,8 +24,8 @@ var _every := 0
 func sample(l: Launcher, dt: float) -> CombatInput:
 	if brain != null:
 		return _fight(l, dt)
-	var other := Launcher.Weapon.ROCKETS if l.weapon == Launcher.Weapon.SEEKERS else Launcher.Weapon.SEEKERS
-	var next: bool = (l.weapon != prefer and int(l.ammo[prefer]) > 0) or (int(l.ammo[l.weapon]) == 0 and int(l.ammo[other]) > 0)
+	var other := l.next_weapon()
+	var next: bool = (l.weapon != prefer and l.left(prefer) > 0) or (l.left(l.weapon) == 0 and l.left(other) > 0)
 	if l.weapon == Launcher.Weapon.SEEKERS:
 		return CombatInput.new(l.locked(), false, next)
 	var t := l.target()
@@ -74,6 +74,8 @@ func _would_hit(l: Launcher, t: CombatSense.Track) -> bool:
 		if layout != null and not layout.segment_clear(l.muzzle(), t.pos, 0.2):
 			return false   # a trunk in the way
 		return FireControl.miss(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, t.turn) < Projectile.fuse * quality
+	if l.weapon != Launcher.Weapon.SEEKERS:
+		return false   # (the gun: not taught yet -- the brain holds its fire with one selected)
 	if not l.locked() or l.lock_target != t.bird:
 		return false
 	# Its best break, at the speed it's seen at, left and right, timed as well as it could be.

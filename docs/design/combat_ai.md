@@ -630,3 +630,24 @@ pursued sparrow *worse* (10 hits against 6 in the wood) -- the run is a straight
 limited to trunks already near the line it never fired. Breaking into the attacker stays the better lock denial.
 Seen in passing (not chased): with one trunk ahead 1-3 m to the left, a pursued sparrow takes 4 hits whatever it
 does; to the right, none -- an asymmetry in the break or the attacker's line, for a later look.
+
+**Weapon proficiency and the enemy mix by difficulty** (2026-11-04, `tests/probe_weapon_skill.gd`): an attacker (a
+crow, then a sparrow) armed with one weapon hunts a defending pilot crow through the pine wood, 60 s from 25 m astern,
+woods 1-4, with respawns:
+
+| skill | weapon | rounds | hits | hits per round | hits per match |
+|---|---|---|---|---|---|
+| recruit | rockets | 23 | 2 | 0.09 | 0.25 |
+| recruit | seekers | 17 | 14 | 0.82 | 1.75 |
+| pilot | rockets | 12 | 1 | 0.08 | 0.12 |
+| pilot | seekers | 11 | 10 | 0.91 | 1.25 |
+| ace | rockets | 25 | 10 | 0.40 | 1.25 |
+| ace | seekers | 14 | 12 | 0.86 | 1.50 |
+
+The AI is far better with seekers at every skill; only an ace makes rockets work (a defending bird denies the slow
+rocket pass; a lock, once made, mostly hits). Downs per minute are near nil at every skill (eight feathers down a bird).
+So the enemy's mix follows the skill (`CombatSkill.seeker_share`, `weapons()`): a recruit side carries seekers on a
+third of its birds, pilot two thirds (the range's mix as before), ace all -- seekers first to the birds built for them
+(crow, owl), then the sparrow; the energy fighters (hawk, falcon) always rockets. The range match arms the enemy so
+(`combat_range.gd`); your wingmen fly their species' rounds. Per-pod loadouts and the machine gun will let the mix go
+per pod; the AI flies one weapon per bird until it learns to switch.

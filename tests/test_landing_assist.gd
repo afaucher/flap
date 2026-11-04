@@ -1,6 +1,7 @@
 extends TestCase
 ## Novice flying's landing assist (FlightAssist): approaches a realistic bird misses -- too high, and off the line with
-## the perch to its left and to its right -- holding catch with a neutral stick, a novice bird lands on. A branch alone
+## the perch to its left and to its right, gliding in or flapping in (flap held: the climb trim carries it up over the
+## perch) -- holding catch with a neutral stick, a novice bird lands on. A branch alone
 ## in still air, so only the approach decides it:
 ##   realistic: the bird passes the perch out of its feet's reach (its closest pass measured) and never perches;
 ##   novice: it perches on that branch;
@@ -17,21 +18,26 @@ func _init() -> void:
 
 func setup() -> void:
 	var cases := [
-		# [label, species, start offset from the seat (x right, y up, z back); it flies a best glide toward -z]
-		["too high", "crow", Vector3(0.0, 5.0, 12.0)],
-		["perch to the left", "crow", Vector3(2.6, 0.9, 12.0)],
-		["perch to the right", "crow", Vector3(-2.6, 0.9, 12.0)],
-		["too high, hawk", "hawk", Vector3(0.0, 4.5, 13.0)],
+		# [label, species, start offset from the seat (x right, y up, z back), flap held all the way in]; it starts on a
+		# best glide toward -z
+		["too high", "crow", Vector3(0.0, 5.0, 12.0), false],
+		["perch to the left", "crow", Vector3(2.6, 0.9, 12.0), false],
+		["perch to the right", "crow", Vector3(-2.6, 0.9, 12.0), false],
+		["too high, hawk", "hawk", Vector3(0.0, 4.5, 13.0), false],
+		["flapping in, perch to the left", "crow", Vector3(2.6, 0.9, 12.0), true],
+		["flapping in, perch to the right", "crow", Vector3(-2.6, 0.9, 12.0), true],
+		["flapping in, too high", "crow", Vector3(0.0, 3.0, 12.0), true],
+		["flapping in, too high, hawk", "hawk", Vector3(0.0, 3.0, 13.0), true],
 	]
 	for c in cases:
 		var label: String = c[0]
 		var p := BirdProfile.by_id(c[1])
-		var real := await _fly(p, c[2], false, 0.75, true)
+		var real := await _fly(p, c[2], false, 0.75, true, c[3])
 		check(real.min_d > p.grab_radius, "%s, realistic: passes out of the feet's reach (closest %.2f m)" % [label, real.min_d])
 		check(not real.perched, "%s, realistic: misses" % label)
-		var nov := await _fly(p, c[2], true, 0.75, true)
+		var nov := await _fly(p, c[2], true, 0.75, true, c[3])
 		check(nov.perched, "%s, novice: lands on the perch (closest %.2f m, %s)" % [label, nov.min_d, nov.why])
-		var off := await _fly(p, c[2], true, 0.0, true)
+		var off := await _fly(p, c[2], true, 0.0, true, c[3])
 		check(not off.perched, "%s, novice at strength 0: misses" % label)
 	# Without catch held the assist does nothing: the stick out is the stick in, every tick.
 	var p := BirdProfile.crow()
@@ -43,7 +49,7 @@ func setup() -> void:
 	finish()
 
 
-func _fly(p: BirdProfile, off: Vector3, novice: bool, strength: float, hold: bool) -> Dictionary:
+func _fly(p: BirdProfile, off: Vector3, novice: bool, strength: float, hold: bool, flapping := false) -> Dictionary:
 	FlightAssist.novice = novice
 	FlightAssist.strength = strength
 	var layout := ArenaLayout.new()
@@ -52,6 +58,7 @@ func _fly(p: BirdProfile, off: Vector3, novice: bool, strength: float, hold: boo
 	layout._add_perch(target)
 	var ctl := ScriptedInput.new()
 	ctl.catch_hold = hold
+	ctl.hold = flapping   # (a held wingbeat trims the bird into a climb: FlightModel.trim_alpha)
 	var assist := FlightAssist.new(ctl)
 	var b := Bird.new()
 	add_child(b)

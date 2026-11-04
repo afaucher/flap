@@ -45,13 +45,26 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
-  Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); a bird
-  carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube. A seeker lock
-  needs a clear line of sight (`Launcher.sees`: wood on the line stops it, past `LOS_GRACE` drains it).
+  Weapons: a pod each side of the rider (`Saddle` loadout, left and right, each `rockets` x3, `seekers` x2 or `gun`,
+  a belt-fed machine gun with `Launcher.GUN_POD` (40) rounds; tilted in a trunnion). `Launcher` carries each kind
+  summed over the pods (`set_tack`, `carried` / `left`), fires each round from its own pod's muzzle
+  (`Tack.muzzle_world`; two gun pods take turns), and Q / RB (`next_weapon`) switches between the two kinds when they
+  differ. `--loadout <left>,<right>` (one value: both; `--seekers` = seekers,seekers; `.\range.ps1 -Loadout gun,rockets`)
+  arms your bird; the menu's Fight screen picks each pod. The target and circuit wingman carry yours with a gun
+  swapped for rockets, the match's AI birds their species' round (the combat AI doesn't use the gun yet: with one
+  selected its fire control holds). A seeker lock needs a clear line of sight (`Launcher.sees`: wood on the line
+  stops it, past `LOS_GRACE` drains it).
+  The gun (`Projectile.Kind.GUN`): 10 rounds/s held (`GUN_RATE`; a tap fires a 3-round burst, `GUN_BURST`), 95 m/s
+  on the carrier's speed, 0.42 s life (about 40 m), 0.7 deg scatter; aimed at the lead mark like rockets
+  (`lead_point` at bullet speed). A bullet hits only within the bird's own size (`Projectile.hit_radius`: crow
+  0.27 m, sparrow 0.09) and hurts only that bird: no stun, a nudge, one feather -- inside the recovery window a third
+  of one (`CombatWorld.GUN_CHIP`), so a stream chips about a feather a second. Drawn as tracer streaks with muzzle
+  flashes; sparks on wood and ground (`CombatFx`); `launched` / `burst` carry `kind` GUN (`burst` why `"hit"` on a bird,
+  `"impact"`; none when it runs out). `GameAudio` maps it to quiet, high rocket / burst cues until it has its own.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
   that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
-  takes one feather at most, so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
+  takes one feather at most (a bullet a third of one), so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
   locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The
   HUD: enemies warm (`CombatHud.ENEMY`), teammates a teal caret (`FRIEND`), a teal cross over the gunsight while a
@@ -61,16 +74,18 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `CombatWorld.warnings_for(bird)` (rounds coming at it, locks on it) -- what the HUD shows and all an AI may
   know of threats; `--return-fire` has the target shoot back.
 - Landing: the highlighted perch (`Bird.candidate`) is the one the predicted flight path (`Bird.predicted_path`: its
-  sink and turn, not the nose) passes closest, a perch in reach now winning. `--flying novice|realistic` (default
+  sink and turn, not the nose) passes closest, a perch in reach now winning; the perch assist keeps the old pick, the
+  nearest perch ahead (`Bird._ahead`: the AI's flying is tuned on it). `--flying novice|realistic` (default
   realistic; `FlightAssist.configure`, `fit` on the player's bird): novice blends the player's input toward
   `AIPilot.steer`'s approach while catch is held (`FlightAssist.strength`, 0 = off), the perch assist works from
-  further out and brakes for height (`Bird.novice_landing`), and `EnergyModel` gives every bird 1.5x stamina, 2x
+  further out on the candidate and brakes for height (`Bird.novice_landing`), and `EnergyModel` gives every bird 1.5x stamina, 2x
   recovery, 1.3x burst refill. `test_perch_highlight`, `test_landing_assist`, `test_energy`.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
-- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: a screen
-  to pick your bird, rockets or seekers, the 3 v 3 match (at recruit | pilot | ace) or target practice, with the
-  mode's rules; `Menu.fight_options()`; Lab), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: a screen to pick your bird and how it flies,
+  Novice | Realistic (`--flying`), then the game without the tack, `Menu.flight_options()`; Fight: a screen to pick your
+  bird, each pod's weapon (rockets | seekers | gun, `--loadout <left>,<right>`), Novice | Realistic, the 3 v 3 match (at
+  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; `--page flight|fight`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
   `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
   look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they

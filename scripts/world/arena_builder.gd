@@ -14,6 +14,10 @@ var highlight: MeshInstance3D      ## the landing mark (show_candidate)
 var edge: EdgeBuilder              ## beyond the boundary (the pine wood's): the escarpment, the heath, the fence
 var _hl_mat: StandardMaterial3D
 var _mats := {}
+## False: the solid wood only -- trunks, limbs, outposts, the ground and every collision shape -- without the bark's
+## dressing, the crowns' needles and leaves or the floor's bracken (none of them solid): for headless matches (Duel),
+## which take a fraction of the time to build.
+var looks := true
 
 
 func build(l: ArenaLayout) -> void:
@@ -31,9 +35,10 @@ func steps(l: ArenaLayout) -> Array:
 		var n := layout.trees.size()
 		for i in range(0, n, TREES_A_STEP):
 			out.append(["Growing the trees", _pinewood_trees.bind(i, mini(i + TREES_A_STEP, n)), 0.5 * TREES_A_STEP / maxf(n, 1.0)])
-		out.append(["Barking the trunks", _pinewood_wood, 0.1])
-		out.append(["Needles and leaves", _crowns, 0.14])
-		out.append(["Bracken on the forest floor", _floor, 0.14])
+		if looks:
+			out.append(["Barking the trunks", _pinewood_wood, 0.1])
+			out.append(["Needles and leaves", _crowns, 0.14])
+			out.append(["Bracken on the forest floor", _floor, 0.14])
 		out.append(["Building the outposts", _outposts, 0.08])
 		out.append(["The heath and the hills", _edge, 0.2])
 	else:

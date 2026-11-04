@@ -2,14 +2,16 @@
 #   .\range.ps1                           # fly it yourself: fire = left mouse / F / RT, switch = Q / RB
 #   .\range.ps1 -Bird hawk -Target sparrow
 #   .\range.ps1 -Seekers                  # carry four seekers instead of six rockets
+#   .\range.ps1 -Loadout gun,seekers      # each side's pod (left, right): rockets | seekers | gun; one value: both
 #   .\range.ps1 -Demo                     # your bird flies itself and fires (watch it)
 #   .\range.ps1 -Match [-Skill pilot] [-Team crow,hawk] [-Enemy falcon,owl,crow]   # you + 2 AI wingmen v 3 AI
-param([string]$Bird = "", [string]$Target = "", [switch]$Seekers, [switch]$Demo, [switch]$Match, [string]$Skill = "",
+param([string]$Bird = "", [string]$Target = "", [switch]$Seekers, [string[]]$Loadout = @(), [switch]$Demo, [switch]$Match, [string]$Skill = "",
     [string]$Team = "", [string]$Enemy = "")
 $a = @("--scene", "res://scenes/combat_range.tscn")
 if ($Bird) { $a += @("--bird", $Bird) }
 if ($Target) { $a += @("--target", $Target) }
 if ($Seekers) { $a += "--seekers" }
+if ($Loadout.Count -gt 0) { $a += @("--loadout", ($Loadout -join ",")) }
 if ($Demo) { $a += "--demo" }
 if ($Match) { $a += "--match" }
 if ($Skill) { $a += @("--skill", $Skill) }

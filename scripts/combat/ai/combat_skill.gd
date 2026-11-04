@@ -18,6 +18,27 @@ var rest_at := 0.3          ## stamina at which it goes to rest
 var ambush_patience := 25.0 ## s an ambusher sits on its perch waiting before it gives up
 var watch_range := 42.0     ## m out to which it reads an enemy lining up on it (and breaks before any warning)
 var decide_every := 0.15    ## s between target and mode decisions
+## Share of an enemy side carrying seekers (CombatSkill.weapons): the AI is far better with seekers than with rockets
+## (probe_weapon_skill, 2026-11-04: ~0.85 hits a round against 0.08 at recruit and pilot, 0.40 at ace), so an easier
+## side carries more rockets, a harder one more seekers.
+var seeker_share := 2.0 / 3.0
+
+
+## The weapon each of a side's birds (species `ids`) carries at this skill: seeker_share of them seekers, given first to
+## the birds built for them (CombatStyle.weapon), then to any that can fight with them; the energy fighters (hawk,
+## falcon: CombatStyle.prefers_height) always rockets -- boom and zoom is a rocket pass.
+func weapons(ids: Array) -> Array:
+	var out := []
+	var order := []   # [rank, index]: who gets seekers first
+	for i in ids.size():
+		var st := CombatStyle.of(BirdProfile.by_id(ids[i]))
+		out.append(Launcher.Weapon.ROCKETS)
+		if not st.prefers_height:
+			order.append([0 if st.weapon == Launcher.Weapon.SEEKERS else 1, i])
+	order.sort()
+	for k in mini(roundi(seeker_share * ids.size()), order.size()):
+		out[order[k][1]] = Launcher.Weapon.SEEKERS
+	return out
 
 
 static func preset(n: String) -> CombatSkill:
@@ -27,12 +48,12 @@ static func preset(n: String) -> CombatSkill:
 		"recruit":
 			s.reaction = 0.45; s.view_deg = 220.0; s.scan_every = 1.5; s.aim_error_deg = 4.0; s.min_quality = 1.6
 			s.break_error = 0.35; s.bank_frac = 0.7; s.yoyos = false; s.tree_drag = false; s.rest_at = 0.4
-			s.ambush_patience = 12.0; s.watch_range = 20.0
+			s.ambush_patience = 12.0; s.watch_range = 20.0; s.seeker_share = 1.0 / 3.0
 			s.decide_every = 0.25
 		"ace":
 			s.reaction = 0.12; s.view_deg = 320.0; s.scan_every = 0.3; s.aim_error_deg = 0.5; s.min_quality = 0.9
 			s.break_error = 0.05; s.bank_frac = 0.95; s.yoyos = true; s.tree_drag = true; s.rest_at = 0.2
-			s.ambush_patience = 40.0
+			s.ambush_patience = 40.0; s.seeker_share = 1.0
 			s.decide_every = 0.1
 		_:
 			s.name = "pilot"

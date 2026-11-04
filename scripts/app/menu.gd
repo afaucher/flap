@@ -3,24 +3,32 @@ extends Control
 ## The start menu (run with no arguments): Flight (the game: the arena and its birds, no rider, no weapons),
 ## Fight and the Lab. A choice opens its scene with its options added to the command line's (Boot.extra).
 ## Keys: 1..4, or click.
-## Fight opens a second screen first: your bird, your weapon (six rockets or four seekers), the mode (the 3 v 3
-## match, or target practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot |
-## ace), with the rules of the mode chosen. Enter starts it, Esc goes back.
+## Flight opens a screen first: your bird and how it flies (Novice: the landing assist and more power and stamina,
+## FlightAssist; Realistic: none). Fight opens one too: your bird, what each pod carries (rockets, seekers or the
+## machine gun, left and right; two kinds, and Q switches), how it flies, the mode (the 3 v 3 match, or target
+## practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot | ace), with the
+## rules of the mode chosen. Enter starts either, Esc goes back.
 ## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
 ## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight`: on the Fight
 ## screen); `--no-backdrop` leaves the birds out.
 
 ## [label, scene, options] ("fight": the Fight screen)
 const CHOICES := [
-	["Flight", "res://scenes/game.tscn", ["--no-rider"]],
+	["Flight", "flight", []],
 	["Fight", "fight", []],
 	["Lab", "res://scenes/bird_lab.tscn", []],
 	["Quit", "", []],
 ]
 const RANGE := "res://scenes/combat_range.tscn"
-const WEAPONS := [   ## [label, what it does]
-	["Six rockets", "Fly straight and burst beside a bird: aim at the lead mark ahead of your target."],
-	["Four seekers", "Hold an enemy in the sight for a second, 6 to 40 m off, to lock; then they steer themselves."],
+const GAME := "res://scenes/game.tscn"
+const WEAPONS := [   ## [--loadout kind, label, what it does] (each pod carries one)
+	["rockets", "Rockets", "Three a pod. They fly straight and burst beside a bird: aim at the lead mark ahead of your target."],
+	["seekers", "Seekers", "Two a pod. Hold an enemy in the sight for a second, 6 to 40 m off, to lock; then they steer themselves."],
+	["gun", "Machine gun", "A belt of rounds in bursts. Each hit chips a feather: lead the mark and keep it there."],
+]
+const FLYING := [   ## [--flying, label, what it means]
+	["novice", "Novice", "Hold Ctrl near a perch and the bird lines itself up and lands for you. More flapping power and stamina."],
+	["realistic", "Realistic", "No help: the bird flies as its wings and muscles allow, and every landing is yours to judge."],
 ]
 const MODES := [   ## [label, rules]
 	["3 v 3 match", "You and two AI wingmen (teal) against three AI birds (warm), out from the far outpost.\n" +
@@ -40,22 +48,29 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 	["ace", "Ace", "Near-instant reactions, sees almost all round, fine aim; drags your seekers through the trunks."],
 ]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
-Left mouse / F: fire.  Esc: free the mouse."
+Left mouse / F: fire.  Q: switch weapon.  Esc: free the mouse."
+const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
+R: start over.  Esc: free the mouse."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
 
 static var fight_bird := "crow"   ## the Fight screen's choices (kept while the game runs)
-static var fight_seekers := false
+static var fight_pods := ["rockets", "rockets"]   ## left, right
 static var fight_match := true
 static var fight_skill := "pilot"
+static var flight_bird := "crow"   ## the Flight screen's
+static var novice := true          ## both screens' Flying choice (Novice from the menu; the command line's default is realistic)
 
-var page := "main"   ## "main" | "fight"
+var page := "main"   ## "main" | "flight" | "fight"
 var backdrop: MenuBackdrop
 var _ui: Control   ## the pages
 var _main: VBoxContainer
+var _flight: VBoxContainer
 var _fight: VBoxContainer
 var _blurb: Label
+var _flight_blurb: Label
+var _flying_notes: Array[Label] = []   ## (one on each screen)
 var _weapon_note: Label
 var _rules: Label
 var _skill_box: VBoxContainer
@@ -69,8 +84,8 @@ func _ready() -> void:
 	if not Boot.args().has("--no-backdrop"):
 		backdrop = MenuBackdrop.new()
 		add_child(backdrop)
-	if Boot.arg_value(Boot.args(), "--page") == "fight":
-		page = "fight"
+	if Boot.arg_value(Boot.args(), "--page") in ["fight", "flight"]:
+		page = Boot.arg_value(Boot.args(), "--page")
 	_build()
 	var shot := Boot.arg_value(Boot.args(), "--shot")
 	if shot != "":
@@ -94,8 +109,33 @@ func _build() -> void:
 		b.name = "Choice%d" % i
 		b.pressed.connect(choose.bind(i))
 		_main.add_child(b)
+	_build_flight()
 	_build_fight()
 	_show(page)
+
+
+func _build_flight() -> void:
+	_flight = _page("FLIGHT", false)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 48)
+	_flight.add_child(cols)
+	var pick := _column(COL_W)
+	var side := _column(RULES_W)
+	cols.add_child(pick)
+	cols.add_child(side)
+	pick.add_child(_heading("Your bird"))
+	pick.add_child(_row(BirdProfile.IDS.map(func(id: String) -> String: return BirdProfile.by_id(id).display_name),
+		BirdProfile.IDS.find(flight_bird), func(i: int) -> void:
+			flight_bird = BirdProfile.IDS[i]
+			_refresh(), "FlightBird"))
+	_flight_blurb = _note(COL_W)
+	pick.add_child(_flight_blurb)
+	_flying_row(pick, "FlightFlying")
+	side.add_child(_heading("Controls"))
+	var controls := _note(RULES_W)
+	controls.text = FLIGHT_CONTROLS
+	side.add_child(controls)
+	_flight.add_child(_go(start_flight, "FlightStart"))
 
 
 func _build_fight() -> void:
@@ -114,10 +154,12 @@ func _build_fight() -> void:
 			_refresh(), "Bird"))
 	_blurb = _note(COL_W)
 	pick.add_child(_blurb)
-	pick.add_child(_heading("Weapon"))
-	pick.add_child(_row(WEAPONS.map(func(w: Array) -> String: return w[0]), int(fight_seekers), func(i: int) -> void:
-		fight_seekers = i == 1
-		_refresh(), "Weapon"))
+	for p in 2:
+		pick.add_child(_heading(["Left pod", "Right pod"][p]))
+		pick.add_child(_row(WEAPONS.map(func(w: Array) -> String: return w[1]),
+			WEAPONS.map(func(w: Array) -> String: return w[0]).find(fight_pods[p]), func(i: int) -> void:
+				fight_pods[p] = WEAPONS[i][0]
+				_refresh(), ["Left", "Right"][p]))
 	_weapon_note = _note(COL_W)
 	pick.add_child(_weapon_note)
 	pick.add_child(_heading("Mode"))
@@ -133,6 +175,7 @@ func _build_fight() -> void:
 	_skill_note = _note(COL_W)
 	_skill_box.add_child(_skill_note)
 	pick.add_child(_skill_box)
+	_flying_row(rules, "Flying")
 	rules.add_child(_heading("Rules"))
 	_rules = _note(RULES_W)
 	rules.add_child(_rules)
@@ -140,30 +183,49 @@ func _build_fight() -> void:
 	var controls := _note(RULES_W)
 	controls.text = CONTROLS
 	rules.add_child(controls)
+	_fight.add_child(_go(start_fight, "Start"))
+	_refresh()
+
+
+## The Flying choice (Novice | Realistic) and what it means, into `box`; its buttons are named <prefix><i>.
+func _flying_row(box: VBoxContainer, prefix: String) -> void:
+	box.add_child(_heading("Flying"))
+	box.add_child(_row(FLYING.map(func(f: Array) -> String: return f[1]), 0 if novice else 1, func(i: int) -> void:
+		novice = i == 0
+		_refresh(), prefix))
+	var note := _note(box.custom_minimum_size.x)
+	_flying_notes.append(note)
+	box.add_child(note)
+
+
+## Back, and Start (named `start_name`) calling `start`.
+func _go(start: Callable, start_name: String) -> HBoxContainer:
 	var go := HBoxContainer.new()
 	go.alignment = BoxContainer.ALIGNMENT_CENTER
 	go.add_theme_constant_override("separation", 16)
 	var back := _button("Back  (Esc)", 20, Vector2(200, 48))
-	back.name = "Back"
+	back.name = start_name + "Back"
 	back.pressed.connect(_show.bind("main"))
-	var start := _button("Start  (Enter)", 20, Vector2(240, 48))
-	start.name = "Start"
-	start.pressed.connect(start_fight)
+	var b := _button("Start  (Enter)", 20, Vector2(240, 48))
+	b.name = start_name
+	b.pressed.connect(start)
 	go.add_child(back)
-	go.add_child(start)
-	_fight.add_child(go)
-	_refresh()
+	go.add_child(b)
+	return go
 
 
 func _unhandled_input(e: InputEvent) -> void:
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
 	var key := (e as InputEventKey).keycode
-	if page == "fight":
+	if page != "main":
 		if key == KEY_ESCAPE:
 			_show("main")
 		elif key == KEY_ENTER or key == KEY_KP_ENTER:
-			start_fight()
+			if page == "fight":
+				start_fight()
+			else:
+				start_flight()
 		return
 	var k := key - KEY_1
 	if k >= 0 and k < CHOICES.size():
@@ -174,21 +236,30 @@ func choose(i: int) -> void:
 	var c: Array = CHOICES[i]
 	if c[1] == "":
 		get_tree().quit()
-	elif c[1] == "fight":
-		_show("fight")
+	elif c[1] in ["fight", "flight"]:
+		_show(c[1])
 	else:
 		Boot.extra = PackedStringArray(c[2])
 		get_tree().change_scene_to_file(c[1])
 
 
-## The range's options for the Fight screen's choices.
+## The range's options for the Fight screen's choices (the pods as one kind when both carry the same).
 static func fight_options() -> PackedStringArray:
-	var o := PackedStringArray(["--bird", fight_bird])
-	if fight_seekers:
-		o.append("--seekers")
+	var pods: String = fight_pods[0] if fight_pods[0] == fight_pods[1] else "%s,%s" % fight_pods
+	var o := PackedStringArray(["--bird", fight_bird, "--loadout", pods, "--flying", "novice" if novice else "realistic"])
 	if fight_match:
 		o.append_array(["--match", "--skill", fight_skill])
 	return o
+
+
+## The game's options for the Flight screen's: no rider or weapons.
+static func flight_options() -> PackedStringArray:
+	return PackedStringArray(["--no-rider", "--bird", flight_bird, "--flying", "novice" if novice else "realistic"])
+
+
+func start_flight() -> void:
+	Boot.extra = flight_options()
+	get_tree().change_scene_to_file(GAME)
 
 
 func start_fight() -> void:
@@ -199,16 +270,34 @@ func start_fight() -> void:
 func _show(p: String) -> void:
 	page = p
 	_main.get_meta("page").visible = p == "main"
+	_flight.get_meta("page").visible = p == "flight"
 	_fight.get_meta("page").visible = p == "fight"
+	_refresh()
 	if p == "main":
 		(_main.find_child("Choice0", true, false) as Button).grab_focus()
+	elif p == "flight":
+		(_flight.find_child("FlightStart", true, false) as Button).grab_focus()
 	else:
 		(_fight.find_child("Start", true, false) as Button).grab_focus()
 
 
 func _refresh() -> void:
 	_blurb.text = BirdProfile.by_id(fight_bird).blurb
-	_weapon_note.text = WEAPONS[int(fight_seekers)][1]
+	_flight_blurb.text = BirdProfile.by_id(flight_bird).blurb
+	var notes := []
+	for w in WEAPONS:
+		if fight_pods.has(w[0]):
+			notes.append("%s: %s" % [w[1], w[2]])
+	if fight_pods[0] != fight_pods[1]:
+		notes.append("Two kinds: Q switches between them.")
+	_weapon_note.text = "\n".join(notes)
+	for n in _flying_notes:
+		n.text = FLYING[0 if novice else 1][2]
+	for prefix in ["Flying", "FlightFlying"]:   # (both screens' rows show the one choice)
+		for i in 2:
+			var b := find_child("%s%d" % [prefix, i], true, false) as Button
+			if b != null:
+				b.set_pressed_no_signal(i == (0 if novice else 1))
 	_rules.text = MODES[0 if fight_match else 1][1]
 	_skill_box.visible = fight_match
 	for k in SKILLS:
