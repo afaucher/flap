@@ -8,12 +8,12 @@ render_mode blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_di
 uniform float size_m = 0.035;       // the quad's true size (AirFx.MOTE_SIZE)
 uniform float min_px = 2.0;         // never drawn smaller than this on screen
 uniform vec3 glint : source_color = vec3(1.0, 0.93, 0.76);
-uniform float energy = 1.8;         // the sun's light it sends on (times the scatter)
+uniform float energy = 2.6;         // the sun's light it sends on (times the scatter)
 uniform float scatter_g = 0.4;      // Henyey-Greenstein: 0 the same every way, toward 1 all forward
 uniform float scatter_even = 0.7;   // the share sent every way alike (fluff glints with the sun behind you too)
 uniform float shade = 0.03;         // what's left of it in the shade
-uniform vec2 fade_far = vec2(40.0, 75.0);   // m: gone by the far blur (ForestLight.FAR_BLUR_FROM 45 m), which spreads
-                                              // a bright speck into a pale bokeh blot
+uniform vec2 fade_far = vec2(70.0, 120.0);  // m: thinning out in the far blur (ForestLight.FAR_BLUR_FROM 45 m), which spreads
+                                              // a bright speck into a pale blot (a dim one into a haze)
 
 varying float dim;
 varying float twinkle;
