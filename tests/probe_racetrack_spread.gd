@@ -11,6 +11,7 @@ func _init() -> void:
 
 
 func setup() -> void:
+	CombatWorld.calm_air = OS.get_environment("FLAP_AIR") != "1"   # (FLAP_AIR=1: the thermals, to compare)
 	for i in 8:
 		if in_shard(i):
 			for s in [1 + i * 2, 2 + i * 2]:

@@ -15,6 +15,13 @@ extends RefCounted
 ##
 ## Integration (semi-implicit, per physics tick): lift turns the velocity (a speed-preserving rotation by
 ## a_L dt / V, which stays stable at low speed), then drag, gravity and thrust are added as accelerations.
+##
+## Moving air (`wind`, AirField's at the bird): the tick is flown in the air's frame -- the velocity through the air
+## is what the wing feels, so speed, path angle, the flight direction and the lift vector are all through the air --
+## and the air's own velocity carries the bird over the ground. In rising air the bird keeps its glide through the
+## air and rises with it: a thermal stronger than its sink rate lifts it. `velocity` outside step() is over the ground,
+## and so are `path_angle` and flight_dir() (where the bird is going: what a pilot, the AI or the HUD steers by);
+## `speed`, the angle of attack and the body are through the air.
 
 const UP := Vector3.UP
 
@@ -36,6 +43,7 @@ var stalled := false
 var flare := 0.0            ## 0..1 extra airbrake from the perch assist (visual + drag)
 var extra_accel := Vector3.ZERO  ## world-space push this tick (arena boundary)
 var ground_height := INF        ## m from the bird's underside to the ground below (set by the Bird each tick)
+var wind := Vector3.ZERO        ## m/s, the air's velocity where the bird is (set by the Bird each tick: AirField)
 ## Battle damage: the share of each wing's area its lost flight feathers took (x left, y right; Bird.lose_feathers).
 ## The wings lose that lift, and the weaker wing drops: the bird rolls toward it unless the stick holds it level.
 var wing_loss := Vector2.ZERO
@@ -51,7 +59,7 @@ var auto_sweep := 0.35      ## wing tuck at twice best-glide speed, with no push
 # --- Outputs (read by the HUD, camera, rig) --------------------------------------------------------
 var lift_dir := UP
 var speed := 0.0
-var path_angle := 0.0       ## rad, + climbing
+var path_angle := 0.0       ## rad, + climbing (over the ground)
 var cl := 0.0
 var cd := 0.0
 var load_factor := 1.0      ## lift / weight
@@ -61,7 +69,9 @@ var lift_to_drag := 0.0
 var ground_effect := 0.0    ## 0 (clear of the ground) .. 1 (on it)
 
 var _last_drag_accel := 0.0
-var _last_dir := Vector3.FORWARD
+var _last_dir := Vector3.FORWARD     ## the direction through the air (the wing's, the body's)
+var _ground_dir := Vector3.FORWARD   ## the direction over the ground (flight_dir())
+var _air_path := 0.0                 ## rad, the path angle through the air
 var _heading_dir := Vector3.FORWARD   ## last horizontal direction of flight (survives a vertical path)
 var _display_sign := 1.0   ## body_basis: +-1 on lift_dir, so the shown body doesn't flip through a vertical path
 
@@ -142,6 +152,7 @@ func flap(free := false) -> bool:
 
 func step(dt: float, input: FlightInput) -> void:
 	var p := profile
+	velocity -= wind   # (through the air, for the tick; speed and the path are already through it, from the last tick)
 	# --- Attitude follows the stick -------------------------------------------------------------
 	var stick := input.stick.clamp(Vector2(-1, -1), Vector2(1, 1))
 	var bank_target := stick.x * deg_to_rad(p.max_bank_deg) + (wing_loss.y - wing_loss.x) * LOSS_ROLL * deg_to_rad(p.max_bank_deg)
@@ -157,7 +168,7 @@ func step(dt: float, input: FlightInput) -> void:
 	# the bob's stiffness, and chatters.)
 	# The damper never takes the wing past the stall itself (accelerating down a steep dive, it would): only the stick can.
 	if not stalled and pitch_damping > 0.0:
-		var a_along := -BirdProfile.G * sin(path_angle) - _last_drag_accel
+		var a_along := -BirdProfile.G * sin(_air_path) - _last_drag_accel   # (through the air)
 		var authority := 1.0 - minf(1.0, absf(stick.y) * 1.5)
 		var damped := alpha_target + pitch_damping * 2.0 * p.alpha_best * clampf(a_along / BirdProfile.G, -0.5, 0.5) * authority
 		alpha_target = minf(damped, maxf(alpha_target, p.alpha_stall * 0.97))
@@ -245,10 +256,12 @@ func step(dt: float, input: FlightInput) -> void:
 	velocity += extra_accel * dt
 	if turn != 0.0:
 		velocity = velocity.rotated(axis, turn * 0.5)
-	position += velocity * dt
+	position += (velocity + wind) * dt
 
 	energy.tick(dt, driving, load_factor, false)
 	_update_frame()
+	velocity += wind   # (over the ground again; speed and the lift stay as through the air, the path is over it)
+	_ground_frame()
 
 
 ## Recompute speed, path angle, flight direction and lift vector from the velocity and bank.
@@ -260,7 +273,9 @@ func _update_frame() -> void:
 	var flat := Vector3(dir.x, 0.0, dir.z)
 	if flat.length() > 0.2:
 		_heading_dir = flat.normalized()
-	path_angle = asin(clampf(dir.y, -1.0, 1.0))
+	_air_path = asin(clampf(dir.y, -1.0, 1.0))
+	path_angle = _air_path
+	_ground_dir = dir
 	var up_perp := UP - dir * dir.dot(UP)
 	if up_perp.length_squared() < 1e-6:
 		up_perp = lift_dir - dir * dir.dot(lift_dir)   # straight up/down: keep the last lift plane
@@ -273,9 +288,19 @@ func _update_frame() -> void:
 	_display_sign = -1.0 if absf(dir.y) > 0.85 and lift_dir.dot(_heading_dir) > 0.0 else 1.0
 
 
-## Direction of flight (unit), even at a standstill.
+## Over the ground: the direction and path angle the bird is travelling (in still air, the same as through it).
+func _ground_frame() -> void:
+	if wind == Vector3.ZERO:
+		return
+	var v := velocity.length()
+	if v > 0.05:
+		_ground_dir = velocity / v
+	path_angle = asin(clampf(_ground_dir.y, -1.0, 1.0))
+
+
+## Direction of flight over the ground (unit), even at a standstill.
 func flight_dir() -> Vector3:
-	return _last_dir
+	return _ground_dir
 
 
 ## The body's orientation: nose `alpha` above the flight path, rolled by `bank`. -Z is the nose. (Near vertical
@@ -302,7 +327,7 @@ func heading_dir() -> Vector3:
 
 ## Heading of the flight path in the horizontal plane (rad, 0 = -Z, + toward +X).
 func heading() -> float:
-	return atan2(_last_dir.x, -_last_dir.z)
+	return atan2(_ground_dir.x, -_ground_dir.z)
 
 
 ## Total mechanical energy per kg (m^2/s^2): what a glide trades between height and speed.

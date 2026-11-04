@@ -23,7 +23,7 @@ uniform sampler2D scan_disp : hint_default_black, filter_linear_mipmap_anisotrop
 // The grain in relief (as the bark's fissures are): the scan's normals deepened, and its height (raised latewood
 // ridges, eroded grooves between) bumped in, with fine ridges of its own along the grain; the ridges worn smoother
 // than the grooves, so a raking sun runs highlights along the grain and the grooves stay dark.
-uniform float normal_depth = 2.6;
+uniform float normal_depth = 1.8;
 uniform float grain_depth = 0.008;       // m from the grooves to the ridges' tops
 uniform float ridge_gloss = 0.55;        // the ridges' roughness, as a share of the scan's
 uniform float scan_tile = 2.0;           // m the scan covers
@@ -92,12 +92,26 @@ void vertex() {
 }
 
 // A bumped normal from a height h (m) over the surface, by its screen derivatives (Mikkelsen 2010).
+// The tilt is capped (MAX_BUMP_TILT): where the height jumps within a pixel (a board's edge, a groove, the grain far
+// off) the slope would tip the normal past edge-on, and the pixel would shade black -- a speckle of dark dots.
+const float MAX_BUMP_TILT = 1.0;   // tan of the steepest tilt (45 deg)
 vec3 bump(vec3 n, vec3 dpx, vec3 dpy, float h) {
 	vec3 r1 = cross(dpy, n);
 	vec3 r2 = cross(n, dpx);
 	float det = dot(dpx, r1);
 	vec3 g = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+	float lim = abs(det) * MAX_BUMP_TILT;
+	float gl = length(g);
+	if (gl > lim) {
+		g *= lim / gl;
+	}
 	return normalize(abs(det) * n - g);
+}
+
+// Fine ridges along the grain (latewood standing out of the weathered earlywood), the rings wandering: 0..1.
+float _ridges(float c, float al, float s) {
+	float wav = vnoise(vec2(c * 35.0 + s * 7.0, al * 1.5)) * 3.0 + vnoise(vec2(c * 90.0, al * 6.0));
+	return smoothstep(0.35, 0.85, vnoise(vec2(c * 220.0 + wav + s * 13.0, al * 2.0))) * vnoise(vec2(c * 40.0, al * 0.8 + s * 3.0));
 }
 
 void fragment() {
@@ -332,10 +346,22 @@ void fragment() {
 		// a pixel spans several: no shimmer).
 		float hd = textureGrad(scan_disp, uv, gx, gy).r;
 		float fine = 1.0 - smoothstep(0.3, 1.0, fwidth(cc) * 220.0);
-		float wav = vnoise(vec2(cc * 35.0 + s * 7.0, al * 1.5)) * 3.0 + vnoise(vec2(cc * 90.0, al * 6.0));   // (rings wander)
-		float rid = smoothstep(0.35, 0.85, vnoise(vec2(cc * 220.0 + wav + s * 13.0, al * 2.0))) * vnoise(vec2(cc * 40.0, al * 0.8 + s * 3.0));
+		float rid = _ridges(cc, al, s);
 		float hg = mix(hd, hd * 0.85 + rid * 0.15, fine);
-		nrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);
+		// Its slope, from the height a couple of millimetres along each way (not the screen's derivatives, which
+		// jump from pixel to pixel and left a speckle of black dots): smooth, and fading by itself far off as the
+		// scan's mips blur it. Capped short of edge-on.
+		float e = 0.0025;
+		float hx = textureGrad(scan_disp, uv + vec2(e / scan_tile, 0.0), gx, gy).r;
+		float hy = textureGrad(scan_disp, uv + vec2(0.0, e / scan_tile), gx, gy).r;
+		hx = mix(hx, hx * 0.85 + _ridges(cc + e * m, al, s) * 0.15, fine);
+		hy = mix(hy, hy * 0.85 + _ridges(cc, al + e * vdir, s) * 0.15, fine);
+		vec2 slope = vec2(hx - hg, hy - hg) / e * grain_depth;
+		float sl = length(slope);
+		if (sl > MAX_BUMP_TILT) {
+			slope *= MAX_BUMP_TILT / sl;
+		}
+		nrm = normalize(nrm - T * slope.x - B * slope.y);
 		float ridge = smoothstep(0.5, 0.8, hg);
 		rough = mix(min(rough * 1.08, 1.0), rough * ridge_gloss, ridge);
 		ao *= mix(0.4, 1.0, smoothstep(0.15, 0.6, hd));

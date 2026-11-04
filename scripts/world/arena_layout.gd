@@ -127,6 +127,7 @@ var ring_radius := 56.0
 var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData
 var outposts: Array = []            ## of OutpostData
+var air := AirField.new()           ## the air's own movement: thermals, ridge lift (empty: still air)
 var style := "greybox"              ## "greybox" (generate) or "pinewood" (Pinewood.generate)
 var perches: Array[Perch] = []
 var _perch_hash := {}               ## Vector2i -> Array[int] perch ids

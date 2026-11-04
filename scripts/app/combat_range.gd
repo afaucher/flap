@@ -86,6 +86,7 @@ func _ready() -> void:
 		match_enemy = enemy_ids
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
+	Antialias.apply(self, args)
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
 	if Boot.arg_value(args, "--loadout") == "seekers":
@@ -101,6 +102,8 @@ func _ready() -> void:
 		Game.add_environment(self)
 	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(7)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(7))
 	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
+	if CombatWorld.calm_air:
+		layout.air = AirField.new()
 	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
@@ -362,6 +365,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F7:
+		print("TAA ", "on" if Antialias.toggle(self) else "off")
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
 		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:

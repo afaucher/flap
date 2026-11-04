@@ -5,9 +5,12 @@ extends Camera3D
 ## between it and the bird. Reads the bird's telemetry and interpolated transform only.
 ## `look_input` (the right stick, -1..1) orbits it around the bird -- up to LOOK_YAW to the side and
 ## LOOK_PITCH up or down -- and it springs back when the stick is let go. A sitting bird's look_pitch tilts it.
+## zoom_by() (the mouse wheel, in flight) moves it in or out, ZOOM_RANGE times the chase distance, easing there.
 
 const LOOK_YAW := 75.0
 const LOOK_PITCH := 35.0
+const ZOOM_RANGE := Vector2(0.45, 3.5)   ## the chase distance's scale, closest .. farthest
+const ZOOM_STEP := 1.15                  ## per wheel click
 
 var bird: Bird
 var distance := 3.2
@@ -17,6 +20,8 @@ var look_input := Vector2.ZERO
 var _look := Vector3.FORWARD
 var _roll := 0.0
 var _orbit := Vector2.ZERO   ## smoothed look_input
+var zoom := 1.0              ## where the wheel has set the distance (a scale of it)
+var _zoom := 1.0             ## eased toward it
 
 
 func _ready() -> void:
@@ -55,8 +60,13 @@ func _orbited(look: Vector3) -> Vector3:
 	return d.normalized()
 
 
+## The wheel: `clicks` out (+) or in (-).
+func zoom_by(clicks: float) -> void:
+	zoom = clampf(zoom * pow(ZOOM_STEP, clicks), ZOOM_RANGE.x, ZOOM_RANGE.y)
+
+
 func _desired(target: Vector3, look: Vector3) -> Vector3:
-	var scale := clampf(bird.profile.span / 1.0, 0.5, 1.4)
+	var scale := clampf(bird.profile.span / 1.0, 0.5, 1.4) * _zoom
 	return target - look * distance * scale + Vector3.UP * height * scale
 
 
@@ -69,6 +79,7 @@ func _process(dt: float) -> void:
 
 
 func _follow(dt: float) -> void:
+	_zoom = lerpf(_zoom, zoom, 1.0 - exp(-8.0 * dt))
 	var t := bird.telemetry()
 	var target := bird.get_global_transform_interpolated().origin
 	var want_look := _look_dir(t)
