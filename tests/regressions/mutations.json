@@ -2846,12 +2846,12 @@
   "edits": [
    {
     "file": "scripts/world/planks.gdshader",
-    "find": "uniform float normal_depth = 2.6;",
+    "find": "uniform float normal_depth = 1.8;",
     "replace": "uniform float normal_depth = 1.0;"
    },
    {
     "file": "scripts/world/planks.gdshader",
-    "find": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);",
+    "find": "\t\tnrm = normalize(nrm - T * slope.x - B * slope.y);",
     "replace": ""
    }
   ]
@@ -2881,6 +2881,25 @@
     "file": "scripts/combat/player_combat.gd",
     "find": "\tif _swallowed or (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not captured):",
     "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "wood-relief-speckle",
+  "bug": "The wood's grain relief took its slope from the screen's per-pixel derivatives over a 2.6x-deepened normal map: pixels tipped edge-on and shaded black, a speckle of dark dots along the boards and in shadows' edges (2026-11-03).",
+  "tests": [
+   "gpu_test_speckle"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tnrm = normalize(nrm - T * slope.x - B * slope.y);",
+    "replace": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);"
+   },
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "uniform float normal_depth = 1.8;",
+    "replace": "uniform float normal_depth = 2.6;"
    }
   ]
  }
