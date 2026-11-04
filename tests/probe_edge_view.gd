@@ -2,7 +2,7 @@ extends TestCase
 ## The arena's edge as it is today, from inside the pine wood looking out across the boundary: reference shots for
 ## designing what lies beyond it (a cliff, a river and a rival wood, a balloon line, heath). A falcon with its rider
 ## and tack in the chase camera's place in most of them. Windowed:
-##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence | extents | top] [--look <name>] [--no-fog] [--tag <suffix>]
+##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence | extents | top | top_aligned] [--look <name>] [--no-fog] [--tag <suffix>]
 ## Views: chase_canopy (at crown height, the edge 40 m ahead), chase_above (over the canopy), low_trunks (among the
 ## trunks at 6 m), overview (60 m up from the far side, the whole wood to its far edge).
 
@@ -77,23 +77,36 @@ func setup() -> void:
 			["extents_right", null, -side * (edge - 2.0) + Vector3.UP * hgt, mid * layout.rock.foot * 0.6 - side * 40.0 + Vector3.UP * 25.0],
 			["extents_flank_out", null, side * (edge - 2.0) + Vector3.UP * hgt, side * 400.0 + mid * 150.0 + Vector3.UP * 30.0],
 		]
-	if heading == "top":   # (the cliff's middle from straight above, orthographic, 120 m across: beside tools/cliff_plan.py)
-		get_window().size = Vector2i(1024, 1024)
+	if heading == "top" or heading == "top_aligned":   # (the cliff's middle from straight above, orthographic, 120 m
+		# across: beside tools/cliff_plan.py; top_aligned: turned so the cliff runs across and the plateau is at the top,
+		# 3:1 and the wood hidden, as docs/images/edge/concept_cliff_plan.png is framed)
+		var aligned := heading == "top_aligned"
+		get_window().size = Vector2i(1536, 512) if aligned else Vector2i(1024, 1024)
+		if aligned:
+			for c in arena.get_children():
+				if c != arena.edge and c.name != "Ground":
+					c.visible = false
+			for c in arena.edge.get_children():
+				if c is VisualInstance3D and (String(c.name).begins_with("Edge_tufts") or String(c.name).begins_with("Edge_heather") or c == arena.edge.wires or String(c.name).begins_with("Edge_fence")):
+					(c as VisualInstance3D).visible = false
 		for c in root.get_children():
 			if c is WorldEnvironment and (c as WorldEnvironment).camera_attributes is CameraAttributesPractical:
 				((c as WorldEnvironment).camera_attributes as CameraAttributesPractical).dof_blur_far_enabled = false
 		var mid := Vector3(sin(float(layout.escarpment.at)), 0.0, cos(float(layout.escarpment.at))) * layout.rock.foot
 		cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-		cam.size = 120.0
+		cam.size = 40.0 if aligned else 120.0
 		cam.far = 600.0
-		cam.look_at_from_position(mid + Vector3.UP * 300.0, mid, Vector3.FORWARD)   # (-z up the image, +x right: as seen from above, as the plan)
+		var outward := mid.normalized()
+		var centre := mid + outward * (6.0 if aligned else 0.0)   # (aligned: the face a little above the middle, talus below)
+		cam.look_at_from_position(centre + Vector3.UP * 300.0, centre, outward if aligned else Vector3.FORWARD)   # (-z up the image, +x right: as seen from above, as the plan)
 		await frames(40)
 		await RenderingServer.frame_post_draw
 		var img := get_viewport().get_texture().get_image()
 		img.convert(Image.FORMAT_RGB8)
 		if out_dir != "":
-			img.save_png(out_dir.path_join("edge_top.png"))
-			print("shot: ", out_dir.path_join("edge_top.png"))
+			var name := "edge_top_aligned.png" if aligned else "edge_top.png"
+			img.save_png(out_dir.path_join(name))
+			print("shot: ", out_dir.path_join(name))
 		finish()
 		return
 	if heading == "ortho":   # (the cliff straight on, a long lens with no perspective, the wood and the heath's cover
