@@ -2902,5 +2902,19 @@
     "replace": "uniform float normal_depth = 2.6;"
    }
   ]
+ },
+ {
+  "id": "combat-ai-never-fires",
+  "bug": "Guard for the range's 3 v 3 check (test_combat#2): a match where the combat AI never fires must fail it, now that it runs until the first rounds (90 s cap) instead of counting rounds at 30 s (2026-11-03).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\tif not i.fire or i.target == null or b.stun > 0.0 or b.state != Bird.State.FLYING or brain.pilot.avoiding > 0.0:",
+    "replace": "\tif true:"
+   }
+  ]
  }
 ]

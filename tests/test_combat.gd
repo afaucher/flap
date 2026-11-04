@@ -30,7 +30,7 @@ const SHARDS := 3   ## (the range scene and its match, the longest parts, each i
 
 
 func _init() -> void:
-	timeout_sec = 240.0
+	timeout_sec = 360.0   # (the match runs up to MATCH_CAP s)
 
 
 func setup() -> void:
@@ -615,8 +615,14 @@ func _range() -> void:
 	await frames(2)
 
 
-## The range's --match: you and two combat-AI wingmen against three combat-AI birds from the far base; within 30 s
-## the AI birds are fighting (rounds fired), each carrying its species' round.
+## The range's --match: you and two combat-AI wingmen against three combat-AI birds from the far base: the AI birds find
+## each other and fight -- some engage or attack, and they fire rounds (MATCH_ROUNDS within MATCH_CAP s; it stops as
+## soon as they have, since how long first contact takes across the wood varies a lot from wood to wood) -- each
+## carrying its species' round. (This is the scene's wiring; how well the AI fights: test_combat_team, test_combat_ai.)
+const MATCH_ROUNDS := 2
+const MATCH_CAP := 90.0
+
+
 func _range_match() -> void:
 	var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 	add_child(r)
@@ -629,20 +635,32 @@ func _range_match() -> void:
 	var mine := ai.filter(func(b): return r.world.friends(b, r.bird))
 	check(ai.size() == 5 and mine.size() == 2, "a match: two AI wingmen and three AI enemies (%d, %d yours)" % [ai.size(), mine.size()])
 	check(r.target == null, "and no racetrack target")
-	await frames(60 * 30)
-	var shots := 0
+	for b in ai + [r.bird]:
+		(b as Bird).rig.visible = false   # (only the fight counts here; the range's own look: _range)
 	var kinds_ok := true
 	for l in r.world.launchers:
 		if ai.has(l.bird):
-			shots += l.shots
 			var st := CombatStyle.of(l.bird.profile)
 			kinds_ok = kinds_ok and int(l.capacity[st.weapon]) > 0 and l.weapon == st.weapon
-	var modes := {}
-	for b in ai:
-		var m: String = (b.controller as CombatPilot).brain.intent.mode
-		modes[m] = int(modes.get(m, 0)) + 1
-	print("range match after 30 s: %d rounds fired, modes %s, score %s" % [shots, modes, r.world.score])
-	check(shots >= 2, "the AI birds fight: %d rounds fired in 30 s" % shots)
+	var shots := 0
+	var engaged := {}   # mode -> seconds some AI bird first flew it ("engage", "attack")
+	var modes := {}     # mode -> bird-ticks in it
+	var t := 0.0
+	while t < MATCH_CAP and (shots < MATCH_ROUNDS or engaged.is_empty()):
+		await get_tree().physics_frame
+		t += 1.0 / 60.0
+		shots = 0
+		for l in r.world.launchers:
+			if ai.has(l.bird):
+				shots += l.shots
+		for b in ai:
+			var m: String = (b.controller as CombatPilot).brain.intent.mode
+			modes[m] = int(modes.get(m, 0)) + 1
+			if m in ["engage", "attack"] and not engaged.has(m):
+				engaged[m] = t
+	print("range match: %d rounds fired by %.1f s (cap %.0f s), first engaged %s, bird-ticks by mode %s, score %s" % [shots, t, MATCH_CAP, engaged, modes, r.world.score])
+	check(not engaged.is_empty(), "the AI birds find each other: some engage or attack within %.0f s" % MATCH_CAP)
+	check(shots >= MATCH_ROUNDS, "the AI birds fight: %d rounds fired within %.0f s" % [shots, MATCH_CAP])
 	check(kinds_ok, "each AI bird carries its species' round")
 	r.queue_free()
 	await frames(2)
