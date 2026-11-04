@@ -3177,5 +3177,19 @@
     "replace": "\t\tvar kit: Array = ids.map("
    }
   ]
+ },
+ {
+  "id": "solid-build-skips-solid",
+  "bug": "Guard for ArenaBuilder.looks: the headless build must leave out only what isn't solid; dropping a solid step (the outposts) with the looks would fly duels through decks and hangars (2026-11-04).",
+  "tests": [
+   "test_arena_looks"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tout.append([\"Building the outposts\", _outposts, 0.08])",
+    "replace": "\t\tif looks:\n\t\t\tout.append([\"Building the outposts\", _outposts, 0.08])"
+   }
+  ]
  }
 ]
