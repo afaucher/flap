@@ -41,6 +41,7 @@ Here q = ½ρv². CL rises linearly up to the stall angle, then sags to 65% of i
 
 **Controls map to physics:**
 - **Neutral stick = best-glide α.** Let go of the mouse and the bird settles onto its ideal glide slope; the virtual stick drifts back to centre. The HUD's pitch ladder marks the ideal glide line, and the flight-path circle turns green when you're on it.
+  - **With flap held, neutral stick climbs** instead: it eases over to the climb trim and back when you stop (see "Flapping trim" below).
 - **Pull back:** more CL, so the path curves up while induced drag bleeds speed. This gives the speed penalty you described. At 85% pull the wing reaches its stall angle. The last 15% of travel is the flare: post-stall, a big airbrake. The HUD stick box marks that line.
 - **Push forward:** less CL, so the path drops and speed builds. Past half push the wings tuck, reducing area, span and parasitic drag. That's the falcon stoop.
 - **Bank-and-yank:** bank tilts the lift vector, which turns the path. Pulling in a bank tightens the turn: turn rate ω = n·g·sin(φ)/V, verified in `test_flight_controls`.
@@ -51,9 +52,67 @@ Here q = ½ρv². CL rises linearly up to the stall angle, then sags to 65% of i
 - `pitch_damping`: a phugoid damper. Without it, speed and height trade back and forth ("the bob") for half a minute.
   - It feeds the unpowered along-path acceleration back into α. That works out to about 0.7 of critical damping.
   - Feeding back the path's rate of change instead only changes the bob's stiffness, and it chatters at 60 Hz. We tried it; the test caught it.
+  - With flap held, the wingbeat's mean thrust along the path is added in, so a steady flapping climb reads as steady. Without it the damper took that climb for speed bleeding away and held the nose about 5° low, so flapping flew fast and shallow.
 - `turn_assist`: described above.
 - `auto_sweep`: the wings tuck up to 35% by themselves at twice best-glide speed. Gliding pigeons do this (wing research).
 - Stall **hysteresis**: the stall sets in past the stall angle and only ends once α is clearly back below it.
+
+### Flapping trim (`FlightModel.climb_alpha`, `best_climb`)
+
+Gliding, neutral stick holds best glide (α*): the flattest path, the most distance per metre of height. With flap held you're adding energy, and the intent is to go up, so neutral stick holds the efficient climb instead. This is part of the stick mapping, not an assist: there is no switch. Full pull and full push are the same as ever; the travel between them is laid out from whichever trim is current.
+
+**Why not just keep α\*?** At cruise a wingbeat's thrust tilts 30° up from the path (65° when slow), so part of it is lift. At α\* the wing then has more lift than it needs, and the bird slows until it doesn't. The crow ends up at its stall speed, and the falcon just under it. The sparrow, whose wingbeat lifts more than its weight when slow, tips into a stalled, near-vertical hovering climb. Before this change, flapping at neutral flew fast and shallow instead (crow 2.1 m/s up at 12 m/s), but only because the phugoid damper misread the thrust (see `pitch_damping` above).
+
+**Which climb.** There are two classic choices:
+- the steepest climb (best angle, Vx), for clearing an obstacle;
+- the fastest climb (best rate, Vy).
+
+A real bird's muscle power is roughly flat with speed, so its fastest climb is at the minimum-power speed Vmp, about 0.76 of its max-range speed (Pennycuick). Here, a held wingbeat spends one burst flap per wingbeat period whatever the bird does. Height per flap is therefore climb rate × period, and the fastest climb is also the most efficient. Best angle is at the slowest speed, which in this model means the stall and the hover, so it stays a pull away.
+
+This model's thrust isn't constant power: T = A·(1 − v/cap)², so its Vy isn't the polar's Vmp. `best_climb()` works it out from the model itself. Per kg, a steady flapping flight at airspeed v holds:
+
+```
+T̄ cos θ − D/m = g sin γ          L/m + T̄ sin θ = g cos γ
+T̄ = A · strength · duty · (1 − v/cap)²
+θ = tilt(v) − (1 − min(1, v/v*)) · γ      (slow thrust is aimed from the heading, not the path)
+L = q S CL,  D = q S (CD0 + K CL²)        (the auto-sweep's tuck included)
+```
+
+- `duty` is the share of ticks that drive. The downstroke and the beat each round up to whole 60 Hz ticks, so the sparrow's is 4/7.
+- `steady_flapping(v)` bisects for γ and reads off α = CL/CLα.
+- `best_climb()` scans v and keeps the fastest climb v·sin γ that is:
+  - no slower than `CLIMB_MIN_SPEED` × v\* (1.0);
+  - on the stable side, where a slower speed needs more α, so slowing drops the nose;
+  - under `CLIMB_ALPHA_MARGIN` (0.9) of the most α any slower steady flight needs. Past that the sparrow tips into its hovering climb.
+
+It is worked out once per set of numbers, in about 20 ms.
+
+**Why floor it at best-glide speed?** The unconstrained Vy is slow, at 1.0–1.3× stall speed. In a test build with the trim at Vy:
+- letting go dived the bird to the edge of the stall (the owl to 0.92×);
+- the combat AI, which flaps when it's slow, stayed slow and flapped itself out (test_combat_team's birds rested 300 of 400 s).
+
+At v\* the climb is only 2–9% slower, the bird flaps at the speed it glides at, and letting go is a gentle nose-over back to the glide.
+
+**Easing.** `flap_trim` follows the held wingbeats' strength with time constant `FLAP_TRIM_TIME`, 0.4 s, both ways. Neutral α is lerp(α\*, `climb_alpha`, `flap_trim`). The nose moves at under 25°/s at the first wingbeat and on letting go; a jerk would slew it at 135–210°/s. A weak, tired wingbeat (an empty burst, strength about 0.2) trims only that share of the way: its best climb is near the glide's. The damper adds the same share of the wingbeat's mean thrust along the path.
+
+| | Crow | Owl | Hawk | Falcon | Sparrow |
+|---|---|---|---|---|---|
+| Best glide α\* / v\* | 9.2° / 8.6 m/s | 10.6° / 8.3 | 8.5° / 9.9 | 8.6° / 12.6 | 9.7° / 8.2 |
+| **Climb trim α / speed** | **6.0° / 8.6 m/s** | **7.5° / 8.3** | **6.5° / 9.9** | **5.8° / 12.6** | **4.6° / 10.1** |
+| Climb trim: climb rate (path) | 3.35 m/s (22.9°) | 2.71 (19.2°) | 2.66 (15.6°) | 4.70 (21.9°) | 3.06 (17.6°) |
+| Fastest climb Vy (≥ 1.2 V_stall) | 3.41 at 7.3 m/s | 2.91 at 6.8 | 2.92 at 8.0 | 4.83 at 11.1 | 3.02 at 10.1 |
+| Flown at neutral (`test_flap_trim`) | 3.37 at 8.7 | 2.72 at 8.4 | 2.67 at 10.0 | 4.78 at 13.0 | 2.86 at 10.4 |
+| Before (damper misreading thrust) | 2.08 at 12.3 | 1.51 at 11.1 | 1.70 at 12.6 | 2.91 at 17.7 | 1.37 at 12.2 |
+
+The sparrow's trim is set by the hover margin, not the floor: its stable climbs start at about 7.8 m/s. A small pull while it flaps (0.12 of the stick) still tips it into the hovering climb, which is the sparrow's own wingbeat, not the trim.
+
+`test_flap_trim` flies each bird from a settled glide:
+- flap held at neutral climbs at the predicted rate, no slower than v\*, never stalled and never under 1.2× stall speed;
+- a little pull flies slower, and a little push faster and shallower;
+- flapping in a 45° bank, left and right, stays on the wing;
+- the nose eases over both ways;
+- letting go never stalls and returns to the ideal glide slope;
+- on its own burst it climbs 12–23 m in 15 s and the trim slides back as the wingbeats weaken.
 
 **Integration.** Semi-implicit Euler. Lift is applied as a speed-preserving rotation of the velocity, which keeps it stable at low speed. The rotation is split half before the linear forces and half after (Strang splitting); applying it all first steepened every glide by about 0.6°. Drag can remove at most half the speed in one tick. Aero forces fade out below 2 m/s, for example when dropping off a perch.
 
