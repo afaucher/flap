@@ -4,7 +4,11 @@ extends TestCase
 ##     it saw then (crossing left and right);
 ##   - one straight behind, in the blind cone, isn't seen until it checks six; one ahead is;
 ##   - a trunk between them hides it, and it is remembered (carried on) for a while, then dropped;
-##   - a bird in a steady banked turn is seen turning at the rate it really turns, to its right or its left.
+##   - a bird in a steady banked turn is seen turning at the rate it really turns, to its right or its left;
+##   - a brain looks every CombatBrain.THINK_EVERY ticks: at each look a bird flying straight is tracked where it is
+##     (the history it reads a reaction time back is kept every tick, not only at looks), and on the ticks between, its
+##     picture is carried on (each bird in sight moves on by its velocity), so fire control and the defence never read
+##     where a bird was a tick ago -- whichever tick its looks fall on.
 
 
 func _init() -> void:
@@ -18,7 +22,49 @@ func setup() -> void:
 	await _behind_a_trunk()
 	for side in [1.0, -1.0]:
 		await _turn_rate(side)
+	for s in [3, 4]:   # (the two think phases)
+		await _coasts_between_looks(s)
 	finish()
+
+
+## A combat brain watching a crow cross ahead, flying straight (its own bird flies straight too; it only watches): at
+## each look the crow is tracked where it is, and on every tick between looks its track moves on by its velocity.
+func _coasts_between_looks(brain_seed: int) -> void:
+	var d: Duel = await _world(ArenaLayout.new())
+	var them: Dictionary = d.add_bird("crow", 1, ScriptedInput.new(), null, Vector3(-12, 30, -25), Vector3.RIGHT)
+	var me: Dictionary = d.add_ai("sparrow", 0, Vector3(0, 30, 0), Vector3.FORWARD, null, brain_seed)
+	(me.bird as Bird).controller = ScriptedInput.new()
+	(me.launcher as Launcher).controller = null
+	var br: CombatBrain = me.brain
+	for f in 40:
+		await get_tree().physics_frame
+		br.tick(1.0 / 60.0)
+	var between := 0
+	var stuck := 0
+	var looks := 0
+	var worst := 0.0   # m between the track and the crow, at a look
+	for f in 20:
+		var pic := br.picture
+		var tr := pic.track_of(them.bird)
+		var was: Vector3 = tr.pos if tr != null else Vector3.INF
+		await get_tree().physics_frame
+		br.tick(1.0 / 60.0)
+		if br.picture != pic or tr == null:
+			var now := br.picture.track_of(them.bird)
+			if now != null:
+				looks += 1
+				worst = maxf(worst, now.pos.distance_to((them.bird as Bird).global_position))
+			continue   # (a look: a fresh picture)
+		between += 1
+		var moved := tr.pos.distance_to(was)
+		if absf(moved - tr.vel.length() / 60.0) > 0.1 * tr.vel.length() / 60.0:
+			stuck += 1
+	print("brain seed %d: %d looks, the crow tracked within %.3f m of it; %d ticks between looks, %d with the crow not carried on" % [brain_seed, looks, worst, between, stuck])
+	check(looks >= 5 and worst < 0.05, "brain seed %d: at each look, a crow flying straight is tracked where it is (%.3f m off at worst)" % [brain_seed, worst])
+	check(between >= 5, "brain seed %d: it looks every other tick (%d ticks between looks in 20)" % [brain_seed, between])
+	eq(stuck, 0, "brain seed %d: between looks, the crow's track moves on by its velocity" % brain_seed)
+	_drop(d)
+	await frames(2)
 
 
 ## A crow ahead holding a bank: after it settles into the turn, the track's turn rate is what its heading really

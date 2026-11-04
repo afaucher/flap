@@ -372,7 +372,9 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 		for q in 4:
 			var ang := ang0 + q * TAU / 4.0 + rng.randf_range(-0.4, 0.4)
 			t.foliage.append([c + Vector3.UP * (t.height - 0.7) + Vector3(sin(ang), 0.0, cos(ang)) * rng.randf_range(1.2, 2.0), Vector3(1.4, 0.7, 1.4) * rng.randf_range(0.8, 1.1)])
-	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.05, _r_at(t, t.height) - 0.02), -c, t.id))
+	# (on the drawn top: its low dome, half way up it -- the grip disc spans most of it)
+	var r_top := _r_at(t, t.height)
+	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top, maxf(0.05, r_top - 0.02), -c, t.id))
 
 
 ## A limb drawn as a smooth curve: out along horizontal `d` for `length` m (from `root`, at the trunk's axis),

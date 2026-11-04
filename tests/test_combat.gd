@@ -48,6 +48,7 @@ func setup() -> void:
 	await _launcher()
 	await _mounted()
 	await _hits()
+	await _recovery()
 	_feather_counts()
 	_wing_loss_flight()
 	await _teams()
@@ -312,6 +313,50 @@ func _hits() -> void:
 	eq(downs[0], 1, "a downed bird isn't downed again")
 	victim.mend()
 	eq(float(victim.telemetry().health), 1.0, "mended, it reads 1")
+	for b in [pr[0], pr[1]]:
+		b.queue_free()
+	world.queue_free()
+	await frames(1)
+
+
+## The recovery window: a hit right after another (a salvo's next round) knocks out at most RECOVER_FEATHERS,
+## whichever bird and wing; once the window has passed a hit takes its full 2 or 3 again; a salvo that keeps hitting
+## keeps the window open; with the window off, every hit takes the full count.
+func _recovery() -> void:
+	var layout := ArenaLayout.lab()
+	var world := CombatWorld.new()
+	add_child(world)
+	var pr := _pair(world, layout, Vector3(0, 0, 20))
+	var victim: Bird = pr[1]
+	await frames(2)
+	var lost := func(side: float) -> int:   # feathers one point-blank hit off that wing knocks out
+		var n0: int = victim.lost_feathers.size()
+		world.hit(victim, victim.global_position + victim.rig.global_basis.x.normalized() * side * 0.3, 1.0, pr[0])
+		return victim.lost_feathers.size() - n0
+	var gap := int(CombatWorld.recover * 0.3 * 60.0)
+	for side in [-1.0, 1.0]:
+		victim.mend()
+		await frames(int(CombatWorld.recover * 60.0) + 2)
+		var first: int = lost.call(side)
+		check(first >= 2, "the first hit of a salvo takes its full count (%d)" % first)
+		var follow := []
+		for k in 4:   # the rest of the salvo, a round every 0.3 of the window, past the first's: the window stays open
+			await frames(gap)
+			follow.append(lost.call(-side))
+		check(follow.max() <= CombatWorld.RECOVER_FEATHERS, "the salvo's next rounds take at most %d each (%s; first off the %s wing, the rest the other)" % [CombatWorld.RECOVER_FEATHERS, str(follow), "left" if side < 0 else "right"])
+		check(not victim.is_down(), "and a salvo of five doesn't down the bird (%d lost)" % victim.lost_feathers.size())
+		await frames(int(CombatWorld.recover * 60.0) + 2)
+		var later: int = lost.call(side)
+		check(later >= 2, "once the window has passed a hit takes its full count again (%d)" % later)
+	var keep := CombatWorld.recover
+	CombatWorld.recover = 0.0
+	victim.mend()
+	var off := []
+	for k in 2:
+		await frames(gap)
+		off.append(lost.call(1.0))
+	CombatWorld.recover = keep
+	check(off.min() >= 2, "with the window off, every hit takes its full count (%s)" % str(off))
 	for b in [pr[0], pr[1]]:
 		b.queue_free()
 	world.queue_free()

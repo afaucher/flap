@@ -25,6 +25,7 @@ enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 ## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest). POST: one of the
 ## arena's edge posts (add_posts), solid like a trunk, its top a perch -- somewhere to rest at the edge.
 enum Kind { GENERIC, PINE, BROADLEAF, SAPLING, POST }
+const TOP_DOME := 0.12   ## a pine's broken-off top rises this share of its radius in the middle (ArenaBuilder._trunk)
 const POST_COUNT := 48
 const POST_HEIGHT := 6.0     ## m
 const POST_RADIUS := 0.25    ## m
@@ -166,7 +167,7 @@ static func lab() -> ArenaLayout:
 	b.perch_id = p.id
 	a._add_perch(p)
 	t.branches.append(b)
-	a._add_perch(Perch.treetop(1, t.top() + Vector3.UP * 0.05, t.radius * 0.75 - 0.03, Vector3.FORWARD, 0))
+	a._add_perch(Perch.treetop(1, t.top(), t.radius * 0.75 - 0.03, Vector3.FORWARD, 0))   # (on the flat top drawn)
 	return a
 
 
@@ -245,7 +246,7 @@ func _grow(t: TreeData, rng: RandomNumberGenerator) -> void:
 		t.branches.append(b)
 	# Treetop: faces the arena centre, so a bird sitting up there looks over the clearing.
 	var to_center := Vector3(-t.base.x, 0.0, -t.base.y)
-	var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.03, t.radius * 0.75 - 0.03), to_center if to_center.length() > 0.1 else Vector3.FORWARD, t.id)
+	var top := Perch.treetop(perches.size(), t.top(), maxf(0.03, t.radius * 0.75 - 0.03), to_center if to_center.length() > 0.1 else Vector3.FORWARD, t.id)
 	_add_perch(top)
 
 
@@ -275,7 +276,7 @@ func add_posts() -> void:
 		t.crown_base = POST_HEIGHT
 		trees.append(t)
 		_add_to_hash(_tree_hash, p, t.id)
-		var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, POST_RADIUS * 0.75 - 0.03, Vector3(-p.x, 0.0, -p.y).normalized(), t.id)
+		var top := Perch.treetop(perches.size(), t.top(), POST_RADIUS * 0.75 - 0.03, Vector3(-p.x, 0.0, -p.y).normalized(), t.id)
 		top.fallback = true
 		_add_perch(top)
 
