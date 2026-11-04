@@ -5,8 +5,8 @@
 Reads <dir>/zones/{concept,model}_segments.json (cliff_segment.py), <dir>/shapes/shapes_report.json (cliff_shapes.py)
 and <dir>/sections/sections_report.json (cliff_section.py: concept_* and ours_* cuts), prints one table and writes
 <dir>/score.md and score.json. Each row says how far to trust it: "along" rows (lengths and headings along the cliff,
-from the concept's plan picture) and "section" rows (the cross-sections) compare like with like; "across" rows (depths
-and shares from the plan picture) don't, because that picture is the front view's layout redrawn from above -- its
+from the concept's plan picture) and "section" rows (the cross-sections) compare like with like; "across" rows (depths,
+shares and headings from the plan picture) don't, because that picture is the front view's layout redrawn from above -- its
 up-down axis is mostly the cliff's height, not depth out from it (docs/design/cliff_from_concept.md) -- so they're
 shown for reference only and never fail.
 """
@@ -33,9 +33,9 @@ def mean_of(reps, prefix, key):
 # (label, trust, source, key, tolerance: "deg:<n>" degrees either way, "abs:<n>" n either way, "rel:<f>" a share of the
 # target either way, "zero:<n>" at most n)
 ROWS = [
-    ("Edges: heading off the cliff's line, ledge back (deg)", "along", "shapes", "ledge_back.heading_abs_deg", "deg:8"),
-    ("Edges: heading off the cliff's line, ledge lip (deg)", "along", "shapes", "ledge_lip.heading_abs_deg", "deg:8"),
-    ("Edges: heading off the cliff's line, wall foot (deg)", "along", "shapes", "wall_foot.heading_abs_deg", "deg:8"),
+    ("Edges: heading off the cliff's line, ledge back (deg)", "across", "shapes", "ledge_back.heading_abs_deg", None),
+    ("Edges: heading off the cliff's line, ledge lip (deg)", "across", "shapes", "ledge_lip.heading_abs_deg", None),
+    ("Edges: heading off the cliff's line, wall foot (deg)", "across", "shapes", "wall_foot.heading_abs_deg", None),
     ("Edges across the cliff (m per 100 m)", "along", "shapes", "talus_over_face.m_per_100m", "zero:10"),
     ("Edges: median run, ledge back (m)", "along", "shapes", "ledge_back.run_median_m", "rel:0.4"),
     ("Edges: median run, ledge lip (m)", "along", "shapes", "ledge_lip.run_median_m", "rel:0.4"),

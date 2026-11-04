@@ -2,10 +2,11 @@
 
     python tools/cliff_segment.py concept <segmented png> <out dir>          # a picture coloured green / red / blue
     python tools/cliff_segment.py model <probe_cliff_plan dir> <out dir>     # ours, exactly, from the heights
+    python tools/cliff_segment.py model <probe_cliff_edges json> <out dir>   # ours unrolled along the cliff (from_wall)
 
 Both in the same frame: the cliff across, the plateau at the top, 120 m along by 40 m out (model: centred 6 m behind
-the middle of the foot, as probe_edge_view --heading top_aligned frames it). Ours is zoned by slope (flat under 20 deg,
-faces over 65 (a wall: the talus lies at up to 50), talus between in front of the wall). Then, with every length a share of the frame's depth: each zone's
+the middle of the foot, as probe_edge_view --heading top_aligned frames it). Ours is zoned by its wall's foot and its
+slope: in front of the foot, talus (or flat ground where it has run out); behind it, flat under 20 deg, face over. Then, with every length a share of the frame's depth: each zone's
 share; up each column, how many bands it crosses (ledges between faces) and how wide each band is; the talus's depth
 and how it varies; and the ledges as patches (how many, how big, how long along the cliff).
 """
@@ -69,20 +70,51 @@ def from_model(d):
     hh = np.full((H, W), np.nan)
     s[ok] = slope[rj[ok], ci[ok]]
     hh[ok] = h[rj[ok], ci[ok]]
-    # (the wall's outline here: the first face from the wood's side, up each column)
-    face = s > 65.0
-    lab[ok & (s < 20.0)] = 0
-    lab[ok & face] = 1
-    mid_s = ok & (s >= 20.0) & (s <= 65.0)
-    first_face = np.full(W, H)
-    for x in range(W):
-        f = np.nonzero(face[:, x])[0]
-        first_face[x] = f.max() if f.size else H   # (rows count down from the plateau: the face nearest the wood)
-    below = np.arange(H)[:, None] > first_face[None, :]
-    lab[mid_s & below] = 2
-    lab[mid_s & ~below] = 1   # (steep-ish rock above the wall's foot: broken face)
-    # (the talus's own flat-ish lower parts, out in front of the wall, count as talus too)
-    lab[ok & (lab == 0) & below & (hh > 0.3)] = 2
+    # In front of the wall's foot (the model's own line, probe_cliff_plan's "foot": its lowest row, per angle) all the
+    # rock is talus -- its slope, and the flat stones and their rims on it -- and the rest flat ground; behind it, flat
+    # under 20 deg, face over (the broken rock between ledges counts as face).
+    foot = np.array(meta["lines"]["foot"], dtype=float)
+    th_f = np.arctan2(foot[:, 0], foot[:, 1])
+    r_f = np.hypot(foot[:, 0], foot[:, 1])
+    o_ = np.argsort(th_f)
+    th = np.arctan2(wx, wz)
+    rr = np.hypot(wx, wz)
+    in_front = rr < np.interp(th, th_f[o_], r_f[o_]) - 0.3
+    lab[ok & ~in_front & (s < 20.0)] = 0
+    lab[ok & ~in_front & (s >= 20.0)] = 1
+    lab[ok & in_front] = 0
+    lab[ok & in_front & (hh > 0.3)] = 2
+    return lab
+
+
+def from_wall(path):
+    """Ours unrolled: along the cliff (m from the sector's middle, -60..60) across, out from the foot down (the plateau
+    at the top, 26 m behind the mean foot, to 14 m in front), from probe_cliff_edges' ground grid (arc x radius), so the
+    cliff's curve doesn't cut its ledges short in a straight frame."""
+    j = json.load(open(path))
+    step, na, nz, nr = j["step"], j["arcs"], j["nz"], j["nr"]
+    g = np.array(j["plan"], dtype=float).reshape(nr, na)   # (row: r_lo + i * step; column: arc0 + k * step)
+    front = np.array([np.nan if v is None else v for v in j["front"]], dtype=float).reshape(nz, na)
+    r_lo = j["foot"] + j["r0"]
+    r0s = np.array(j["r0s"], dtype=float)
+    low = np.where(np.isnan(front[: int(2.0 / step)]), np.inf, front[: int(2.0 / step)]).min(0)   # (the foot: its lowest rows)
+    foot_r = r0s + np.where(np.isfinite(low), low, 0.0)
+    gy, gx = np.gradient(g, step)
+    slope = np.degrees(np.arctan(np.hypot(gx, gy)))
+    arcs = j["arc0"] + np.arange(na) * step
+    xs = (np.arange(W) + 0.5) / W * 120.0 - 60.0
+    ys = (j["foot"] + 26.0) - (np.arange(H) + 0.5) / H * 40.0   # (radius, the top row farthest out)
+    ci = np.clip(np.round((xs - j["arc0"]) / step).astype(int), 0, na - 1)
+    ri = np.round((ys - r_lo) / step).astype(int)
+    lab = np.full((H, W), 3, dtype=np.int8)
+    okr = (ri >= 0) & (ri < nr)
+    for y in np.nonzero(okr)[0]:
+        s_ = slope[ri[y], ci]
+        h_ = g[ri[y], ci]
+        front_of = ys[y] < foot_r[ci] - 0.3
+        row = np.where(s_ < 20.0, 0, 1).astype(np.int8)
+        row[front_of] = np.where(h_[front_of] > 0.3, 2, 0)
+        lab[y] = row
     return lab
 
 
@@ -156,7 +188,7 @@ def save(lab, path):
 def main():
     mode, src, out = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(out, exist_ok=True)
-    lab = from_concept(src) if mode == "concept" else from_model(src)
+    lab = from_concept(src) if mode == "concept" else from_wall(src) if src.endswith(".json") else from_model(src)
     save(lab, os.path.join(out, mode + "_segments.png"))
     rep = measure(lab)
     print(json.dumps(rep, indent=1))

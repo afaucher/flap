@@ -23,11 +23,15 @@ uniform float scan_tile = 6.0;              // m one repeat of the scan covers (
 uniform vec3 scan_tint : source_color = vec3(0.42, 0.44, 0.49);
 uniform float scan_normal_depth = 1.0;
 
-uniform bool use_ground = false;            // the scree's scan on the gentle ground low down
+uniform bool use_ground = false;            // the talus's own scans on the gentle ground low down: stony dirt
 uniform sampler2D ground_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D ground_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float ground_tile = 1.8;
+uniform float ground_tile = 2.0;
 uniform vec3 ground_tint : source_color = vec3(0.5, 0.52, 0.56);
+uniform sampler2D rubble_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;   // and rubble, in patches
+uniform sampler2D rubble_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float rubble_tile = 1.8;
+uniform vec3 rubble_tint : source_color = vec3(0.5, 0.52, 0.56);
 uniform float ground_y = 0.0;
 uniform float scree_top = 6.0;              // m above the ground: below it, gentle ground is scree
 
@@ -179,12 +183,18 @@ void fragment() {
 	float scree = 0.0;
 	if (use_ground) {
 		scree = (1.0 - smoothstep(scree_top - 1.5, scree_top, wp.y - ground_y)) * smoothstep(0.5, 0.75, n.y);
+		// The dirt (stony earth, sampled at two scales turned apart so its tiling doesn't show), and rubble in patches
+		// over it: the talus is soil and broken stone, not litter.
 		vec2 gu = wp.xz / ground_tile;
-		// (and earth between, in patches: the talus is soil and rubble as much as stone)
-		float soil = smoothstep(0.35, 0.55, fbm3(wp * 0.09 + 13.0)) * 0.9;
-		vec3 ground = mix(texture(ground_albedo, gu).rgb * ground_tint, vec3(0.2, 0.15, 0.1) * (0.8 + 0.4 * fine), soil);
-		col = mix(col, ground, scree);
-		vec3 gn = texture(ground_normal, gu).rgb * 2.0 - 1.0;
+		vec2 gu2 = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * gu * 0.41 + 0.37;
+		float two = smoothstep(0.35, 0.65, fbm3(wp * 0.07 + 13.0));
+		vec3 ground = mix(texture(ground_albedo, gu).rgb, texture(ground_albedo, gu2).rgb, two) * ground_tint;
+		vec3 gn = mix(texture(ground_normal, gu).rgb, texture(ground_normal, gu2).rgb, two) * 2.0 - 1.0;
+		float rub = smoothstep(0.5, 0.62, fbm3(wp * 0.11 + 29.0));
+		vec2 ru = wp.xz / rubble_tile;
+		ground = mix(ground, texture(rubble_albedo, ru).rgb * rubble_tint, rub);
+		gn = mix(gn, texture(rubble_normal, ru).rgb * 2.0 - 1.0, rub);
+		col = mix(col, ground * (0.9 + 0.2 * fine), scree);
 		nw = normalize(mix(nw, normalize(vec3(gn.x, gn.z, gn.y) + n * 0.5), scree));   // (seen from above: x, z across, y up)
 		rough = mix(rough, 0.92, scree);
 	}

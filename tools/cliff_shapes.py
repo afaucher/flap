@@ -283,7 +283,7 @@ def main():
     reps, ims = {}, []
     for arg in sys.argv[2:]:
         name, src = arg.split("=", 1)
-        raw = seg.from_concept(src) if name == "concept" else seg.from_model(src)
+        raw = seg.from_concept(src) if name == "concept" else seg.from_wall(src) if src.endswith(".json") else seg.from_model(src)
         lab = clean(raw)
         runs = [(t, run_metrics(c)) for t, c in edges(lab)]
         lg, stack = ledges(lab)

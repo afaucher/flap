@@ -2,10 +2,14 @@
 
     python tools/cliff_section.py <out dir> <name>=<png> [<name>=<png> ...]
     python tools/cliff_section.py <out dir> <name>=plan:<probe_cliff_plan dir>@<m along> ...   # ours, cut from the model
+    python tools/cliff_section.py <out dir> <name>=wall:<probe_cliff_edges json>@<m along> ...  # ours, with the overhangs
 
 A plan cut: our ground's height (the probe's exact height field, so no overhangs) along the line out from the cliff at
 <m along> the middle 120 m of probe_edge_view's top_aligned frame (0: its middle, - left), drawn as a picture of the
-same kind (PX px per m, the plateau on the left) and then measured as any other.
+same kind (PX px per m, the plateau on the left) and then measured as any other. A plan cut can't show an overhang (the
+height field is the rock's envelope, solid under every lip); a wall cut can: the wall's own sheet (probe_cliff_edges:
+how far back the face stands at each height) for the face, the height field for the talus in front of it and the
+plateau behind its top, at <m along> the cliff from the sector's middle.
 
 Traces the profile (per row, the rock's outermost pixel, thin grid lines opened away), simplifies it to straight
 pieces (TOL of the cliff's height), and classes each piece by its angle from horizontal: ledge (under LEDGE deg),
@@ -161,6 +165,41 @@ def cut_from_plan(d, along, path):
     return path
 
 
+def cut_from_wall(path_json, along, path):
+    j = json.load(open(path_json))
+    step, na, nz, nr = j["step"], j["arcs"], j["nz"], j["nr"]
+    ci = int(round((along - j["arc0"]) / step))
+    front = np.array(j["front"], dtype=float).reshape(nz, na)[:, ci]
+    ground = np.array(j["plan"], dtype=float).reshape(nr, na)[:, ci]
+    r_lo = j["foot"] + j["r0"]
+    r0 = j["r0s"][ci]
+    rs = r_lo + np.arange(nr) * step
+    face = r0 + front   # (m out from the middle at each height; NaN above the top)
+    ok = ~np.isnan(face)
+    top_z = np.nonzero(ok)[0].max() * step
+    r_out = np.nanmin(face)           # (the farthest out the wall comes: in front of it, the talus)
+    r_back = face[np.nonzero(ok)[0].max()]   # (the top's edge: behind it, the plateau)
+    tal_top = float(np.interp(r_out - 0.5, rs, ground))
+    r_max, r_min = rs[-1], max(rs[0], r_out - 40.0)
+    W = int((r_max - r_min) * PX)
+    Hpx = int((top_z + 14.0) * PX)
+    img = np.full((Hpx, W, 3), 255, np.uint8)
+    xs = np.arange(W)
+    r_at = r_max - xs / PX   # (the plateau on the left: x grows toward the wood)
+    g_at = np.interp(r_at, rs, ground)
+    for y in range(Hpx):
+        z = (Hpx - y) / PX - 4.0
+        zi = int(round(z / step))
+        wall = np.zeros(W, bool)
+        if 0 <= zi < nz and ok[zi]:
+            wall = r_at >= face[zi]
+        z_ok = z <= g_at
+        rock = wall | (z < 0.0) | (z_ok & ((r_at < r_out) | (r_at > r_back))) | (z_ok & (z <= tal_top))
+        img[y, rock] = (205, 205, 200)
+    Image.fromarray(img).save(path)
+    return path
+
+
 def main():
     out_dir = sys.argv[1]
     os.makedirs(out_dir, exist_ok=True)
@@ -170,6 +209,9 @@ def main():
         if src.startswith("plan:"):
             d, along = src[5:].rsplit("@", 1)
             src = cut_from_plan(d, float(along), os.path.join(out_dir, name + "_cut.png"))
+        elif src.startswith("wall:"):
+            d, along = src[5:].rsplit("@", 1)
+            src = cut_from_wall(d, float(along), os.path.join(out_dir, name + "_cut.png"))
         im, xs, top, ground = profile(src)
         coarse, fine, lip, foot, toe = pieces(xs, top, ground)
         reps[name] = measure(coarse, fine, lip, foot, toe)

@@ -333,8 +333,8 @@ func _rock_dressing() -> void:
 	_heather_batch(hx, hc, "ledge_heather")
 
 
-## The rock's blocks (limestone breaks along its bedding and its joints into squared blocks, edges sharp, a few
-## corners knocked off): set into the faces in courses, each a little proud of or back from its neighbours, and
+## The rock's blocks (limestone breaks along its bedding and its joints, then at odd angles: flat faces, sharp
+## edges, no two alike; _block_mesh): set into the faces in courses, each a little proud of or back from its neighbours, and
 ## fallen into the scree below, the biggest rolled furthest, out to its toe. Solid where a bird could meet them.
 func _blocks() -> void:
 	var meshes := []
@@ -355,7 +355,7 @@ func _blocks() -> void:
 		block_batches.append(mi)
 
 
-const BLOCK_SHAPES := 4
+const BLOCK_SHAPES := 8
 
 
 ## The scree: blocks fallen from the faces, lying on its slope, sizes sorted down it (small against the foot, the
@@ -408,10 +408,10 @@ func _scree_blocks(sets: Array) -> void:
 		scree.append([centre, maxf(dims.x, dims.z), toe])
 		if size > 1.3:   # (a bird skimming the scree meets these; the small ones only scuff)
 			solid.append([Transform3D(Basis(x, up, z), centre), dims])
-	for b in solid:   # (boxes a little inside the drawn block: its chamfers and knocked-off corners)
+	for b in solid:   # (boxes a little inside the drawn block: its cut-off corners and faces)
 		var cs := CollisionShape3D.new()
 		var box := BoxShape3D.new()
-		box.size = (b[1] as Vector3) * 0.92
+		box.size = (b[1] as Vector3) * 0.8
 		cs.shape = box
 		cs.transform = b[0]
 		rock_body.add_child(cs)
@@ -533,66 +533,85 @@ func _stone_colour() -> Color:
 	return Color(1, 1, 1).lerp(Color(1.06, 1.02, 0.94), _rng.randf()) * _rng.randf_range(0.78, 1.12)
 
 
-## A squared block, unit size: its edges chamfered narrow, each corner pulled in a little by its own amount and one
-## or two knocked right off, so no two shapes are quite the same (`variant`). Flat faces, sharp edges.
+## A broken block, unit size: a cube cut by BLOCK_CUTS planes of its own (`variant`) -- limestone breaks along its
+## joints and bedding and then at odd angles, so every face is flat and every edge sharp, but no two blocks are
+## square: some corners sliced off small, some faces cut back far enough to turn the block wedge- or slab-shaped.
+const BLOCK_CUTS := Vector2i(5, 9)   ## the least and most cuts a block takes
 func _block_mesh(variant: int) -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 911 + variant * 17
-	var bevel := 0.035
-	var corners := []
-	var pull := []
-	for i in 8:
-		var c := Vector3(0.5 if i & 1 else -0.5, 0.5 if i & 2 else -0.5, 0.5 if i & 4 else -0.5)
-		corners.append(c)
-		var knock := 0.18 if rng.randf() < 0.22 else rng.randf_range(0.0, 0.06)
-		pull.append(Vector3(rng.randf_range(0.0, 1.0), rng.randf_range(0.0, 1.0), rng.randf_range(0.0, 1.0)) * knock)
-	# P(c, a): corner c's point on the face across axis a (the other two coordinates drawn in by the chamfer and the
-	# corner's own pull).
-	var pt := func(i: int, a: int) -> Vector3:
-		var c: Vector3 = corners[i]
-		var q := c
-		for ax in 3:
-			var inward := -signf(c[ax])
-			var d: float = (pull[i] as Vector3)[ax]
-			q[ax] += inward * (d if ax == a else bevel + d)
-		return q
+	var faces := []   # (each a PackedVector3Array, wound anticlockwise seen from outside)
+	for a in 3:
+		for sgn in [-1.0, 1.0]:
+			var n := Vector3.ZERO
+			n[a] = sgn
+			var u := Vector3.ZERO
+			u[(a + 1) % 3] = 0.5
+			var v := Vector3.ZERO
+			v[(a + 2) % 3] = 0.5
+			var c := n * 0.5
+			var quad := PackedVector3Array([c - u - v, c + u - v, c + u + v, c - u + v])
+			if (quad[1] - quad[0]).cross(quad[2] - quad[0]).dot(n) < 0.0:
+				quad.reverse()
+			faces.append(quad)
+	for k in rng.randi_range(BLOCK_CUTS.x, BLOCK_CUTS.y):
+		# (a plane at a random angle, most of them toward a corner or an edge; how deep it cuts: a sliver to a third)
+		var n := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+		var reach := absf(n.x) * 0.5 + absf(n.y) * 0.5 + absf(n.z) * 0.5   # (the cube's farthest point along n)
+		faces = _cut(faces, n, reach - rng.randf_range(0.06, 0.32) * (1.0 if rng.randf() < 0.75 else 1.6))
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var tri := func(a: Vector3, b: Vector3, c: Vector3) -> void:
-		var g := (b - a).cross(c - a)
-		if g.length_squared() < 1e-10:
-			return
-		if g.dot((a + b + c) / 3.0) > 0.0:   # (front faces wind clockwise seen from outside: the cross points in)
-			var t := b
-			b = c
-			c = t
-		var n := -(b - a).cross(c - a).normalized()
-		for v in [a, b, c]:
-			st.set_normal(n)
-			st.add_vertex(v)
-	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
-		tri.call(a, b, c)
-		tri.call(a, c, d)
-	for a in 3:   # the six faces
-		for sgn in [-1, 1]:
-			var ids := []
-			for i in 8:
-				if signf((corners[i] as Vector3)[a]) == float(sgn):
-					ids.append(i)
-			var b1 := (a + 1) % 3
-			var b2 := (a + 2) % 3
-			ids.sort_custom(func(p, q): return atan2((corners[p] as Vector3)[b2], (corners[p] as Vector3)[b1]) < atan2((corners[q] as Vector3)[b2], (corners[q] as Vector3)[b1]))
-			quad.call(pt.call(ids[0], a), pt.call(ids[1], a), pt.call(ids[2], a), pt.call(ids[3], a))
-	for i in 8:   # the edges' chamfers and the corners
-		for a in 3:
-			var j := i ^ (1 << a)
-			if j < i:
-				continue
-			var b1 := (a + 1) % 3
-			var b2 := (a + 2) % 3
-			quad.call(pt.call(i, b1), pt.call(j, b1), pt.call(j, b2), pt.call(i, b2))
-		tri.call(pt.call(i, 0), pt.call(i, 1), pt.call(i, 2))
+	for f in faces:
+		var poly: PackedVector3Array = f
+		var n := (poly[1] - poly[0]).cross(poly[2] - poly[0]).normalized()
+		for i in range(1, poly.size() - 1):   # (front faces wind clockwise seen from outside, in Godot)
+			for q in [poly[0], poly[i + 1], poly[i]]:
+				st.set_normal(n)
+				st.add_vertex(q)
 	return st.commit()
+
+
+## The convex solid `faces` cut by the plane n . x = d (n unit), keeping what lies below it, the cut closed by a new
+## face: each face clipped (Sutherland-Hodgman), the points on the plane gathered and ordered round it.
+static func _cut(faces: Array, n: Vector3, d: float) -> Array:
+	var out := []
+	var cap := PackedVector3Array()
+	for f in faces:
+		var poly: PackedVector3Array = f
+		var kept := PackedVector3Array()
+		for i in poly.size():
+			var a := poly[i]
+			var b := poly[(i + 1) % poly.size()]
+			var da := n.dot(a) - d
+			var db := n.dot(b) - d
+			if da <= 0.0:
+				kept.append(a)
+			if (da < 0.0) != (db < 0.0) and absf(da - db) > 1e-9:
+				var x := a.lerp(b, da / (da - db))
+				kept.append(x)
+				cap.append(x)
+		if kept.size() >= 3:
+			out.append(kept)
+	if cap.size() >= 3:
+		var c := Vector3.ZERO
+		for q in cap:
+			c += q
+		c /= cap.size()
+		var u := n.cross(Vector3.UP if absf(n.y) < 0.9 else Vector3.RIGHT).normalized()
+		var v := n.cross(u)
+		var pts := Array(cap)
+		pts.sort_custom(func(p, q): return atan2((p - c).dot(v), (p - c).dot(u)) < atan2((q - c).dot(v), (q - c).dot(u)))
+		var poly := PackedVector3Array()
+		for q in pts:   # (the clipped edges meet at shared points: drop the doubles)
+			if poly.is_empty() or (q as Vector3).distance_to(poly[poly.size() - 1]) > 1e-5:
+				poly.append(q)
+		if poly.size() > 3 and poly[0].distance_to(poly[poly.size() - 1]) < 1e-5:
+			poly.resize(poly.size() - 1)
+		if poly.size() >= 3:
+			if (poly[1] - poly[0]).cross(poly[2] - poly[0]).dot(n) < 0.0:
+				poly.reverse()
+			out.append(poly)
+	return out
 
 
 # --- The heath ------------------------------------------------------------------------------
@@ -847,7 +866,8 @@ func _rock_mat_instanced() -> Material:
 
 
 ## The rock's material: rock.gdshader on the photoscan `scan` (assets/textures/rock; assets/LICENSES.md) repeating
-## every `tile` m, toned by `tint`; with `scree`, gray_rocks on the gentle ground low down.
+## every `tile` m, toned by `tint`; with `scree`, the talus's stony dirt (rocky_trail) on the gentle ground low down,
+## gray_rocks' rubble in patches over it.
 static func _rock_mat(scan: String, tile: float, tint: Color, strata: float, scree: bool) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = ROCK_SHADER
@@ -860,11 +880,16 @@ static func _rock_mat(scan: String, tile: float, tint: Color, strata: float, scr
 	m.set_shader_parameter("scan_tint", tint)
 	m.set_shader_parameter("strata", strata)
 	if scree:
-		var g := "res://assets/textures/rock/gray_rocks/gray_rocks"
+		var g := "res://assets/textures/ground/rocky_trail/rocky_trail"
+		var rb := "res://assets/textures/rock/gray_rocks/gray_rocks"
 		m.set_shader_parameter("use_ground", true)
 		m.set_shader_parameter("ground_albedo", load(g + "_diff_2k.jpg"))
 		m.set_shader_parameter("ground_normal", load(g + "_nor_gl_2k.jpg"))
-		m.set_shader_parameter("ground_tile", 1.8)
+		m.set_shader_parameter("ground_tile", 2.0)
+		m.set_shader_parameter("ground_tint", Color(0.5, 0.49, 0.52))   # (cooler and darker than the scan: grey-brown, as the concept)
+		m.set_shader_parameter("rubble_albedo", load(rb + "_diff_2k.jpg"))
+		m.set_shader_parameter("rubble_normal", load(rb + "_nor_gl_2k.jpg"))
+		m.set_shader_parameter("rubble_tile", 1.8)
 		m.set_shader_parameter("ground_y", ArenaLayout.GROUND_Y)
 		m.set_shader_parameter("scree_top", (Escarpment.SKYLINE.y + Escarpment.SKYLINE.z) * 0.5 * Escarpment.TALUS.y + 1.0)
 	return m

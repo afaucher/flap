@@ -16,7 +16,7 @@ source URL, author and licence here.
 
 All Poly Haven assets are CC0 1.0 (public domain dedication; no attribution required, credited here anyway):
 <https://polyhaven.com/license>. Downloaded 2026-11-02 as 2K JPEGs (diffuse, OpenGL normal, AO/rough/metal
-packed as `arm`, displacement); the rock ones 2026-11-03 (diffuse, OpenGL normal, arm).
+packed as `arm`, displacement); the rock ones and Rocky Trail 2026-11-03 (diffuse, OpenGL normal, arm).
 
 | Path | Asset | Author | Real size | Source | Licence |
 |---|---|---|---|---|---|
@@ -24,6 +24,7 @@ packed as `arm`, displacement); the rock ones 2026-11-03 (diffuse, OpenGL normal
 | `assets/textures/bark/knotted_pine_bark/` | Knotted Pine Bark | Dimitrios Savva | 1.7 x 1.7 m | <https://polyhaven.com/a/knotted_pine_bark> | CC0 1.0 |
 | `assets/textures/bark/jolcham_oak_bark_01/` | Jolcham Oak Bark 01 | Charlotte Baglioni | 1.0 x 2.0 m | <https://polyhaven.com/a/jolcham_oak_bark_01> | CC0 1.0 |
 | `assets/textures/ground/forrest_ground_03/` | Forest Ground 03 (pine-needle litter) | Rob Tuytel | 2.0 x 2.0 m | <https://polyhaven.com/a/forrest_ground_03> | CC0 1.0 |
+| `assets/textures/ground/rocky_trail/` | Rocky Trail (the escarpment's talus: stony dirt) | Amal Kumar | 2.0 x 2.0 m | <https://polyhaven.com/a/rocky_trail> | CC0 1.0 |
 | `assets/textures/planks/weathered_planks/` | Weathered Planks | Dario Barresi, Dimitrios Savva | 2.0 x 2.0 m | <https://polyhaven.com/a/weathered_planks> | CC0 1.0 |
 | `assets/textures/rock/marble_cliff_05/` | Marble Cliff 05 (the escarpment's faces) | Amal Kumar | 20.0 x 20.0 m | <https://polyhaven.com/a/marble_cliff_05> | CC0 1.0 |
 | `assets/textures/rock/rock_boulder_dry/` | Rock Boulder Dry (the escarpment's blocks) | Dimitrios Savva, Rico Cilliers | 1.8 x 1.8 m | <https://polyhaven.com/a/rock_boulder_dry> | CC0 1.0 |
