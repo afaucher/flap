@@ -227,7 +227,8 @@ func _fly(dt: float, inp: FlightInput) -> void:
 		ctl = FlightInput.new()
 	_apply_assists()
 	model.position = global_position
-	model.ground_height = global_position.y - ArenaLayout.GROUND_Y - _radius
+	var floor_y := ArenaLayout.GROUND_Y + layout.ground(global_position.x, global_position.z)   # (the floor's mounds)
+	model.ground_height = global_position.y - floor_y - _radius
 	model.step(dt, ctl)
 	var col := move_and_collide(model.position - global_position)
 	if col != null:
@@ -236,8 +237,8 @@ func _fly(dt: float, inp: FlightInput) -> void:
 			return
 	model.position = global_position
 	# Belly on the ground and settling: stand (even if the contact came through a seam the collision missed).
-	if _grace <= 0.0 and global_position.y < _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
-		_land_on_ground(ArenaLayout.GROUND_Y)
+	if _grace <= 0.0 and global_position.y < floor_y + _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
+		_land_on_ground(floor_y)
 		return
 	global_basis = model.body_basis()
 
@@ -536,7 +537,7 @@ func telemetry() -> Dictionary:
 		"bird": p.display_name,
 		"species": p.id,
 		"state": state,
-		"stand_height": stand_y - ArenaLayout.GROUND_Y,   # (GROUNDED: how far above the ground it stands)
+		"stand_height": stand_y - ArenaLayout.GROUND_Y - layout.ground(global_position.x, global_position.z),   # (GROUNDED: how far above the ground it stands)
 		"position": global_position,
 		"velocity": m.velocity,
 		"flight_dir": m.flight_dir(),

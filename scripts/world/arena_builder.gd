@@ -81,37 +81,46 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
-		var ops := PackedVector4Array()
-		for o in layout.openings:
-			ops.append(Vector4(o.centre.x, o.centre.y, float(o.r), float(o.ph)))
-		ops.resize(16)
-		sm.set_shader_parameter("openings", ops)
-		sm.set_shader_parameter("opening_count", mini(layout.openings.size(), 16))
-		sm.set_shader_parameter("fade_r", layout.boundary + 8.0)
-		# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart); the big plane draws only
-		# round it. Drawn only: the ground's collision stays flat at GROUND_Y (the mounds are a hand high).
-		var fine := MeshInstance3D.new()
-		fine.name = "FloorMounds"
-		var grid := PlaneMesh.new()
-		var side := (layout.boundary + 12.0) * 2.0
-		grid.size = Vector2(side, side)
-		grid.subdivide_width = int(side / FLOOR_STEP)
-		grid.subdivide_depth = int(side / FLOOR_STEP)
-		fine.mesh = grid
-		fine.custom_aabb = AABB(Vector3(-side * 0.5, -0.1, -side * 0.5), Vector3(side, 0.6, side))   # (the mounds rise in the shader)
-		var fm := sm.duplicate() as ShaderMaterial
-		fm.set_shader_parameter("displace", 1.0)
-		fm.set_shader_parameter("mound_h", MOUND_H)
-		fine.material_override = fm
-		body.add_child(fine)
-		sm.set_shader_parameter("hole_r", layout.boundary + 11.0)
+		var ff := layout.floor_field
+		if ff != null:
+			sm.set_shader_parameter("use_field", true)
+			sm.set_shader_parameter("field", ImageTexture.create_from_image(ff.image()))
+			sm.set_shader_parameter("field_origin", ff.origin)
+			sm.set_shader_parameter("field_size", ff.size)
+			sm.set_shader_parameter("field_res", FloorField.RES)
+			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart); the big plane draws only
+			# round it. Solid at the same height: a heightmap from the same field (so a bird stands, a round bursts and
+			# a feather settles on the mound it's drawn on).
+			var fine := MeshInstance3D.new()
+			fine.name = "FloorMounds"
+			var grid := PlaneMesh.new()
+			grid.size = Vector2(ff.size, ff.size)
+			grid.subdivide_width = int(ff.size / FLOOR_STEP)
+			grid.subdivide_depth = int(ff.size / FLOOR_STEP)
+			fine.mesh = grid
+			fine.position = Vector3(ff.origin.x + ff.size * 0.5, ArenaLayout.GROUND_Y, ff.origin.y + ff.size * 0.5)
+			fine.custom_aabb = AABB(Vector3(-ff.size * 0.5, -0.1, -ff.size * 0.5), Vector3(ff.size, FloorField.MOUND_H + 0.2, ff.size))   # (the mounds rise in the shader)
+			var fm := sm.duplicate() as ShaderMaterial
+			fm.set_shader_parameter("displace", 1.0)
+			fine.material_override = fm
+			body.add_child(fine)
+			sm.set_shader_parameter("hole_r", ff.size * 0.5 - 1.0)
+			var hcs := CollisionShape3D.new()
+			hcs.name = "FloorMoundsShape"
+			var hm := HeightMapShape3D.new()
+			hm.map_width = ff.n
+			hm.map_depth = ff.n
+			hm.map_data = ff.heights()
+			hcs.shape = hm
+			hcs.position = fine.position
+			hcs.scale = Vector3(FloorField.RES, 1.0, FloorField.RES)
+			body.add_child(hcs)
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
 
 
 const GRASS_PER_M2 := 3.5   ## grass tussocks sown to the square metre over the openings (_grass)
-const MOUND_H := 0.22      ## m: the needle litter's mounds at their highest (drawn only)
 const FLOOR_STEP := 0.4   ## m between the fine floor mesh's vertices (where the litter's mounds are drawn)
 
 
@@ -636,7 +645,7 @@ func _floor() -> void:
 		var lit := Pinewood.light(layout, p)
 		if rng.randf() > lerpf(0.4, 1.0, lit):
 			continue
-		var base := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
+		var base := Vector3(p.x, ArenaLayout.GROUND_Y + layout.ground(p.x, p.y), p.y)
 		var size := rng.randf_range(0.6, 1.4) * lerpf(0.8, 1.2, lit)
 		var phase := rng.randf()
 		var tint := Color(1, 1, 1).lerp(Color(1.1, 1.0, 0.75), rng.randf()) * rng.randf_range(0.85, 1.05)
@@ -685,7 +694,7 @@ func _grass(rng: RandomNumberGenerator) -> void:
 		if rng.randf() > want:
 			continue
 		var size := rng.randf_range(0.35, 0.75) * lerpf(0.75, 1.0, inside)
-		var at := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
+		var at := Vector3(p.x, ArenaLayout.GROUND_Y + layout.ground(p.x, p.y), p.y)
 		tx.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size * 1.2, size * rng.randf_range(0.8, 1.2), size * 1.2)), at))
 		tc.append(Color(1.0, 0.95, 0.82).lerp(Color(0.8, 0.9, 0.62), rng.randf()) * rng.randf_range(0.7, 1.0))
 		tcu.append(Color(at.x, at.y + size * 0.3, at.z, rng.randf()))

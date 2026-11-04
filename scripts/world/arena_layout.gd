@@ -121,6 +121,7 @@ var avenues: Array = []             ## of [Vector2 a, Vector2 b, float half_widt
 ## Open ground in the wood (Pinewood): {centre: Vector2, r: float, ph: float, kind: "clearing" | "glade" | "gap"}
 ## -- no standing pine inside its edge (Pinewood.edge: irregular, about r out).
 var openings: Array = []
+var floor_field: FloorField         ## the floor's mounds and patches (Pinewood; null: flat), what ground() reads
 var ring_radius := 56.0
 var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData
@@ -277,6 +278,12 @@ func add_posts() -> void:
 		_add_perch(top)
 
 
+## The ground's height above GROUND_Y at (x, z): the floor's mounds where there are any (FloorField), else 0. What a
+## bird stands on, a round bursts on, a feather settles on; the floor is drawn and solid at this height.
+func ground(x: float, z: float) -> float:
+	return 0.0 if floor_field == null else floor_field.height(x, z)
+
+
 ## (Pinewood builds through these too.)
 func _add_perch(p: Perch) -> void:
 	perches.append(p)
@@ -343,7 +350,7 @@ func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) 
 ## place (the AI's predicted paths); `ignore_also`: a second tree to skip; `decks`: the outposts that could be
 ## near (null: all of them).
 func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, ignore_tree := -1, ignore_also := -1, decks: Variant = null) -> bool:
-	if a.y < GROUND_Y + clearance or b.y < GROUND_Y + clearance:
+	if a.y < GROUND_Y + ground(a.x, a.z) + clearance or b.y < GROUND_Y + ground(b.x, b.z) + clearance:
 		return false
 	var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance
 	var hi := Vector2(maxf(a.x, b.x), maxf(a.z, b.z)) + Vector2.ONE * clearance
@@ -385,7 +392,7 @@ func path_blocked_at(near: Array, pts: PackedVector3Array, clearance: float, ign
 	for i in pts.size() - 1:
 		var a := pts[i]
 		var b := pts[i + 1]
-		if a.y < floor_y or b.y < floor_y:
+		if a.y < floor_y + ground(a.x, a.z) or b.y < floor_y + ground(b.x, b.z):
 			return i
 		if ts.is_empty() and os.is_empty():
 			continue

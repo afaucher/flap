@@ -1,9 +1,10 @@
 // The pine wood's floor, in world metres: needle litter (the photoscan, warm and dry) heaped in low mounds; moss in
 // the hollows between them (cushions of green, soft and lumpy, its own relief -- no needles drawn through it); bare
-// dirt in patches (dark, gritty, flat); and in the openings -- the clearing, the glade, the gaps (`openings`) -- a
-// short sward, greener, no mounds. Each patch's edge is ragged but sharp enough to read from the air. The mounds are
-// real height where the mesh is fine enough (`displace`: the floor mesh under the wood, ArenaBuilder._ground); the
-// big plane round it draws only past `hole_r`. The fine detail fades with distance so it doesn't shimmer.
+// dirt in patches (dark, gritty, flat); and in the openings -- the clearing, the glade, the gaps -- a short sward,
+// greener, no mounds. Where and how high all comes from the floor's field (`field`: FloorField, the same data the
+// collision and ArenaLayout.ground read); the shader adds each patch's ragged fine edge and the close detail. The
+// mounds are drawn as height on the fine mesh under the wood (`displace`, ArenaBuilder._ground); the big plane round
+// it draws only past `hole_r`. The fine detail fades with distance so it doesn't shimmer.
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
@@ -21,17 +22,14 @@ uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, r
 uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float scan_tile = 2.0;
 uniform vec3 scan_tint : source_color = vec3(1.0);
-// The patches: how much of the floor is moss (the hollows) and bare dirt.
-uniform float moss_amount = 0.5;
-uniform float dirt_amount = 0.5;
-// The mounds: their height (m), drawn as height where this mesh is fine (0 on the big plane); none past fade_r.
+// The floor's field (FloorField.image): r the mounds' height, g moss, b dirt (each -1..1 about its edge), a the openings.
+uniform sampler2D field : filter_linear, repeat_disable;
+uniform vec2 field_origin = vec2(0.0);
+uniform float field_size = 1.0;
+uniform float field_res = 0.5;
+uniform bool use_field = false;
 uniform float displace = 0.0;
-uniform float mound_h = 0.22;
-uniform float fade_r = 95.0;
 uniform float hole_r = 0.0;   // (the big plane: nothing drawn inside this, where the fine mesh is)
-// The openings: xy centre, z radius, w its edge's phase (Pinewood.edge's wobble); the first `opening_count`.
-uniform vec4 openings[16];
-uniform int opening_count = 0;
 
 varying vec2 wxz;
 varying float v_mound;
@@ -71,40 +69,28 @@ float fbm3(vec2 p) {
 	return s / 0.875;
 }
 
-// How far inside an opening p is: 1 well in, 0 outside (the edge ragged as Pinewood.edge draws it, 3 m soft).
-float open_mask(vec2 p) {
-	float m = 0.0;
-	for (int i = 0; i < 16; i++) {
-		if (i >= opening_count) {
-			break;
-		}
-		vec4 o = openings[i];
-		vec2 d = p - o.xy;
-		float a = atan(d.y, d.x);
-		float r = o.z * (1.0 + 0.14 * sin(3.0 * a + o.w) + 0.08 * sin(5.0 * a + o.w * 2.3));   // (as Pinewood.edge)
-		m = max(m, 1.0 - smoothstep(r - 3.0, r + 1.0, length(d)));
+// The field at p: x height, y moss, z dirt, w open (zero off it).
+vec4 field_at(vec2 p) {
+	if (!use_field) {
+		return vec4(0.0, -1.0, -1.0, 0.0);
 	}
-	return m;
+	vec2 uv = (p - field_origin) / field_size;
+	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+		return vec4(0.0, -1.0, -1.0, 0.0);
+	}
+	// (texel centres sit on the grid's points)
+	float n = field_size / field_res + 1.0;
+	return textureLod(field, (uv * (n - 1.0) + 0.5) / n, 0.0);
 }
 
-// The patches at p: x moss (in the hollows), y bare dirt, z the sward of the openings; the litter is what's left.
+// The patches at p: x moss, y dirt, z the sward of the openings (the field's signals, their edges ragged in fine).
 vec3 patches(vec2 p) {
-	float big = fbm3(p * 0.07);
-	float mid = fbm3(p * 0.33 + 3.0);
-	float edge = (vnoise(p * 2.3 + 11.0) - 0.5) * 0.06;   // (a ragged edge, not a blur)
-	float lo = 0.7 - moss_amount * 0.12;   // (0.5: about a fifth of the floor)
-	float moss_m = smoothstep(lo, lo + 0.04, big * 0.6 + mid * 0.45 + edge);
-	float dlo = 0.7 - dirt_amount * 0.1;
-	float dirt_m = smoothstep(dlo, dlo + 0.04, fbm3(p * 0.19 + 9.0) + edge) * (1.0 - moss_m);
-	float op = open_mask(p);
+	vec4 f = field_at(p);
+	float edge = (vnoise(p * 2.3 + 11.0) - 0.5) * 0.9 + (vnoise(p * 7.0 + 3.0) - 0.5) * 0.3;
+	float moss_m = smoothstep(-0.12, 0.12, f.y + edge);
+	float dirt_m = smoothstep(-0.12, 0.12, f.z + edge) * (1.0 - moss_m);
+	float op = f.w;
 	return vec3(moss_m * (1.0 - op), dirt_m * (1.0 - op), op);
-}
-
-// The mounds' height at p (m): on the litter only, low and broad, a little steeper at their edges.
-float mound(vec2 p, vec3 pt) {
-	float lit = (1.0 - pt.x) * (1.0 - pt.y * 0.8) * (1.0 - pt.z);
-	float h = smoothstep(0.25, 0.75, fbm3(p * 0.42 + 17.0)) * 0.75 + fbm3(p * 1.3 + 5.0) * 0.25;
-	return mound_h * h * lit * (1.0 - smoothstep(fade_r - 12.0, fade_r, length(p)));
 }
 
 void vertex() {
@@ -112,14 +98,14 @@ void vertex() {
 	wxz = wp.xz;
 	v_mound = 0.0;
 	if (displace > 0.0) {
-		float e = 0.25;
-		float h = mound(wxz, patches(wxz)) * displace;
-		float hx = mound(wxz + vec2(e, 0.0), patches(wxz + vec2(e, 0.0))) * displace;
-		float hz = mound(wxz + vec2(0.0, e), patches(wxz + vec2(0.0, e))) * displace;
-		VERTEX.y += h;
+		float e = field_res;
+		float h = field_at(wxz).x;
+		float hx = field_at(wxz + vec2(e, 0.0)).x - field_at(wxz - vec2(e, 0.0)).x;
+		float hz = field_at(wxz + vec2(0.0, e)).x - field_at(wxz - vec2(0.0, e)).x;
+		VERTEX.y += h * displace;
 		v_mound = h;
-		NORMAL = normalize(vec3(-(hx - h) / e, 1.0, -(hz - h) / e));
-		TANGENT = normalize(vec3(1.0, (hx - h) / e, 0.0));
+		NORMAL = normalize(vec3(-hx / (2.0 * e), 1.0, -hz / (2.0 * e)));
+		TANGENT = normalize(vec3(1.0, hx / (2.0 * e), 0.0));
 		BINORMAL = normalize(cross(NORMAL, TANGENT));
 	}
 }

@@ -124,6 +124,7 @@ static func generate(s: int) -> ArenaLayout:
 			placed += 1
 	_outposts(a, rng)
 	a.add_posts()
+	a.floor_field = FloorField.build(a, a.boundary + 12.0)
 	return a
 
 

@@ -2893,8 +2893,50 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\tsm.set_shader_parameter(\"hole_r\", layout.boundary + 11.0)\n",
+    "find": "\t\t\tsm.set_shader_parameter(\"hole_r\", ff.size * 0.5 - 1.0)\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "floor-mounds-not-solid",
+  "bug": "The floor's mounds were drawn only, the collision flat at GROUND_Y: a bird landing on a mound stood inside it, rounds burst under it (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tbody.add_child(hcs)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "bird-ground-flat",
+  "bug": "The bird took the ground as flat at GROUND_Y for its ground effect and for settling: over a mound it settled inside it (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar floor_y := ArenaLayout.GROUND_Y + layout.ground(global_position.x, global_position.z)   # (the floor's mounds)",
+    "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
+   }
+  ]
+ },
+ {
+  "id": "round-bursts-under-mound",
+  "bug": "A round coming down onto the floor burst at GROUND_Y, under the mound it hit (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/projectile.gd",
+    "find": "\tvar floor_y := ArenaLayout.GROUND_Y + (layout.ground(pos.x, pos.z) if layout != null else 0.0)   # (the floor's mounds)",
+    "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
    }
   ]
  }
