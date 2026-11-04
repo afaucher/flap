@@ -3331,5 +3331,131 @@
     "replace": "\tvar see_rock := false"
    }
   ]
+ },
+ {
+  "id": "perch-highlight-nearest-not-path",
+  "bug": "The highlighted landing candidate was the nearest perch in a 60-degree cone round the flight direction, so a perch the nose pointed at (alpha above the path) or one the path would sink or turn away from was shown, usually above where the bird could reach; now the perch the predicted path passes closest (2026-11-04).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\tscore = Vector2(side, miss.y * (PATH_ABOVE_COST if miss.y > 0.0 else 1.0)).length() + PATH_NEAR_COST * float(hit[2])",
+    "replace": "\t\t\tscore = global_position.distance_to(hit[0])"
+   }
+  ]
+ },
+ {
+  "id": "perch-highlight-straight-path",
+  "bug": "The candidate's predicted path went straight along the present velocity: a slow bird's sink and a banked bird's turn were ignored, so the perch on the line it was moving along was shown rather than the one it would reach (2026-11-04).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tv += acc * h\n",
+    "replace": "\t\tv += acc * 0.0\n"
+   }
+  ]
+ },
+ {
+  "id": "perch-candidate-in-reach-at-path-grip-only",
+  "bug": "With the path pick, a perch in the feet's reach straight ahead was tested only at the grip where the path passes it closest (further on), so it read as out of reach and the bird flew on past the catch (2026-11-04).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tvar status := p.catch_status(profile, global_position, model.velocity, grip)\n\t\tvar score := 0.0\n",
+    "replace": "\t\tvar status := Perch.Catch.OUT_OF_RANGE\n\t\tvar score := 0.0\n"
+   }
+  ]
+ },
+ {
+  "id": "landing-assist-no-blend",
+  "bug": "Novice landing assist: the player's input passed through unblended, so approaches from too high or off the line missed as in realistic (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, inp.flap_held or (ai.flap_held and w >= 0.5),",
+    "replace": "FlightInput.new(inp.stick, inp.flap_pressed, inp.flap_held,"
+   }
+  ]
+ },
+ {
+  "id": "landing-assist-in-realistic",
+  "bug": "The landing assist steered in realistic flying too (not gated on FlightAssist.novice) (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tvar on := novice and strength > 0.0 and inp.catch_held",
+    "replace": "\tvar on := strength > 0.0 and inp.catch_held"
+   }
+  ]
+ },
+ {
+  "id": "landing-assist-strength-zero-not-off",
+  "bug": "FlightAssist.strength 0 left the novice perch assist (further reach, height braking) on: the knob didn't turn the assist off (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tvar on := novice and strength > 0.0\n",
+    "replace": "\tvar on := novice\n"
+   }
+  ]
+ },
+ {
+  "id": "novice-no-height-brake",
+  "bug": "Novice perch assist braked only for speed, not for the height over the perch: an approach from too high came in too fast to catch (2026-11-04).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tif landing:\n",
+    "replace": "\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "novice-stamina-unscaled",
+  "bug": "Novice flying didn't scale the stamina's wingbeats: a novice bird tired as fast as a realistic one (2026-11-04).",
+  "tests": [
+   "test_energy"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/energy_model.gd",
+    "find": "(profile.stamina_flaps * FlightAssist.stamina_scale())",
+    "replace": "(profile.stamina_flaps * 1.0)"
+   }
+  ]
+ },
+ {
+  "id": "novice-recovery-unscaled",
+  "bug": "Novice flying didn't scale the stamina's recovery (2026-11-04).",
+  "tests": [
+   "test_energy"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/energy_model.gd",
+    "find": "regen * FlightAssist.recovery_scale() * dt",
+    "replace": "regen * dt"
+   }
+  ]
  }
 ]

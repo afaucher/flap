@@ -90,6 +90,7 @@ func _ready() -> void:
 	if Boot.arg_value(args, "--pause-at") != "":
 		pause_at = float(Boot.arg_value(args, "--pause-at"))
 	onion = args.has("--onion")
+	FlightAssist.configure(args)   # (--flying novice: the landing assist, more stamina)
 	rider = not args.has("--no-rider")
 	if Boot.arg_value(args, "--dist") != "":
 		_dist_arg = float(Boot.arg_value(args, "--dist"))

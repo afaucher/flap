@@ -2,6 +2,7 @@ extends TestCase
 ## Flapping: a fresh bird can hold height and climb; held flapping drains the burst in seconds and
 ## the stamina within a couple of minutes; a tired bird can't hold height; flaps can't come faster than
 ## the wingbeat or push past the flap speed cap; perching restores both reserves.
+## Novice flying (FlightAssist) lasts longer, sprints harder and rests faster; realistic is the profile's numbers.
 
 const DT := 1.0 / 60.0
 
@@ -74,4 +75,47 @@ func setup() -> void:
 	for i in 60:
 		e.tick(DT, true, 3.5, false)
 	check(e.burst < b0 - 1.0, "a 3.5 g second drains burst")
+	_novice()
 	finish()
+
+
+## Novice flying (FlightAssist.novice): the same bird, flapping held from fresh, flaps for longer before its stamina is
+## gone, gets more full-strength wingbeats in its first sprint, and rests back faster on a perch; realistic is the
+## profile's numbers as they are (its stamina gone after stamina_flaps full wingbeats).
+func _novice() -> void:
+	for p in BirdProfile.all():
+		var r := _flap_out(p, false)
+		var n := _flap_out(p, true)
+		check(n.secs > r.secs * 1.35, "%s novice flaps for longer (%.0f s vs %.0f s realistic)" % [p.id, n.secs, r.secs])
+		check(n.sprint > r.sprint, "%s novice gets more full wingbeats in a 20 s sprint (%d vs %d)" % [p.id, n.sprint, r.sprint])
+		check(n.rested > r.rested * 1.5, "%s novice rests back faster (%.2f vs %.2f after 3 s perched)" % [p.id, n.rested, r.rested])
+		var e := EnergyModel.new(p)
+		for i in int(p.stamina_flaps):
+			e.burst = p.burst_max   # (every one full strength)
+			e.spend_flap()
+		check(e.stamina < 1e-3, "%s realistic: stamina gone after its %d wingbeats (%.3f left)" % [p.id, int(p.stamina_flaps), e.stamina])
+	FlightAssist.novice = false
+
+
+func _flap_out(p: BirdProfile, novice: bool) -> Dictionary:
+	FlightAssist.novice = novice
+	var m := FlightModel.new(p)
+	m.launch(Vector3(0, 3000, 0), Vector3.FORWARD, p.v_best)
+	var hold := FlightInput.new(Vector2.ZERO, false, true)
+	var secs := 0.0
+	var sprint := 0
+	var flaps := 0
+	while m.energy.stamina > 0.01 and secs < 1200.0:
+		var before := m.energy.burst
+		m.step(DT, hold)
+		if m.flap_count > flaps:
+			flaps = m.flap_count
+			if secs < 20.0 and before >= 1.0:
+				sprint += 1
+		secs += DT
+	var e := EnergyModel.new(p)
+	e.stamina = 0.0
+	for i in 60 * 3:
+		e.tick(DT, false, 0.0, true)
+	FlightAssist.novice = false
+	return {"secs": secs, "sprint": sprint, "rested": e.stamina}

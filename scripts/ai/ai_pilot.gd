@@ -245,7 +245,7 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 	if final and dist_perch < 6.0:
 		# The outer branch, aimed a little high: the feet reach forward and down from the flight line, so the
 		# path should meet the branch from level or above (the swoop up from the approach point does that).
-		aim = target.approach_anchor() + Vector3.UP * 0.45
+		aim = target.approach_anchor() + Vector3.UP * AIM_HIGH
 
 	var opts := {"route": true}
 	if final and target.position.y < 5.0:
@@ -421,6 +421,7 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 	return best
 
 
+const AIM_HIGH := 0.45      ## m the last metres aim above the branch (the feet reach forward and down from the path)
 const TURN_GAIN := 2.2       ## bank (rad) per radian of heading error
 const PREDICT_STEP := 0.1    ## s, the chord of a predicted path
 const PREDICT_LAG := 0.1     ## s before the stick (smoothed) starts the roll

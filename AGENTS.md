@@ -60,6 +60,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   range: you and a wingman v the target, your base by the clearing and theirs the farthest outpost. Warnings:
   `CombatWorld.warnings_for(bird)` (rounds coming at it, locks on it) -- what the HUD shows and all an AI may
   know of threats; `--return-fire` has the target shoot back.
+- Landing: the highlighted perch (`Bird.candidate`) is the one the predicted flight path (`Bird.predicted_path`: its
+  sink and turn, not the nose) passes closest, a perch in reach now winning. `--flying novice|realistic` (default
+  realistic; `FlightAssist.configure`, `fit` on the player's bird): novice blends the player's input toward
+  `AIPilot.steer`'s approach while catch is held (`FlightAssist.strength`, 0 = off), the perch assist works from
+  further out and brakes for height (`Bird.novice_landing`), and `EnergyModel` gives every bird 1.5x stamina, 2x
+  recovery, 1.3x burst refill. `test_perch_highlight`, `test_landing_assist`, `test_energy`.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: a screen

@@ -10,6 +10,7 @@ perches to rest. This is the flight-model prototype; combat comes next.
 .\run.ps1 --bird falcon        # crow | owl | hawk | falcon | sparrow
 .\run.ps1 --seed 3 --ai 5      # another arena, more AI birds
 .\run.ps1 --autopilot          # watch your bird fly itself (P toggles)
+.\run.ps1 --flying novice      # landing assist (hold catch: it steers you onto the marked perch), more stamina
 .\run.ps1 --scene res://scenes/rig_gallery.tscn --pose flap --view three   # the bird models side by side
 .\run.ps1 --scene res://scenes/rig_gallery.tscn --only hawk --view under --sun back   # one bird, backlit (add --feather-shader for the parked feather shader)
 .\run.ps1 --scene res://scenes/rig_gallery.tscn --pose folded --view feet --branch             # the detailed legs and feet (--legs capsules: the old ones)
@@ -62,7 +63,9 @@ Everything else (`GameAudio`, `docs/design/audio_plan.md`):
 
 The sounds are baked by `tools/bake_sounds.gd` from `SoundRecipes`; re-run it after changing a recipe.
 
-**Perching.** Approach the perch slower than the catch speed (the perch's gauge turns green): dive under it and swoop up. Hold catch on the way in.
+**Perching.** Approach the perch slower than the catch speed (the perch's gauge turns green): dive under it and swoop up. Hold catch on the way in. The marked perch is the one your flight path is heading for (where you will actually go as you sink or turn), not the one the nose points at.
+
+**Flying modes.** `--flying realistic` (the default) is the flight model as it is. `--flying novice` helps: while you hold catch with a perch marked, the bird steers itself onto it (blended with your stick; let go of catch to take it all back), brakes for a perch below you and marks perches from further out; every bird also gets half as much stamina again, recovers it twice as fast and refills its burst faster.
 
 **Low and slow.** Ground effect (within about 1.5 spans of the ground) cuts drag and strengthens wingbeats, so a downed bird can flap back up.
 
