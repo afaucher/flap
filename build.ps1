@@ -68,6 +68,8 @@ foreach ($f in @("$GameName.exe", "$GameName.pck")) {
     if (-not (Test-Path (Join-Path $outDir $f))) { Write-Host "BUILD FAILED: missing $f" -ForegroundColor Red; exit 1 }
 }
 Set-Content -Path (Join-Path $outDir "version.txt") -Value $buildVersion
+# The playtest log packer (from cast): double-click Pack_logs.bat to zip this PC's Flap logs next to the exe.
+foreach ($f in @("Pack_logs.bat", "pack_logs.ps1")) { Copy-Item (Join-Path "$PSScriptRoot\tools\release" $f) -Destination $outDir -Force }
 
 # --- Package -------------------------------------------------------------------------------------
 # From cast: Compress-Archive silently skips a file it cannot open (an antivirus scan of the fresh .exe),

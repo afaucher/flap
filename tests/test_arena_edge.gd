@@ -180,6 +180,15 @@ func _rock(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 			before -= dir * 0.5
 		print("EDGE clearance: in the rock %s (%.1f m up, rock %.1f), short of it at %.1f m out %s (rock %.1f), the posts %s" % [layout.clear_by(into, 0.3), into.y, layout.rock.height(into.x, into.z), _r(before), layout.clear_by(before, 0.3), layout.rock.height(before.x, before.z), layout.clear_by(dir * (layout.boundary + 3.0) + Vector3.UP * 12.0, 0.3)])
 		check(not layout.clear_by(into, 0.3) and layout.clear_by(before, 0.3), "the AI's clearance sees the rock (in it: blocked; 3 m short: clear)")
+		# And its whole-path query agrees with its segment one (the avoidance and the planner see the same rock): a path
+		# into the rock is blocked at that chord, one stopping short of it isn't.
+		var start := dir * (layout.boundary + 2.0) + Vector3.UP * 12.0
+		var into_path := PackedVector3Array([start, before, into])
+		var short_path := PackedVector3Array([start, before])
+		var at := layout.path_blocked_at([], into_path, 0.3)
+		print("EDGE paths: into the rock blocked at chord %d (segments: %s, %s); short of it %d" % [at, layout.segment_clear_among([], start, before, 0.3), layout.segment_clear_among([], before, into, 0.3), layout.path_blocked_at([], short_path, 0.3)])
+		check(at == 1 and not layout.segment_clear_among([], before, into, 0.3), "the AI's whole-path query sees the rock as its segment query does (blocked going in)")
+		check(layout.path_blocked_at([], short_path, 0.3) == -1 and layout.segment_clear_among([], start, before, 0.3), "and both clear short of it")
 		check(not layout.segment_clear(before, into + dir * 3.0, 0.3) and layout.segment_clear(before - dir * 2.0, before, 0.3), "and a flight into it isn't clear, one short of it is")
 	var away := -dir
 	var miss := space.intersect_ray(PhysicsRayQueryParameters3D.create(away * (layout.boundary + 0.5) + Vector3.UP * 12.0, away * 400.0 + Vector3.UP * 12.0))

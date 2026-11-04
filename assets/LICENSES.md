@@ -25,6 +25,7 @@ packed as `arm`, displacement); the rock ones and Rocky Trail 2026-11-03 (diffus
 | `assets/textures/bark/jolcham_oak_bark_01/` | Jolcham Oak Bark 01 | Charlotte Baglioni | 1.0 x 2.0 m | <https://polyhaven.com/a/jolcham_oak_bark_01> | CC0 1.0 |
 | `assets/textures/ground/forrest_ground_03/` | Forest Ground 03 (pine-needle litter) | Rob Tuytel | 2.0 x 2.0 m | <https://polyhaven.com/a/forrest_ground_03> | CC0 1.0 |
 | `assets/textures/ground/rocky_trail/` | Rocky Trail (the escarpment's talus: stony dirt) | Amal Kumar | 2.0 x 2.0 m | <https://polyhaven.com/a/rocky_trail> | CC0 1.0 |
+| `assets/textures/ground/forest_leaves_02/` | Forest Leaves 02 (the floor's moss patches; 4K, downloaded 2026-11-03) | Rob Tuytel | 3.0 x 3.0 m | <https://polyhaven.com/a/forest_leaves_02> | CC0 1.0 |
 | `assets/textures/planks/weathered_planks/` | Weathered Planks | Dario Barresi, Dimitrios Savva | 2.0 x 2.0 m | <https://polyhaven.com/a/weathered_planks> | CC0 1.0 |
 | `assets/textures/rock/marble_cliff_05/` | Marble Cliff 05 (the escarpment's faces) | Amal Kumar | 20.0 x 20.0 m | <https://polyhaven.com/a/marble_cliff_05> | CC0 1.0 |
 | `assets/textures/rock/rock_boulder_dry/` | Rock Boulder Dry (the escarpment's blocks) | Dimitrios Savva, Rico Cilliers | 1.8 x 1.8 m | <https://polyhaven.com/a/rock_boulder_dry> | CC0 1.0 |

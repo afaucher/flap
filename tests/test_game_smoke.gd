@@ -1,12 +1,24 @@
 extends TestCase
-## The whole game scene runs: arena, player bird on its start perch, AI birds, camera, HUD. The player's
+## The whole game scene runs: arena, player bird on its start perch, AI birds, camera, HUD. It loads behind a
+## loading screen: up at once, its bar only ever filling, its step named, gone once the game is ready to fly. The
+## mouse wheel zooms the chase camera out (down) and in (up), within its range. TAA is on; F7 toggles it. The player's
 ## bird is put on autopilot and flies for a while; every bird switch works.
 
 
 func setup() -> void:
 	var game: Game = load("res://scenes/game.tscn").instantiate()
 	add_child(game)
+	await _loading_screen(game)
 	await frames(5)
+	await _zoom(game)
+	check(game.get_viewport().use_taa, "temporal anti-aliasing is on")
+	var f7 := InputEventKey.new()
+	f7.keycode = KEY_F7
+	f7.pressed = true
+	game._unhandled_input(f7)
+	check(not game.get_viewport().use_taa, "F7 turns it off")
+	game._unhandled_input(f7)
+	check(game.get_viewport().use_taa, "and on again")
 	check(game.bird != null and game.bird.state == Bird.State.PERCHED, "player starts perched")
 	check(game.ai_birds.size() >= 1, "AI birds spawned")
 	check(not game.hud.t.is_empty(), "HUD has telemetry")
@@ -86,3 +98,54 @@ func _landing_bar(game: Game) -> void:
 		b.model.velocity = Vector3(0, 0, -g * float(c[1]))
 		eq(b.candidate_too_fast(), c[2], "status %d at %.1fx the catch speed: too fast %s" % [c[0], c[1], c[2]])
 	b.model.velocity = Vector3.ZERO
+
+
+func _loading_screen(game: Game) -> void:
+	var screen: Loading = null
+	for c in game.get_children():
+		if c is Loading:
+			screen = c
+	check(screen != null and not game.is_loaded, "a loading screen is up while the arena grows")
+	if screen == null:
+		await game.loaded
+		return
+	var seen := []
+	var steps := {}
+	var last := -1.0
+	var backwards := false
+	while not game.is_loaded:
+		backwards = backwards or screen.progress < last - 1e-6
+		last = screen.progress
+		seen.append(last)
+		var st := screen.find_child("Step", true, false) as Label
+		if st != null and st.text != "":
+			steps[st.text] = true
+		await get_tree().process_frame
+	check(not backwards, "its bar only fills")
+	check(seen.size() >= 8, "it moves while the wood goes up (%d frames)" % seen.size())
+	check(steps.size() >= 4, "and says what it's doing (%s)" % ", ".join(steps.keys()))
+	await frames(40)
+	check(not is_instance_valid(screen), "it's gone once the game is ready")
+
+
+func _zoom(game: Game) -> void:
+	await frames(30)
+	var d0 := game.camera.global_position.distance_to(game.bird.global_position)
+	var wheel := func(button: MouseButton, n: int) -> void:
+		for i in n:
+			var e := InputEventMouseButton.new()
+			e.button_index = button
+			e.pressed = true
+			game._unhandled_input(e)
+	wheel.call(MOUSE_BUTTON_WHEEL_DOWN, 4)
+	await frames(90)
+	var d_out := game.camera.global_position.distance_to(game.bird.global_position)
+	wheel.call(MOUSE_BUTTON_WHEEL_UP, 30)
+	await frames(90)
+	var d_in := game.camera.global_position.distance_to(game.bird.global_position)
+	check(d_out > d0 * 1.5, "the wheel down zooms out (%.2f -> %.2f m)" % [d0, d_out])
+	check(d_in < d0 * 0.6 and d_in > d0 * 0.3, "the wheel up zooms in, as far as its range (%.2f m)" % d_in)
+	wheel.call(MOUSE_BUTTON_WHEEL_DOWN, 30)
+	wheel.call(MOUSE_BUTTON_WHEEL_UP, 30)
+	game.camera.zoom = 1.0
+	await frames(60)

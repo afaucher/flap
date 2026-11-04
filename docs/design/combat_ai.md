@@ -620,3 +620,13 @@ change meant to leave behaviour alone can be shown to, to the bit). 2026-11-03: 
   turning shot and the seeker drag miss). Brain + sense 1.0 -> 0.6 ms.
 Still over section 8's 0.1 ms per bird: avoidance (~0.2 ms per bird) and the occasional long plan home (a bird 70-160 m
 from its base: a few hundred expansions, every new node and edge checked against the wood -- not a failed search).
+
+**Seeker locks need sight** (2026-11-03): `Launcher.sees` -- wood on the line from muzzle to target stops a lock
+building, and past `LOS_GRACE` (0.25 s) drains it (`LOS_DRAIN` 1.5/s); a new lock starts only on a bird in sight
+(`test_lock_sight`). In 3 v 3s over six woods it changed little (38 locks against 41, hits level): between birds
+10-30 m apart the line rarely crosses a trunk. It makes cover a player's tool (`docs/tutorial/tactics.md`).
+An AI cover tactic was tried and dropped: running for a trunk to put between itself and a locking shooter made a
+pursued sparrow *worse* (10 hits against 6 in the wood) -- the run is a straight line, the easiest lock -- and
+limited to trunks already near the line it never fired. Breaking into the attacker stays the better lock denial.
+Seen in passing (not chased): with one trunk ahead 1-3 m to the left, a pursued sparrow takes 4 hits whatever it
+does; to the right, none -- an asymmetry in the break or the attacker's line, for a later look.

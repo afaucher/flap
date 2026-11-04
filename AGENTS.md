@@ -20,9 +20,14 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 
 ## Layout
 - `scripts/flight/`: `BirdProfile` (species numbers, derived polar), `FlightModel` (pure, headless-testable),
-  `EnergyModel` (burst + stamina), `FlightInput`.
+  `EnergyModel` (burst + stamina), `FlightInput`, `AirField` (the air's movement: thermals over the clearings, ridge
+  lift for a cliff; the bird flies through it, `FlightModel.wind`; `AirFx` draws it; `--calm`; the combat range
+  is calm until the combat AI reads the air: `CombatWorld.calm_air`). The chase camera zooms with the mouse wheel.
+  TAA over 2x MSAA by default (`Antialias`; `--no-taa`, F7): it clears the speckle on feather cards' edges and fine
+  texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
+  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans (`TreeData.form`;
+  `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
   `TimberMesh` each (framing, ironwork, rail, the hangar back-right seen from the rail, ammo boxes, and drawn-only
   props: rope coil, windsock, pennants; every vertex carries its piece's grain frame, so `planks.gdshader`
   draws end grain on end faces and maps the planks scan at its true scale). Collision: deck box, rail capsule,
@@ -41,9 +46,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
   Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); a bird
-  carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube.
+  carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube. A seeker lock
+  needs a clear line of sight (`Launcher.sees`: wood on the line stops it, past `LOS_GRACE` drains it).
+- Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
-  that area and drops (`FlightModel.wing_loss`); eight down the bird; your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
+  that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
+  takes one feather at most, so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
   locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The
   HUD: enemies warm (`CombatHud.ENEMY`), teammates a teal caret (`FRIEND`), a teal cross over the gunsight while a
@@ -58,7 +66,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   to pick your bird, rockets or seekers, the 3 v 3 match (at recruit | pilot | ace) or target practice, with the
   mode's rules; `Menu.fight_options()`; Lab), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
-  `Boot.args()` (the command line plus the menu's choice).
+  `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
+  look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they
+  set `is_loaded` and emit `loaded` when ready (a test that opens them awaits it).
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
   smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
   and flutter to the ground; down; ruffled coverts; shedding.

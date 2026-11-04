@@ -637,6 +637,9 @@ class Reposition extends ActionLeaf:
 
 
 ## No target: loiter in a wide circle over the base (or the arena's middle) at the style's height, looking.
+const PATROL_RADIUS := 25.0   ## m round the base (or the arena's middle) a bird with nothing to do circles
+
+
 class Patrol extends ActionLeaf:
 	func tick(actor: Node, bb: Blackboard) -> int:
 		var br := CombatTree._brain(bb)
@@ -647,7 +650,13 @@ class Patrol extends ActionLeaf:
 		var c := base.position if base != null else Vector3.ZERO
 		var y := (br.style.height_band.x + br.style.height_band.y) * 0.5
 		var rel := Vector3(b.global_position.x - c.x, 0.0, b.global_position.z - c.z)
-		var ang := atan2(rel.z, rel.x) + 0.6
-		i.aim = Vector3(c.x + cos(ang) * 25.0, y, c.z + sin(ang) * 25.0)
+		if rel.length() < PATROL_RADIUS * 0.5:
+			# Near the middle, the way round is anyone's guess: fly on out to the circle as it is heading.
+			var fd := b.model.flight_dir()
+			var ahead := Vector3(fd.x, 0.0, fd.z).normalized() if Vector2(fd.x, fd.z).length() > 1e-3 else b.facing
+			i.aim = Vector3(b.global_position.x, y, b.global_position.z) + ahead * PATROL_RADIUS
+		else:
+			var ang := atan2(rel.z, rel.x) + 0.6
+			i.aim = Vector3(c.x + cos(ang) * PATROL_RADIUS, y, c.z + sin(ang) * PATROL_RADIUS)
 		i.opts.flap = "auto"
 		return SUCCESS

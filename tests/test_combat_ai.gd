@@ -189,10 +189,11 @@ func _no_way_in() -> void:
 	var layout := Pinewood.generate(ARENA_SEED)
 	var prof := BirdProfile.by_id("crow")
 	var planner := FlightPlanner.new(layout, AIPilot.plan_clearance(prof))
+	var tight := FlightPlanner.new(layout, 0.2)   # (the wood truly in the way, not a near miss the crow squeezes past)
 	var base: Perch = null
 	var start := Vector3.ZERO
 	for p in layout.perches:
-		if p.position.y < 8.0 or p.position.y > 20.0 or Vector2(p.position.x, p.position.z).length() > 50.0 or planner.swoop_clear(p, prof):
+		if p.position.y < 8.0 or p.position.y > 20.0 or Vector2(p.position.x, p.position.z).length() > 50.0 or planner.swoop_clear(p, prof) or tight.swoop_clear(p, prof):
 			continue
 		start = p.position + p.facing * 20.0 + Vector3.UP * 6.0
 		if layout.obstacle_distance(start) > 3.0:
@@ -213,15 +214,19 @@ func _no_way_in() -> void:
 	var plans := 0
 	var last := pilot.replans
 	var nearest := INF
+	var strayed: Perch = null   # (another perch it settled on: a neighbour on the same branch is near, but not its base)
 	for f in 60 * 12:
 		await get_tree().physics_frame
 		plans += maxi(0, pilot.replans - last)
 		last = pilot.replans
+		if b.state == Bird.State.PERCHED and b.perch != base and strayed == null:
+			strayed = b.perch
 		if f > 60 * 6:
 			nearest = minf(nearest, b.global_position.distance_to(base.position))
 	print("base %d with no way in: %d route plans in 12 s, within %.1f m of it after 6 s, %d bonks" % [base.id, plans, nearest, b.bonks])
 	check(plans <= 3, "no way in to its base: it doesn't plan a route every tick (%d plans)" % plans)
 	check(nearest < 25.0, "and keeps to its base rather than flying off to another perch (%.1f m)" % nearest)
+	check(strayed == null, "nor settles on another perch instead (perch %d)" % (strayed.id if strayed != null else -1))
 	d.cleanup()
 	d.queue_free()
 	await frames(2)

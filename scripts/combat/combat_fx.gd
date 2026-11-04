@@ -115,7 +115,7 @@ func _loose(bird: Bird, key: int, kick: Vector3) -> void:
 	var xf := bird.rig.global_transform * bird.rig.feather_xforms[bird.rig.feather_keys.find(key)]
 	node.global_transform = xf
 	var ground := ArenaLayout.GROUND_Y
-	loose.append({"node": node, "basis": xf.basis, "pos": xf.origin, "vel": bird.model.velocity * 0.5 + kick, "t": clock,
+	loose.append({"layout": bird.layout, "node": node, "basis": xf.basis, "pos": xf.origin, "vel": bird.model.velocity * 0.5 + kick, "t": clock,
 		"spin": _rng.randf_range(-5.0, 5.0), "rock": _rng.randf_range(5.0, 9.0), "phase": _rng.randf() * TAU, "landed": false, "ground": ground, "path": 0.0})
 	while loose.size() > MAX_LOOSE:
 		(loose.pop_front().node as Node).queue_free()
@@ -142,10 +142,11 @@ func step(dt: float, world: CombatWorld) -> void:
 		f.pos = (f.pos as Vector3) + step_v * dt
 		f.path = float(f.path) + (slip * dt).length()
 		f.basis = bs.rotated(bs.z.normalized(), float(f.spin) * dt).rotated(across, cos(age * float(f.rock)) * 0.9 * dt)
-		if (f.pos as Vector3).y <= float(f.ground) + 0.005:
+		var under: float = float(f.ground) + ((f.layout as ArenaLayout).ground((f.pos as Vector3).x, (f.pos as Vector3).z) if f.layout != null else 0.0)
+		if (f.pos as Vector3).y <= under + 0.005:   # (on the floor, its mounds and all)
 			f.landed = true
 			var p: Vector3 = f.pos
-			f.pos = Vector3(p.x, float(f.ground) + 0.005, p.z)
+			f.pos = Vector3(p.x, under + 0.005, p.z)
 			var z := (f.basis as Basis).z
 			var flat := Vector3(z.x, 0.0, z.z)
 			var len_z := z.length()

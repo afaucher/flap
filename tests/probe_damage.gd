@@ -30,6 +30,8 @@ func setup() -> void:
 	for seekers in [false, true]:
 		var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 		add_child(r)
+		if not r.is_loaded:
+			await r.loaded
 		await frames(2)
 		r.demo = true
 		r.evade = true

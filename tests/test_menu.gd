@@ -77,6 +77,8 @@ func _menu_and_flight() -> void:
 		Boot.extra = PackedStringArray(Menu.CHOICES[0][2] if no_tack else [])
 		var game: Game = load("res://scenes/game.tscn").instantiate()
 		add_child(game)
+		if not game.is_loaded:
+			await game.loaded
 		await frames(3)
 		var tacks := 0
 		for b in game.ai_birds + [game.bird]:
@@ -129,6 +131,8 @@ func _fights() -> void:
 		Boot.extra = Menu.fight_options()
 		var r: Node = load("res://scenes/combat_range.tscn").instantiate()
 		add_child(r)
+		if not r.is_loaded:
+			await r.loaded
 		await frames(3)
 		var what := "%s, %s, %s" % [f[0], "seekers" if f[1] else "rockets", ("match at " + f[3]) if f[2] else "practice"]
 		eq((r.bird as Bird).profile.id, f[0], what + ": you fly the bird picked")

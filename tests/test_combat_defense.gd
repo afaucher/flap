@@ -7,15 +7,17 @@ extends TestCase
 ##     is a combat-AI bird (defending only: it has no rounds), once the same bird flying straight on. Defending must
 ##     take at most half the hits, from the left and from the right, and the attacker must hold a seeker lock for far
 ##     less of the time.
-##   - Tree drag: a seeker fired from behind with a trunk ahead and to one side; the defender (a sparrow, ace skill)
-##     flies close past the trunk and hooks in behind it, and the seeker bursts on the wood. Flying straight on, it's
-##     hit.
+##   - Tree drag: a seeker fired from behind with a trunk ahead and 2.5 or 3 m to one side; the defender (a sparrow, ace
+##     skill) flies close past the trunk and hooks in behind it, and the seeker bursts on the wood -- both sides, at
+##     both of its think phases (brain seeds 3 and 4). Flying straight on, it's hit. A trunk 1.5-2 m off its line is
+##     printed, not checked: noticing the seeker with the trunk ~3 m ahead, its ~7 m turning circle can't hook in behind
+##     it in time (probe_tree_drag).
 
 const SECONDS := 10.0
 
 
 func _init() -> void:
-	timeout_sec = 400.0
+	timeout_sec = 600.0
 
 
 func setup() -> void:
@@ -43,17 +45,19 @@ func setup() -> void:
 				check(by_side[side][1] < by_side[side][0], "%s, from the %s: defending beats flying straight (%d vs %d)" % [what, "right" if side > 0 else "left", by_side[side][1], by_side[side][0]])
 			if seekers:
 				check(defended.locked * 2.0 < straight.locked, "%s: denies the lock (locked %.1f s vs %.1f s)" % [what, defended.locked, straight.locked])
-	# Tree drag: the sparrow (the turn fighter, at home among the trunks) both ways. A crow's ~4 m turn can't hook in
-	# behind a trunk in the second between the incoming warning (25 m out) and the seeker: printed, not checked.
+	# Tree drag: the sparrow (the turn fighter, at home among the trunks) both ways, at both think phases; the crow and
+	# the trunks close to the line printed, not checked.
 	for id in ["sparrow", "crow"]:
-		for side in [1.0, -1.0]:
-			var a: Dictionary = await _tree_drag(id, side, false)
-			var b: Dictionary = await _tree_drag(id, side, true)
-			var what := "%s, a seeker from behind, a trunk ahead on the %s" % [id, "right" if side > 0 else "left"]
-			print("%s: straight %s, defending %s" % [what, a, b])
-			if id == "sparrow":
-				check(a.hits > 0, "%s: flying straight on, it's hit" % what)
-				check(b.hits == 0 and b.on == "trunk", "%s: dragged past the trunk, the seeker bursts on the wood (%s)" % [what, b.on])
+		for off in [3.0, 2.5, 2.0, 1.5]:
+			for side in [1.0, -1.0]:
+				for brain_seed in [3, 4]:
+					var a: Dictionary = await _tree_drag(id, side, false, off, brain_seed)
+					var b: Dictionary = await _tree_drag(id, side, true, off, brain_seed)
+					var what := "%s, a seeker from behind, a trunk ahead %.1f m to the %s (brain seed %d)" % [id, off, "right" if side > 0 else "left", brain_seed]
+					print("%s: straight %s, defending %s" % [what, a, b])
+					if id == "sparrow" and off >= 2.5:
+						check(a.hits > 0, "%s: flying straight on, it's hit" % what)
+						check(b.hits == 0 and b.on == "trunk", "%s: dragged past the trunk, the seeker bursts on the wood (%s)" % [what, b.on])
 	finish()
 
 
@@ -94,13 +98,14 @@ func _pursued(id: String, attacker: String, from: Vector3, defend: bool) -> Dict
 	return out
 
 
-## A seeker locked on the defender from 32 m behind, a trunk 7 m ahead and 2 m to the `side`. Returns {hits, on
+## A seeker locked on the defender from 32 m behind, a trunk 7 m ahead and `off` m to the `side`; the defender a combat AI
+## (`defend`, brain seed `brain_seed`) or flying straight. Returns {hits, on
 ## (what the seeker burst on)}.
-func _tree_drag(id: String, side: float, defend: bool) -> Dictionary:
+func _tree_drag(id: String, side: float, defend: bool, off := 2.0, brain_seed := 3) -> Dictionary:
 	var layout := ArenaLayout.new()
 	var t := ArenaLayout.TreeData.new()
 	t.id = 0
-	t.base = Vector2(side * 2.0, -7.0)
+	t.base = Vector2(side * off, -7.0)
 	t.height = 40.0
 	t.radius = 0.5
 	layout.trees.append(t)
@@ -112,7 +117,7 @@ func _tree_drag(id: String, side: float, defend: bool) -> Dictionary:
 	var pos := Vector3(0, 20, 0)
 	var me: Dictionary
 	if defend:
-		me = d.add_ai(id, 0, pos, Vector3.FORWARD, CombatSkill.preset("ace"), 3)
+		me = d.add_ai(id, 0, pos, Vector3.FORWARD, CombatSkill.preset("ace"), brain_seed)
 		var l: Launcher = me.launcher
 		l.capacity[l.weapon] = 0
 		l.ammo[l.weapon] = 0

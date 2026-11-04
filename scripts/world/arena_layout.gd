@@ -25,6 +25,7 @@ enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 ## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest). POST: one of the
 ## arena's edge posts (add_posts), solid like a trunk, its top a perch -- somewhere to rest at the edge.
 enum Kind { GENERIC, PINE, BROADLEAF, SAPLING, POST, ROCK }   ## (ROCK: the escarpment, standing in as its perches' "tree")
+const TOP_DOME := 0.12   ## a pine's broken-off top rises this share of its radius in the middle (ArenaBuilder._trunk)
 const POST_COUNT := 48
 const POST_HEIGHT := 1.4     ## m: fence height (as the heath concept's posts; still a perch on each top)
 const POST_RADIUS := 0.18    ## m
@@ -45,6 +46,7 @@ class TreeData:
 	var branches: Array = []        ## of BranchData
 	var kind := 0                   ## Kind
 	var crown_base := 0.0           ## m above the ground where the crown (foliage) starts
+	var form := ""                  ## a pine's age (Pinewood): "" mature, "pole" (young, slim), "veteran" (old, broad)
 	var foliage: Array = []         ## visual only (birds fly through it): [centre: Vector3, radii: Vector3]
 	## The limbs as drawn (Pinewood): [points: PackedVector3Array, radii: PackedFloat32Array, material key]. The
 	## solid branches (BranchData) are chords along these curves; the perch stretch of a limb is exactly straight.
@@ -127,10 +129,14 @@ var openings: Array = []
 var escarpment := {}
 var rock: Escarpment                ## the escarpment's shape (null: none), for the queries below
 var rock_tree := -1                 ## its ROCK entry in `trees` (its perches' tree_id)
+
+
+var floor_field: FloorField         ## the floor's mounds and patches (Pinewood; null: flat), what ground() reads
 var ring_radius := 56.0
 var ring_half_width := 5.0
 var trees: Array = []               ## of TreeData
 var outposts: Array = []            ## of OutpostData
+var air := AirField.new()           ## the air's own movement: thermals, ridge lift (empty: still air)
 var style := "greybox"              ## "greybox" (generate) or "pinewood" (Pinewood.generate)
 var perches: Array[Perch] = []
 var _perch_hash := {}               ## Vector2i -> Array[int] perch ids
@@ -169,7 +175,7 @@ static func lab() -> ArenaLayout:
 	b.perch_id = p.id
 	a._add_perch(p)
 	t.branches.append(b)
-	a._add_perch(Perch.treetop(1, t.top() + Vector3.UP * 0.05, t.radius * 0.75 - 0.03, Vector3.FORWARD, 0))
+	a._add_perch(Perch.treetop(1, t.top(), t.radius * 0.75 - 0.03, Vector3.FORWARD, 0))   # (on the flat top drawn)
 	return a
 
 
@@ -248,7 +254,7 @@ func _grow(t: TreeData, rng: RandomNumberGenerator) -> void:
 		t.branches.append(b)
 	# Treetop: faces the arena centre, so a bird sitting up there looks over the clearing.
 	var to_center := Vector3(-t.base.x, 0.0, -t.base.y)
-	var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.03, t.radius * 0.75 - 0.03), to_center if to_center.length() > 0.1 else Vector3.FORWARD, t.id)
+	var top := Perch.treetop(perches.size(), t.top(), maxf(0.03, t.radius * 0.75 - 0.03), to_center if to_center.length() > 0.1 else Vector3.FORWARD, t.id)
 	_add_perch(top)
 
 
@@ -278,7 +284,7 @@ func add_posts() -> void:
 		t.crown_base = POST_HEIGHT
 		trees.append(t)
 		_add_to_hash(_tree_hash, p, t.id)
-		var top := Perch.treetop(perches.size(), t.top() + Vector3.UP * 0.05, POST_RADIUS * 0.75 - 0.03, Vector3(-p.x, 0.0, -p.y).normalized(), t.id)
+		var top := Perch.treetop(perches.size(), t.top(), POST_RADIUS * 0.75 - 0.03, Vector3(-p.x, 0.0, -p.y).normalized(), t.id)
 		top.fallback = true
 		_add_perch(top)
 
@@ -318,6 +324,12 @@ func rock_clear(pos: Vector3, d: float) -> bool:
 		if y < rock.height(pos.x + o.x, pos.z + o.y):
 			return false
 	return true
+
+
+## The ground's height above GROUND_Y at (x, z): the floor's mounds where there are any (FloorField), else 0. What a
+## bird stands on, a round bursts on, a feather settles on; the floor is drawn and solid at this height.
+func ground(x: float, z: float) -> float:
+	return 0.0 if floor_field == null else floor_field.height(x, z)
 
 
 ## (Pinewood builds through these too.)
@@ -386,7 +398,7 @@ func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) 
 ## place (the AI's predicted paths); `ignore_also`: a second tree to skip; `decks`: the outposts that could be
 ## near (null: all of them).
 func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, ignore_tree := -1, ignore_also := -1, decks: Variant = null) -> bool:
-	if a.y < GROUND_Y + clearance or b.y < GROUND_Y + clearance:
+	if a.y < GROUND_Y + ground(a.x, a.z) + clearance or b.y < GROUND_Y + ground(b.x, b.z) + clearance:
 		return false
 	# (the rock too, unless it's the "tree" left out: coming in to, or leaving, one of its perches)
 	if rock != null and ignore_tree != rock_tree and ignore_also != rock_tree and maxf(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length()) > rock.foot - Escarpment.SCREE - clearance - 0.5:
@@ -431,11 +443,18 @@ func path_blocked_at(near: Array, pts: PackedVector3Array, clearance: float, ign
 		if o.tree_id != ignore_tree and o.tree_id != ignore_also:
 			os.append(o)
 	var floor_y := GROUND_Y + clearance
+	var see_rock := rock != null and ignore_tree != rock_tree and ignore_also != rock_tree
 	for i in pts.size() - 1:
 		var a := pts[i]
 		var b := pts[i + 1]
-		if a.y < floor_y or b.y < floor_y:
+		if a.y < floor_y + ground(a.x, a.z) or b.y < floor_y + ground(b.x, b.z):
 			return i
+		# (the rock, as segment_clear_among sees it: sampled along the chord, only out by it)
+		if see_rock and maxf(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length()) > rock.foot - Escarpment.SCREE - clearance - 0.5:
+			var n := maxi(1, ceili(a.distance_to(b) / 0.25))
+			for k in n + 1:
+				if not rock_clear(a.lerp(b, float(k) / n), clearance):
+					return i
 		if ts.is_empty() and os.is_empty():
 			continue
 		var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance

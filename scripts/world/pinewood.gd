@@ -8,6 +8,9 @@ extends RefCounted
 ##   OAKS       a few old broadleaf "perch trees" standing in glades: a stout trunk, long level limbs at three
 ##              heights (long perches), a broad canopy over them. Most perching off the outposts is here.
 ##   SAPLINGS   young pines on the floor: a slalom under ~6 m.
+##   AGES       an old pinewood is mixed-age: pole-stage pines (9-17 m, slim, their crowns narrow and lower down) in
+##              the half-light round the gaps and through the thin stand, and a few veterans ("granny" pines:
+##              shorter, very thick, a broad flat crown on heavy limbs) where they grew up in the open.
 ##   OUTPOSTS   timber decks bolted to trunks between the stubs and the crown (and to the oaks between their
 ##              limbs), facing open air: the outer edge is a rounded landing rail -- the perch -- with a nest-box
 ##              hangar and crates on the deck. Supplied from the air (no hoists, no ladders).
@@ -24,6 +27,12 @@ const CLEARING := 20.0   ## m, the clearing round the big oak (to its nearest pi
 const GLADE := {"r": Vector2(16.0, 18.0), "at": Vector2(42.0, 56.0)}
 const GAPS := {"count": 7, "r": Vector2(6.0, 10.0)}
 const OAK := {"count": 4, "h": Vector2(17.0, 22.0), "r": Vector2(0.65, 0.9), "limb": Vector2(6.0, 9.5), "glade": 11.0}
+## Pole-stage pines (in little groups, in the half-light) and veterans (alone, at the clumps' edges); `crown` is
+## how far the crown reaches from the trunk, for the light under it. A mature pine's is 2.5 m.
+const POLE := {"count": 36, "h": Vector2(9.0, 17.0), "r": Vector2(0.08, 0.15), "clear": Vector2(0.42, 0.56), "crown": 1.2}
+const VETERAN := {"count": 6, "h": Vector2(18.0, 24.0), "r": Vector2(0.42, 0.52), "clear": Vector2(0.4, 0.5), "spacing": 9.0, "crown": 4.5}
+## Whether the wood has the other ages (off: the mature stand and the saplings only, as it was; for an A/B).
+static var ages := true
 const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08), "spacing": 3.2}
 const OUTPOSTS := 9
 ## An outpost's way in: the final swoop onto the rail comes up from out in front and a little below, so it faces only
@@ -125,8 +134,12 @@ static func generate(s: int) -> ArenaLayout:
 			var t := _tree(a, ArenaLayout.Kind.SAPLING, q, lerpf(SAPLING.h.x, SAPLING.h.y, rng.randf() * lerpf(0.4, 1.0, light(a, q))), rng.randf_range(SAPLING.r.x, SAPLING.r.y))
 			_grow_sapling(a, t, rng)
 			placed += 1
+	if ages:
+		_ages(a, s)
 	_outposts(a, rng)
 	a.add_posts()
+	a.floor_field = FloorField.build(a, a.boundary + 12.0)
+	_thermals(a)
 	# The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
 	# DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
 	if cliff:
@@ -134,6 +147,74 @@ static func generate(s: int) -> ArenaLayout:
 		a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": s}
 		a.add_rock()
 	return a
+
+
+## The other ages among the mature pines (after the saplings, on an RNG of their own, so the stand they join stays
+## as it was): veterans at the clumps' edges (room for a broad crown, others near), then pole-stage
+## pines in little groups in the half-light -- round the gaps and through the thin stand, not under the clumps.
+static func _ages(a: ArenaLayout, s: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = s * 7919 + 13
+	var e := a.half_extent
+	var tries := 0
+	var placed := 0
+	while placed < VETERAN.count and tries < 8000:
+		tries += 1
+		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
+		if p.length() > a.boundary - 10.0 or in_opening(a, p, 3.0):
+			continue
+		if not _clear_of(a, p, VETERAN.spacing, OAK.glade + OAK.limb.y * 0.6 + 4.0) or _young_near(a, p, VETERAN.crown + 1.5):
+			continue
+		var far := true
+		var stand := 0   # (mature pines near: at a clump's edge, not out on its own)
+		for t in a.trees:
+			if t.form == "veteran" and p.distance_to(t.base) < 30.0:
+				far = false
+			if t.kind == ArenaLayout.Kind.PINE and t.form == "" and p.distance_to(t.base) < 18.0:
+				stand += 1
+		if not far or stand < 2:
+			continue
+		var t := _tree(a, ArenaLayout.Kind.PINE, p, rng.randf_range(VETERAN.h.x, VETERAN.h.y), rng.randf_range(VETERAN.r.x, VETERAN.r.y))
+		t.form = "veteran"
+		_grow_pine(a, t, rng)
+		placed += 1
+	tries = 0
+	placed = 0
+	while placed < POLE.count and tries < POLE.count * 200:
+		tries += 1
+		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
+		var lit := light(a, p)
+		if lit < 0.2 or lit > 0.95 or rng.randf() > 0.2 + lit:
+			continue
+		for g in rng.randi_range(1, 4):
+			var q := p + Vector2.from_angle(rng.randf() * TAU) * (0.0 if g == 0 else rng.randf_range(4.0, 7.0))
+			if placed >= POLE.count or q.length() > a.boundary - 3.0 or in_opening(a, q, 1.5) or not _clear_of(a, q, 4.0, OAK.glade + OAK.limb.y * 0.6) or _young_near(a, q, POLE.crown + 4.0):
+				continue
+			var t := _tree(a, ArenaLayout.Kind.PINE, q, rng.randf_range(POLE.h.x, POLE.h.y), rng.randf_range(POLE.r.x, POLE.r.y))
+			t.form = "pole"
+			_grow_pine(a, t, rng)
+			placed += 1
+
+
+## Is a young pine within `d` m of `p`? (An older tree there would shade it: they come up in the light.)
+static func _young_near(a: ArenaLayout, p: Vector2, d: float) -> bool:
+	for t in a.trees_near_segment(Vector3(p.x, 0.0, p.y), Vector3(p.x, 0.0, p.y), d):
+		if t.kind == ArenaLayout.Kind.SAPLING and p.distance_to(t.base) < d:
+			return true
+	return false
+
+
+## The sun warms the open ground: a thermal over the clearing (the strongest: the widest patch of sunlit floor), the
+## glade, and each gap (weak: about a soaring bird's sink rate, so only the best soarers hold in them). Each is about
+## as wide as its opening: a crow's tightest comfortable circle (8-10 m) fits in the clearing's core.
+const THERMALS := {   ## kind -> [core lift m/s, radius as a share of the opening's, top m]
+	"clearing": [2.6, 1.0, 55.0], "glade": [2.0, 0.9, 45.0], "gap": [1.0, 0.8, 30.0],
+}
+static func _thermals(a: ArenaLayout) -> void:
+	for o in a.openings:
+		if THERMALS.has(o.kind):
+			var spec: Array = THERMALS[o.kind]
+			a.air.add_thermal(o.centre, float(o.r) * float(spec[1]), spec[0], spec[2])
 
 
 ## How far opening `o`'s edge lies from its centre toward `p` (irregular: no opening in a wood is round).
@@ -156,7 +237,7 @@ static func light(a: ArenaLayout, p: Vector2) -> float:
 	var near := 99.0
 	for t in a.trees_near_segment(Vector3(p.x, 0.0, p.y), Vector3(p.x, 0.0, p.y), 8.0):
 		match t.kind:
-			ArenaLayout.Kind.PINE: near = minf(near, p.distance_to(t.base) - 2.5)
+			ArenaLayout.Kind.PINE: near = minf(near, p.distance_to(t.base) - (POLE.crown if t.form == "pole" else (VETERAN.crown if t.form == "veteran" else 2.5)))
 			ArenaLayout.Kind.BROADLEAF: near = minf(near, p.distance_to(t.base) - 9.0)
 	return smoothstep(0.0, 6.0, near)
 
@@ -211,21 +292,26 @@ static func _branch(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, tip:
 
 
 ## A Scots pine: clear below, a few dead stubs, whorls of upswept limbs in the crown with needle pads, a
-## treetop perch.
+## treetop perch. By its age (`t.form`): a pole's crown is narrow, pointed and lower down, on many thin whorls,
+## the stubs below it thin; a veteran's is broad and flat on a few whorls of heavy, spreading limbs, the stubs
+## thick.
 static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
-	t.crown_base = t.height * rng.randf_range(PINE.clear.x, PINE.clear.y)
+	var pole := t.form == "pole"
+	var vet := t.form == "veteran"
+	var clear: Vector2 = POLE.clear if pole else (VETERAN.clear if vet else PINE.clear)
+	t.crown_base = t.height * rng.randf_range(clear.x, clear.y)
 	var c := Vector3(t.base.x, 0.0, t.base.y)
 	# Dead stubs on the clear trunk, where old limbs broke off: few or none on some trees, short, drooping,
 	# tapering to a snapped end, scattered rather than at regular heights. (Not perches: as long, level perch
 	# sticks they read as pegs.)
-	for i in rng.randi_range(0, 4):
-		var y := t.height * rng.randf_range(0.2, 0.58)
+	for i in (rng.randi_range(2, 6) if pole or vet else rng.randi_range(0, 4)):
+		var y := t.height * rng.randf_range(0.15 if pole else 0.2, minf(0.58, t.crown_base / t.height - 0.04))
 		var ang := rng.randf() * TAU
 		var d := Vector3(sin(ang), 0.0, cos(ang))
 		var r := _r_at(t, y)
 		var root := c + Vector3.UP * y
-		var reach := r + rng.randf_range(0.12, 0.55) * (2.0 if rng.randf() < 0.15 else 1.0)
-		var sr := rng.randf_range(0.025, 0.045)
+		var reach := r + rng.randf_range(0.12, 0.55) * (2.0 if rng.randf() < 0.15 else 1.0) * (0.5 if pole else 1.0)
+		var sr := rng.randf_range(0.012, 0.022) if pole else (rng.randf_range(0.05, 0.08) if vet else rng.randf_range(0.025, 0.045))
 		var droop := rng.randf_range(-0.35, 0.05)
 		var tip := root + d * reach + Vector3.UP * droop * (reach - r)
 		_branch(a, t, root, tip, sr, STUB_PERCHES, true)
@@ -242,12 +328,20 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 	# some off to the side, sizes varying), with a tuft part-way along the longer limbs.
 	var dens := clampf(crown_density, 0.0, 1.0)
 	var whorls := rng.randi_range(4, 6) if dens >= 0.75 else rng.randi_range(3, 4)
+	if pole:
+		whorls = rng.randi_range(5, 7) if dens >= 0.75 else rng.randi_range(4, 5)
+	elif vet:
+		whorls = rng.randi_range(5, 6) if dens >= 0.75 else rng.randi_range(4, 5)
 	var ang0 := rng.randf() * TAU
 	for w in whorls:
 		var f := (w + rng.randf_range(0.0, 0.5)) / float(whorls)
-		var y := lerpf(t.crown_base, t.height - 1.6, f)
+		var y := lerpf(t.crown_base, t.height - (0.9 if pole else 1.6), f)
 		var reach := lerpf(1.7, 3.1, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0))) * rng.randf_range(0.75, 1.2)
-		var n := rng.randi_range(2, 4)
+		if pole:   # (a narrowing spire)
+			reach = lerpf(1.5, 0.7, f) * rng.randf_range(0.8, 1.15)
+		elif vet:   # (broad from the crown's foot up, a little narrower at the flat top)
+			reach = lerpf(4.6, 3.6, f) * rng.randf_range(0.8, 1.15)
+		var n := rng.randi_range(2, 4) if not vet else rng.randi_range(3, 4)
 		for k in n:
 			if rng.randf() < 0.12:
 				continue   # (a limb lost: whorls are rarely complete on an old pine)
@@ -255,11 +349,20 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 			var d := Vector3(sin(ang), 0.0, cos(ang))
 			var root := c + Vector3.UP * maxf(y + rng.randf_range(-0.25, 0.25), t.crown_base)
 			var rise := lerpf(0.35, 0.7, f) * rng.randf_range(0.8, 1.25)
+			if vet:   # (heavy limbs: out and up, the lower ones flatter, every tip turning up)
+				rise = lerpf(0.3, 0.55, f) * rng.randf_range(0.8, 1.25)
 			var rt := _r_at(t, y)
+			var r0 := lerpf(0.075, 0.04, f)
+			if pole:
+				r0 = lerpf(0.035, 0.02, f)
+			elif vet:
+				r0 = lerpf(0.15, 0.09, f)
 			# Up steeply from the trunk, a long straight upswept middle (the perch), the tip turning up and aside.
-			var lim := _limb(a, t, root, d, rt + reach * rng.randf_range(0.85, 1.15), Vector3(rise * 1.6 + 0.25, rise, rise + 0.6), Vector2(0.15, 0.8), lerpf(0.075, 0.04, f), rt, "limb", true, rng.randf_range(-0.35, 0.35))
+			# (A pole's thin upper limbs, under 3 cm, are twigs as a sapling's are: drawn, brushed through, no perch.)
+			var twig := pole and r0 < 0.03
+			var lim := _limb(a, t, root, d, rt + reach * rng.randf_range(0.85, 1.15), Vector3(rise * 1.6 + 0.25, rise, rise + 0.6), Vector2(0.15, 0.8), r0, rt, "limb", not twig, rng.randf_range(-0.35, 0.35) * (1.6 if vet else 1.0), 0.35, not twig)
 			var tip: Vector3 = lim.tip
-			var s := lerpf(0.75, 1.0, dens) * rng.randf_range(0.8, 1.25)
+			var s := lerpf(0.75, 1.0, dens) * rng.randf_range(0.8, 1.25) * (0.6 if pole else (1.25 if vet else 1.0))
 			var pad := Vector3(1.15, 0.6, 1.15) * s
 			t.foliage.append([tip + Vector3.UP * 0.2, pad])
 			var side := d.cross(Vector3.UP)
@@ -268,9 +371,19 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 				t.foliage.append([tip + off, pad * rng.randf_range(0.6, 0.9)])
 			if reach > 2.3 and rng.randf() < lerpf(0.35, 0.8, dens):
 				t.foliage.append([(lim.at as Callable).call((rt + reach) * 0.62) + Vector3.UP * 0.25 + side * rng.randf_range(-0.3, 0.3), pad * 0.7])
-	# The leader's tuft and a treetop perch on the broken-off top.
-	t.foliage.append([c + Vector3.UP * (t.height - 0.4), Vector3(1.0, 1.2, 1.0)])
-	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.05, _r_at(t, t.height) - 0.02), -c, t.id))
+			if vet:   # (and tufts further in along a veteran's long limbs, up off them)
+				for x in [0.3, 0.45]:
+					if rng.randf() < lerpf(0.5, 0.9, dens):
+						t.foliage.append([(lim.at as Callable).call((rt + reach) * x) + Vector3.UP * 0.35 + side * rng.randf_range(-0.5, 0.5), pad * rng.randf_range(0.55, 0.75)])
+	# The leader's tuft (a pole's pointed, a veteran's flat) and a treetop perch on the top.
+	t.foliage.append([c + Vector3.UP * (t.height - 0.4), Vector3(0.55, 1.0, 0.55) if pole else (Vector3(1.8, 0.8, 1.8) if vet else Vector3(1.0, 1.2, 1.0))])
+	if vet:   # (a veteran's top is a flat dome of tufts, not a leader)
+		for q in 4:
+			var ang := ang0 + q * TAU / 4.0 + rng.randf_range(-0.4, 0.4)
+			t.foliage.append([c + Vector3.UP * (t.height - 0.7) + Vector3(sin(ang), 0.0, cos(ang)) * rng.randf_range(1.2, 2.0), Vector3(1.4, 0.7, 1.4) * rng.randf_range(0.8, 1.1)])
+	# (on the drawn top: its low dome, half way up it -- the grip disc spans most of it)
+	var r_top := _r_at(t, t.height)
+	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top, maxf(0.05, r_top - 0.02), -c, t.id))
 
 
 ## A limb drawn as a smooth curve: out along horizontal `d` for `length` m (from `root`, at the trunk's axis),
@@ -479,7 +592,7 @@ static func _outposts(a: ArenaLayout, rng: RandomNumberGenerator) -> void:
 			hosts.append(t)
 	var pines := []
 	for t in a.trees:
-		if t.kind == ArenaLayout.Kind.PINE and Vector2(t.base).length() < a.boundary - 12.0:
+		if t.kind == ArenaLayout.Kind.PINE and t.form == "" and Vector2(t.base).length() < a.boundary - 12.0:   # (mature ones)
 			pines.append(t)
 	for i in range(pines.size() - 1, 0, -1):   # (shuffled with the layout's own RNG: same seed, same outposts)
 		var j := rng.randi_range(0, i)

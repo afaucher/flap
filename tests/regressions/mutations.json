@@ -1942,8 +1942,8 @@
   "edits": [
    {
     "file": "scripts/combat/projectile.gd",
-    "find": "var surface := \"ground\" if pos.y <= ArenaLayout.GROUND_Y else \"trunk\"",
-    "replace": "var surface := \"trunk\" if pos.y <= ArenaLayout.GROUND_Y else \"ground\""
+    "find": "var surface := \"ground\" if pos.y <= floor_y else \"trunk\"",
+    "replace": "var surface := \"trunk\" if pos.y <= floor_y else \"ground\""
    }
   ]
  },
@@ -2666,6 +2666,7 @@
   "id": "combat-picture-stale-between-looks",
   "bug": "With the brain looking every other tick, the picture between looks was a tick old: fire control and the defence read where birds and rounds had been (2026-11-03).",
   "tests": [
+   "test_combat_sense",
    "test_fire_control",
    "test_combat_defense"
   ],
@@ -2681,14 +2682,15 @@
   "id": "combat-history-at-look-rate",
   "bug": "Sense recorded the birds' history only when it looked (every other tick): what it read a reaction time back was up to a tick older, enough to lose a seeker drag past a trunk and a turning shot (2026-11-03).",
   "tests": [
+   "test_combat_sense",
    "test_fire_control",
    "test_combat_defense"
   ],
   "edits": [
    {
     "file": "scripts/combat/ai/combat_brain.gd",
-    "find": "\tsense.record(dt)\n\tif picture != null and posmod(f + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n",
-    "replace": "\tif picture != null and posmod(f + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n\tsense.record(_unthought)\n"
+    "find": "\tsense.record(dt)\n\tif picture != null and posmod(_ticks + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n",
+    "replace": "\tif picture != null and posmod(_ticks + _phase, THINK_EVERY) != 0:\n\t\tCombatSense.coast(picture, dt)\n\t\treturn\n\tsense.record(_unthought)\n"
    }
   ]
  },
@@ -2743,8 +2745,8 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "rings := [], cap := true) -> void:",
-    "replace": "rings := [], cap := false) -> void:"
+    "find": "rings := [], cap := true, dome := 0.35) -> void:",
+    "replace": "rings := [], cap := false, dome := 0.35) -> void:"
    }
   ]
  },
@@ -2846,12 +2848,12 @@
   "edits": [
    {
     "file": "scripts/world/planks.gdshader",
-    "find": "uniform float normal_depth = 2.6;",
+    "find": "uniform float normal_depth = 1.8;",
     "replace": "uniform float normal_depth = 1.0;"
    },
    {
     "file": "scripts/world/planks.gdshader",
-    "find": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);",
+    "find": "\t\tnrm = normalize(nrm - T * slope.x - B * slope.y);",
     "replace": ""
    }
   ]
@@ -2867,6 +2869,284 @@
     "file": "scripts/flight/flight_model.gd",
     "find": "\t\talpha_target = minf(damped, maxf(alpha_target, p.alpha_stall * 0.97))",
     "replace": "\t\talpha_target = damped"
+   }
+  ]
+ },
+ {
+  "id": "capture-click-fires",
+  "bug": "In the range, the click that captured the mouse also fired the weapon (left mouse is fire, read straight from the input state), wasting a round; so did a click a panel took while the mouse was free (2026-11-03).",
+  "tests": [
+   "test_capture_click"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/player_combat.gd",
+    "find": "\tif _swallowed or (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not captured):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "floor-plane-over-mounds",
+  "bug": "The big ground plane drew under the wood too, flat at GROUND_Y through the fine floor mesh: z-fighting with it where its mounds are low, the mounds' feet cut off (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tsm.set_shader_parameter(\"hole_r\", ff.size * 0.5 - 1.0)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "floor-mounds-not-solid",
+  "bug": "The floor's mounds were drawn only, the collision flat at GROUND_Y: a bird landing on a mound stood inside it, rounds burst under it (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tbody.add_child(hcs)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "bird-ground-flat",
+  "bug": "The bird took the ground as flat at GROUND_Y for its ground effect and for settling: over a mound it settled inside it (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar floor_y := ArenaLayout.GROUND_Y + layout.ground(global_position.x, global_position.z)   # (the floor's mounds)",
+    "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
+   }
+  ]
+ },
+ {
+  "id": "round-bursts-under-mound",
+  "bug": "A round coming down onto the floor burst at GROUND_Y, under the mound it hit (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/projectile.gd",
+    "find": "\tvar floor_y := ArenaLayout.GROUND_Y + (layout.ground(pos.x, pos.z) if layout != null else 0.0)   # (the floor's mounds)",
+    "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
+   }
+  ]
+ },
+ {
+  "id": "camera-slerp-hair-off",
+  "bug": "The chase camera slerped its look onto the bird's when the two were all but the same (a hair, 1e-20, off a level look): slerp's axis, from so small a cross product, came out of unit length and the engine errored every frame (2026-11-03).",
+  "tests": [
+   "test_chase_camera_turn"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/chase_camera.gd",
+    "find": "\tif _look.dot(want_look) > 0.0 and _look.cross(want_look).length_squared() < 1e-12:\n",
+    "replace": "\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "wood-relief-speckle",
+  "bug": "The wood's grain relief took its slope from the screen's per-pixel derivatives over a 2.6x-deepened normal map: pixels tipped edge-on and shaded black, a speckle of dark dots along the boards and in shadows' edges (2026-11-03).",
+  "tests": [
+   "gpu_test_speckle"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tnrm = normalize(nrm - T * slope.x - B * slope.y);",
+    "replace": "\t\tnrm = bump(nrm, dpx, dpy, (hg - 0.5) * grain_depth);"
+   },
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "uniform float normal_depth = 1.8;",
+    "replace": "uniform float normal_depth = 2.6;"
+   }
+  ]
+ },
+ {
+  "id": "combat-ai-never-fires",
+  "bug": "Guard for the range's 3 v 3 check (test_combat#2): a match where the combat AI never fires must fail it, now that it runs until the first rounds (90 s cap) instead of counting rounds at 30 s (2026-11-03).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\tif not i.fire or i.target == null or b.stun > 0.0 or b.state != Bird.State.FLYING or brain.pilot.avoiding > 0.0:",
+    "replace": "\tif true:"
+   }
+  ]
+ },
+ {
+  "id": "salvo-downs-in-one-pass",
+  "bug": "Every hit knocked out its full 2 or 3 feathers however soon after the last: a salvo's rounds are in the air before the first lands, so a bird that flew on (a player) was downed by one AI salvo within 1.4 s of its first hit, before it could do anything (2026-11-03; probe_salvo). Now a hit within CombatWorld.recover s of the last takes at most RECOVER_FEATHERS.",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tn = mini(n, RECOVER_FEATHERS)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "recovery-window-not-restarted",
+  "bug": "The recovery window counted only from a salvo's first (full) hit, so a salvo longer than the window took full counts again from its later rounds (2026-11-03).",
+  "tests": [
+   "test_combat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t_last_hit[b] = _clock\n",
+    "replace": "\tif n > RECOVER_FEATHERS:\n\t\t_last_hit[b] = _clock\n"
+   }
+  ]
+ },
+ {
+  "id": "brain-thinks-on-global-tick",
+  "bug": "A combat-AI brain thought on alternate ticks of the engine's global physics frame count, so a duel played out differently depending on how many ticks ran before it in the process: test_combat_defense's tree drag passed or failed by the parity the earlier cases left (exposed when CombatWorld.recover made those cases run longer) (2026-11-03). Now each brain counts its own ticks.",
+  "tests": [
+   "test_duel_repeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "posmod(_ticks + _phase, THINK_EVERY)",
+    "replace": "posmod(Engine.get_physics_frames() + _phase, THINK_EVERY)"
+   }
+  ]
+ },
+ {
+  "id": "patrol-turns-at-centre",
+  "bug": "A combat bird patrolling at the very middle of its patrol circle aimed 0.6 rad round from a bearing it didn't have: it turned hard right whatever its heading, so a defence that started from patrol (the tree drag) worked one way and not the other (2026-11-03).",
+  "tests": [
+   "test_combat_defense"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_tree.gd",
+    "find": "\t\tif rel.length() < PATROL_RADIUS * 0.5:",
+    "replace": "\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "treetop-perch-floats",
+  "bug": "Treetop perches sat 5 cm over the trunk's full height while the drawn trunk stopped 15 cm short of it under a dome: the perch (and a bird on it) floated over the top (2026-11-03).",
+  "tests": [
+   "test_tree_tops"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top,",
+    "replace": "t.top() + Vector3.UP * 0.05,"
+   },
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tvar y := (t.height + 0.15) * u - 0.15",
+    "replace": "\t\tvar y := t.height * u - 0.15"
+   }
+  ]
+ },
+ {
+  "id": "settle-perches-too-fast",
+  "bug": "A bird striking a perch's top up to 1.6x the catch speed was caught as if it had settled there: flying fast at a treetop caught it (2026-11-03).",
+  "tests": [
+   "test_perching"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "_perch_under(at) if v.length() <= profile.grab_speed_max else null",
+    "replace": "_perch_under(at)"
+   }
+  ]
+ },
+ {
+  "id": "lock-sees-through-wood",
+  "bug": "Guard for the seeker lock's need for sight: a lock built and held through a trunk between shooter and target would make cover worthless (2026-11-03).",
+  "tests": [
+   "test_lock_sight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn layout == null or layout.segment_clear(muzzle(), b.global_position, 0.0)",
+    "replace": "\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "hut-window-black-card",
+  "bug": "The outpost hangar's opening was a flat black card stuck on a solid wall over a dark box filling the hut: an opaque black window, no inside (2026-11-04).",
+  "tests": [
+   "test_outpost_timber",
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t# The opening's frame: jambs, head and sill, three slats across its top, a landing board under it.\n",
+    "replace": "\t# The opening's frame: jambs, head and sill, three slats across its top, a landing board under it.\n\ttm.box(\"door\", Transform3D(Basis(), d.call(sx + HANGAR_SIDE * 0.001, oy + oh * 0.5, oz)), Vector3(0.004, oh, ow), TimberMesh.Kind.DARK, 0.0)\n\ttm.box(\"hangar_core\", Transform3D(Basis(), d.call(hx, S.y * 0.48, hz)), Vector3(S.x - 0.02, S.y * 0.96, S.z - 0.02), TimberMesh.Kind.DARK, 0.0)\n"
+   }
+  ]
+ },
+ {
+  "id": "hut-opening-not-sawn",
+  "bug": "The hangar's outer wall boards left whole behind its opening's frame: no way in to see (2026-11-04).",
+  "tests": [
+   "test_outpost_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tif wall[0] == outer:   # (the opening sawn through the boards it crosses)\n",
+    "replace": "\t\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "hut-inside-full-sky",
+  "bug": "The hollow hangar's inside lit by the whole sky (the shader not told where it is): its pale unweathered wood brighter through the opening than the wall outside (2026-11-04).",
+  "tests": [
+   "test_outpost_timber",
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": ",\n\t\t\"hut_lo\": hangar_inside(o).position, \"hut_hi\": hangar_inside(o).end})",
+    "replace": "})"
+   }
+  ]
+ },
+ {
+  "id": "hut-inside-sky-not-kept-out",
+  "bug": "The hangar's inside known to the shader but the sky not kept out there: the inside as bright as outdoors through the opening (2026-11-04).",
+  "tests": [
+   "gpu_test_timber"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/planks.gdshader",
+    "find": "\t\tao *= INSIDE_SKY;\n",
+    "replace": ""
    }
   ]
  },
@@ -3035,6 +3315,20 @@
     "file": "scripts/world/escarpment.gd",
     "find": "const BEND := 230.0",
     "replace": "const BEND := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "edge-path-blind-to-rock",
+  "bug": "Merging the escarpment into master's AI: ArenaLayout.path_blocked_at (the avoidance's whole-path query) didn't check the rock that segment_clear_among (the planner's) does, so the AI could fly into the cliff while its planner avoided it (2026-11-04).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\tvar see_rock := rock != null and ignore_tree != rock_tree and ignore_also != rock_tree",
+    "replace": "\tvar see_rock := false"
    }
   ]
  }
