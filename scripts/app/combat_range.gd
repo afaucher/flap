@@ -86,6 +86,7 @@ func _ready() -> void:
 		match_enemy = enemy_ids
 	if args.has("--no-far-blur"):
 		ForestLight.far_blur = false
+	Antialias.apply(self, args)
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
 	if Boot.arg_value(args, "--loadout") == "seekers":
@@ -364,6 +365,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if e.is_action_pressed("release_mouse"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F7:
+		print("TAA ", "on" if Antialias.toggle(self) else "off")
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
 		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:

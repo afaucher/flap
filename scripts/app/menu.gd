@@ -65,6 +65,7 @@ var _skill_note: Label
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Antialias.apply(self, Boot.args())
 	if not Boot.args().has("--no-backdrop"):
 		backdrop = MenuBackdrop.new()
 		add_child(backdrop)
