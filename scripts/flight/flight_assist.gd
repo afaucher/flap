@@ -83,7 +83,8 @@ func apply(bird: Bird, inp: FlightInput, dt: float) -> FlightInput:
 	var on := novice and strength > 0.0 and inp.catch_held and bird.state == Bird.State.FLYING and bird.candidate != null
 	if not on:
 		engage = 0.0   # (catch released, or nothing to land on: the player's at once)
-		bird.candidate_lock = null
+		if bird != null:
+			bird.candidate_lock = null
 		return inp
 	if bird.candidate_lock != null and bird.candidate != bird.candidate_lock:
 		engage = 0.0   # (the held perch went out of the cone: a fresh approach on the new one)

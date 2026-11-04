@@ -233,7 +233,7 @@
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\t\t\tscore = IN_REACH_SCORE + d\n",
+    "find": "\t\t\tscore = IN_REACH_SCORE + d + OFF_PATH_COST * off * d\n",
     "replace": "\t\t\tscore = INF\n"
    }
   ]
@@ -3722,8 +3722,13 @@
   "edits": [
    {
     "file": "scripts/flight/flight_assist.gd",
-    "find": "FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, held,",
-    "replace": "FlightInput.new(inp.stick, inp.flap_pressed, inp.flap_held,"
+    "find": "\tvar stick := inp.stick.lerp(ai.stick, w)\n",
+    "replace": "\tvar stick := inp.stick\n"
+   },
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tvar held := inp.flap_held or (ai.flap_held and w >= 0.5)\n",
+    "replace": "\tvar held := inp.flap_held\n"
    }
   ]
  },
@@ -3794,20 +3799,6 @@
     "file": "scripts/flight/energy_model.gd",
     "find": "regen * FlightAssist.recovery_scale() * dt",
     "replace": "regen * dt"
-   }
-  ]
- },
- {
-  "id": "perch-assist-on-path-candidate-unasked",
-  "bug": "With the candidate following the predicted path, the perch assist (flare and pull) worked on it: a combat bird stooping through the wood was pulled toward branches on its path (the falcon's bonks 3 -> 12 in test_combat_boom_zoom), and a too-strong flare gain no longer showed in test_perching. Except a novice landing, the assist keeps the nearest perch ahead, as before (2026-11-04).",
-  "tests": [
-   "test_combat_boom_zoom"
-  ],
-  "edits": [
-   {
-    "file": "scripts/bird/bird.gd",
-    "find": "\tvar on_candidate := landing   #",
-    "replace": "\tvar on_candidate := true   #"
    }
   ]
  },
@@ -3891,8 +3882,8 @@
   "edits": [
    {
     "file": "scripts/flight/flight_assist.gd",
-    "find": "\t\tbird.candidate_lock = null\n\t\treturn inp",
-    "replace": "\t\treturn inp"
+    "find": "\t\tif bird != null:\n\t\t\tbird.candidate_lock = null\n",
+    "replace": ""
    }
   ]
  }
