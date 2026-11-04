@@ -1942,8 +1942,8 @@
   "edits": [
    {
     "file": "scripts/combat/projectile.gd",
-    "find": "var surface := \"ground\" if pos.y <= ArenaLayout.GROUND_Y else \"trunk\"",
-    "replace": "var surface := \"trunk\" if pos.y <= ArenaLayout.GROUND_Y else \"ground\""
+    "find": "var surface := \"ground\" if pos.y <= floor_y else \"trunk\"",
+    "replace": "var surface := \"trunk\" if pos.y <= floor_y else \"ground\""
    }
   ]
  },
