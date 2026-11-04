@@ -405,9 +405,10 @@ func _cell(cells: Dictionary, cell: Vector2i, key: String) -> Array:
 
 ## A tube through `pts` with `radii` (per point), `segs` round, appended to `arr`. UV in metres -- round the tube
 ## a whole number of `tile`s at its base radius (no seam), along it its length -- UV2 (share of its length, seed).
-## Normals radial; frames carried along the curve without twisting. `cap`: its far end closed with a low dome (a
+## Normals radial; frames carried along the curve without twisting. `cap`: its far end closed with a low dome `dome`
+## of its end radius high (a
 ## trunk's top, a limb's tip: open, it's a hole seen from above or past the end).
-func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs: int, tile: float, seed: float, rings := [], cap := true) -> void:
+func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs: int, tile: float, seed: float, rings := [], cap := true, dome := 0.35) -> void:
 	var n := pts.size()
 	var base: int = (arr[0] as PackedVector3Array).size()
 	var around: float = maxf(1.0, roundf(TAU * radii[0] / tile)) * tile
@@ -443,7 +444,7 @@ func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs:
 		var last := base + (n - 1) * (segs + 1)
 		var r_end: float = radii[n - 1]
 		var tip := base + n * (segs + 1)
-		arr[0].append(pts[n - 1] + tg * r_end * 0.35)
+		arr[0].append(pts[n - 1] + tg * r_end * dome)
 		arr[1].append(tg)
 		var side := tg.cross(Vector3.UP if absf(tg.y) < 0.95 else Vector3.RIGHT).normalized()
 		arr[2].append_array(PackedFloat32Array([side.x, side.y, side.z, 1.0]))
@@ -466,7 +467,7 @@ func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var rings := []
 	for i in n:
 		var u := pow(float(i) / (n - 1), 1.6)   # (rings closer near the foot, where the flare turns)
-		var y := t.height * u - 0.15
+		var y := (t.height + 0.15) * u - 0.15   # (from just under the floor to its full height: the treetop perch's)
 		pts.append(c + Vector3.UP * y)
 		radii.append(t.radius * lerpf(1.0, top_share, clampf(y / t.height, 0.0, 1.0)) * (1.0 + flare * exp(-maxf(y, 0.0) / (0.9 if oak else 0.6))))
 		var ring := []
@@ -474,7 +475,7 @@ func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 			var a := TAU * j / segs
 			ring.append(1.0 + 0.03 * sin(3.0 * a + seed * 9.0 + y * 0.35) + 0.02 * sin(5.0 * a + seed * 4.0 - y * 0.8) + (0.06 * flare * sin(4.0 * a + seed * 7.0) * exp(-maxf(y, 0.0) / 0.7)))
 		rings.append(ring)
-	_tube(arr, pts, radii, segs, _TILE["oak_trunk" if oak else "pine_trunk"], seed, rings)
+	_tube(arr, pts, radii, segs, _TILE["oak_trunk" if oak else "pine_trunk"], seed, rings, true, ArenaLayout.TOP_DOME)
 
 
 func _bark(key: String) -> ShaderMaterial:

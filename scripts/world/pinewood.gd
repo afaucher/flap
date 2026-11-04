@@ -275,7 +275,9 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 				t.foliage.append([(lim.at as Callable).call((rt + reach) * 0.62) + Vector3.UP * 0.25 + side * rng.randf_range(-0.3, 0.3), pad * 0.7])
 	# The leader's tuft and a treetop perch on the broken-off top.
 	t.foliage.append([c + Vector3.UP * (t.height - 0.4), Vector3(1.0, 1.2, 1.0)])
-	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * 0.05, maxf(0.05, _r_at(t, t.height) - 0.02), -c, t.id))
+	# (on the drawn top: its low dome, half way up it -- the grip disc spans most of it)
+	var r_top := _r_at(t, t.height)
+	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top, maxf(0.05, r_top - 0.02), -c, t.id))
 
 
 ## A limb drawn as a smooth curve: out along horizontal `d` for `length` m (from `root`, at the trunk's axis),

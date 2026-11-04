@@ -312,10 +312,11 @@ func _on_collision(col: KinematicCollision3D) -> void:
 	var into := v.dot(n)
 	var collider := col.get_collider()
 	# Settling slowly onto anything flat: a perch (a branch, a treetop: falling onto it after a bonk) takes it, as a
-	# catch would; anything else (the ground, a deck, a roof) it stands on, where it is.
+	# catch would, if no faster than a catch; anything else (the ground, a deck, a roof), or a perch come at faster,
+	# it stands on, where it is.
 	if _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:
 		var at := col.get_position()
-		var under := _perch_under(at)
+		var under := _perch_under(at) if v.length() <= profile.grab_speed_max else null   # (no faster than a catch)
 		if under != null:
 			candidate = under
 			candidate_grip = under.closest_grip(at)
