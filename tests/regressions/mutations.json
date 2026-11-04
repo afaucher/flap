@@ -2963,8 +2963,8 @@
   "edits": [
    {
     "file": "scripts/world/escarpment.gd",
-    "find": "const PERCH_EVERY := [11.0, 26.0]   ## m along the cliff between perches on each tier's ledge, foot up",
-    "replace": "const PERCH_EVERY := [26.0, 11.0]"
+    "find": "const PERCH_EVERY := [10.0, 32.0]   ## m along the cliff between perches on each tier's ledge, foot up",
+    "replace": "const PERCH_EVERY := [32.0, 10.0]"
    }
   ]
  },

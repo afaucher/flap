@@ -28,7 +28,8 @@ $agentExe = $env:ANTIGRAVITY_AGENTAPI_EXE
 if (-not $agentExe -or -not (Test-Path $agentExe)) {
     $candidates = @(
         "$env:LOCALAPPDATA\Programs\Antigravity IDE\resources\app\extensions\antigravity\bin\language_server_windows_x64.exe",
-        "$env:LOCALAPPDATA\Programs\Antigravity\resources\bin\language_server.exe"
+        "$env:LOCALAPPDATA\Programs\Antigravity\resources\bin\language_server.exe",
+        "$env:USERPROFILE\.gemini\bin\agy.exe"
     )
     foreach ($cand in $candidates) {
         if (Test-Path $cand) { $agentExe = $cand; break }
@@ -42,12 +43,17 @@ if (-not $agentExe) {
 
 # 3. Discover active LS address and CSRF token if not already in environment
 if (-not $env:ANTIGRAVITY_LS_ADDRESS -or -not $env:ANTIGRAVITY_CSRF_TOKEN) {
-    $proc = Get-CimInstance Win32_Process -Filter "Name LIKE '%language_server%'" | 
-        Where-Object { $_.CommandLine -match "--csrf_token" } | 
+    $proc = Get-CimInstance Win32_Process -Filter "Name LIKE '%language_server%' OR Name = 'agy.exe'" |
+        Where-Object { $_.CommandLine -match "--csrf_token" } |
         Select-Object -First 1
 
-    if ($proc -and $proc.CommandLine -match "--csrf_token\s+([a-f0-9\-]+)") {
+    if ($proc -and $proc.CommandLine -match "--csrf_token[\s=]+([a-f0-9\-]+)") {
         $env:ANTIGRAVITY_CSRF_TOKEN = $matches[1]
+        # (newer Antigravity runs as the agy hub, which serves agentapi on its --hub-port)
+        if ($proc.Name -eq "agy.exe") { $agentExe = $proc.ExecutablePath }
+        if ($proc.CommandLine -match "--hub-port[\s=]+(\d+)") { $env:ANTIGRAVITY_LS_ADDRESS = "localhost:$($matches[1])" }
+    }
+    if ($proc -and -not $env:ANTIGRAVITY_LS_ADDRESS) {
         $conn = Get-NetTCPConnection -State Listen -OwningProcess $proc.ProcessId -ErrorAction SilentlyContinue | 
             Select-Object -First 1
         if ($conn) {
@@ -64,9 +70,9 @@ if (-not $env:ANTIGRAVITY_LS_ADDRESS) {
 # 4. Resolve Active Conversation ID
 $targetConv = $env:ANTIGRAVITY_CONVERSATION_ID
 if (-not $targetConv) {
-    $brainDir = Join-Path $env:USERPROFILE ".gemini\antigravity-ide\brain"
-    if (Test-Path $brainDir) {
-        $latest = Get-ChildItem $brainDir -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $brainDirs = @((Join-Path $env:USERPROFILE ".gemini\antigravity\brain"), (Join-Path $env:USERPROFILE ".gemini\antigravity-ide\brain")) | Where-Object { Test-Path $_ }
+    if ($brainDirs) {
+        $latest = Get-ChildItem $brainDirs -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if ($latest) {
             $targetConv = $latest.Name
         }

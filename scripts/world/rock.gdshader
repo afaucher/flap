@@ -191,7 +191,9 @@ void fragment() {
 	// Grass and heather on what faces up (not on the scree).
 	float veg = smoothstep(0.62, 0.85, n.y) * smoothstep(0.2, 0.5, mid + 0.25) * (1.0 - scree) * veg_amount;
 	vec3 green = mix(vec3(0.1, 0.13, 0.05), vec3(0.13, 0.08, 0.09), smoothstep(0.45, 0.65, fbm3(wp * 0.3 + 61.0)));
-	col = mix(col, green * (0.8 + 0.3 * fine), veg);
+	// (on the ledges and the cliff's top, as the concept's plan: brown soil and thin grass between bare rock)
+	green = mix(green, vec3(0.22, 0.17, 0.11) * (0.8 + 0.4 * fine), smoothstep(0.35, 0.6, fbm3(wp * 0.18 + 71.0)) * 0.8);
+	col = mix(col, green * (0.8 + 0.3 * fine), veg * smoothstep(0.3, 0.6, fbm3(wp * 0.11 + 81.0)));
 	ALBEDO = col * tint;
 	ROUGHNESS = mix(rough, 0.95, veg);
 	AO = mix(ao, 1.0, veg);

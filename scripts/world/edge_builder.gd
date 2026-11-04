@@ -32,6 +32,7 @@ var far_pines: MultiMeshInstance3D
 var ledge_pines: MultiMeshInstance3D
 var block_batches: Array[MultiMeshInstance3D] = []   ## the rock's blocks, one batch per shape (_blocks)
 var scree_solid := 0      ## how many of the scree's blocks are solid
+var slab_count := 0       ## block tops laid on the ledges and the pavement (_slabs)
 var wires: MeshInstance3D
 static var draw_always := false   ## build what's drawn only even with no screen (test_arena_edge)
 var placed := {}      ## key -> PackedVector3Array: where each batch's instances stand (_batch)
@@ -212,6 +213,9 @@ func _wall() -> void:
 			var q3 := q0 + 1
 			if verts[q0].distance_squared_to(verts[q3]) + verts[q1].distance_squared_to(verts[q2]) < 1e-6:
 				continue   # (closed up above the top, or squeezed out under the ground)
+			var dr := Vector2(verts[q3].x, verts[q3].z).length() - Vector2(verts[q0].x, verts[q0].z).length()
+			if dr > 0.8 and verts[q3].y - verts[q0].y < dr * 0.35:
+				continue   # (a ledge between tiers: near level, set back; the height field draws it, as ground)
 			idx.append_array(PackedInt32Array([q0, q1, q2, q0, q2, q3]))   # (facing the wood)
 	var surf := []
 	surf.resize(Mesh.ARRAY_MAX)
@@ -319,7 +323,7 @@ func _rock_dressing() -> void:
 				var b := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(tall, tall, tall) * Vector3(_rng.randf_range(0.8, 1.2), 1.0, _rng.randf_range(0.8, 1.2)))
 				px.append(Transform3D(b, at))
 				pc.append(Color(1, 1, 1) * _rng.randf_range(0.85, 1.05))
-			elif _rng.randf() < 0.7:
+			elif _rng.randf() < 0.25:
 				var size := _rng.randf_range(0.5, 1.4)
 				hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size, size * 0.45, size)), at))
 				hc.append(_heather_colour())
@@ -340,6 +344,11 @@ func _blocks() -> void:
 	for k in BLOCK_SHAPES:
 		sets.append([[], []])
 	_scree_blocks(sets)
+	var slab_set := [[], []]
+	_slabs(slab_set)
+	var bm := BoxMesh.new()   # (flat-topped: stretched thin, a chamfered block's uneven corners shade as broken halves)
+	var slabs := _batch("slabs", bm, slab_set[0], slab_set[1])
+	slabs.material_override = _rock_mat_instanced()
 	for k in BLOCK_SHAPES:
 		var mi := _batch("blocks_%d" % k, meshes[k], sets[k][0], sets[k][1])
 		mi.material_override = _rock_mat_instanced()
@@ -466,6 +475,58 @@ func _ledge_growth(hx: Array, hc: Array) -> void:
 ## The talus's earthy patches (the shader's soil, the same noise): 0..1.
 func _soil(p: Vector2) -> float:
 	return _vnoise(p * 0.09 + Vector2(13.0, 13.0)) * 0.7 + _vnoise(p * 0.2 + Vector2(3.0, 9.0)) * 0.3
+
+
+## Block tops (as the concept's plan: the ledges and the cliff's top are bare blocks, soil and thin grass in the joints
+## between them, not lawns): flat blocks tiled across every ledge and over a strip of limestone pavement along the top's
+## edge, SLAB.x..SLAB.y m along the cliff, in rows across, a little proud, turned with the cliff, gaps between (the
+## grikes); none on a perch. Drawn only (a bird skims them; they stand under half a metre proud).
+const SLAB := Vector3(2.5, 7.0, 12.0)   ## m: least and most along the cliff, and how deep the pavement runs past the top
+func _slabs(set: Array) -> void:
+	var perches := []
+	for p in layout.perches:
+		if p.tree_id == layout.rock_tree:
+			perches.append(Vector2(p.position.x, p.position.z))
+	var arc := -Escarpment.HALF * esc.foot
+	var lim := Escarpment.HALF * esc.foot * Escarpment.BEND_FROM * 1.4   # (where the cliff is near: not out round its arms)
+	arc = -lim
+	while arc < lim:
+		var len := _rng.randf_range(SLAB.x, SLAB.y)
+		var theta := esc.at + (arc + len * 0.5) / esc.foot
+		arc += len + _rng.randf_range(0.1, 0.6)
+		var col := esc.column(theta)
+		if col.is_empty() or col[0] < 0.4:
+			continue
+		var bands := []   # [from, to, height]: each ledge, and the pavement past the top
+		for l in esc.ledges(col, 1.6):
+			bands.append([float(l[0]) + 0.3, float(l[1]) - 0.3, float(l[2])])
+		var ts := esc.top_start(col)
+		bands.append([ts + 0.6, ts + SLAB.z, esc.height_in(col, ts + 2.0)])
+		var out := Vector3(sin(theta), 0.0, cos(theta))
+		var along := Vector3.UP.cross(out).normalized()
+		for band in bands:
+			var r: float = float(band[0]) + _rng.randf_range(0.0, 0.8)
+			while r < float(band[1]) - 0.8:
+				var depth := minf(_rng.randf_range(1.5, 5.0), float(band[1]) - r)
+				var c := r + depth * 0.5
+				r += depth + _rng.randf_range(0.1, 0.5)
+				var along_off := _rng.randf_range(-0.25, 0.25) * len   # (rows not lined up)
+				var len_here := len * _rng.randf_range(0.55, 1.0)
+				var p := Vector2(sin(theta), cos(theta)) * c + Vector2(along.x, along.z) * along_off
+				var near := false
+				for q in perches:
+					if (q as Vector2).distance_to(p) < 2.2:
+						near = true
+				if near or _rng.randf() < 0.22:   # (gaps: soil, a lost slab)
+					continue
+				var h := esc.height_in(col, c)
+				var thick := _rng.randf_range(0.35, 0.8)
+				var proud := _rng.randf_range(0.12, 0.4)
+				var basis := Basis(along * len_here, Vector3.UP * thick, out * (depth - _rng.randf_range(0.1, 0.4)))
+				basis = Basis(Vector3.UP, _rng.randf_range(-0.14, 0.14)) * Basis(along, _rng.randf_range(-0.04, 0.04)) * Basis(out, _rng.randf_range(-0.04, 0.04)) * basis
+				set[0].append(Transform3D(basis, Vector3(p.x, ArenaLayout.GROUND_Y + h + proud - thick * 0.5, p.y)))
+				set[1].append(_stone_colour())
+				slab_count += 1
 
 
 func _stone_colour() -> Color:
@@ -779,7 +840,7 @@ func _heather_colour() -> Color:
 
 func _rock_mat_instanced() -> Material:
 	var m := _rock_mat("rock_boulder_dry", 2.4, Color(0.8, 0.83, 0.9), 0.0, false)
-	m.set_shader_parameter("veg_amount", 0.3)   # (a little moss on the blocks' tops, not a lawn)
+	m.set_shader_parameter("veg_amount", 0.15)   # (a little moss on the blocks' tops, not a lawn)
 	m.set_shader_parameter("fracture", 0.5)
 	m.set_shader_parameter("fracture_size", 0.5)
 	return m

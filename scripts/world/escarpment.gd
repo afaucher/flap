@@ -9,7 +9,7 @@ extends RefCounted
 ## at faults (FAULT), each hard or soft; cut by two sets of near-vertical joints at uneven spacings (JOINTS), each
 ## joint running through a few beds and stopping; so the wall is panels -- a bed between two joints -- each set back
 ## from the foot by its bed's softness (hard beds over soft jut as lips, overhanging), its own random amount, now and
-## then a lost block, a slight tilt of its own, and the benches below it (BENCHES: two beds whose tops are ledges,
+## then a lost block, a slight tilt of its own, and the tiers below it (TIERS: the cliff steps back at two beds,
 ## coming and going along the cliff). The wall is a sheet, radius out from the middle against height, per angle
 ## (column(): rows up each bed); the ground over it, the height field, is its envelope (height_in: the highest rock
 ## at that distance out -- solid under the lips, for the collision and the AI), with the scree in front (and flat
@@ -32,13 +32,13 @@ const SCREE := 11.0                 ## m: the least talus width (the scree block
 const SCREE_H := 5.5                ## m: the least talus height
 ## The talus apron the wall stands in: up to TALUS.x..TALUS.y of the cliff's mean height up its face, sloping at TALUS.z
 ## deg (a little steeper than scree's angle of repose where the wood is close), as the concept's lower half is.
-const TALUS := Vector3(0.38, 0.58, 37.0)
+const TALUS := Vector3(0.3, 0.48, 37.0)
 const BAY := Vector2(24.0, 10.0)    ## the foot's bays and buttresses: m along (their size), m in and out
 const BED := Vector2(3.4, 0.5)     ## a bed's thickness: m (its median), and its spread (lognormal)
 const BED_DIP := 0.05               ## how the beds rise along the cliff (m per m: about 3 deg)
 const FAULT := Vector3(35.0, 70.0, 2.6)   ## fault blocks along the cliff: m long (least, most), the most a fault throws
 const FAULT_RAMP := 2.5             ## m along the cliff a fault's step takes
-const JOINTS := [Vector2(5.0, 0.55), Vector2(11.0, 0.6)]   ## two sets: spacing m along a bed (median), its spread
+const JOINTS := [Vector2(8.0, 0.5), Vector2(14.0, 0.55)]   ## two sets: spacing m along a bed (median), its spread
 const RUN_ON := 0.6                 ## the chance a joint carries on into the bed above (long joints, as the concept's)
 const SLANT := Vector2(0.45, 0.35)  ## the share of beds whose joints run aslant, and the most they lean (m per m up)
 const SOFT := 0.55                  ## m a soft bed stands back behind a hard one (so a hard one over it juts)
@@ -46,7 +46,13 @@ const PANEL := 0.45                 ## m each panel stands out or back on its ow
 const LOSS := Vector2(0.05, 1.3)    ## the chance a panel's block is gone, and how deep the hole
 const PANEL_TILT := 0.08            ## the most a panel's face turns from the cliff's line (m per m along it)
 const LEAN := 0.045                 ## m the wall leans back per m up
-const BENCHES := [[19.0, 4.4], [27.0, 3.4]]   ## [height m, width m]: the beds nearest these heights are ledges
+## The cliff in tiers (as the concept's plan: a deep stepped band of block tops, not one wall): the beds from those
+## nearest these heights (at the sector's middle) up are a tier set back from the one below, by TIER_BACK (least, most)
+## varying along the cliff -- a deep staircase in some stretches, near one wall in others -- and each tier's line
+## wanders in plan on its own (TIER_WANDER m), so in plan the tiers' lips are separate lines; their tops are ledges.
+const TIER_H := [18.0, 29.0]
+const TIER_BACK := Vector2(1.5, 20.0)
+const TIER_WANDER := 3.0
 const ROW_F := [0.03, 0.18, 0.34, 0.5, 0.66, 0.82, 0.97]   ## the sheet's rows up each bed (fractions, foot to top)
 const BULGE := Vector2(0.4, 0.15)   ## m: a face's gentle swell over a few metres, and its roughness over one
 ## A panel's face broken into planar facets -- the rock's own fracturing, not a texture: [m across, the most one
@@ -56,11 +62,11 @@ const SKYLINE := Vector3(24.0, 30.0, 44.0)    ## the top: m per stretch, its hei
 const GULLY := Vector3(28.0, 3.0, 1.6)   ## m: a deep cleft in the cliff about every x along it, y deep, z wide
 const PLATEAU := 30.0               ## m past the top's edge it rises (the hills take over beyond)
 const BUTTRESS := 4.5               ## m the foot wanders in and out
-const REACH := 24.0                 ## m past the foot: the soft wall in its sector (just past the top's edge)
+const REACH := 40.0                 ## m past the foot: the soft wall in its sector (just past the top's edge)
 const STONES := 9                   ## flat-topped stones on the scree, perches
 const STONE_R := Vector2(0.9, 1.6)  ## m: their tops' radius
 const STONE_H := Vector2(1.6, 3.2)  ## m: their tops' height
-const PERCH_EVERY := [11.0, 26.0]   ## m along the cliff between perches on each tier's ledge, foot up
+const PERCH_EVERY := [10.0, 32.0]   ## m along the cliff between perches on each tier's ledge, foot up
                                                 ## (none on the top tier: nothing up there to settle on)
 const PERCH_DISC := 0.45            ## m: a ledge perch's footing (Perch.treetop's disc)
 const LEDGE_BANDS := [Vector2(0.5, 9.0), Vector2(9.0, 18.0)]   ## m above the talus: the heights each tier's perches are sought at
@@ -74,7 +80,7 @@ var _stones := []   ## [Vector2 centre, top radius, top height] (stones())
 var _beds := PackedFloat32Array()   ## each bed's foot's height at the sector's middle, before the dip and the faults
 var _hard := PackedFloat32Array()   ## each bed's hardness, 0..1
 var _joints := []   ## per bed, the joints crossing it: PackedFloat32Array of m along the cliff, sorted
-var _bench := []    ## per bed, how wide a bench it carries on its top (0: none)
+var _tier_of := PackedInt32Array()   ## per bed, its tier (0: the lowest)
 var _slant := PackedFloat32Array()   ## per bed, how its joints lean (m along per m up; 0: upright)
 var _cache := {}    ## column(), by angle in COLUMN_STEPs
 var _facets := []   ## per FRACTURES size: each cell's [jitter along, jitter up, set back, tilt along, tilt up], flat
@@ -127,7 +133,6 @@ func _lay() -> void:
 	var n := _beds.size() - 1
 	for b in n:
 		_joints.append([])
-		_bench.append(0.0)
 		_slant.append(SLANT.y * (_h(b * 6.7 + 2.2) * 2.0 - 1.0) if _h(b * 3.1 + 8.8) < SLANT.x else 0.0)
 	var span := HALF * foot + 12.0
 	for b in n:   # (each bed its own joints, both sets; a share carried on from the bed below, the rest stopping there)
@@ -166,12 +171,20 @@ func _lay() -> void:
 			t[i * 5 + 4] = _h(id + 2.9) * 2.0 - 1.0
 		_facets.append(t)
 		_facet_n.append(Vector2i(nx, nz))
-	for spec in BENCHES:   # (the bed whose top lies nearest each bench height carries it)
+	var starts := []   # (the bed whose foot lies nearest each tier's height starts it)
+	for th in TIER_H:
 		var best := 0
 		for b in n:
-			if absf(_beds[b + 1] - float(spec[0])) < absf(_beds[best + 1] - float(spec[0])):
+			if absf(_beds[b] - float(th)) < absf(_beds[best] - float(th)):
 				best = b
-		_bench[best] = float(spec[1])
+		starts.append(best)
+	_tier_of.resize(n)
+	for b in n:
+		var t := 0
+		for st in starts:
+			if b >= st:
+				t += 1
+		_tier_of[b] = t
 
 
 ## How much the beds stand raised `arc` m along the cliff: the dip, a fault block's throw, a gentle warp.
@@ -229,12 +242,12 @@ func _facet(arc: float, z: float, b: int, k: int) -> float:
 	return out
 
 
-## The benches under bed `b` at `arc`: how far it stands back for them (each comes and goes along the cliff).
-func _benches(b: int, arc: float) -> float:
-	var back := 0.0
-	for k in b:
-		if _bench[k] > 0.0:
-			back += _bench[k] * (0.5 + _n1(arc / 23.0 + k * 1.7)) * smoothstep(0.18, 0.38, _n1(arc / 41.0 + k * 5.3 + 2.0))
+## How far bed `b` stands back at `arc` for its tier: the setbacks of every tier under it, and its own wander.
+func _tier_back(b: int, arc: float) -> float:
+	var t := _tier_of[b]
+	var back := TIER_WANDER * (_n1(arc / 14.0 + t * 7.7) - 0.5) * 2.0
+	for k in range(1, t + 1):
+		back += lerpf(TIER_BACK.x, TIER_BACK.y, smoothstep(0.2, 0.8, _n1(arc / 47.0 + k * 5.1)))
 	return back
 
 
@@ -272,7 +285,7 @@ func _column(theta: float) -> PackedFloat32Array:
 		# wall of a bed or two, not a staircase of thin ones)
 		var z0 := _beds[b] + lift
 		var z1 := _beds[b + 1] + lift
-		var bed_back := _benches(b, arc) + cleft
+		var bed_back := _tier_back(b, arc) + cleft
 		var zc := (z0 + z1) * 0.5
 		for f in ROW_F:
 			var z := lerpf(z0, z1, f)
@@ -448,7 +461,7 @@ func _ledge_spot(i: int, arc: float) -> Array:
 	var band: Vector2 = LEDGE_BANDS[i] + Vector2.ONE * talus(col).y
 	for l in ledges(col):
 		var h: float = l[2]
-		if h < band.x or h >= band.y:
+		if h < band.x or h >= band.y or h > minf(col[3], mean_top()) - 4.0:   # (not up by the top)
 			continue
 		var depth: float = float(l[1]) - float(l[0])
 		var r: float = float(l[0]) + clampf(depth * 0.45, 0.6, 1.2)   # (back from the lip, on the level)
@@ -503,7 +516,8 @@ func talus_in(col: PackedFloat32Array, r: float) -> float:
 	if k <= 0.0:
 		return 0.0
 	k = minf(k, 1.0)
-	return t.y * pow(k, 1.3) * (0.92 + 0.16 * _n1(col[2] * 120.0 + r * 0.6))
+	var arc := off(col[2]) * foot   # (lumps in two directions, not streaks out from the middle)
+	return t.y * pow(k, 1.3) * (0.92 + 0.16 * _n1(arc * 0.35 + 3.0) * _n1(r * 0.6 + arc * 0.11))
 
 
 ## The tallest the escarpment stands at angle `theta` (its top's height).

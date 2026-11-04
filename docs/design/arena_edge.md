@@ -103,5 +103,8 @@ rock (90k triangles, one draw), the hills, and six instanced batches.
 
 ## Looking at it
 
+Measuring the cliff against its concept, and the process for retuning it: `cliff_from_concept.md`
+(`.\tools\cliff_measure.ps1` after every change: the scorecard).
+
 `.\run.ps1`-style, windowed: `Godot --path . -- --run-test probe_edge_view --out-dir <dir> --heading cliff|heath|away`
 (chase shots at crown height, among the trunks, over the canopy, an overview; `--no-fog`, `--look <name>`).
