@@ -74,7 +74,11 @@ func _follow(dt: float) -> void:
 	var want_look := _look_dir(t)
 	if _look.dot(want_look) < -0.98:   # (turned right round, a perch faced the other way: slerp has no axis between opposites)
 		_look = _look.rotated(Vector3.UP, 0.3).normalized()
-	_look = _look.slerp(want_look, 1.0 - exp(-4.0 * dt)).normalized()
+	var w := 1.0 - exp(-4.0 * dt)
+	if _look.dot(want_look) > 0.0 and _look.cross(want_look).length_squared() < 1e-12:
+		_look = _look.lerp(want_look, w).normalized()   # (all but the same: slerp's axis, from so small a cross product, comes out of unit length and errors)
+	else:
+		_look = _look.slerp(want_look, w).normalized()
 	_orbit = _orbit.lerp(look_input, 1.0 - exp(-6.0 * dt))
 	var look := _orbited(_look)
 	var want := _desired(target, look)

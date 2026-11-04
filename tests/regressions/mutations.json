@@ -2939,5 +2939,19 @@
     "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
    }
   ]
+ },
+ {
+  "id": "camera-slerp-hair-off",
+  "bug": "The chase camera slerped its look onto the bird's when the two were all but the same (a hair, 1e-20, off a level look): slerp's axis, from so small a cross product, came out of unit length and the engine errored every frame (2026-11-03).",
+  "tests": [
+   "test_chase_camera_turn"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/chase_camera.gd",
+    "find": "\tif _look.dot(want_look) > 0.0 and _look.cross(want_look).length_squared() < 1e-12:\n",
+    "replace": "\tif false:\n"
+   }
+  ]
  }
 ]

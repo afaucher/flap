@@ -504,7 +504,7 @@ func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs:
 ## little above the floor and running out along the floor's ridge over it, half buried in the litter, then under it.
 func _roots(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
-	var k := float(FloorField.FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+	var k := FloorField.foot_k(t)
 	for rt in FloorField.roots_of(t):
 		var dir := Vector3(rt[0].x, 0.0, rt[0].y)
 		var h: float = rt[1]
@@ -532,6 +532,8 @@ func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
 	var top_share := 0.65 if oak else (0.4 if t.kind == ArenaLayout.Kind.PINE else 0.25)
 	var flare := 0.55 if oak else (0.3 if t.kind == ArenaLayout.Kind.PINE else 0.1)
+	if t.form == "veteran":
+		flare = 0.45   # (an old pine's foot spreads)
 	var segs := 22 if oak else (18 if t.kind == ArenaLayout.Kind.PINE else 7)
 	var n := 26 if t.kind != ArenaLayout.Kind.SAPLING else 5
 	var pts := PackedVector3Array()

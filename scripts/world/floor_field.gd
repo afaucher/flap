@@ -18,7 +18,7 @@ const RES := 0.5            ## m between the grid's points
 const MOUND_H := 0.22       ## m: the mounds at their highest
 const MOSS_SHARE := 0.2     ## of the floor
 const DIRT_SHARE := 0.08
-const FOOT := {"dome": Vector2(0.1, 1.6), "ridge": Vector3(0.2, 0.3, 2.6), "oak": 1.7}   ## dome: height m, its reach
+const FOOT := {"dome": Vector2(0.1, 1.6), "ridge": Vector3(0.2, 0.3, 2.6), "oak": 1.7, "veteran": 1.45, "pole": 0.5}   ## dome: height m, its reach
 	## past the trunk m; ridge: height at the trunk m, half width m, length m; an oak's foot that much bigger
 static var feet := true      ## the trunks' feet in the floor (off: the floor runs flat up to the trunks, for A/B)
 const BAND := 0.05          ## the signals' half width about their edges (noise units: the shader's ragged edge works in it)
@@ -91,7 +91,7 @@ static func _feet(a: ArenaLayout, f: FloorField, h: PackedFloat32Array, moss: Pa
 	for t in a.trees:
 		if t.kind != ArenaLayout.Kind.PINE and t.kind != ArenaLayout.Kind.BROADLEAF:
 			continue
-		var k := float(FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+		var k := foot_k(t)
 		var c: Vector2 = t.base
 		var roots := roots_of(t)
 		var reach: float = t.radius + float(FOOT.ridge.z) * k * 1.3
@@ -129,7 +129,7 @@ static func _feet(a: ArenaLayout, f: FloorField, h: PackedFloat32Array, moss: Pa
 ## one from each of the trunk's four flare lobes (ArenaBuilder._trunk's, where its mesh swells) and two smaller between.
 ## The floor's ridges over them (here) and the bark-covered roots drawn along them (ArenaBuilder._roots) both read these.
 static func roots_of(t: ArenaLayout.TreeData) -> Array:
-	var k := float(FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+	var k := foot_k(t)
 	var seed := fmod(t.id * 0.6180339, 1.0)   # (as ArenaBuilder._pinewood gives the trunk its lobes)
 	var out := []
 	for q in 4:   # (where the trunk's mesh swells: sin(4a + seed * 7) = 1; its ring at angle a points (-sin a, -cos a))
@@ -139,6 +139,13 @@ static func roots_of(t: ArenaLayout.TreeData) -> Array:
 		var ang := (PI * 0.5 - seed * 7.0) / 4.0 + (q * 2 + 1) * PI * 0.25 + (_hash(t.id * 7.7 + q) - 0.5) * 0.4
 		out.append([Vector2(-sin(ang), -cos(ang)), FOOT.ridge.x * k * 0.55, FOOT.ridge.z * k * 0.6, FOOT.ridge.y * k * 0.7])
 	return out
+
+
+## How big tree `t`'s foot is, against a mature pine's: an oak's broad, a veteran pine's bigger, a pole's slight.
+static func foot_k(t: ArenaLayout.TreeData) -> float:
+	if t.kind == ArenaLayout.Kind.BROADLEAF:
+		return float(FOOT.oak)
+	return float(FOOT.get(t.form, 1.0))
 
 
 ## A root ridge's height `along` m out from the bark (of `height` at the trunk, `length` long).

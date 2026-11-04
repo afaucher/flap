@@ -22,7 +22,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/flight/`: `BirdProfile` (species numbers, derived polar), `FlightModel` (pure, headless-testable),
   `EnergyModel` (burst + stamina), `FlightInput`.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
+  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans (`TreeData.form`;
+  `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
   `TimberMesh` each (framing, ironwork, rail, the hangar back-right seen from the rail, ammo boxes, and drawn-only
   props: rope coil, windsock, pennants; every vertex carries its piece's grain frame, so `planks.gdshader`
   draws end grain on end faces and maps the planks scan at its true scale). Collision: deck box, rail capsule,
