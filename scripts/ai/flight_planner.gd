@@ -208,7 +208,7 @@ func _usable(k: Vector3i) -> bool:
 	if _node_ok.has(k):
 		return _node_ok[k]
 	var p := _pos(k)
-	var ok := Vector2(p.x, p.z).length() < layout.boundary - 2.0 and p.y < layout.ceiling and layout.clear_by(p, clearance + 0.3)
+	var ok := Vector2(p.x, p.z).length() < layout.reach(Vector2(p.x, p.z)) - 2.0 and p.y < layout.ceiling and layout.clear_by(p, clearance + 0.3)
 	_node_ok[k] = ok
 	return ok
 

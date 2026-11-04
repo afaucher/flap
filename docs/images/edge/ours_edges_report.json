@@ -1,0 +1,76 @@
+{
+ "bed_thickness_m": {
+  "n": 16,
+  "median": 3.87,
+  "mean": 3.76,
+  "cv": 0.4,
+  "p10": 1.97,
+  "p90": 5.59
+ },
+ "joint_spacing_m": {
+  "n": 344,
+  "median": 4.12,
+  "mean": 5.31,
+  "cv": 0.98,
+  "p10": 0.59,
+  "p90": 10.93
+ },
+ "joints_per_bed": {
+  "n": 15,
+  "median": 28.0,
+  "mean": 23.93,
+  "cv": 0.42,
+  "p10": 8.6,
+  "p90": 33.6
+ },
+ "joints_running_on": 0.28,
+ "lip_fraction_of_bed_feet": 0.36,
+ "lip_depth_m": {
+  "n": 2641,
+  "median": 1.13,
+  "mean": 1.33,
+  "cv": 0.69,
+  "p10": 0.44,
+  "p90": 2.6
+ },
+ "proud_of_surroundings_m": {
+  "p50": 0.0,
+  "p90": 0.77,
+  "p99": 2.72,
+  "over_0.5m": 0.167,
+  "over_1m": 0.066
+ },
+ "crease_dirs": {
+  "horizontal": 0.27,
+  "vertical": 0.37,
+  "of_face": 0.336
+ },
+ "image_segments_front_shaded": {
+  "segments": 2395,
+  "length": {
+   "n": 2395,
+   "median": 20.0,
+   "mean": 26.33,
+   "cv": 0.81,
+   "p10": 12.58,
+   "p90": 47.5
+  },
+  "horizontal": 0.11,
+  "vertical": 0.89,
+  "oblique": 0.0,
+  "angle_hist_15deg": [
+   0.055,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.44,
+   0.447,
+   0.001,
+   0.0,
+   0.0,
+   0.0,
+   0.057
+  ]
+ }
+}

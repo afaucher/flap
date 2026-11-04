@@ -18,6 +18,7 @@ func _ready() -> void:
 		ForestLight.far_blur = false
 	if Boot.arg_value(args, "--crowns") != "":
 		Pinewood.crown_density = float(Boot.arg_value(args, "--crowns"))
+	Pinewood.cliff = args.has("--cliff")
 	layout = Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
 	if Boot.arg_value(args, "--light") == "grey":
 		Game.add_environment(self)

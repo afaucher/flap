@@ -36,7 +36,7 @@ func setup() -> void:
 		var space := b.get_world_3d().direct_space_state
 		var solid := 0
 		for t in posts:
-			var c := Vector3(t.base.x, 3.0, t.base.y)
+			var c := Vector3(t.base.x, ArenaLayout.GROUND_Y + t.height * 0.5, t.base.y)
 			var side := Vector3(-t.base.y, 0.0, t.base.x).normalized()
 			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(c - side * 2.0, c + side * 2.0, ArenaBuilder.WORLD_LAYER))
 			if not hit.is_empty() and (hit.position as Vector3).distance_to(c) < ArenaLayout.POST_RADIUS + 0.05:

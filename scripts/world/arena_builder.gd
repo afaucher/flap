@@ -11,6 +11,7 @@ var layout: ArenaLayout
 var tree_bodies: Array[StaticBody3D] = []   ## by tree id
 var placed := {}   ## key -> PackedVector3Array: where each batch's instances stand (_batch)
 var highlight: MeshInstance3D      ## the landing mark (show_candidate)
+var edge: EdgeBuilder              ## beyond the boundary (the pine wood's): the escarpment, the heath, the fence
 var _hl_mat: StandardMaterial3D
 var _mats := {}
 ## False: the solid wood only -- trunks, limbs, outposts, the ground and every collision shape -- without the bark's
@@ -39,6 +40,7 @@ func steps(l: ArenaLayout) -> Array:
 			out.append(["Needles and leaves", _crowns, 0.14])
 			out.append(["Bracken on the forest floor", _floor, 0.14])
 		out.append(["Building the outposts", _outposts, 0.08])
+		out.append(["The heath and the hills", _edge, 0.2])
 	else:
 		out.append(["Planting the trees", _greybox, 0.9])
 	out.append(["", _highlight, 0.0])
@@ -87,6 +89,9 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
+		sm.set_shader_parameter("heath_on", true)
+		sm.set_shader_parameter("heath_from", layout.boundary - 16.0)   # (grass coming in among the last trees, as in the
+		sm.set_shader_parameter("heath_to", layout.boundary + 4.0)      # heath concept: a wide, ragged change)
 		var mo := "res://assets/textures/ground/forest_leaves_02/forest_leaves_02"   # (the moss: assets/LICENSES.md)
 		sm.set_shader_parameter("use_moss_scan", true)
 		sm.set_shader_parameter("moss_albedo", load(mo + "_diff_4k.jpg"))
@@ -173,6 +178,7 @@ func _strip(a: Vector3, b: Vector3, width: float, m: Material) -> MeshInstance3D
 
 
 const POST_COLOR := Color(0.62, 0.36, 0.30)
+const FENCE_POST_COLOR := Color(0.34, 0.3, 0.26)   ## the pine wood's: weathered, unpainted (as the heath concept's)
 
 
 ## An edge post as drawn: a straight painted post (its body is the tree's: a cylinder of its radius and height).
@@ -184,7 +190,7 @@ func _post_mesh(t: ArenaLayout.TreeData) -> MeshInstance3D:
 	cyl.height = t.height
 	cyl.radial_segments = 16
 	mi.mesh = cyl
-	mi.material_override = _mat("post", POST_COLOR)
+	mi.material_override = _mat("fence_post", FENCE_POST_COLOR) if layout.style == "pinewood" else _mat("post", POST_COLOR)
 	mi.position.y = t.height * 0.5
 	return mi
 
@@ -349,10 +355,12 @@ func _pinewood() -> void:
 	_crowns()
 	_floor()
 	_outposts()
+	_edge()
 
 
 const TREES_A_STEP := 40   ## trees built between a loading screen's frames
 var _cells := {}           ## the pine wood's trunk and limb arrays, by material and cell, as the trees go up
+var _rock_id := -1         ## the escarpment's ROCK entry in the trees (its body is the edge's: _edge)
 
 
 ## Trees `i0` to `i1`: their collision bodies, their trunks and limbs into the cells' arrays (_pinewood_wood meshes them).
@@ -360,6 +368,10 @@ func _pinewood_trees(i0: int, i1: int) -> void:
 	var cells := _cells
 	for ti in range(i0, i1):
 		var t: ArenaLayout.TreeData = layout.trees[ti]
+		if t.kind == ArenaLayout.Kind.ROCK:   # (the escarpment's: EdgeBuilder builds it, its body stands in, _edge)
+			_rock_id = t.id
+			tree_bodies.append(null)
+			continue
 		var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 		var body := StaticBody3D.new()
 		body.name = "Tree%d" % t.id
@@ -430,6 +442,16 @@ func _pinewood_wood() -> void:
 func _outposts() -> void:
 	for o in layout.outposts:
 		_outpost(o)
+
+
+## Beyond the boundary (EdgeBuilder): the heath, the hills, the fence, and the escarpment when there is one.
+func _edge() -> void:
+	edge = EdgeBuilder.new()
+	edge.name = "Edge"
+	add_child(edge)
+	edge.build(layout)
+	if _rock_id >= 0:
+		tree_bodies[_rock_id] = edge.rock_body
 
 
 ## The bark materials (bark.gdshader; textures in assets/textures/bark, assets/LICENSES.md): [A, B, settings].
@@ -663,7 +685,7 @@ func _crowns() -> void:
 		mi.material_override = _foliage_mat(k, _CARDS[k])
 
 
-func _foliage_mat(key: String, spec: Dictionary, extra := {}) -> ShaderMaterial:
+static func _foliage_mat(key: String, spec: Dictionary, extra := {}) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = FOLIAGE_SHADER
 	m.set_shader_parameter("tex", FoliageTex.get_tex(spec.tex))

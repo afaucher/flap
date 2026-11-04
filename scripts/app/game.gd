@@ -78,6 +78,7 @@ func _ready() -> void:
 		ForestLight.setup(self)
 	else:
 		_environment()
+	Pinewood.cliff = args.has("--cliff")   # (the escarpment at the edge: on hold, off unless asked for)
 	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(arena_seed)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(arena_seed))
 	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
 	HdrOutput.add(self)

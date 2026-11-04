@@ -13,7 +13,8 @@ extends RefCounted
 ##            so the bird, its rider and the trees you fly among stay sharp); `far_blur` false (--no-far-blur) or
 ##            F5 in the game and the range turns it off
 ## Returns the sun.
-## Looks (LOOKS; `--look <name>`, F6 in the game and the range steps through them; golden by default): the
+## Looks (LOOKS; `--look <name>`, F6 in the game and the range steps through them; golden by default; clear for the
+## arena-edge concepts): the
 ## afternoon above, and others laid over it -- sun, sky, haze and grade -- each a set of property overrides plus an
 ## optional per-channel tone curve (`curve`: input level -> output colour, a colourist's split-tone). probe_grade
 ## renders them for comparing; docs/design/color_grading.md.
@@ -38,6 +39,18 @@ const LOOKS := {
 		"env.volumetric_fog_density": 0.005, "env.volumetric_fog_albedo": Color(1.0, 0.9, 0.76),
 		"env.ambient_light_color": Color(0.58, 0.48, 0.36),
 		"curve": [[0.0, Color(0.015, 0.01, 0.005)], [0.25, Color(0.26, 0.235, 0.2)], [0.6, Color(0.62, 0.59, 0.52)], [1.0, Color(1.0, 0.97, 0.88)]],
+	},
+	# Clear: the arena-edge concepts' (r5_edge_split): bright, high-key midday under a clean blue sky, a near-white
+	# sun higher up, thin air (the far hills blue with distance, not cream), neutral shadows; grey rock reads grey.
+	"clear": {
+		"sun.rotation_degrees:x": -42.0, "sun.light_color": Color(1.0, 0.95, 0.88), "sun.light_energy": 2.5,
+		"sun.light_volumetric_fog_energy": 0.6,
+		"sky.rayleigh_coefficient": 2.8, "sky.mie_coefficient": 0.004, "sky.turbidity": 3.0,
+		"env.tonemap_exposure": 0.95, "env.adjustment_saturation": 1.15, "env.adjustment_contrast": 1.12,
+		"env.fog_light_color": Color(0.66, 0.75, 0.88), "env.fog_sun_scatter": 0.15, "env.fog_density": 0.0009,
+		"env.fog_aerial_perspective": 0.6,
+		"env.volumetric_fog_density": 0.0008, "env.volumetric_fog_albedo": Color(0.92, 0.95, 1.0),
+		"env.ambient_light_color": Color(0.5, 0.55, 0.62), "env.ambient_light_energy": 0.45,
 	},
 	# Early morning: a pale sun from the other side, cool blue mist hanging in the wood, soft and low in contrast.
 	"misty_morning": {

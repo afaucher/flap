@@ -24,11 +24,11 @@ const HANGAR_SIDE := -1.0      ## which end of the deck it stands at (deck x): -
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
 ## What a tree is, for drawing it (the greybox arena's are all GENERIC; Pinewood grows the rest). POST: one of the
 ## arena's edge posts (add_posts), solid like a trunk, its top a perch -- somewhere to rest at the edge.
-enum Kind { GENERIC, PINE, BROADLEAF, SAPLING, POST }
+enum Kind { GENERIC, PINE, BROADLEAF, SAPLING, POST, ROCK }   ## (ROCK: the escarpment, standing in as its perches' "tree")
 const TOP_DOME := 0.12   ## a pine's broken-off top rises this share of its radius in the middle (ArenaBuilder._trunk)
 const POST_COUNT := 48
-const POST_HEIGHT := 6.0     ## m
-const POST_RADIUS := 0.25    ## m
+const POST_HEIGHT := 1.4     ## m: fence height (as the heath concept's posts; still a perch on each top)
+const POST_RADIUS := 0.18    ## m
 
 const TIERS := [
 	{"tier": Tier.UNDERSTORY, "count": 90, "h": Vector2(4.0, 9.0), "r": Vector2(0.12, 0.22), "spacing": 5.5, "branch_len": Vector2(0.9, 1.8)},
@@ -123,6 +123,14 @@ var avenues: Array = []             ## of [Vector2 a, Vector2 b, float half_widt
 ## Open ground in the wood (Pinewood): {centre: Vector2, r: float, ph: float, kind: "clearing" | "glade" | "gap"}
 ## -- no standing pine inside its edge (Pinewood.edge: irregular, about r out).
 var openings: Array = []
+## Beyond the boundary (Pinewood; Escarpment, EdgeBuilder): {at: angle round the ring, foot: m, seed} -- a cliff
+## along one sector, heath round the rest. Drawn and solid, all outside the boundary; in its sector the soft wall
+## stands out by the cliff (reach()), and it has perches (add_rock).
+var escarpment := {}
+var rock: Escarpment                ## the escarpment's shape (null: none), for the queries below
+var rock_tree := -1                 ## its ROCK entry in `trees` (its perches' tree_id)
+
+
 var floor_field: FloorField         ## the floor's mounds and patches (Pinewood; null: flat), what ground() reads
 var ring_radius := 56.0
 var ring_half_width := 5.0
@@ -281,6 +289,43 @@ func add_posts() -> void:
 		_add_perch(top)
 
 
+## The escarpment (`escarpment` set): its shape for the queries, a ROCK entry in `trees` standing in as its perches'
+## tree (no trunk, no branches; not in the tree hash: the queries test the rock itself, rock_clear), and its perches
+## (Escarpment.perch_spots: stones on the scree, ledges, fewer the higher).
+func add_rock() -> void:
+	rock = Escarpment.of(self)
+	if rock == null:
+		return
+	var t := TreeData.new()
+	t.id = trees.size()
+	t.kind = Kind.ROCK
+	t.tier = Tier.UNDERSTORY
+	t.base = Vector2(sin(rock.at), cos(rock.at)) * rock.foot
+	t.height = 0.0
+	t.radius = 0.0
+	t.crown_base = 0.0
+	trees.append(t)
+	rock_tree = t.id
+	for spot in rock.perch_spots():
+		_add_perch(Perch.treetop(perches.size(), spot[0], Escarpment.PERCH_DISC, spot[1], t.id))
+
+
+## The soft wall's radius toward `xz` (the boundary, or out by the cliff in the escarpment's sector).
+func reach(xz: Vector2) -> float:
+	return boundary if rock == null else rock.reach(atan2(xz.x, xz.y), boundary)
+
+
+## Is `pos` at least `d` clear of the escarpment's rock? (Its height under pos and a few points d round it.)
+func rock_clear(pos: Vector3, d: float) -> bool:
+	if rock == null or Vector2(pos.x, pos.z).length() < rock.foot - Escarpment.SCREE - d - 0.5:
+		return true
+	var y := pos.y - GROUND_Y - d
+	for o in [Vector2.ZERO, Vector2(d, 0.0), Vector2(-d, 0.0), Vector2(0.0, d), Vector2(0.0, -d)]:
+		if y < rock.height(pos.x + o.x, pos.z + o.y):
+			return false
+	return true
+
+
 ## The ground's height above GROUND_Y at (x, z): the floor's mounds where there are any (FloorField), else 0. What a
 ## bird stands on, a round bursts on, a feather settles on; the floor is drawn and solid at this height.
 func ground(x: float, z: float) -> float:
@@ -355,6 +400,12 @@ func segment_clear(a: Vector3, b: Vector3, clearance: float, ignore_tree := -1) 
 func segment_clear_among(near: Array, a: Vector3, b: Vector3, clearance: float, ignore_tree := -1, ignore_also := -1, decks: Variant = null) -> bool:
 	if a.y < GROUND_Y + ground(a.x, a.z) + clearance or b.y < GROUND_Y + ground(b.x, b.z) + clearance:
 		return false
+	# (the rock too, unless it's the "tree" left out: coming in to, or leaving, one of its perches)
+	if rock != null and ignore_tree != rock_tree and ignore_also != rock_tree and maxf(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length()) > rock.foot - Escarpment.SCREE - clearance - 0.5:
+		var n := maxi(1, ceili(a.distance_to(b) / 0.25))   # (the rock, sampled along the segment: only out by it)
+		for k in n + 1:
+			if not rock_clear(a.lerp(b, float(k) / n), clearance):
+				return false
 	var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance
 	var hi := Vector2(maxf(a.x, b.x), maxf(a.z, b.z)) + Vector2.ONE * clearance
 	for t in near:
@@ -392,11 +443,18 @@ func path_blocked_at(near: Array, pts: PackedVector3Array, clearance: float, ign
 		if o.tree_id != ignore_tree and o.tree_id != ignore_also:
 			os.append(o)
 	var floor_y := GROUND_Y + clearance
+	var see_rock := rock != null and ignore_tree != rock_tree and ignore_also != rock_tree
 	for i in pts.size() - 1:
 		var a := pts[i]
 		var b := pts[i + 1]
 		if a.y < floor_y + ground(a.x, a.z) or b.y < floor_y + ground(b.x, b.z):
 			return i
+		# (the rock, as segment_clear_among sees it: sampled along the chord, only out by it)
+		if see_rock and maxf(Vector2(a.x, a.z).length(), Vector2(b.x, b.z).length()) > rock.foot - Escarpment.SCREE - clearance - 0.5:
+			var n := maxi(1, ceili(a.distance_to(b) / 0.25))
+			for k in n + 1:
+				if not rock_clear(a.lerp(b, float(k) / n), clearance):
+					return i
 		if ts.is_empty() and os.is_empty():
 			continue
 		var lo := Vector2(minf(a.x, b.x), minf(a.z, b.z)) - Vector2.ONE * clearance
@@ -499,6 +557,8 @@ func _deck_lines(o: OutpostData) -> Array:
 ## Is `pos` farther than `d` from every trunk, branch and deck: obstacle_distance(pos, search) > d, answered at the
 ## first piece of wood within d (and without measuring any tree that can't reach that close).
 func clear_by(pos: Vector3, d: float, search := 12.0) -> bool:
+	if not rock_clear(pos, d):
+		return false
 	for t in trees_near_segment(pos, pos, search):
 		if Vector2(pos.x, pos.z).distance_to(t.base) - t.reach() - BOX_MARGIN > d:
 			continue
