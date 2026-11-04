@@ -148,4 +148,10 @@ func _drawn() -> void:
 		var m := big.process_material as ParticleProcessMaterial
 		check(m.direction.y > 0.9 and m.initial_velocity_min > 0.5, "rising")
 		check(Vector2(big.global_position.x, big.global_position.z).distance_to(Vector2(5, 5)) < 0.01 and big.visibility_aabb.end.y > 50.0, "over its thermal, up to its top")
+		# Points of light, not snowflakes (0.22 m soft discs read as a snowfall up close).
+		var quad := big.draw_pass_1 as QuadMesh
+		var mat := quad.material as ShaderMaterial if quad != null else null
+		check(quad != null and quad.get_aabb().size.x < 0.06, "a mote is a speck: %s m across" % [quad.get_aabb().size.x if quad != null else -1.0])
+		check(mat != null and mat.shader.code.contains("blend_add"), "a mote adds light (a glint, not a pale disc)")
+		check(mat != null and not mat.shader.code.contains("unshaded") and mat.shader.code.contains("void light()"), "a mote is lit by the sun (it glints in the sunbeams, not in the shade)")
 	fx.queue_free()

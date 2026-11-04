@@ -9,6 +9,7 @@ const WORLD_LAYER := 1
 
 var layout: ArenaLayout
 var tree_bodies: Array[StaticBody3D] = []   ## by tree id
+var placed := {}   ## key -> PackedVector3Array: where each batch's instances stand (_batch)
 var highlight: MeshInstance3D      ## the landing mark (show_candidate)
 var _hl_mat: StandardMaterial3D
 var _mats := {}
@@ -81,9 +82,52 @@ func _ground() -> void:
 		sm.set_shader_parameter("scan_normal", load(g + "_nor_gl_2k.jpg"))
 		sm.set_shader_parameter("scan_arm", load(g + "_arm_2k.jpg"))
 		sm.set_shader_parameter("scan_tint", Color(0.62, 0.58, 0.52))
+		var mo := "res://assets/textures/ground/forest_leaves_02/forest_leaves_02"   # (the moss: assets/LICENSES.md)
+		sm.set_shader_parameter("use_moss_scan", true)
+		sm.set_shader_parameter("moss_albedo", load(mo + "_diff_4k.jpg"))
+		sm.set_shader_parameter("moss_normal", load(mo + "_nor_gl_4k.jpg"))
+		sm.set_shader_parameter("moss_arm", load(mo + "_arm_4k.jpg"))
+		var ff := layout.floor_field
+		if ff != null:
+			sm.set_shader_parameter("use_field", true)
+			sm.set_shader_parameter("field", ImageTexture.create_from_image(ff.image()))
+			sm.set_shader_parameter("field_origin", ff.origin)
+			sm.set_shader_parameter("field_size", ff.size)
+			sm.set_shader_parameter("field_res", FloorField.RES)
+			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart); the big plane draws only
+			# round it. Solid at the same height: a heightmap from the same field (so a bird stands, a round bursts and
+			# a feather settles on the mound it's drawn on).
+			var fine := MeshInstance3D.new()
+			fine.name = "FloorMounds"
+			var grid := PlaneMesh.new()
+			grid.size = Vector2(ff.size, ff.size)
+			grid.subdivide_width = int(ff.size / FLOOR_STEP)
+			grid.subdivide_depth = int(ff.size / FLOOR_STEP)
+			fine.mesh = grid
+			fine.position = Vector3(ff.origin.x + ff.size * 0.5, ArenaLayout.GROUND_Y, ff.origin.y + ff.size * 0.5)
+			fine.custom_aabb = AABB(Vector3(-ff.size * 0.5, -0.1, -ff.size * 0.5), Vector3(ff.size, FloorField.MOUND_H + 0.2, ff.size))   # (the mounds rise in the shader)
+			var fm := sm.duplicate() as ShaderMaterial
+			fm.set_shader_parameter("displace", 1.0)
+			fine.material_override = fm
+			body.add_child(fine)
+			sm.set_shader_parameter("hole_r", ff.size * 0.5 - 1.0)
+			var hcs := CollisionShape3D.new()
+			hcs.name = "FloorMoundsShape"
+			var hm := HeightMapShape3D.new()
+			hm.map_width = ff.n
+			hm.map_depth = ff.n
+			hm.map_data = ff.heights()
+			hcs.shape = hm
+			hcs.position = fine.position
+			hcs.scale = Vector3(FloorField.RES, 1.0, FloorField.RES)
+			body.add_child(hcs)
 	mi.material_override = sm
 	body.add_child(mi)
 	add_child(body)
+
+
+const GRASS_PER_M2 := 3.5   ## grass tussocks sown to the square metre over the openings (_grass)
+const FLOOR_STEP := 0.4   ## m between the fine floor mesh's vertices (where the litter's mounds are drawn)
 
 
 ## Pale strips on the ground under the clearing, avenues and ring: the flight paths, readable from the air.
@@ -332,6 +376,8 @@ func _pinewood_trees(i0: int, i1: int) -> void:
 			tree_bodies.append(body)
 			continue
 		_trunk(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
+		if FloorField.feet and (t.kind == ArenaLayout.Kind.PINE or oak):
+			_roots(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
 		for lb in t.limbs:
 			_tube(_cell(cells, cell, lb[2]), lb[0], lb[1], 9 if float(lb[1][0]) > 0.05 else 6, _TILE[lb[2]], fmod(seed + (lb[0] as PackedVector3Array)[0].y * 0.37, 1.0))
 		for br in t.branches:
@@ -455,11 +501,40 @@ func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs:
 
 
 ## A trunk: tapering, flared at its foot, a little out of round and wobbling up its height; capped at the top.
+## Tree `t`'s roots as drawn (FloorField.roots_of): each a tapering bark-covered tube leaving the trunk's flare a
+## little above the floor and running out along the floor's ridge over it, half buried in the litter, then under it.
+func _roots(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
+	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
+	var k := FloorField.foot_k(t)
+	for rt in FloorField.roots_of(t):
+		var dir := Vector3(rt[0].x, 0.0, rt[0].y)
+		var h: float = rt[1]
+		var length: float = rt[2]
+		var r0 := 1.1 * h + 0.04 * k   # (thick where it leaves the trunk, a lobe of its flare)
+		var pts := PackedVector3Array()
+		var radii := PackedFloat32Array()
+		for i in 9:
+			var u := float(i) / 8.0
+			var along := lerpf(-t.radius * 0.6, length * 0.7, u)
+			var r := r0 * pow(1.0 - u * 0.85, 1.4)
+			var ground := ArenaLayout.GROUND_Y + layout.ground(c.x + dir.x * (t.radius + along), c.z + dir.z * (t.radius + along))
+			# (its back out of the litter near the trunk, sinking under it within a metre or so)
+			var show := lerpf(0.55, -1.3, smoothstep(0.15, 0.8, u))
+			var top := ground + r * show
+			if along < 0.0:   # (inside the trunk's flare: up into it)
+				top += -along * 0.9
+			pts.append(c + dir * (t.radius + along) + Vector3.UP * (top - r - ArenaLayout.GROUND_Y) + dir.cross(Vector3.UP) * (sin(u * 5.0 + seed * 9.0) * 0.05 * u))
+			radii.append(r)
+		_tube(arr, pts, radii, 7, _TILE["oak_trunk" if t.kind == ArenaLayout.Kind.BROADLEAF else "pine_trunk"], fmod(seed + h, 1.0))
+
+
 func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
 	var top_share := 0.65 if oak else (0.4 if t.kind == ArenaLayout.Kind.PINE else 0.25)
 	var flare := 0.55 if oak else (0.3 if t.kind == ArenaLayout.Kind.PINE else 0.1)
+	if t.form == "veteran":
+		flare = 0.45   # (an old pine's foot spreads)
 	var segs := 22 if oak else (18 if t.kind == ArenaLayout.Kind.PINE else 7)
 	var n := 26 if t.kind != ArenaLayout.Kind.SAPLING else 5
 	var pts := PackedVector3Array()
@@ -492,6 +567,11 @@ func _bark(key: String) -> ShaderMaterial:
 	for k in (spec[2] as Dictionary):
 		m.set_shader_parameter(k, spec[2][k])
 	m.set_shader_parameter("built", true)
+	if FloorField.feet and (key == "pine_trunk" or key == "oak_trunk"):   # (a moss collar on the shady side of the foot)
+		var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+		m.set_shader_parameter("moss_h", 1.6 if key == "oak_trunk" else 1.2)
+		m.set_shader_parameter("shade_dir", -Vector3(to_sun.x, 0.0, to_sun.z).normalized())
+		m.set_shader_parameter("moss_tex", load("res://assets/textures/ground/forest_leaves_02/forest_leaves_02_diff_4k.jpg"))
 	return m
 
 
@@ -512,8 +592,10 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], cus
 	mm.use_custom_data = not customs.is_empty()
 	mm.mesh = mesh
 	mm.instance_count = xfs.size()
+	var at := PackedVector3Array()   # (where they stand, for tests: headless, a MultiMesh's transforms don't read back)
 	for i in xfs.size():
 		mm.set_instance_transform(i, xfs[i])
+		at.append((xfs[i] as Transform3D).origin)
 		if mm.use_colors:
 			mm.set_instance_color(i, colors[i])
 		if mm.use_custom_data:
@@ -521,6 +603,7 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], cus
 	var mi := MultiMeshInstance3D.new()
 	mi.name = "Batch_" + key
 	mi.multimesh = mm
+	placed[key] = at
 	var m := _mat("pw_" + key, color)
 	m.vertex_color_use_as_albedo = mm.use_colors
 	mi.material_override = m
@@ -608,7 +691,7 @@ func _floor() -> void:
 		var lit := Pinewood.light(layout, p)
 		if rng.randf() > lerpf(0.4, 1.0, lit):
 			continue
-		var base := Vector3(p.x, ArenaLayout.GROUND_Y, p.y)
+		var base := Vector3(p.x, ArenaLayout.GROUND_Y + layout.ground(p.x, p.y), p.y)
 		var size := rng.randf_range(0.6, 1.4) * lerpf(0.8, 1.2, lit)
 		var phase := rng.randf()
 		var tint := Color(1, 1, 1).lerp(Color(1.1, 1.0, 0.75), rng.randf()) * rng.randf_range(0.85, 1.05)
@@ -629,6 +712,58 @@ func _floor() -> void:
 			cus.append(Color(base.x, base.y + size * 0.4, base.z, phase))
 	var mi := _batch("ferns", frond, Color.WHITE, xfs, cols, cus)
 	mi.material_override = _foliage_mat("ferns", {"tex": "fern", "tint": Color(1, 1, 1)}, {"bend": 0.35, "clump_normal": 0.45, "sway": 0.015, "flutter": 0.01, "backlight": 0.7})
+	_grass(rng)
+
+
+## Grass in the open: tussocks thick in the openings (the clearing, the glade, the gaps: the floor's sward there,
+## forest_floor.gdshader) and thinning out from their edges, a few in the brightest spots under the trees; FoliageTex's
+## grass on three crossed cards each. Drawn only.
+func _grass(rng: RandomNumberGenerator) -> void:
+	var tx := []
+	var tc := []
+	var tcu := []
+	var spots := PackedVector2Array()   # (sown over each opening and a margin round it, GRASS_PER_M2; and thinly everywhere)
+	for o in layout.openings:
+		var reach := float(o.r) * 1.25 + 4.0
+		for i in int(PI * reach * reach * GRASS_PER_M2):
+			spots.append(o.centre + Vector2.from_angle(rng.randf() * TAU) * reach * sqrt(rng.randf()))
+	for i in 9000:
+		spots.append(Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary)
+	for p in spots:
+		if p.length() > layout.boundary:
+			continue
+		var inside := 0.0   # (how far into an opening: 1 well in, falling to 0 four metres out past its edge)
+		for o in layout.openings:
+			var e := Pinewood.edge(o, p)
+			inside = maxf(inside, 1.0 - smoothstep(e - 2.0, e + 4.0, p.distance_to(o.centre)))
+		var want := inside * 0.9 + (1.0 - inside) * 0.15 * smoothstep(0.85, 1.0, Pinewood.light(layout, p))
+		if rng.randf() > want:
+			continue
+		var size := rng.randf_range(0.35, 0.75) * lerpf(0.75, 1.0, inside)
+		var at := Vector3(p.x, ArenaLayout.GROUND_Y + layout.ground(p.x, p.y), p.y)
+		tx.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size * 1.2, size * rng.randf_range(0.8, 1.2), size * 1.2)), at))
+		tc.append(Color(1.0, 0.95, 0.82).lerp(Color(0.8, 0.9, 0.62), rng.randf()) * rng.randf_range(0.7, 1.0))
+		tcu.append(Color(at.x, at.y + size * 0.3, at.z, rng.randf()))
+	var mi := _batch("grass", _tussock_mesh(), Color.WHITE, tx, tc, tcu)
+	mi.material_override = _foliage_mat("grass", {"tex": "grass", "tint": Color(1, 1, 1)}, {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6})
+
+
+## A grass tussock as drawn: three cards crossed at 60 deg, standing on the origin (unit size), lit as the sward
+## (normals mostly up).
+static func _tussock_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in 3:
+		var a := PI * i / 3.0
+		var side := Vector3(cos(a), 0.0, sin(a)) * 0.5
+		var face := Vector3(-sin(a), 0.0, cos(a))
+		var n := (face * 0.3 + Vector3.UP).normalized()
+		var q := [[-side, Vector2(0, 1)], [side, Vector2(1, 1)], [side + Vector3.UP, Vector2(1, 0)], [-side + Vector3.UP, Vector2(0, 0)]]
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.set_normal(n)
+			st.set_uv(q[k][1])
+			st.add_vertex(q[k][0])
+	return st.commit()
 
 
 ## An outpost (docs/images/concepts/r4_aces_outpost.jpg): a deck of hand-sawn planks nailed across two heavy

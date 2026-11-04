@@ -4,7 +4,8 @@ extends Node3D
 ## climbs and thinning out toward the top; up a ridge's face, the same along its edge. Enough to find a thermal
 ## from close by, and to see it working when circling in it.
 
-const FLUFF_SIZE := 0.22      ## m across, a mote (a seed head, lit: it has to show against the haze)
+const MOTE_SIZE := 0.035      ## m across, a mote (a seed head or a speck of dust catching the sun): a point of light
+const MOTES := preload("res://scripts/world/air_motes.gdshader")   ## (never under 2 px on screen, dimmer far off)
 const PER_M2 := 0.9          ## motes in the air per m^2 of a thermal's floor (its core's)
 
 
@@ -49,7 +50,7 @@ func build(air: AirField) -> void:
 		add_child(p)
 
 
-## Motes: `n` of them, each `life` s, soft round fluff lit by the sun, fading in at the floor and out up high.
+## Motes: `n` of them, each `life` s, points of sunlit fluff (air_motes.gdshader), fading in at the floor and out up high.
 static func _motes(n: int, life: float) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.amount = n
@@ -63,8 +64,8 @@ static func _motes(n: int, life: float) -> GPUParticles3D:
 	m.turbulence_noise_scale = 6.0
 	m.turbulence_influence_min = 0.05
 	m.turbulence_influence_max = 0.15
-	m.scale_min = 0.6
-	m.scale_max = 1.3
+	m.scale_min = 0.4
+	m.scale_max = 1.1
 	var fade := Gradient.new()
 	fade.offsets = PackedFloat32Array([0.0, 0.12, 0.7, 1.0])
 	fade.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
@@ -73,23 +74,10 @@ static func _motes(n: int, life: float) -> GPUParticles3D:
 	m.color_ramp = ramp
 	p.process_material = m
 	var quad := QuadMesh.new()
-	quad.size = Vector2(FLUFF_SIZE, FLUFF_SIZE)
-	var mat := StandardMaterial3D.new()
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.vertex_color_use_as_albedo = true
-	mat.albedo_color = Color(1.0, 0.96, 0.86, 0.9)
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED   # (sunlit fluff glints whichever way it's seen)
-	var dot := Gradient.new()
-	dot.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
-	var dt := GradientTexture2D.new()
-	dt.gradient = dot
-	dt.fill = GradientTexture2D.FILL_RADIAL
-	dt.fill_from = Vector2(0.5, 0.5)
-	dt.fill_to = Vector2(1.0, 0.5)
-	dt.width = 32
-	dt.height = 32
-	mat.albedo_texture = dt
+	quad.size = Vector2(MOTE_SIZE, MOTE_SIZE)
+	var mat := ShaderMaterial.new()
+	mat.shader = MOTES
+	mat.set_shader_parameter("size_m", MOTE_SIZE)
 	quad.material = mat
 	p.draw_pass_1 = quad
 	return p

@@ -159,6 +159,7 @@ func _structure(a: ArenaLayout) -> void:
 func _sightlines(a: ArenaLayout) -> void:
 	var hs := [5.0, 12.0, 18.0, 22.0, 26.0, 32.0]
 	var r := Pinewood.sightlines(a, hs, 120, 40.0, true)
+	print("SIGHTLINES share of level looks reaching 40 m: %s" % ", ".join(hs.map(func(h): return "%.0f m %.0f%%" % [h, float(r[h][2]) * 100.0])))
 	for h in hs:
 		check(float(r[h][2]) >= 0.33, "at %.0f m, a third of looks reach 40 m (%.0f%%)" % [h, float(r[h][2]) * 100.0])
 	check(float(r[12.0][2]) >= 0.75, "under the crowns most looks reach 40 m (%.0f%%)" % (float(r[12.0][2]) * 100.0))
@@ -169,10 +170,20 @@ func _pines(a: ArenaLayout) -> void:
 	var low_live := 0
 	var long_stubs := 0
 	var crown_ok := 0
+	var forms := {"": [], "pole": [], "veteran": []}   # (each pine's [height, trunk radius, crown reach, thickest limb])
 	for t in a.trees:
 		if t.kind != ArenaLayout.Kind.PINE:
 			continue
 		n += 1
+		var reach := 0.0
+		var thick := 0.0
+		for lb in t.limbs:
+			if lb[2] != "limb":
+				continue
+			thick = maxf(thick, float(lb[1][0]))
+			for q in lb[0]:
+				reach = maxf(reach, Vector2(q.x, q.z).distance_to(t.base))
+		forms[t.form].append([t.height, t.radius, reach, thick])
 		var limbs_up := 0
 		for br in t.branches:
 			if br.dead:
@@ -182,7 +193,8 @@ func _pines(a: ArenaLayout) -> void:
 				low_live += 1
 			else:
 				limbs_up += 1
-		if t.crown_base > t.height * 0.55 and limbs_up >= 6:
+		var cb: Vector2 = {"": Vector2(0.55, 0.75), "pole": Vector2(0.4, 0.6), "veteran": Vector2(0.38, 0.52)}[t.form]
+		if t.crown_base > t.height * cb.x and t.crown_base < t.height * cb.y and limbs_up >= (4 if t.form == "veteran" else 6):
 			crown_ok += 1
 		for f in t.foliage:
 			if (f[0] as Vector3).y < t.crown_base - 0.5:
@@ -190,7 +202,36 @@ func _pines(a: ArenaLayout) -> void:
 	check(n > 150, "a stand of pines (%d)" % n)
 	eq(low_live, 0, "no live limb or needles on a pine below its crown")
 	eq(long_stubs, 0, "the dead stubs are short")
-	eq(crown_ok, n, "every pine's crown is up top, with its whorls of limbs")
+	eq(crown_ok, n, "every pine's crown is up top (a pole's and a veteran's lower), with its whorls of limbs")
+	# Mixed ages: pole-stage pines fill the heights between the saplings and the mature stand, their crowns
+	# narrow and their trunks slim; a few veterans, shorter than the mature pines, thicker, their crowns broader
+	# on heavier limbs. (Measured from the trees as grown: their drawn limbs.)
+	var med := func(rows: Array, i: int) -> float:
+		var v := []
+		for r in rows:
+			v.append(r[i])
+		v.sort()
+		return v[v.size() / 2] if v.size() > 0 else NAN
+	var mid := 0
+	for f in forms:
+		for r in forms[f]:
+			mid += int(r[0] > 8.0 and r[0] < 18.0)
+	print("AGES mature %d (height %.1f, crown reach %.1f m), pole %d (%.1f, %.1f m), veteran %d (%.1f, %.1f m, trunk r %.2f, limbs r %.3f against %.3f)" % [forms[""].size(), med.call(forms[""], 0), med.call(forms[""], 2), forms.pole.size(), med.call(forms.pole, 0), med.call(forms.pole, 2), forms.veteran.size(), med.call(forms.veteran, 0), med.call(forms.veteran, 2), med.call(forms.veteran, 1), med.call(forms.veteran, 3), med.call(forms[""], 3)])
+	check(mid >= 30, "pole-stage pines fill the middle heights (%d pines 8-18 m)" % mid)
+	check(forms.veteran.size() >= 4, "a few veterans (%d)" % forms.veteran.size())
+	check(med.call(forms.pole, 2) < med.call(forms[""], 2) * 0.6 and med.call(forms.pole, 1) < 0.2, "a pole's crown is narrow (reach %.1f m against %.1f) and its trunk slim" % [med.call(forms.pole, 2), med.call(forms[""], 2)])
+	check(med.call(forms.veteran, 2) > med.call(forms[""], 2) * 1.35, "a veteran's crown is broad (reach %.1f m against %.1f)" % [med.call(forms.veteran, 2), med.call(forms[""], 2)])
+	var mature_r := 0.0
+	var mature_h := INF
+	for r in forms[""]:
+		mature_r = maxf(mature_r, r[1])
+		mature_h = minf(mature_h, r[0])
+	var stout := 0
+	for r in forms.veteran:
+		stout += int(r[1] > mature_r and r[0] < mature_h and r[3] > med.call(forms[""], 3) * 1.5)
+	eq(stout, forms.veteran.size(), "every veteran is thicker and shorter than any mature pine, on heavier limbs")
+	for o in a.outposts:
+		check(a.trees[o.tree_id].form == "", "outpost %d is on a mature pine or an oak, not a pole or a veteran" % o.id)
 
 
 func _oaks(a: ArenaLayout) -> void:

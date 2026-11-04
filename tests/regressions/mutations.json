@@ -1942,8 +1942,8 @@
   "edits": [
    {
     "file": "scripts/combat/projectile.gd",
-    "find": "var surface := \"ground\" if pos.y <= ArenaLayout.GROUND_Y else \"trunk\"",
-    "replace": "var surface := \"trunk\" if pos.y <= ArenaLayout.GROUND_Y else \"ground\""
+    "find": "var surface := \"ground\" if pos.y <= floor_y else \"trunk\"",
+    "replace": "var surface := \"trunk\" if pos.y <= floor_y else \"ground\""
    }
   ]
  },
@@ -2887,6 +2887,76 @@
   ]
  },
  {
+  "id": "floor-plane-over-mounds",
+  "bug": "The big ground plane drew under the wood too, flat at GROUND_Y through the fine floor mesh: z-fighting with it where its mounds are low, the mounds' feet cut off (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tsm.set_shader_parameter(\"hole_r\", ff.size * 0.5 - 1.0)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "floor-mounds-not-solid",
+  "bug": "The floor's mounds were drawn only, the collision flat at GROUND_Y: a bird landing on a mound stood inside it, rounds burst under it (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tbody.add_child(hcs)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "bird-ground-flat",
+  "bug": "The bird took the ground as flat at GROUND_Y for its ground effect and for settling: over a mound it settled inside it (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar floor_y := ArenaLayout.GROUND_Y + layout.ground(global_position.x, global_position.z)   # (the floor's mounds)",
+    "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
+   }
+  ]
+ },
+ {
+  "id": "round-bursts-under-mound",
+  "bug": "A round coming down onto the floor burst at GROUND_Y, under the mound it hit (2026-11-03).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/projectile.gd",
+    "find": "\tvar floor_y := ArenaLayout.GROUND_Y + (layout.ground(pos.x, pos.z) if layout != null else 0.0)   # (the floor's mounds)",
+    "replace": "\tvar floor_y := ArenaLayout.GROUND_Y"
+   }
+  ]
+ },
+ {
+  "id": "camera-slerp-hair-off",
+  "bug": "The chase camera slerped its look onto the bird's when the two were all but the same (a hair, 1e-20, off a level look): slerp's axis, from so small a cross product, came out of unit length and the engine errored every frame (2026-11-03).",
+  "tests": [
+   "test_chase_camera_turn"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/chase_camera.gd",
+    "find": "\tif _look.dot(want_look) > 0.0 and _look.cross(want_look).length_squared() < 1e-12:\n",
+    "replace": "\tif false:\n"
+   }
+  ]
+ },
+ {
   "id": "wood-relief-speckle",
   "bug": "The wood's grain relief took its slope from the screen's per-pixel derivatives over a 2.6x-deepened normal map: pixels tipped edge-on and shaded black, a speckle of dark dots along the boards and in shadows' edges (2026-11-03).",
   "tests": [
@@ -3005,6 +3075,20 @@
     "file": "scripts/bird/bird.gd",
     "find": "_perch_under(at) if v.length() <= profile.grab_speed_max else null",
     "replace": "_perch_under(at)"
+   }
+  ]
+ },
+ {
+  "id": "lock-sees-through-wood",
+  "bug": "Guard for the seeker lock's need for sight: a lock built and held through a trunk between shooter and target would make cover worthless (2026-11-03).",
+  "tests": [
+   "test_lock_sight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn layout == null or layout.segment_clear(muzzle(), b.global_position, 0.0)",
+    "replace": "\treturn true"
    }
   ]
  }

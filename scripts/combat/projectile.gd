@@ -90,10 +90,11 @@ func step(dt: float, layout: ArenaLayout, birds: Array) -> Dictionary:
 				alive = false
 				pos = q
 				return {"burst": q, "why": "fuse", "near": b, "surface": "bird"}
-	if pos.y <= ArenaLayout.GROUND_Y or (layout != null and not layout.segment_clear(prev, pos, 0.0)):
+	var floor_y := ArenaLayout.GROUND_Y + (layout.ground(pos.x, pos.z) if layout != null else 0.0)   # (the floor's mounds)
+	if pos.y <= floor_y or (layout != null and not layout.segment_clear(prev, pos, 0.0)):
 		alive = false
-		var surface := "ground" if pos.y <= ArenaLayout.GROUND_Y else "trunk"
-		pos.y = maxf(pos.y, ArenaLayout.GROUND_Y + 0.05)
+		var surface := "ground" if pos.y <= floor_y else "trunk"
+		pos.y = maxf(pos.y, floor_y + 0.05)
 		return {"burst": pos, "why": "impact", "surface": surface}
 	if age >= float(s.life):
 		alive = false
