@@ -3532,6 +3532,49 @@
   ]
  },
  {
+<<<<<<< HEAD
+  "id": "flap-damper-reads-thrust-as-bleed",
+  "bug": "The phugoid damper read a steady flapping climb's wingbeat thrust as speed bleeding away and held the nose about 5 deg low, so flap held at neutral stick flew fast and shallow instead of climbing (crow 2.1 m/s up at 12 m/s; the climb trim's 3.35 at 8.6) (2026-11-04).",
+  "tests": [
+   "test_flap_trim"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\t\ta_along += mean_flap_thrust(speed, flap_trim, _air_path).x\n",
+    "replace": ""
+=======
+  "id": "gun-ai-holds-fire",
+  "bug": "Guard for the AI's gun: fire control held every gun shot (the gun branch's placeholder), so an AI bird with the gun never fired (2026-11-04).",
+  "tests": [
+   "test_gun_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\t\treturn FireControl.miss(Projectile.Kind.GUN, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, t.turn) < take",
+    "replace": "\t\treturn false"
+>>>>>>> 3095af0
+   }
+  ]
+ },
+ {
+<<<<<<< HEAD
+=======
+  "id": "weapon-mix-gun-at-any-skill",
+  "bug": "Guard for the gun in the enemy mix: the AI's weakest weapon against a defending bird, it must go only to an easy side; a mix handing it out at every skill would arm an ace side with it (2026-11-04).",
+  "tests": [
+   "test_weapon_mix"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_skill.gd",
+    "find": "\tfor k in mini(roundi(gun_share * ids.size()), rest.size()):",
+    "replace": "\tfor k in mini(roundi(1.0 / 3.0 * ids.size()), rest.size()):"
+   }
+  ]
+ },
+ {
   "id": "flap-damper-reads-thrust-as-bleed",
   "bug": "The phugoid damper read a steady flapping climb's wingbeat thrust as speed bleeding away and held the nose about 5 deg low, so flap held at neutral stick flew fast and shallow instead of climbing (crow 2.1 m/s up at 12 m/s; the climb trim's 3.35 at 8.6) (2026-11-04).",
   "tests": [
@@ -3546,6 +3589,7 @@
   ]
  },
  {
+>>>>>>> 3095af0
   "id": "flap-trim-stays-glide",
   "bug": "Neutral stick stayed the best-glide angle of attack with flap held: the wingbeat's lift share slowed the bird to its stall speed (crow, falcon) or tipped it into a stalled, hovering climb (sparrow) instead of climbing on the wing (2026-11-04).",
   "tests": [
@@ -3584,6 +3628,7 @@
     "file": "scripts/flight/flight_model.gd",
     "find": "const CLIMB_MIN_SPEED := 1.0\n",
     "replace": "const CLIMB_MIN_SPEED := 0.0\n"
+<<<<<<< HEAD
    }
   ]
  },
@@ -3612,6 +3657,8 @@
     "file": "scripts/combat/ai/combat_skill.gd",
     "find": "\tfor k in mini(roundi(gun_share * ids.size()), rest.size()):",
     "replace": "\tfor k in mini(roundi(1.0 / 3.0 * ids.size()), rest.size()):"
+=======
+>>>>>>> 3095af0
    }
   ]
  }
