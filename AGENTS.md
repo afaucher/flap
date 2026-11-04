@@ -111,7 +111,14 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - Looks: `ForestLight.LOOKS` (golden by default, afternoon, misty_morning, overcast; `--look`, F6), graded as in
   `docs/design/color_grading.md` (`tests/probe_grade.gd` renders fixed views; `tools/grade_scopes.py` charts them
   beside the concept art).
-- `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
+- `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name: `.\probe.ps1 probe_x [args]`
+  (`-Headless` where no renderer is needed). **Keep windowed runs off the user's screen**: many sessions run tests and
+  renders at once, and each Godot window used to pop up over whatever the user was doing and take focus. The test
+  runner, `mutation_check.ps1`, `probe.ps1`, `run.ps1 --shot/--sheet` (or `-Hidden`) and `perf.ps1 -Hidden` start
+  Godot on a desktop of its own (`test_lib.ps1`, `FlapHidden`): it renders on the GPU as usual (the GPU tests' numbers
+  are the same) but is never on screen, never in the taskbar, never focused, and dies with the script that started
+  it. Don't launch a windowed Godot directly (`& $godot --path . -- ...`) for a render or check; use these.
+  `FLAP_SHOW_WINDOWS=1` puts them on the user's desktop, to watch one.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch tree and requires the named tests to fail (KILLED); a
   SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code. Entries run in

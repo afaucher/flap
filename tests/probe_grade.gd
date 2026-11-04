@@ -1,7 +1,7 @@
 extends TestCase
 ## The pine wood in ForestLight from three fixed views (toward the sun, across it, away from it), 1376 x 768 each,
 ## for grading against the concept art (docs/images/concepts/r4_aces_outpost.jpg). Windowed:
-##   Godot --path . -- --run-test probe_grade --out <prefix> [--look <name>] [--set '<json>']
+##   .\probe.ps1 probe_grade --out <prefix> [--look <name>] [--set '<json>']
 ## --set overrides properties after the look: {"env.tonemap_exposure": 1.3, "sun.light_energy": 3.5,
 ## "sky.turbidity": 12, "sun.rotation_degrees": [-18, 205, 0]} (colours as [r, g, b]).
 

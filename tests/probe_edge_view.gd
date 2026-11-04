@@ -2,7 +2,7 @@ extends TestCase
 ## The arena's edge as it is today, from inside the pine wood looking out across the boundary: reference shots for
 ## designing what lies beyond it (a cliff, a river and a rival wood, a balloon line, heath). A falcon with its rider
 ## and tack in the chase camera's place in most of them. Windowed:
-##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence | extents | top | top_aligned] [--look <name>] [--no-fog] [--tag <suffix>]
+##   .\probe.ps1 probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence | extents | top | top_aligned] [--look <name>] [--no-fog] [--tag <suffix>]
 ## Views: chase_canopy (at crown height, the edge 40 m ahead), chase_above (over the canopy), low_trunks (among the
 ## trunks at 6 m), overview (60 m up from the far side, the whole wood to its far edge).
 
