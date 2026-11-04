@@ -1,72 +1,150 @@
 # Flap
 
-A bird flight combat demo in Godot 4.7. Fly a bird around a greybox arena of trees, flap and glide, and catch
-perches to rest. This is the flight-model prototype; combat comes next.
+![A crow and its rider fire a rocket after a falcon, into the low sun over the pinewood](docs/images/readme/hero.jpg)
 
-## Run
+**Flap is a bird flight combat game.** You fly a war bird (crow, owl, hawk, falcon or sparrow) with a tiny rider in
+the saddle and a weapon pod each side of them, through a sunlit pinewood of tall trunks, clearings and plank
+outposts up in the trees. The birds really fly: lift, drag, stalls and stamina come from each species' wings and
+muscles, so height is speed, gliding is free, and landing on a branch is a skill. Built in Godot 4.7; Windows.
+
+## Get it and play
+
+You need the source and Godot 4.7 (`Godot_v4.7-stable_win64_console.exe`):
 
 ```powershell
-.\run.ps1                      # play (crow)
-.\run.ps1 --bird falcon        # crow | owl | hawk | falcon | sparrow
-.\run.ps1 --seed 3 --ai 5      # another arena, more AI birds
-.\run.ps1 --autopilot          # watch your bird fly itself (P toggles)
-.\run.ps1 --flying novice      # landing assist (hold catch: it steers you onto the marked perch), more stamina
-.\run.ps1 --scene res://scenes/rig_gallery.tscn --pose flap --view three   # the bird models side by side
-.\run.ps1 --scene res://scenes/rig_gallery.tscn --only hawk --view under --sun back   # one bird, backlit (add --feather-shader for the parked feather shader)
-.\run.ps1 --scene res://scenes/rig_gallery.tscn --pose folded --view feet --branch             # the detailed legs and feet (--legs capsules: the old ones)
-.\run.ps1 --scene res://scenes/bird_lab.tscn   # the bird lab: species, poses, take-offs and landings from several approaches; slow-mo, pause/step, onion-skin ghosts, orbit camera
-.\run.ps1 --scene res://scenes/bird_lab.tscn --bird hawk --scenario land_above --speed 0.25 --onion   # start straight into one
-.\run.ps1 --scene res://scenes/bird_lab.tscn --bird owl --scenario pose_folded --bones   # the skeleton drawn over the bird (B cycles: off / over / bones only)
-.\test_runner.ps1 -TestAll     # headless tests
-.\build.ps1                    # tests, then export build\windows\Flap.exe + zip
+git clone https://github.com/afaucher/flap.git
+cd flap
+$env:FLAP_GODOT = "C:\path\to\Godot_v4.7-stable_win64_console.exe"
+.\run.ps1
 ```
 
-Godot 4.7 is found via `$env:FLAP_GODOT`, Flap's own `build\deps` (gitignored), `..\cast\build\deps`, or
-`..\Hero-Reader\third_party\godot`. Export templates are copied from `..\cast\build\deps\godot-data` on the first
-build. Every build is stamped `yyyy-MM-dd.HHmmss` (`build.ps1`), shown in a corner of the game's HUD and the bird
-lab (`scripts/ui/build_version.gd`; a source run says `dev (...)`).
+`.\run.ps1` with nothing after it opens the menu. A gamepad is the best way to fly (its left stick has a real
+centre); mouse and keyboard work too.
+
+## The menu
+
+- **Flight**: just flying. Pick a bird and how it flies, then explore the wood, ride the thermals, practise landing.
+  No riders, no weapons.
+- **Fight**: pick your bird, what each of its two pods carries, how it flies, and the mode:
+  - **3 v 3 match**: you and two AI wingmen (teal) against three AI birds (warm), each side out from its own outpost.
+    The AI comes at **recruit**, **pilot** or **ace** skill. The score (top right) counts enemies downed; no time limit.
+  - **Target practice**: a target bird flies a racetrack over the clearing, your crow wingman circling above it.
+    Its straights are long enough to lock, its turns break the lock, and it breaks away when you lock or shoot it
+    (T: it flies straight).
+- **Lab**: the bird lab, for looking at the birds, their poses, take-offs and landings.
+
+**Novice or Realistic** (both screens; Novice is the menu's default). *Novice*: hold catch near a perch and the
+bird lines itself up and lands for you; every bird gets half as much stamina again, recovers it twice as fast and
+refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 
 ## Controls
 
-A gamepad is the recommended way to fly: the left stick has a real centre (wings level, best glide).
-
-| Gamepad | Keyboard + mouse | Effect |
+| Gamepad | Mouse + keyboard | What it does |
 |---|---|---|
-| Left stick | mouse (click to capture, Esc releases) | bank left/right; pull back = climb, lose speed, flare; push = dive, gain speed, tuck past half |
-| (let go) | (let go: drifts back; C / middle mouse snaps) | centre = wings level, best glide |
-| Left trigger | Space | flap (hold to keep flapping); from a perch or the ground: take off |
-| A (hold) | Ctrl (hold) | catch: hold it through the approach and the bird catches the perch the moment it's in reach and slow enough. On a perch, a fresh press lets go and drops. |
-| Right stick | | tilt / orbit the camera (springs back) |
-| Left stick while perched | mouse while perched | turn on the perch to look around; you leave the way you face |
-| Back / Start / Y | 1-5 / R / P | change bird / respawn / autopilot |
-| | F1 | show the key hints again |
-| | F3 | instruments and debug panel: speed tape, pitch ladder, bank arc, stick; angle of attack, CL, L/D, wing areas |
+| Left stick | Mouse (click to capture it, Esc lets go) | Bank left / right. Pull back: climb, slow down, flare. Push: dive, speed up, tuck. |
+| (let go) | C or middle mouse | Centre: wings level, best glide |
+| Left trigger | Space | Flap (hold to keep flapping); take off from a perch or the ground |
+| A (hold) | Ctrl (hold) | Catch: hold it through the approach to land on a perch; on a perch, press again to drop off |
+| Right trigger | Left mouse or F | Fire (hold: rockets four a second, the gun ten a second) |
+| RB | Q | Switch weapon (when your two pods carry different kinds) |
+| Right stick | | Look around (the camera springs back) |
+| | Mouse wheel | Zoom the camera in and out |
+| Start | R | Start over |
+| | F1 | Show the key hints again |
+| | F3 | Instruments: speed tape, pitch ladder, bank arc, angle of attack, lift / drag |
+| | F6 | The light: golden (default), afternoon, clear, misty morning, overcast |
 
-**HUD.**
-- Top left: your bird, burst and stamina (in a fight, health and rounds under them).
-- Speed shows where it matters, on the perch: hold catch and the perch you're heading for is marked, with a
-  gauge of your speed against the catch speed (green: it will hold; red: slow down).
-- Prompts at the bottom (stall, too fast, perched); key hints fade after a few seconds.
-- `--hud dev` puts every instrument on screen (speed tape, pitch ladder, bank arc, stick); `--hud ring` wraps the
-  status round the aim circle.
+## Flying
 
-**Audio.** The wind rises with speed. Each speed band boundary plays its own whoosh: rising when you speed up, falling when you slow down. When you drop under catch speed you hear it, and best glide has its own whoosh too. Wingbeats thump, each species its own (an owl's next to silent).
+- **Height is speed.** Dive to gain speed, climb to trade it back. Gliding costs nothing; flapping costs stamina,
+  and a tired bird's beats are weak. Hold flap with the stick centred and the bird climbs as well as it can.
+- **Thermals** rise over the clearings in Flight: you can see them by the seed fluff drifting up. Circle in one for
+  free height. (The air in a fight is calm for now.)
+- **Low and slow is dangerous.** A stalled wing drops the nose: let it, don't keep pulling. Near the ground (ground
+  effect) flapping is stronger, so a downed bird can flap back up.
+- **Landing on a perch.** Hold catch on the way in. The perch you'll reach is marked (where your flight path is
+  really heading as you sink and turn, not where the nose points) with a bar for your speed: green, slow enough to
+  hold on; red, slow down. Dive under the perch and swoop up to it, bleeding off speed. Sitting on a perch restores
+  stamina; on a perch, the stick turns you to look around and you leave the way you face.
 
-Everything else (`GameAudio`, `docs/design/audio_plan.md`):
-- **Combat:** launches with motors that ride each round, bursts by what they hit, feather puffs, the downed flutter.
-- **Lock tones:** beeps that quicken and rise as a lock builds, a steady tone once locked, a low pulse when someone is
-  locking you, and a warble that speeds up as a seeker closes.
-- **The base:** a clink for each round restocked, then a chime.
-- **Perches and trees:** talons on the perch, take-off pushes, bonks.
-- **Calls:** each species' contact call and alarm.
-- **The forest:** canopy wind louder with height, insects near the ground, pinewood birdsong.
+## Fighting
 
-The sounds are baked by `tools/bake_sounds.gd` from `SoundRecipes`; re-run it after changing a recipe.
+![Each pod carries rockets, seekers or a machine gun](docs/images/readme/hawk_rocket.jpg)
 
-**Perching.** Approach the perch slower than the catch speed (the perch's gauge turns green): dive under it and swoop up. Hold catch on the way in. The marked perch is the one your flight path is heading for (where you will actually go as you sink or turn), not the one the nose points at.
+Your rider's pods face forward: **you aim by flying the bird**. Each pod carries one kind:
 
-**Flying modes.** `--flying realistic` (the default) is the flight model as it is. `--flying novice` helps: while you hold catch with a perch marked, the bird steers itself onto it (blended with your stick; let go of catch to take it all back), brakes for a perch below you and marks perches from further out; every bird also gets half as much stamina again, recovers it twice as fast and refills its burst faster.
+- **Rockets** (three a pod). Unguided, with a proximity fuse: fly the sight onto the lead mark (where the target
+  will be when the rocket arrives) and fire from 8-22 m behind.
+- **Seekers** (two a pod). Guided. Hold an enemy within 15 deg of your nose for a second, 6-40 m away, to lock;
+  then fire and they steer themselves. **The lock needs a clear line**: a trunk, a branch or a deck between you
+  stops it building, and it drains if the line stays blocked. Leaves don't count.
+- **Machine gun** (40 rounds a pod; a tap fires three). Fast tracers out to about 40 m that have to hit the bird
+  itself. Each hit chips a feather; fire bursts at 6-18 m on the lead mark and keep it there.
 
-**Low and slow.** Ground effect (within about 1.5 spans of the ground) cuts drag and strengthens wingbeats, so a downed bird can flap back up.
+**Damage.** A hit knocks out the flight feathers nearest it, two or three at a time; the hurt wing loses lift and
+drops, so hold the stick against the roll. Eight feathers down and the bird falls. Hits within a second of the
+last take one feather at most (a bullet a third of one), so one salvo can't finish you: break away after the first
+hit. A downed bird comes back at its side's base a few seconds later, mended and rearmed.
 
-Design: `docs/design/flight_model.md`. Research: `docs/research/`.
+**Rearm at your base.** Each side's base is an outpost; perch on its rail for two seconds to restock every round
+and grow your lost feathers back. No other perch rearms. The HUD points home when you need it.
+
+**Staying alive.**
+- You're warned when someone is locking you. **Break toward the attacker's side** to swing out of its cone; don't
+  weave, and put a trunk between you.
+- A seeker already fired: **fly close past a trunk and hook in behind it**; the seeker cuts the corner into the wood.
+- Don't let a rocket bird settle behind you at close range: jink before it fires. Against the gun, keep turning.
+- **Keep your height**: no height means no dive to escape and no speed to turn.
+- **Friendly fire is on.** A teal cross over your sight means a teammate is in the line of fire: hold.
+- Out of rounds or losing feathers? Go home by a route away from the fight.
+
+The full set of tactics, bird by bird: [docs/tutorial/tactics.md](docs/tutorial/tactics.md).
+
+## The birds
+
+| Bird | Its round | How it fights |
+|---|---|---|
+| **Sparrow** | Rockets | Turn fighter: rolls fastest, at home low among the trunks, best at dragging seekers into wood. |
+| **Crow** | Seekers | All-rounder: hunts from 12-28 m and is hard to lock. |
+| **Owl** | Seekers | Ambusher: floats slowly, perches above the fight and drops on birds passing below. |
+| **Hawk** | Rockets | Boom and zoom: climbs above, stoops on the target, zooms back up. |
+| **Falcon** | Rockets | Boom and zoom, more so: the fastest stoop, the widest turn, needs its height. |
+
+(The round is what the AI birds carry; you choose your own pods.)
+
+## Gallery
+
+| | |
+|---|---|
+| ![An owl and rider loose a rocket into the backlit wood](docs/images/readme/owl_rocket.jpg) | ![A rocket bursts beside a bird among the trunks](docs/images/readme/burst.jpg) |
+| ![Birds and riders on an outpost's rail by the hangar](docs/images/readme/outpost.jpg) | ![A hawk banks past the edge of the wood](docs/images/readme/hawk_flyby.jpg) |
+| ![In play: a seeker lock building on a bird ahead, teammates' trails in teal](docs/images/readme/seeker_lock.jpg) | ![A crow and rider's machine gun sparking off a trunk past its target](docs/images/readme/gun.jpg) |
+
+---
+
+## Developing
+
+Everything runs from PowerShell in the repository root, with Godot 4.7 found via `$env:FLAP_GODOT`, then Flap's own
+`build\deps` (gitignored), `..\cast\build\deps`, or `..\Hero-Reader\third_party\godot`.
+
+```powershell
+.\run.ps1 --bird falcon --flying novice       # straight into flight, skipping the menu (see scripts/app/game.gd)
+.\range.ps1 -Match -Skill ace                 # straight into a fight (-Loadout gun,seekers, -Demo, ...)
+.\run.ps1 --scene res://scenes/bird_lab.tscn  # the bird lab
+.\test_runner.ps1 -TestAll                    # the test suite
+.\mutation_check.ps1                          # every fixed bug put back: each must be caught (KILLED)
+.\probe.ps1 probe_sizzle --out C:\shots --match   # a diagnostic or render (tests\probe_*.gd)
+.\build.ps1                                   # tests, then export build\windows\Flap.exe and a zip
+```
+
+- **The gate before merging to master:** `.\test_runner.ps1 -TestAll`, then `.\mutation_check.ps1`, all KILLED.
+  While iterating, `.\mutation_check.ps1 -Changed` checks only the entries your branch could affect.
+- **Fixing a bug:** add an entry to `tests/regressions/mutations.json` that puts it back, and check that
+  `.\mutation_check.ps1 -Only <id>` comes back KILLED.
+- **Probes** (`tests/probe_*.gd`) are diagnostics and renders run by name. They, the test runner and any
+  `--shot` run start Godot on a desktop of its own, so no window pops up over your work (`FLAP_SHOW_WINDOWS=1` to
+  watch one). `probe_sizzle` made the pictures on this page.
+- **Builds** are stamped `yyyy-MM-dd.HHmmss`, shown in a corner of the HUD (a source run says `dev`).
+- **Design docs:** `docs/design/` (start with `flight_model.md`; also `combat_ai.md`, `wing_rig.md`,
+  `audio_plan.md`, `performance.md`, `color_grading.md`), the research behind the numbers in `docs/research/`.
+- **[AGENTS.md](AGENTS.md)** has the full layout of the code, every subsystem and the project's rules.
