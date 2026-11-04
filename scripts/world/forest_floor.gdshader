@@ -147,7 +147,13 @@ void fragment() {
 	// Dirt: dark earth, grit and a few pale stones.
 	float grit = hash12(floor(p * 45.0));
 	vec3 dcol = earth * (0.85 + 0.3 * fbm3(p * 3.0)) * mix(1.0, 0.75 + 0.5 * grit, keep);
-	dcol = mix(dcol, vec3(0.35, 0.32, 0.27), step(0.985, hash12(floor(p * 9.0) + 2.0)) * keep * 0.8);
+	// (a few small stones: round, of different sizes, a jittered point a cell, earthy greys, not white)
+	vec2 sc = floor(p * 6.0);
+	vec2 so = (vec2(hash12(sc + 2.0), hash12(sc + 9.0)) * 0.6 + 0.2) / 6.0;
+	float srad = (0.012 + 0.03 * hash12(sc + 5.0)) * step(0.93, hash12(sc + 13.0));
+	float stone = 1.0 - smoothstep(srad * 0.6, srad, length(p - sc / 6.0 - so));
+	vec3 stone_col = vec3(0.2, 0.18, 0.15) * (0.8 + 0.4 * hash12(sc + 17.0));
+	dcol = mix(dcol, stone_col, stone * keep);
 	// The sward: short grass, green and straw, in the openings.
 	float blades = vnoise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * vec2(60.0, 9.0));
 	vec3 scol = mix(sward, sward * vec3(1.35, 1.25, 0.9), fbm3(p * 0.5 + 21.0)) * mix(1.0, 0.75 + 0.5 * blades, keep);
