@@ -5,7 +5,8 @@ extends RefCounted
 ## The bird's attitude is two numbers relative to its own flight path: angle of attack `alpha` (nose above
 ## the path) and bank `bank` (roll about the path). The stick commands both; they slew toward the command at
 ## the profile's rates. So the bird is always coordinated (no sideslip), never tumbles, and "neutral stick"
-## is the best-glide angle of attack: let go of the mouse and it settles onto its ideal glide slope.
+## is the best-glide angle of attack: let go of the mouse and it settles onto its ideal glide slope. With flap held,
+## neutral stick eases over to the climb trim instead (climb_alpha: the fastest steady climb no slower than best glide).
 ##
 ## Forces: lift L = q S CL(alpha) along the lift vector (perpendicular to the path, tilted by bank), drag
 ## D = q S (CD0 + K CL^2 + stall drag) against the path, gravity, flap thrust during a downstroke.
@@ -56,6 +57,25 @@ var pitch_damping := 1.0
 var turn_assist := 0.6      ## share of the extra lift a bank needs that is added automatically
 var auto_sweep := 0.35      ## wing tuck at twice best-glide speed, with no push at all
 
+# --- Flapping trim (part of the stick's mapping, not an assist) ------------------------------------
+## Neutral stick is best glide only while gliding. With flap held it slides over to `climb_alpha`, the angle of attack
+## of the fastest steady climb on the wing no slower than best-glide speed (best_climb(); docs/design/flight_model.md,
+## "Flapping trim"), and back to best glide when the wingbeats stop. The slide eases at FLAP_TRIM_TIME both ways, so
+## neither the first wingbeat nor letting go jerks the nose.
+const FLAP_TRIM_TIME := 0.4         ## s, time constant of the slide between the glide and the climb trims
+## The climb trim flies no slower than this times best-glide speed. The fastest climb of all (Vy) is slower, 1.0-1.3x
+## the stall speed, but only 2-9% faster: there letting go dives the bird to the edge of the stall, a turn stalls it,
+## and an AI that flaps when slow stays slow and flaps itself out.
+const CLIMB_MIN_SPEED := 1.0
+## ... and keeps its angle of attack under this share of the one that would tip a flapping climb off the wing into a
+## stalled, hovering one (only the sparrow, whose wingbeat lifts more than its weight when slow, comes near it).
+const CLIMB_ALPHA_MARGIN := 0.9
+var climb_alpha := 0.0      ## rad, neutral stick's angle of attack with full-strength wingbeats held
+## 0 .. 1: how far neutral stick has slid to climb_alpha: the held wingbeats' strength, eased (a weak, tired
+## wingbeat trims only part of the way: its best climb is near the glide's).
+var flap_trim := 0.0
+var _duty := -1.0           ## flap_duty(), once worked out
+
 # --- Outputs (read by the HUD, camera, rig) --------------------------------------------------------
 var lift_dir := UP
 var speed := 0.0
@@ -80,6 +100,7 @@ func _init(p: BirdProfile) -> void:
 	profile = p
 	energy = EnergyModel.new(p)
 	alpha = p.alpha_best
+	climb_alpha = best_climb().x
 
 
 ## Start flying from `pos` along `dir` at `spd` (alpha at best glide, wings level).
@@ -94,6 +115,7 @@ func launch(pos: Vector3, dir: Vector3, spd: float) -> void:
 	var flat := Vector3(dir.x, 0.0, dir.z)
 	_heading_dir = flat.normalized() if flat.length() > 0.05 else Vector3.FORWARD
 	_last_drag_accel = 0.0
+	flap_trim = 0.0
 	_update_frame()
 
 
@@ -101,15 +123,22 @@ func launch(pos: Vector3, dir: Vector3, spd: float) -> void:
 const STALL_STICK := 0.85
 
 
-## Commanded angle of attack for a stick pitch (-1 push .. +1 pull).
+## Neutral stick's angle of attack now: best glide, slid toward climb_alpha while flap is held (flap_trim).
+func trim_alpha() -> float:
+	return lerpf(profile.alpha_best, climb_alpha, flap_trim)
+
+
+## Commanded angle of attack for a stick pitch (-1 push .. +1 pull). Full pull and full push are the same whatever
+## the trim; the travel between them is laid out from the trim.
 func alpha_for_stick(y: float) -> float:
 	var p := profile
+	var neutral := trim_alpha()
 	if y >= 0.0:
 		if y <= STALL_STICK:
-			return lerpf(p.alpha_best, p.alpha_stall * 0.98, y / STALL_STICK)
+			return lerpf(neutral, p.alpha_stall * 0.98, y / STALL_STICK)
 		var top := p.alpha_stall + deg_to_rad(p.alpha_pull_over_deg)
 		return lerpf(p.alpha_stall * 0.98, top, (y - STALL_STICK) / (1.0 - STALL_STICK))
-	return lerpf(p.alpha_best, deg_to_rad(p.alpha_push_deg), minf(1.0, -y * 2.0))
+	return lerpf(neutral, deg_to_rad(p.alpha_push_deg), minf(1.0, -y * 2.0))
 
 
 ## Lift coefficient with a soft stall: linear to the stall angle, then it sags to ~65% over 10 degrees.
@@ -131,6 +160,128 @@ func drag_coefficient(c_l: float, a: float, f: float) -> float:
 	if a > p.alpha_stall:
 		c += 1.3 * pow(sin(a), 2.0) * smoothstep(p.alpha_stall, p.alpha_stall + deg_to_rad(8.0), a)
 	return c
+
+
+## Wingbeat thrust (m/s^2, during a downstroke at full strength, before ground effect) at airspeed `v`: strongest at a
+## standstill, fading as (1 - v/cap)^2 so flapping has a top speed.
+func flap_accel_at(v: float) -> float:
+	return profile.flap_accel * pow(clampf(1.0 - v / profile.flap_speed_cap, 0.0, 1.0), 2.0)
+
+
+## How far a wingbeat's thrust tilts up from the flight path (rad) at airspeed `v`: mostly lift when slow, mostly
+## forward at best-glide speed and above.
+func flap_tilt_at(v: float) -> float:
+	return deg_to_rad(lerpf(profile.flap_tilt_slow_deg, profile.flap_tilt_deg, clampf(v / profile.v_best, 0.0, 1.0)))
+
+
+## The share of the time a held wingbeat drives, as step() counts it: the downstroke and the whole beat each round
+## up to whole physics ticks (a sparrow's 0.1 s beat drives 4 ticks in 7 at 60 Hz: 0.57, not the downstroke's 0.5).
+func flap_duty() -> float:
+	if _duty >= 0.0:
+		return _duty
+	var dt := 1.0 / Engine.physics_ticks_per_second
+	var drive := 0
+	var ft := profile.flap_period * profile.downstroke
+	while ft > 0.0:
+		drive += 1
+		ft = maxf(0.0, ft - dt)
+	var beat := 1
+	var cool := maxf(0.0, profile.flap_period - dt)
+	while cool > 0.0:
+		beat += 1
+		cool = maxf(0.0, cool - dt)
+	_duty = float(drive) / beat
+	return _duty
+
+
+## The wingbeat's thrust averaged over the beat at airspeed `v` and strength `s`, split along the path (x) and across
+## it toward the lift (y), for a path `gamma` above the horizon: below best-glide speed the thrust is aimed partly from
+## the heading (step()), so it tilts up from the path by less the steeper the climb.
+func mean_flap_thrust(v: float, s: float, gamma: float) -> Vector2:
+	var k := clampf(v / profile.v_best, 0.0, 1.0)
+	var theta := flap_tilt_at(v) - (1.0 - k) * gamma
+	var t := flap_accel_at(v) * s * flap_duty()
+	return Vector2(t * cos(theta), t * sin(theta))
+
+
+## Steady flight at airspeed `v` with flap held at strength `s`, wings level and undamaged: Vector2(angle of attack,
+## path angle). Per kg, along the path  T_along - D = g sin(gamma)  and across it  L + T_across = g cos(gamma), with
+## L and D from the polar (the auto-sweep's tuck included) and T from the wingbeat as step() flies it. The path angle
+## that balances them is found by bisection; the angle of attack is the one whose lift is what's left. Vector2(NAN, ..)
+## where there is none: the thrust alone outclimbs the weight (a hovering climb, not flight on the wing), or the wing
+## can't lift what's left.
+func steady_flapping(v: float, s := 1.0) -> Vector2:
+	var lo := deg_to_rad(-60.0)
+	var hi := deg_to_rad(85.0)
+	if _steady_along(v, s, hi) > 0.0 or _steady_along(v, s, lo) < 0.0:
+		return Vector2(NAN, hi)
+	for i in 40:
+		var mid := 0.5 * (lo + hi)
+		if _steady_along(v, s, mid) > 0.0:
+			lo = mid
+		else:
+			hi = mid
+	var gamma := 0.5 * (lo + hi)
+	var c_l := _steady_cl(v, s, gamma)
+	if c_l > profile.cl_max or c_l < -0.6:
+		return Vector2(NAN, gamma)
+	return Vector2(c_l / profile.cl_alpha, gamma)
+
+
+static var _climb_cache := {}
+
+
+## The fastest steady climb on the wing with flap held at strength `s`, no slower than `min_speed` (m/s; by default
+## CLIMB_MIN_SPEED x best-glide speed, the climb trim): Vector3(angle of attack, airspeed, climb rate). Climb rate is
+## v sin(gamma) from steady_flapping, scanned over airspeed. A held wingbeat spends the same burst every second whatever
+## the bird does, so the fastest climb is also the most height per wingbeat: the efficient climb, as the minimum-power
+## speed is a real bird's (Pennycuick). It stays on the stable side (a slower speed needs more angle of attack, so
+## slowing drops the nose), and under CLIMB_ALPHA_MARGIN of the most angle of attack any slower steady flight needs:
+## past that a flapping climb tips into a stalled, hovering one (the sparrow's wingbeat lifts more than its weight at a
+## standstill). Falls back to best glide if there is no steady climb. Worked out once per set of numbers.
+func best_climb(s := 1.0, min_speed := -1.0) -> Vector3:
+	var p := profile
+	var floor_v := min_speed if min_speed >= 0.0 else CLIMB_MIN_SPEED * p.v_best
+	var key := "%s|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%f|%d" % [p.id, p.mass, p.wing_area, p.span, p.oswald,
+		p.glide_ratio, p.cl_max, p.flap_period, p.downstroke, p.flap_accel, p.flap_speed_cap, p.flap_tilt_deg,
+		p.flap_tilt_slow_deg, p.fold_area_cut, p.fold_span_cut, p.fold_drag_cut, auto_sweep, s, floor_v,
+		Engine.physics_ticks_per_second]
+	if _climb_cache.has(key):
+		return _climb_cache[key]
+	var best := Vector3(p.alpha_best, p.v_best, -INF)
+	var hump := -INF        # the most angle of attack a steady flight slower than this one needs
+	var last := INF
+	var step := p.v_stall * 0.02
+	var v := p.v_stall * 0.5
+	while v < p.v_best * 2.5:
+		var st := steady_flapping(v, s)
+		if not is_nan(st.x):
+			var climb := v * sin(st.y)
+			if v >= floor_v and st.x < last and st.x <= CLIMB_ALPHA_MARGIN * hump and climb > best.z:
+				best = Vector3(st.x, v, climb)
+			hump = maxf(hump, st.x)
+			last = st.x
+		v = floor_v if v < floor_v and v + step > floor_v else v + step   # (the floor itself is one of the speeds tried)
+	_climb_cache[key] = best
+	return best
+
+
+## The lift coefficient a steady flapping flight at (v, gamma) needs: what the thrust leaves of the weight's share.
+func _steady_cl(v: float, s: float, gamma: float) -> float:
+	var p := profile
+	var f := auto_sweep * smoothstep(p.v_best, p.v_best * 2.0, v)
+	var qs := 0.5 * BirdProfile.RHO * v * v * p.wing_area * (1.0 - p.fold_area_cut * f) / p.mass
+	return (BirdProfile.G * cos(gamma) - mean_flap_thrust(v, s, gamma).y) / maxf(qs, 1e-6)
+
+
+## Along-path force per kg left over in a steady flapping flight at (v, gamma): falls as the path steepens.
+func _steady_along(v: float, s: float, gamma: float) -> float:
+	var p := profile
+	var f := auto_sweep * smoothstep(p.v_best, p.v_best * 2.0, v)
+	var qs := 0.5 * BirdProfile.RHO * v * v * p.wing_area * (1.0 - p.fold_area_cut * f) / p.mass
+	var c_l := _steady_cl(v, s, gamma)
+	var c_d := drag_coefficient(c_l, c_l / p.cl_alpha, f)
+	return mean_flap_thrust(v, s, gamma).x - qs * c_d - BirdProfile.G * sin(gamma)
 
 
 ## Can a wingbeat start now?
@@ -157,6 +308,9 @@ func step(dt: float, input: FlightInput) -> void:
 	var stick := input.stick.clamp(Vector2(-1, -1), Vector2(1, 1))
 	var bank_target := stick.x * deg_to_rad(p.max_bank_deg) + (wing_loss.y - wing_loss.x) * LOSS_ROLL * deg_to_rad(p.max_bank_deg)
 	bank = move_toward(bank, bank_target, deg_to_rad(p.roll_rate_deg) * dt)
+	# Flapping trim: neutral slides toward the climb's angle of attack as far as the held wingbeats are strong.
+	var held := flap_strength if input.flap_held and flap_count > 0 else 0.0
+	flap_trim = lerpf(flap_trim, held, 1.0 - exp(-dt / FLAP_TRIM_TIME))
 	var alpha_target := alpha_for_stick(stick.y)
 	# Turn assist: some of the extra lift a bank needs (1/cos) comes without pulling.
 	if alpha_target > 0.0 and alpha_target < p.alpha_stall:
@@ -166,9 +320,13 @@ func step(dt: float, input: FlightInput) -> void:
 	# along-path acceleration (zero in a steady glide) back into alpha adds lift while speed is building and
 	# sheds it while speed bleeds, which damps the swing. (Feeding back the path's rate instead only changes
 	# the bob's stiffness, and chatters.)
+	# With flap held the steady state is a climb, not a glide: there the wingbeat's mean thrust along the path
+	# (as flap_trim has it) balances the drag and the climb. Left out, the damper read that steady climb as speed
+	# bleeding away and held the nose ~5 deg low, so flapping flew fast and shallow instead of climbing.
 	# The damper never takes the wing past the stall itself (accelerating down a steep dive, it would): only the stick can.
 	if not stalled and pitch_damping > 0.0:
 		var a_along := -BirdProfile.G * sin(_air_path) - _last_drag_accel   # (through the air)
+		a_along += mean_flap_thrust(speed, flap_trim, _air_path).x
 		var authority := 1.0 - minf(1.0, absf(stick.y) * 1.5)
 		var damped := alpha_target + pitch_damping * 2.0 * p.alpha_best * clampf(a_along / BirdProfile.G, -0.5, 0.5) * authority
 		alpha_target = minf(damped, maxf(alpha_target, p.alpha_stall * 0.97))
@@ -245,13 +403,12 @@ func step(dt: float, input: FlightInput) -> void:
 		# Slow thrust is aimed forward-and-up from the bird's heading (not its path, which may point straight up
 		# or down at low speed: aiming along it would let a bird helicopter vertically).
 		var cruise_k := clampf(speed / p.v_best, 0.0, 1.0)
-		var tilt := deg_to_rad(lerpf(p.flap_tilt_slow_deg, p.flap_tilt_deg, cruise_k))
+		var tilt := flap_tilt_at(speed)
 		var cruise_dir := (dir * cos(tilt) + lift_dir * sin(tilt)).normalized()
 		var slow_dir := (_heading_dir * cos(tilt) + UP * sin(tilt)).normalized()
 		var thrust_dir := slow_dir.slerp(cruise_dir, cruise_k)
-		var fade := pow(clampf(1.0 - speed / p.flap_speed_cap, 0.0, 1.0), 2.0)
 		var cushion := 1.0 + p.ground_effect_thrust * ground_effect
-		velocity += thrust_dir * p.flap_accel * flap_strength * fade * cushion * dt
+		velocity += thrust_dir * flap_accel_at(speed) * flap_strength * cushion * dt
 		flap_time = maxf(0.0, flap_time - dt)
 	velocity += extra_accel * dt
 	if turn != 0.0:
