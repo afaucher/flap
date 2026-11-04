@@ -647,7 +647,7 @@ func _heath_cover() -> void:
 	var tc := []
 	var hx := []
 	var hc := []
-	for k in 230000:
+	for k in 320000:
 		var theta := _rng.randf() * TAU
 		var r := layout.boundary - GRASS_IN + pow(_rng.randf(), 2.1) * (GRASS_TO - layout.boundary + GRASS_IN)
 		var x := sin(theta) * r
@@ -672,16 +672,19 @@ func _heath_cover() -> void:
 		var at := Vector3(x, ArenaLayout.GROUND_Y + h, z)
 		# (heather grows in patches: where a slow noise is high, low purple-brown tussocks instead of grass)
 		var patch := _vnoise(Vector2(x, z) * 0.07 + Vector2(3.0, 1.0)) * 0.7 + _vnoise(Vector2(x, z) * 0.21 + Vector2(9.0, 4.0)) * 0.3
-		if patch < 0.6 or _rng.randf() < 0.15:
-			var size := _rng.randf_range(0.38, 0.8) * lerpf(0.6, 1.0, fade)   # (knee high, below the fence wire)
-			tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.2, size * _rng.randf_range(0.75, 1.15), size * 1.2)), at))
-			tc.append(Color(1.0, 0.95, 0.85).lerp(Color(0.75, 0.85, 0.62), _rng.randf()) * _rng.randf_range(0.7, 1.05))
+		# (the sward as the heath concept's: one cover, not plants in rows -- wide low tufts that overlap, of mixed
+		# heights, golden straw to olive in drifts; heather in bigger, darker patches)
+		if patch < 0.55 or _rng.randf() < 0.12:
+			var size := _rng.randf_range(0.3, 0.75) * lerpf(0.6, 1.0, fade)   # (knee high and under, below the fence wire)
+			tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.9, size * _rng.randf_range(0.6, 1.2), size * 1.9)), at))
+			var drift := _vnoise(Vector2(x, z) * 0.11 + Vector2(5.0, 8.0))
+			tc.append(Color(1.05, 0.95, 0.7).lerp(Color(0.78, 0.82, 0.55), clampf(drift * 1.3 - 0.15 + _rng.randf_range(-0.2, 0.2), 0.0, 1.0)) * _rng.randf_range(0.72, 1.02))
 		else:
-			var size := _rng.randf_range(0.45, 0.9)
-			hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.4, size * 0.5, size * 1.4)), at))
-			hc.append(Color(0.62, 0.36, 0.5).lerp(Color(0.45, 0.4, 0.35), _rng.randf()) * _rng.randf_range(0.6, 0.95))
+			var size := _rng.randf_range(0.45, 0.95)
+			hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.6, size * 0.55, size * 1.6)), at))
+			hc.append(Color(0.48, 0.27, 0.36).lerp(Color(0.36, 0.3, 0.26), _rng.randf()) * _rng.randf_range(0.55, 0.85))
 	tufts = _batch("tufts", _tuft_cards(), tx, tc)
-	tufts.material_override = _grass_mat()
+	tufts.material_override = _grass_mat("sward")
 	heather = _batch("heather", _tuft_cards(), hx, hc)
 	heather.material_override = _grass_mat()
 
@@ -913,9 +916,10 @@ func _tuft_cards() -> ArrayMesh:
 	return st.commit()
 
 
-## The grass cards' material: the foliage shader on FoliageTex's grass (the arena builder's, as the bracken's).
-func _grass_mat() -> Material:
-	return ArenaBuilder._foliage_mat("grass", {"tex": "grass", "tint": Color(1, 1, 1)}, {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6})
+## The grass cards' material: the foliage shader on FoliageTex's `tex` (grass: a tussock, for the heather; sward:
+## meadow grass, for the sward) (the arena builder's, as the bracken's).
+func _grass_mat(tex := "grass") -> Material:
+	return ArenaBuilder._foliage_mat(tex, {"tex": tex, "tint": Color(1, 1, 1)}, {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6})
 
 
 ## A grass tuft as geometry: blades fanning up and out from a point (unit size, vertex colour darker at the root).

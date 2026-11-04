@@ -28,8 +28,8 @@ vec3 heath_albedo(vec2 p) {
 	float big = heath_fbm(p * 0.02);
 	float mid = heath_fbm(p * 0.15 + 4.0);
 	float fine = heath_fbm(p * 1.3 + 9.0);
-	vec3 h_straw = vec3(0.12, 0.115, 0.05);   // (dark: it's the sward's floor, seen between the tussocks)
-	vec3 h_olive = vec3(0.065, 0.095, 0.03);
+	vec3 h_straw = vec3(0.15, 0.135, 0.06);   // (the sward's floor, seen between the tussocks: near the grass's own
+	vec3 h_olive = vec3(0.1, 0.11, 0.045);    // tone, so the gaps read as grass, not as ground)
 	vec3 h_heather = vec3(0.13, 0.08, 0.1);
 	vec3 h_earth = vec3(0.14, 0.1, 0.07);
 	vec3 col = mix(h_straw, h_olive, smoothstep(0.35, 0.7, big * 0.6 + mid * 0.5));
