@@ -246,7 +246,7 @@ func _start_match() -> void:
 			var brain := CombatBrain.new(b, world, l, skill, 100 + n)
 			brain.board = board
 			var weapon: int = kit[i]
-			var kind := "seekers" if weapon == Launcher.Weapon.SEEKERS else "rockets"
+			var kind: String = {Launcher.Weapon.SEEKERS: "seekers", Launcher.Weapon.GUN: "gun"}.get(weapon, "rockets")
 			_arm(b, l, [kind, kind])
 			if not tacks.has(b):
 				CombatBrain.arm_with(l, weapon)

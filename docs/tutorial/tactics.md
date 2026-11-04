@@ -31,6 +31,15 @@ at the same lead marker as rockets (it sits much closer to the target: a bullet 
   stops the lock building; past a quarter of a second it starts to drain. Leaves don't count.
 - Fire only when locked. A seeker fired without a lock flies straight.
 
+**The machine gun** (40 rounds a pod, ten a second while fire is held; a tap fires a burst of three). Bullets fly at
+about 95 m/s and die at about 40 m, scattering a little. A bullet has no fuse: it has to pass *through* the bird,
+within a few tens of centimetres of its centre (a sparrow is a small target).
+- Fly the lead marker and fire bursts at **6-18 m**. Beyond that the scatter spreads past the bird.
+- A hit takes one feather, but hits within a second of the last take only a third of one. Sustained fire chips about a
+  feather a second: the gun wears a bird down, and a rocket or seeker finishes it.
+- It's best against a bird flying straight, busy with someone else. Against a bird that breaks, your nose can't stay on
+  it: fire short snapshots as it crosses your sight.
+
 ## 2. Damage
 
 A hit knocks out the flight feathers nearest it, about 2.5 at a time. That wing loses area and drops: **hold the stick
@@ -67,13 +76,15 @@ Height is stored speed, and speed is how you turn and escape.
   you see the seeker coming. Start the hook early.
 - Small, quick-rolling birds (the sparrow) do this best. A wide turner can't hook in behind in time.
 
-## 5. Defending against rockets
+## 5. Defending against rockets and the gun
 
 A rocket from inside about 15 m arrives before you can roll. You can't dodge it once it's fired; you dodge the bird
 holding it.
 - **Don't let a rocket bird settle behind you at close range.** Jink when one is lined up on you (nose on you,
   inside ~30 m), before it fires.
 - A rocket that misses flies on: don't fly through its line.
+- **Against the gun, keep breaking.** Bullets are too fast to dodge once fired, but a gunner needs you steady in its
+  sight; a bird that keeps turning is hard to hit.
 
 ## 6. Attacking
 

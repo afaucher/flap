@@ -392,11 +392,12 @@ func _pinewood_trees(i0: int, i1: int) -> void:
 			add_child(body)
 			tree_bodies.append(body)
 			continue
-		_trunk(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
-		if FloorField.feet and (t.kind == ArenaLayout.Kind.PINE or oak):
-			_roots(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
-		for lb in t.limbs:
-			_tube(_cell(cells, cell, lb[2]), lb[0], lb[1], 9 if float(lb[1][0]) > 0.05 else 6, _TILE[lb[2]], fmod(seed + (lb[0] as PackedVector3Array)[0].y * 0.37, 1.0))
+		if looks:   # (the drawn wood, for _pinewood_wood; without looks only the collision below)
+			_trunk(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
+			if FloorField.feet and (t.kind == ArenaLayout.Kind.PINE or oak):
+				_roots(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
+			for lb in t.limbs:
+				_tube(_cell(cells, cell, lb[2]), lb[0], lb[1], 9 if float(lb[1][0]) > 0.05 else 6, _TILE[lb[2]], fmod(seed + (lb[0] as PackedVector3Array)[0].y * 0.37, 1.0))
 		for br in t.branches:
 			if not br.solid:
 				continue

@@ -52,7 +52,7 @@ func _turning_shot(side: float, turn: bool) -> void:
 		await get_tree().physics_frame
 		br.tick(1.0 / 60.0)
 	var tr := br.picture.track_of(them.bird)
-	var lead := br.rocket_lead(tr)
+	var lead := br.lead_for(tr)
 	var straight := FireControl.lead(l.muzzle(), b.model.velocity, tr.pos, tr.vel)
 	d.world.spawn(Projectile.launch(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, (lead if turn else straight) - l.muzzle(), b))
 	for f in 70:

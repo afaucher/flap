@@ -1,11 +1,12 @@
 extends TestCase
-## Diagnostic: how well the combat AI uses each weapon, by skill. One shard per (skill, weapon): an attacker (a crow,
+## Diagnostic: how well the combat AI uses each weapon (rockets, seekers, the gun), by skill. One shard per (skill, weapon): an attacker (a crow,
 ## then a sparrow) armed with that weapon only hunts a defending crow (pilot skill, unarmed) in the pine wood, 60 s
 ## from 25 m astern, in woods 1-4; a downed defender comes back on its base. Prints rounds fired, hits, downs.
 
-const SHARDS := 6
+const SHARDS := 9
+const ONLY := ""   ## (set to a weapon name to run just its shards)
 const SKILLS := ["recruit", "pilot", "ace"]
-const WEAPONS := [Launcher.Weapon.ROCKETS, Launcher.Weapon.SEEKERS]
+const WEAPONS := [Launcher.Weapon.ROCKETS, Launcher.Weapon.SEEKERS, Launcher.Weapon.GUN]
 const SECONDS := 60.0
 
 
@@ -21,7 +22,7 @@ func setup() -> void:
 			for id in ["crow", "sparrow"]:
 				for wood in [1, 2, 3, 4]:
 					var r: Dictionary = await _hunt(SKILLS[si], WEAPONS[wi], id, wood)
-					print("WEAPON %s %s %s wood %d: rounds %d, hits %d, downs %d" % [SKILLS[si], "rockets" if WEAPONS[wi] == Launcher.Weapon.ROCKETS else "seekers", id, wood, r.rounds, r.hits, r.downs])
+					print("WEAPON %s %s %s wood %d: rounds %d, hits %d, downs %d" % [SKILLS[si], ["rockets", "seekers", "gun"][WEAPONS[wi]], id, wood, r.rounds, r.hits, r.downs])
 	finish()
 
 
@@ -36,13 +37,11 @@ func _hunt(skill: String, weapon: int, id: String, wood: int) -> Dictionary:
 	var spot := _spot(layout)
 	var them: Dictionary = d.add_ai("crow", 1, spot, Vector3.FORWARD, CombatSkill.preset("pilot"), 9)
 	var tl: Launcher = them.launcher
-	tl.capacity = {Launcher.Weapon.ROCKETS: 0, Launcher.Weapon.SEEKERS: 0}
+	tl.capacity = {Launcher.Weapon.ROCKETS: 0, Launcher.Weapon.SEEKERS: 0, Launcher.Weapon.GUN: 0}
 	tl.ammo = tl.capacity.duplicate()
 	var me: Dictionary = d.add_ai(id, 0, spot + Vector3(0, 1, 25), Vector3.FORWARD, CombatSkill.preset(skill), 5)
 	var l: Launcher = me.launcher
-	l.capacity = {Launcher.Weapon.ROCKETS: Launcher.AMMO[Launcher.Weapon.ROCKETS] if weapon == Launcher.Weapon.ROCKETS else 0, Launcher.Weapon.SEEKERS: Launcher.AMMO[Launcher.Weapon.SEEKERS] if weapon == Launcher.Weapon.SEEKERS else 0}
-	l.ammo = l.capacity.duplicate()
-	l.weapon = weapon
+	CombatBrain.arm_with(l, weapon)
 	(me.bird as Bird).rig.visible = false
 	(them.bird as Bird).rig.visible = false
 	var out: Dictionary = await d.run(SECONDS)

@@ -64,6 +64,9 @@ func _fight(l: Launcher, dt: float) -> CombatInput:
 	return CombatInput.new(true)
 
 
+const GUN_TRACK := 0.5   ## m of the gunsight's wander a gun burst is worth firing through
+
+
 func _would_hit(l: Launcher, t: CombatSense.Track) -> bool:
 	var b := l.bird
 	# The last rounds wait for a better shot.
@@ -74,8 +77,18 @@ func _would_hit(l: Launcher, t: CombatSense.Track) -> bool:
 		if layout != null and not layout.segment_clear(l.muzzle(), t.pos, 0.2):
 			return false   # a trunk in the way
 		return FireControl.miss(Projectile.Kind.ROCKET, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, t.turn) < Projectile.fuse * quality
+	if l.weapon == Launcher.Weapon.GUN:
+		# Snapshots: a bullet hits only within the bird's hit radius, and the nose never tracks a breaking bird that
+		# finely -- so fire when a burst has a fair chance: the aimed bullet within the hit radius, plus two of the
+		# scatter's spreads at this range, plus GUN_TRACK of the sight's own wander (a recruit sprays, an ace waits).
+		if layout != null and not layout.segment_clear(l.muzzle(), t.pos, 0.05):
+			return false
+		var d := l.muzzle().distance_to(t.pos)
+		var spread := d * tan(deg_to_rad(Launcher.GUN_SPREAD))
+		var take := (Projectile.hit_radius(t.bird) + 2.0 * spread + GUN_TRACK) * brain.skill.min_quality
+		return FireControl.miss(Projectile.Kind.GUN, l.muzzle(), b.model.velocity, l.aim(), t.pos, t.vel, t.turn) < take
 	if l.weapon != Launcher.Weapon.SEEKERS:
-		return false   # (the gun: not taught yet -- the brain holds its fire with one selected)
+		return false
 	if not l.locked() or l.lock_target != t.bird:
 		return false
 	# Its best break, at the speed it's seen at, left and right, timed as well as it could be.

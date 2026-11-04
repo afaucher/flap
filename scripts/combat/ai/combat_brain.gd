@@ -222,16 +222,29 @@ static func arm_with(l: Launcher, weapon: int) -> void:
 var _lead_at := -INF
 var _lead := Vector3.ZERO
 var _lead_for: Bird = null
+var _lead_kind := -1
 
 
-## Where to fly the gunsight for a rocket to meet track `t`, turning as it's seen turning (FireControl.lead, refreshed
-## every LEAD_EVERY s and carried along with the target in between).
-func rocket_lead(t: CombatSense.Track) -> Vector3:
-	if clock - _lead_at >= LEAD_EVERY or _lead_for != t.bird:
-		_lead = FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel, t.turn) - t.pos
+## Where to fly the gunsight for its round (a rocket, a bullet) to meet track `t`, turning as it's seen turning
+## (FireControl.lead, refreshed every LEAD_EVERY s and carried along with the target in between).
+func lead_for(t: CombatSense.Track) -> Vector3:
+	var kind := round_kind()
+	if clock - _lead_at >= LEAD_EVERY or _lead_for != t.bird or _lead_kind != kind:
+		_lead = FireControl.lead(launcher.muzzle(), bird.model.velocity, t.pos, t.vel, t.turn, 3, kind) - t.pos
 		_lead_at = clock
 		_lead_for = t.bird
+		_lead_kind = kind
 	return t.pos + _lead
+
+
+## The round its selected weapon fires (Projectile.Kind).
+func round_kind() -> int:
+	match launcher.weapon:
+		Launcher.Weapon.GUN:
+			return Projectile.Kind.GUN
+		Launcher.Weapon.SEEKERS:
+			return Projectile.Kind.SEEKER
+	return Projectile.Kind.ROCKET
 
 
 const LEAD_EVERY := 0.1
@@ -239,8 +252,8 @@ const LEAD_EVERY := 0.1
 
 ## Ammo left / full.
 func ammo_left() -> int:
-	return int(launcher.ammo[launcher.weapon])
+	return launcher.left(launcher.weapon)
 
 
 func ammo_full() -> bool:
-	return int(launcher.ammo[launcher.weapon]) >= int(launcher.capacity[launcher.weapon])
+	return launcher.left(launcher.weapon) >= launcher.carried(launcher.weapon)
