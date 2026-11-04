@@ -7,6 +7,9 @@ extends RefCounted
 ##   oak       a twig with clusters of lobed oak leaves (~0.8 m)
 ##   grass     a tussock of heath grass: blades from a tight root fanning up and out, curving over, olive at the
 ##             root, straw at the tips (~0.8 m; v runs base 1 -> tip 0)
+##   sward     a strip of meadow grass, as the heath concept's: many thin upright blades rooted all along the
+##             card's width, of mixed heights, leaning a little, a few with seed heads; olive at the root, straw at
+##             the tips (~1 m wide; v runs base 1 -> tip 0), so cards side by side make one cover
 ##   fern      a bracken frond: a stem up the middle, pinnae left and right shortening to the tip, each lobed
 ##             (~0.9 m long; the card's v runs base 1 -> tip 0)
 ## Pixels are painted as anti-aliased strokes into float buffers (coverage, then colour over), then mipmapped.
@@ -21,6 +24,7 @@ static func get_tex(kind: String) -> ImageTexture:
 			"oak": _cache[kind] = _oak(512, 23)
 			"fern": _cache[kind] = _fern(512, 37)
 			"grass": _cache[kind] = _grass(512, 53)
+			"sward": _cache[kind] = _sward(512, 61)
 	return _cache[kind]
 
 
@@ -274,4 +278,28 @@ static func _grass(size: int, s: int) -> ImageTexture:
 			dir = dir.rotated(lean * 0.09 * f).normalized()   # (curving over, more toward the tip)
 			cv.stroke(p, q, w * lerpf(1.0, 0.25, f), col.lerp(tip_col, f), 0.85)
 			p = q
+	return ImageTexture.create_from_image(cv.image())
+
+
+static func _sward(size: int, s: int) -> ImageTexture:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = s
+	var cv := Canvas.new(size)
+	for i in 240:
+		var lean := rng.randf_range(-0.35, 0.35)
+		var tall := size * rng.randf_range(0.3, 0.96)
+		var p := Vector2(size * rng.randf_range(0.03, 0.97), size * 0.995)
+		var dir := Vector2(lean * 0.4, -1.0).normalized()
+		var segs := 6
+		var w := rng.randf_range(1.8, 3.6)
+		var col := Color(0.42, 0.42, 0.2).lerp(Color(0.52, 0.5, 0.25), rng.randf())   # (not dark: the shader darkens the root)
+		var tip_col := Color(0.8, 0.72, 0.44).lerp(Color(0.62, 0.62, 0.34), rng.randf())
+		for k in segs:
+			var f := float(k + 1) / segs
+			var q := p + dir * tall / segs
+			dir = dir.rotated(lean * 0.06 * f).normalized()   # (a little bowed toward the tip)
+			cv.stroke(p, q, w * lerpf(1.0, 0.3, f), col.lerp(tip_col, f), 0.85)
+			p = q
+		if rng.randf() < 0.18:   # (a seed head: a short, paler spike on a bare stalk)
+			cv.stroke(p, p + dir * size * rng.randf_range(0.04, 0.08), w * 1.6, Color(0.86, 0.8, 0.58), 0.6)
 	return ImageTexture.create_from_image(cv.image())

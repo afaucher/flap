@@ -22,6 +22,14 @@ uniform sampler2D scan_normal : hint_normal, filter_linear_mipmap_anisotropic, r
 uniform sampler2D scan_arm : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float scan_tile = 2.0;
 uniform vec3 scan_tint : source_color = vec3(1.0);
+// Past the wood's edge the litter gives way to heath (EdgeBuilder; heath.gdshaderinc), from heath_from to heath_to
+// m out from the middle, raggedly.
+uniform bool heath_on = false;
+uniform float heath_from = 84.0;
+uniform float heath_to = 98.0;
+
+#include "res://scripts/world/heath.gdshaderinc"
+
 // The moss's photoscan (forest_leaves_02, assets/LICENSES.md: moss cushions with twigs and fallen leaves), when given:
 // at `moss_tile` m, two scales and rotations blended by noise, toned greener by `moss_tint`.
 uniform bool use_moss_scan = false;
@@ -182,8 +190,14 @@ void fragment() {
 	col = mix(col, mcol, moss_m);
 	col = mix(col, dcol, dirt_m);
 	col = mix(col, scol, open_m);
+	// Past the wood's edge the floor gives way to heath (heath.gdshaderinc), along a ragged line.
+	float heath_k = 0.0;
+	if (heath_on) {
+		heath_k = smoothstep(heath_from, heath_to, length(p) + (big - 0.5) * 16.0 + (fbm(p * 0.3 + 6.0) - 0.5) * 4.0);
+		col = mix(col, heath_albedo(p), heath_k);
+	}
 	ALBEDO = col;
-	ROUGHNESS = mix(mix(mix(rough, mscan_r, moss_m), 0.97, dirt_m), 0.9, open_m);
+	ROUGHNESS = mix(mix(mix(mix(rough, mscan_r, moss_m), 0.97, dirt_m), 0.9, open_m), 0.95, heath_k);
 	SPECULAR = 0.25;
 	// Relief: the scan's on the litter; the moss its cushions; the dirt its grit; the sward nearly flat.
 	float e = 0.02;
@@ -193,5 +207,5 @@ void fragment() {
 	nrm = mix(nrm, use_moss_scan ? mscan_n : mix(vec3(0.5, 0.5, 1.0), mn, keep), moss_m);
 	nrm = mix(nrm, vec3(0.5 + (grit - 0.5) * 0.2 * keep, 0.5, 1.0), dirt_m);
 	nrm = mix(nrm, vec3(0.5, 0.5 + (blades - 0.5) * 0.25 * keep, 1.0), open_m);
-	NORMAL_MAP = nrm;
+	NORMAL_MAP = mix(nrm, vec3(0.5, 0.5, 1.0), heath_k * 0.7);
 }

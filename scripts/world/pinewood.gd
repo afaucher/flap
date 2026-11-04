@@ -46,6 +46,9 @@ const APPROACH_BERTH := 2.0
 ## airier (fewer whorls, pads only at the tips, smaller, some limbs bare) -- the crown layer's sightlines.
 ## 0.5: in the crown band (about 22 m) almost half of level looks reach 40 m, against a fifth at 1 (probe_sightlines).
 static var crown_density := 0.5
+## The escarpment along part of the wood's edge: on hold (docs/design/cliff_from_concept.md), so off -- the heath runs
+## all the way round; --cliff turns it on (the scenes), and the cliff's own tests and probes do.
+static var cliff := false
 ## Whether the dead stubs on the clear trunks are perches. Off: short broken snags read as wood, long level
 ## perch sticks read as pegs (and switching them off didn't change how often the AI bumps trunks).
 static var STUB_PERCHES := false
@@ -137,6 +140,12 @@ static func generate(s: int) -> ArenaLayout:
 	a.add_posts()
 	a.floor_field = FloorField.build(a, a.boundary + 12.0)
 	_thermals(a)
+	# The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
+	# DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
+	if cliff:
+		var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+		a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": s}
+		a.add_rock()
 	return a
 
 

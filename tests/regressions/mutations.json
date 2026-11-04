@@ -3191,5 +3191,187 @@
     "replace": "\t\tif looks:\n\t\t\tout.append([\"Building the outposts\", _outposts, 0.08])"
    }
   ]
+ },
+ {
+  "id": "edge-rock-inside-out",
+  "bug": "The escarpment's triangles were wound backwards: drawn inside out, the faces toward the wood culled, so only the cliff's far side showed, hanging in the sky (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/edge_builder.gd",
+    "find": "\t\t\tidx.append_array([q0, q1, q2, q0, q2, q3])",
+    "replace": "\t\t\tidx.append_array([q0, q2, q1, q0, q3, q2])"
+   }
+  ]
+ },
+ {
+  "id": "edge-rock-rows-backwards",
+  "bug": "The escarpment's grid ran its fine rows out past where the coarse ones were to start, so its last row stepped back inward: a strip of triangles folded over, inside out (2026-11-03). (The entry runs the fine rows 60 m past the foot: with the cliff out at today's foot the original 40 m no longer reaches the coarse rows.)",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/edge_builder.gd",
+    "find": "\tvar far := esc.foot + Escarpment.BEND + 50.0   # (out to where the curving ends run)",
+    "replace": "\tvar far := esc.foot + Escarpment.BEND + 50.0   # (out to where the curving ends run)\n\tr = esc.foot + 30.0"
+   }
+  ]
+ },
+ {
+  "id": "edge-plateau-rises-forever",
+  "bug": "The escarpment's top went on rising with distance, so out in the hills its sector stood tens of metres above them with sheer walls at its ends (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/escarpment.gd",
+    "find": "\treturn maxf(lerpf(col[3], mean_top() * w, smoothstep(0.0, PLATEAU, t)) + minf(t, PLATEAU) * 0.1 * w, tal)",
+    "replace": "\treturn maxf(col[3] + t * 0.08, tal)"
+   }
+  ]
+ },
+ {
+  "id": "edge-ai-blind-to-rock",
+  "bug": "The AI's clearance queries knew only trees: with the soft wall out by the escarpment, a planned path could run into the rock (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\tif not rock_clear(pos, d):\n\t\treturn false\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "edge-wall-at-boundary",
+  "bug": "The soft wall stayed at the boundary in the escarpment's sector: its ledge perches lay outside it, out of reach, and the planner had no way in (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\treturn boundary if rock == null else rock.reach(atan2(xz.x, xz.y), boundary)",
+    "replace": "\treturn boundary"
+   }
+  ]
+ },
+ {
+  "id": "edge-bird-wall-at-boundary",
+  "bug": "The bird's soft wall pushed back at the boundary all round, the escarpment's sector too: a bird couldn't fly in to the cliff's perches (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar wall := layout.reach(horiz)",
+    "replace": "\tvar wall := layout.boundary"
+   }
+  ]
+ },
+ {
+  "id": "edge-perches-high",
+  "bug": "The escarpment's perches thickest high up (the spacing the wrong way round): encouraging birds to sit above the fight rather than drop in low (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/escarpment.gd",
+    "find": "const PERCH_EVERY := [10.0, 32.0]   ## m along the cliff between perches on each tier's ledge, foot up",
+    "replace": "const PERCH_EVERY := [32.0, 10.0]"
+   }
+  ]
+ },
+ {
+  "id": "edge-scree-unsorted",
+  "bug": "The scree's blocks all one size range down its slope: real talus sorts, the biggest blocks rolling furthest out to its toe (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/edge_builder.gd",
+    "find": "\t\tvar size := lerpf(0.5, 2.6, toe)",
+    "replace": "\t\tvar size := lerpf(0.5, 2.6, 0.5)"
+   }
+  ]
+ },
+ {
+  "id": "edge-blocks-on-perch-stones",
+  "bug": "Scree blocks fell anywhere, on top of the flat perch stones and across the way in to them (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/edge_builder.gd",
+    "find": "\t\tif not clear or r < layout.boundary + 1.5:",
+    "replace": "\t\tif r < layout.boundary + 1.5:"
+   }
+  ]
+ },
+ {
+  "id": "edge-joints-through-every-bed",
+  "bug": "The joints ran on through the beds above them (one set of seams the whole height of the wall): the cliff read as masonry columns; in limestone most joints stop at the bedding (2026-11-03).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/escarpment.gd",
+    "find": "const RUN_ON := 0.6 ",
+    "replace": "const RUN_ON := 1.0 "
+   }
+  ]
+ },
+ {
+  "id": "edge-stones-cut-at-scree-edge",
+  "bug": "Past the scree's outer edge the height returned flat ground before looking for the flat perch stones, so a stone at the edge was half missing from the rock (a perch over a hole) (2026-11-03). (Since the talus, the stones stand well up it: the entry now takes the stones out of the rock's height altogether -- a perch over nothing, the same failure.)",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/escarpment.gd",
+    "find": "\t\t\t\th0 = maxf(h0, float(st[2]) * (1.0 - smoothstep(float(st[1]), rim, d) * 0.7))",
+    "replace": "\t\t\t\th0 = maxf(h0, 0.0 * (1.0 - smoothstep(float(st[1]), rim, d) * 0.7))"
+   }
+  ]
+ },
+ {
+  "id": "edge-cliff-ends-in-view",
+  "bug": "The escarpment covered a third of the ring and tapered down into the heath: flying near the play area's sides, its ends stood in plain view (2026-11-03). It now runs most of the way round and curves away out of view.",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/escarpment.gd",
+    "find": "const BEND := 230.0",
+    "replace": "const BEND := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "edge-path-blind-to-rock",
+  "bug": "Merging the escarpment into master's AI: ArenaLayout.path_blocked_at (the avoidance's whole-path query) didn't check the rock that segment_clear_among (the planner's) does, so the AI could fly into the cliff while its planner avoided it (2026-11-04).",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\tvar see_rock := rock != null and ignore_tree != rock_tree and ignore_also != rock_tree",
+    "replace": "\tvar see_rock := false"
+   }
+  ]
  }
 ]

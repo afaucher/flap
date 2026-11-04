@@ -139,6 +139,11 @@ static func _tip_reach(t: ArenaLayout.TreeData) -> float:
 static func _brute_clear(a: ArenaLayout, p: Vector3, q: Vector3, c: float, ignore: int) -> bool:
 	if p.y < ArenaLayout.GROUND_Y + a.ground(p.x, p.z) + c or q.y < ArenaLayout.GROUND_Y + a.ground(q.x, q.z) + c:
 		return false
+	if a.rock != null and ignore != a.rock_tree:   # (the escarpment's rock, every 5 cm)
+		var n := ceili(p.distance_to(q) / 0.05)
+		for k in n + 1:
+			if not a.rock_clear(p.lerp(q, float(k) / n), c):
+				return false
 	for t in a.trees:
 		if t.id == ignore:
 			continue
