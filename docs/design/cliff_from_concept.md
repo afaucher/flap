@@ -97,7 +97,7 @@ the tests read):
 3. Read `score.md`: each row the concept's number, ours, ok / low / high, and how far to trust it. Look at its
    pictures (`zones/`, `shapes/shapes.png`, `sections/*_profile.png`): a number off is a reason to look, not a verdict.
 4. Look at it lit, windowed:
-   `Godot --path . -- --run-test probe_edge_view --out-dir <dir> --heading cliff | ortho | top_aligned --look clear`
+   `.\probe.ps1 probe_edge_view --out-dir <dir> --heading cliff | ortho | top_aligned --look clear`
    (`ortho` is the straight-on front view to set beside `concept_cliff_ortho.png`; `cliff` gives the chase views).
 5. Log the count and the change below; gate before committing.
 

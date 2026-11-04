@@ -1,39 +1,202 @@
-# test_lib.ps1 - what test_runner.ps1 and mutation_check.ps1 share (dot-source it): the runs a test splits into,
-# how a run is started and judged, the last run's times, and the hash of the working tree.
+# test_lib.ps1 - what test_runner.ps1, mutation_check.ps1 and probe.ps1 share (dot-source it): the runs a test splits
+# into, how a run is started and judged, the last run's times, and the hash of the working tree.
 
 # One test process, its output read line by line as it comes: the first line that fails the run (FailLine, the
 # same rule Test-RunPassed applies to the whole output) is known while the test still runs.
+#
+# Every run starts on a desktop of its own (FlapHidden: CreateDesktop "FlapHidden" in the user's window station), so
+# a windowed run (gpu_test_*, render probes) draws as usual, on the real GPU, but its window is never on screen,
+# never in the taskbar and can't take focus. (Off-screen --position is clamped back onto the screen, and a minimized
+# window stops Godot drawing.) FLAP_SHOW_WINDOWS=1 starts them on the user's desktop instead, to watch one.
 if (-not ('FlapTestProc' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
+using Microsoft.Win32.SafeHandles;
+
+public static class FlapHidden {
+    public const string DesktopName = "FlapHidden";
+    static IntPtr _desk;
+    static readonly object _lock = new object();
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct STARTUPINFO {
+        public int cb; public string lpReserved; public string lpDesktop; public string lpTitle;
+        public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+        public short wShowWindow, cbReserved2; public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct STARTUPINFOEX { public STARTUPINFO StartupInfo; public IntPtr lpAttributeList; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROCESS_INFORMATION { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct SECURITY_ATTRIBUTES { public int nLength; public IntPtr lpSecurityDescriptor; public bool bInheritHandle; }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateDesktopW(string name, IntPtr device, IntPtr devmode, int flags, uint access, IntPtr sa);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CreatePipe(out IntPtr read, out IntPtr write, ref SECURITY_ATTRIBUTES sa, int size);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetHandleInformation(IntPtr h, int mask, int flags);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr h);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateFileW(string name, uint access, uint share, ref SECURITY_ATTRIBUTES sa, uint disp, uint flags, IntPtr tmpl);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref IntPtr size);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool UpdateProcThreadAttribute(IntPtr list, int flags, IntPtr attr, IntPtr value, IntPtr size, IntPtr prev, IntPtr retSize);
+    [DllImport("kernel32.dll")]
+    static extern void DeleteProcThreadAttributeList(IntPtr list);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool CreateProcessW(string app, StringBuilder cmd, IntPtr pa, IntPtr ta, bool inherit, uint flags,
+        IntPtr env, string cwd, ref STARTUPINFOEX si, out PROCESS_INFORMATION pi);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern uint ResumeThread(IntPtr h);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool TerminateProcess(IntPtr h, uint code);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateJobObjectW(IntPtr sa, string name);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION info, int size);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+        public long PerProcessUserTimeLimit, PerJobUserTimeLimit; public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize; public uint ActiveProcessLimit;
+        public UIntPtr Affinity; public uint PriorityClass, SchedulingClass;
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount;
+        public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+    }
+    static IntPtr _job;
+
+    // A job that kills its processes when this process ends: a hidden run can't outlive its launcher (a stopped
+    // runner, a probe left running) unseen.
+    static IntPtr Job() {
+        lock (_lock) {
+            if (_job == IntPtr.Zero) {
+                IntPtr job = CreateJobObjectW(IntPtr.Zero, null);
+                if (job == IntPtr.Zero) throw new Win32Exception();
+                var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION { LimitFlags = 0x2000 /* KILL_ON_JOB_CLOSE */ };
+                if (!SetInformationJobObject(job, 9 /* ExtendedLimitInformation */, ref info, Marshal.SizeOf(info))) throw new Win32Exception();
+                _job = job;
+            }
+            return _job;
+        }
+    }
+
+    const uint CREATE_SUSPENDED = 0x4, CREATE_NO_WINDOW = 0x08000000, EXTENDED_STARTUPINFO_PRESENT = 0x80000;
+    const int STARTF_USESTDHANDLES = 0x100;
+    static readonly IntPtr PROC_THREAD_ATTRIBUTE_HANDLE_LIST = (IntPtr)0x20002;
+
+    // "WinSta0\FlapHidden" (made on first use, opened if another process made it), or null: the user's desktop.
+    public static string Desktop() {
+        if (Environment.GetEnvironmentVariable("FLAP_SHOW_WINDOWS") == "1") return null;
+        lock (_lock) {
+            if (_desk == IntPtr.Zero) {
+                _desk = CreateDesktopW(DesktopName, IntPtr.Zero, IntPtr.Zero, 0, 0x10000000 /* GENERIC_ALL */, IntPtr.Zero);
+                if (_desk == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error(), "CreateDesktop " + DesktopName);
+            }
+            return "WinSta0\\" + DesktopName;
+        }
+    }
+
+    // `file args` on the hidden desktop, stdin from NUL, stdout/stderr on the streams returned. Only those three
+    // handles are inherited (so one run's pipes never stay open in another run started meanwhile), and the process
+    // starts suspended until it is in the job and its Process is open, so its exit code and times can be read
+    // however soon it exits.
+    public static Process Start(string file, string args, out Stream stdout, out Stream stderr) {
+        var sa = new SECURITY_ATTRIBUTES { nLength = Marshal.SizeOf(typeof(SECURITY_ATTRIBUTES)), bInheritHandle = true };
+        IntPtr outR, outW, errR, errW;
+        if (!CreatePipe(out outR, out outW, ref sa, 0)) throw new Win32Exception();
+        if (!CreatePipe(out errR, out errW, ref sa, 0)) throw new Win32Exception();
+        SetHandleInformation(outR, 1, 0);
+        SetHandleInformation(errR, 1, 0);
+        stdout = new FileStream(new SafeFileHandle(outR, true), FileAccess.Read, 4096, false);
+        stderr = new FileStream(new SafeFileHandle(errR, true), FileAccess.Read, 4096, false);
+        IntPtr nul = CreateFileW("NUL", 0x80000000 /* GENERIC_READ */, 3, ref sa, 3 /* OPEN_EXISTING */, 0, IntPtr.Zero);
+        var handles = new IntPtr[] { nul, outW, errW };
+        IntPtr list = Marshal.AllocHGlobal(IntPtr.Size * handles.Length);
+        Marshal.Copy(handles, 0, list, handles.Length);
+        IntPtr size = IntPtr.Zero;
+        InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+        IntPtr attrs = Marshal.AllocHGlobal(size);
+        bool attrsMade = false;
+        try {
+            if (!InitializeProcThreadAttributeList(attrs, 1, 0, ref size)) throw new Win32Exception();
+            attrsMade = true;
+            if (!UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, list,
+                    (IntPtr)(IntPtr.Size * handles.Length), IntPtr.Zero, IntPtr.Zero)) throw new Win32Exception();
+            var si = new STARTUPINFOEX();
+            si.StartupInfo.cb = Marshal.SizeOf(typeof(STARTUPINFOEX));
+            si.StartupInfo.lpDesktop = Desktop();
+            si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+            si.StartupInfo.hStdInput = nul; si.StartupInfo.hStdOutput = outW; si.StartupInfo.hStdError = errW;
+            si.lpAttributeList = attrs;
+            PROCESS_INFORMATION pi;
+            if (!CreateProcessW(null, new StringBuilder("\"" + file + "\" " + args), IntPtr.Zero, IntPtr.Zero, true,
+                    CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, IntPtr.Zero, null, ref si, out pi))
+                throw new Win32Exception();
+            bool ready = false;
+            try {
+                if (!AssignProcessToJobObject(Job(), pi.hProcess)) throw new Win32Exception();
+                Process p = Process.GetProcessById(pi.dwProcessId);
+                IntPtr opened = p.Handle;   // (the Process keeps this handle: ExitCode, ExitTime, CPU time)
+                ready = true;
+                return p;
+            } finally {
+                if (ready) ResumeThread(pi.hThread); else TerminateProcess(pi.hProcess, 1);
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+            }
+        } finally {
+            if (attrsMade) DeleteProcThreadAttributeList(attrs);
+            Marshal.FreeHGlobal(attrs);
+            Marshal.FreeHGlobal(list);
+            CloseHandle(outW); CloseHandle(errW); CloseHandle(nul);
+        }
+    }
+}
 
 public class FlapTestProc {
     public static readonly Regex FailLine = new Regex(@"SCRIPT ERROR|^(USER )?(ERROR|WARNING):");
-    public readonly Process Proc = new Process();
+    public readonly Process Proc;
     public readonly Stopwatch Watch = new Stopwatch();
     readonly StringBuilder _out = new StringBuilder();
     readonly StringBuilder _err = new StringBuilder();
+    readonly ConcurrentQueue<string> _lines = new ConcurrentQueue<string>();
+    readonly Thread[] _readers;
     volatile string _firstFail;
 
-    public FlapTestProc(ProcessStartInfo psi) {
-        psi.UseShellExecute = false;
-        psi.RedirectStandardOutput = true;
-        psi.RedirectStandardError = true;
-        Proc.StartInfo = psi;
-        Proc.OutputDataReceived += (s, e) => Take(_out, e.Data);
-        Proc.ErrorDataReceived += (s, e) => Take(_err, e.Data);
-        Proc.Start();
+    // `file args`, started on the hidden desktop (FlapHidden).
+    public FlapTestProc(string file, string args) {
+        Stream o, e;
+        Proc = FlapHidden.Start(file, args, out o, out e);
         Watch.Start();
-        Proc.BeginOutputReadLine();
-        Proc.BeginErrorReadLine();
+        _readers = new Thread[] { Reader(o, _out), Reader(e, _err) };
+    }
+
+    Thread Reader(Stream s, StringBuilder sb) {
+        var t = new Thread(() => {
+            using (var r = new StreamReader(s)) { string line; while ((line = r.ReadLine()) != null) Take(sb, line); }
+        });
+        t.IsBackground = true;
+        t.Start();
+        return t;
     }
 
     void Take(StringBuilder sb, string line) {
-        if (line == null) return;
         lock (sb) sb.Append(line).Append('\n');
+        _lines.Enqueue(line);
         if (_firstFail == null && FailLine.IsMatch(line)) _firstFail = line;
     }
 
@@ -42,9 +205,11 @@ public class FlapTestProc {
     public bool HasExited { get { return Proc.HasExited; } }
     public void Kill() { try { if (!Proc.HasExited) Proc.Kill(); } catch (Exception) {} }
     // Waits for the exit and the last of the output.
-    public void Wait() { Proc.WaitForExit(); }
+    public void Wait() { Proc.WaitForExit(); foreach (var t in _readers) t.Join(); }
     public string Out { get { lock (_out) return _out.ToString(); } }
     public string Err { get { lock (_err) return _err.ToString(); } }
+    // The lines (stdout and stderr, as they came) since the last call: probe.ps1 relays them.
+    public string[] NewLines() { var a = new System.Collections.Generic.List<string>(); string l; while (_lines.TryDequeue(out l)) a.Add(l); return a.ToArray(); }
     public double WallSec { get { return (Proc.ExitTime - Proc.StartTime).TotalSeconds; } }
     public double CpuSec { get { return Proc.TotalProcessorTime.TotalSeconds; } }
 }
@@ -80,11 +245,30 @@ function Get-TestRuns([string]$Root, [string[]]$Names) {
 # Start one run of a test in the project at `root`.
 function Start-TestRun([string]$Engine, [string]$Root, $Run) {
     $shardArg = if ($Run.Shard -ge 0) { " --shard $($Run.Shard)" } else { "" }
-    $mode = if ($Run.Name -like "gpu_test_*") { "" } else { "--headless " }   # (GPU tests run windowed: headless runs no shaders)
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $Engine
-    $psi.Arguments = "--path `"$Root`" $mode--fixed-fps 60 -- --run-test $($Run.Name)$shardArg"
-    return New-Object FlapTestProc $psi
+    # (GPU tests run windowed, on the hidden desktop: headless runs no shaders)
+    $mode = if ($Run.Name -like "gpu_test_*") { "" } else { "--headless " }
+    return New-Object FlapTestProc $Engine, "--path `"$Root`" $mode--fixed-fps 60 -- --run-test $($Run.Name)$shardArg"
+}
+
+# Arguments as one command line (the quoting CommandLineToArgvW undoes).
+function Join-FlapArgs([string[]]$Arguments) {
+    return (@($Arguments | ForEach-Object {
+        if ($_ -ne "" -and $_ -notmatch '[\s"]') { $_ }
+        else { '"' + (($_ -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
+    }) -join " ")
+}
+
+# Runs `exe args` on the hidden desktop (probe.ps1, run.ps1 -Hidden): its output (stdout and stderr) relayed as it
+# comes, its exit code in $LASTEXITCODE.
+function Invoke-FlapHidden([string]$Exe, [string[]]$Arguments) {
+    $p = New-Object FlapTestProc $Exe, (Join-FlapArgs $Arguments)
+    while (-not $p.HasExited) {
+        $p.NewLines()
+        Start-Sleep -Milliseconds 50
+    }
+    $p.Wait()
+    $p.NewLines()
+    $global:LASTEXITCODE = $p.Proc.ExitCode
 }
 
 # A run passes only with exit code 0, the PASS marker, and no SCRIPT ERROR or engine ERROR:/WARNING: line. (A script

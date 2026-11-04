@@ -2,7 +2,7 @@ extends TestCase
 ## The pine wood's floor up close, for judging the ground cover (the litter, the moss and dirt patches, the mounds,
 ## the plants): a sheet of fixed views -- low under a clump of pines, low in a gap, looking down from 4 m, across the
 ## glade, over the clearing's edge. Windowed:
-##   Godot --path . -- --run-test probe_floor_view --out <png> [--seed 7] [--look <name>]
+##   .\probe.ps1 probe_floor_view --out <png> [--seed 7] [--look <name>]
 
 const CELL := Vector2i(800, 450)
 

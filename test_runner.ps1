@@ -6,7 +6,7 @@
 #   .\test_runner.ps1 -TestAll -Jobs 8            # at most 8 at a time
 #
 # GPU tests (tests\gpu_test_*.gd: they read back what a shader computed) run windowed, since the headless renderer
-# runs no shaders; -TestAll includes them.
+# runs no shaders; -TestAll includes them. Every run starts on a hidden desktop (test_lib.ps1), so no window shows.
 #
 # Logs: test_logs\<name>.log / .err.log (a sharded test: <name>.<shard>.log). A test passes only with exit code 0,
 # the ">>> [TEST PASSED] <name> <<<" marker, AND no "SCRIPT ERROR" or engine ERROR:/WARNING: line in its output.

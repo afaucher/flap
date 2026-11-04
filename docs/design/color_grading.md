@@ -44,7 +44,7 @@ the rail are lit.
 1. **Fixed views**: `tests/probe_grade.gd` renders the pine wood (seed 7) from three cameras at 14 m: `away`
    (the sun behind, everything front-lit), `across`, and `toward` (into the sun: backlit haze and shafts, like
    the concept). Windowed:
-   `Godot --path . -- --run-test probe_grade --look golden --out <prefix>`
+   `.\probe.ps1 probe_grade --look golden --out <prefix>`
    `--set '{"env.tonemap_exposure": 1.3}'` tries a value without editing code.
 2. **Scopes**: `python tools/grade_scopes.py <out.jpg> "concept=<jpg>" "golden=<png>" ...` puts each image in a
    row with a colourist's charts:

@@ -2,7 +2,7 @@ extends TestCase
 ## The pine wood's ages (Pinewood: mature pines, pole-stage pines, veterans) in a sheet of fixed views: a veteran
 ## from out in front and from under its crown, a group of poles, and long looks through the stand at two heights.
 ## The views are picked on the wood with its ages; `--no-ages` builds the same seed without them (the A/B). Windowed:
-##   Godot --path . -- --run-test probe_pine_ages --out <png> [--seed 7] [--no-ages]
+##   .\probe.ps1 probe_pine_ages --out <png> [--seed 7] [--no-ages]
 
 const CELL := Vector2i(800, 450)
 

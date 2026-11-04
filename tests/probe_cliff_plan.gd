@@ -3,7 +3,7 @@ extends TestCase
 ## the highest rock at each spot, the talus, the plateau) on a world grid, for tools/cliff_plan.py to draw as a plan
 ## (hillshade, contours) -- the whole wrap, and the middle close up. And, per column, where the wall's face stands at
 ## each height (its rows), to draw the face's lines in plan.
-##   Godot --path . --headless -- --run-test probe_cliff_plan --out <dir> [--seed 7]
+##   .\probe.ps1 -Headless probe_cliff_plan --out <dir> [--seed 7]
 ## Writes <dir>/plan_wide.bin and plan_mid.bin (float32 heights, row-major, north up) and plan.json (their grids, the
 ## sector, the boundary, the reach, the face lines).
 
