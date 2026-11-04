@@ -3007,5 +3007,19 @@
     "replace": "_perch_under(at)"
    }
   ]
+ },
+ {
+  "id": "lock-sees-through-wood",
+  "bug": "Guard for the seeker lock's need for sight: a lock built and held through a trunk between shooter and target would make cover worthless (2026-11-03).",
+  "tests": [
+   "test_lock_sight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn layout == null or layout.segment_clear(muzzle(), b.global_position, 0.0)",
+    "replace": "\treturn true"
+   }
+  ]
  }
 ]

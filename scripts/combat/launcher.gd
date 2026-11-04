@@ -3,7 +3,10 @@ extends RefCounted
 ## A saddle-mounted launcher (Hedgerow Aces, docs/design/concept_briefs.html): bolted on facing forward, so
 ## you aim it by flying the bird, like a First World War fighter. Two weapons:
 ##   ROCKETS  6 rounds, 4 a second while fire is held; unguided, so you fly the gunsight onto the lead marker.
-##   SEEKERS  3 rounds; hold a target inside the LOCK_CONE for LOCK_TIME to lock, then fire.
+##   SEEKERS  3 rounds; hold a target inside the LOCK_CONE for LOCK_TIME to lock, then fire. The seeker head sees
+##            along a straight line: wood cutting it (a trunk, a branch, an outpost's deck; not leaves) stops the lock
+##            building, and past LOS_GRACE drains it -- so among the trunks a lock is hard to hold, and a bird can
+##            break one by putting a trunk between itself and the shooter.
 ## Ammo is restocked, and lost feathers grown back, by sitting RESTOCK_TIME on the bird's base: its `rearm_perch`
 ## (the range sets an outpost's rail; unset, any perch does).
 ## Stepped by CombatWorld; reads the bird's public state only (state, model, global transform).
@@ -16,6 +19,8 @@ const LOCK_CONE := 15.0       ## deg off the aim to start and build a lock
 const LOCK_KEEP := 25.0       ## deg off the aim before a lock is dropped
 const LOCK_TIME := 1.0        ## s inside the cone to lock
 const LOCK_RANGE := Vector2(6.0, 40.0)   ## m
+const LOS_GRACE := 0.25       ## s the wood may cut the line before the lock drains (a branch flicking past)
+const LOS_DRAIN := 1.5        ## lock lost per s while the wood cuts the line, past the grace
 const TARGET_RANGE := 60.0    ## m, the furthest bird the HUD will bracket
 const RESTOCK_TIME := 2.0     ## s perched to rearm
 
@@ -34,6 +39,7 @@ var shots := 0
 var dry_fires := 0             ## fire pressed with the weapon empty (GameAudio: the dry click)
 var rearm_perch := -1          ## the base's perch (Perch.id): the only place to rearm and mend (-1: any perch)
 var _perched := 0.0
+var _blocked := 0.0            ## s the wood has cut the line to lock_target
 var _birds: Array = []
 var _world: CombatWorld = null
 
@@ -132,10 +138,16 @@ func _update_lock(dt: float) -> void:
 	if lock_target != null and is_instance_valid(lock_target):
 		var br := bearing(lock_target)
 		if br.x <= LOCK_KEEP and br.y >= LOCK_RANGE.x and br.y <= LOCK_RANGE.y:
-			if br.x <= LOCK_CONE:
-				lock = minf(1.0, lock + dt / LOCK_TIME)
+			if sees(lock_target):
+				_blocked = 0.0
+				if br.x <= LOCK_CONE:
+					lock = minf(1.0, lock + dt / LOCK_TIME)
+			else:
+				_blocked += dt
+				if _blocked > LOS_GRACE:
+					lock = maxf(0.0, lock - dt * LOS_DRAIN)
 			return
-	# Nothing held: start on the bird nearest the aim inside the cone.
+	# Nothing held: start on the bird nearest the aim inside the cone, in sight.
 	lock = maxf(0.0, lock - dt * 2.0)
 	var best: Bird = null
 	var best_a := LOCK_CONE
@@ -143,12 +155,19 @@ func _update_lock(dt: float) -> void:
 		if not is_instance_valid(b) or not is_enemy(b):   # (never a lock on a teammate)
 			continue
 		var br := bearing(b)
-		if br.x <= best_a and br.y >= LOCK_RANGE.x and br.y <= LOCK_RANGE.y:
+		if br.x <= best_a and br.y >= LOCK_RANGE.x and br.y <= LOCK_RANGE.y and sees(b):
 			best = b
 			best_a = br.x
 	if best != lock_target:
 		lock_target = best
 		lock = 0.0
+		_blocked = 0.0
+
+
+## Can the seeker head see `b`: is the straight line from the muzzle to it clear of wood (trunks, branches, decks)?
+func sees(b: Bird) -> bool:
+	var layout := _world.layout if _world != null else null
+	return layout == null or layout.segment_clear(muzzle(), b.global_position, 0.0)
 
 
 ## Is `b` an enemy of this launcher's bird (another team)? Every other bird is, outside a CombatWorld.

@@ -43,7 +43,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   cloth/skin/eye shaders. Look at it with
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
   Weapons: a pod each side of the rider (`Saddle` loadout: rockets x3 / seekers x2, tilted in a trunnion); a bird
-  carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube.
+  carries one kind, six rockets or four seekers (`.\range.ps1 [-Seekers]`), each fired from its tube. A seeker lock
+  needs a clear line of sight (`Launcher.sees`: wood on the line stops it, past `LOS_GRACE` drains it).
+- Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
   that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
   takes one feather at most, so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
