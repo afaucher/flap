@@ -18,6 +18,7 @@ func setup(l: ArenaLayout, bases := {}) -> void:
 	if CombatWorld.calm_air:
 		l.air = AirField.new()
 	arena = ArenaBuilder.new()
+	arena.looks = false   # (headless: only what's solid)
 	add_child(arena)
 	arena.build(l)
 	world = CombatWorld.new()
