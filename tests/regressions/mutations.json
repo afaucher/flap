@@ -3558,5 +3558,61 @@
     "replace": "\tfor k in mini(roundi(1.0 / 3.0 * ids.size()), rest.size()):"
    }
   ]
+ },
+ {
+  "id": "flap-damper-reads-thrust-as-bleed",
+  "bug": "The phugoid damper read a steady flapping climb's wingbeat thrust as speed bleeding away and held the nose about 5 deg low, so flap held at neutral stick flew fast and shallow instead of climbing (crow 2.1 m/s up at 12 m/s; the climb trim's 3.35 at 8.6) (2026-11-04).",
+  "tests": [
+   "test_flap_trim"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\t\ta_along += mean_flap_thrust(speed, flap_trim, _air_path).x\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "flap-trim-stays-glide",
+  "bug": "Neutral stick stayed the best-glide angle of attack with flap held: the wingbeat's lift share slowed the bird to its stall speed (crow, falcon) or tipped it into a stalled, hovering climb (sparrow) instead of climbing on the wing (2026-11-04).",
+  "tests": [
+   "test_flap_trim"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tclimb_alpha = best_climb().x\n",
+    "replace": "\tclimb_alpha = p.alpha_best\n"
+   }
+  ]
+ },
+ {
+  "id": "flap-trim-snaps",
+  "bug": "The flapping trim switched at the first wingbeat and on letting go instead of easing over, so the nose jerked at the bird's full alpha rate (2026-11-04).",
+  "tests": [
+   "test_flap_trim"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tflap_trim = lerpf(flap_trim, held, 1.0 - exp(-dt / FLAP_TRIM_TIME))\n",
+    "replace": "\tflap_trim = held\n"
+   }
+  ]
+ },
+ {
+  "id": "flap-trim-under-glide-speed",
+  "bug": "The climb trim at the fastest climb of all (Vy, 1.0-1.3x the stall speed) rather than the fastest no slower than best glide: letting go dived the bird to the edge of the stall (owl 0.92x), and the combat AI, which flaps when slow, stayed slow and flapped itself out (test_combat_team's birds rested 300 of 400 s) (2026-11-04).",
+  "tests": [
+   "test_flap_trim"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "const CLIMB_MIN_SPEED := 1.0\n",
+    "replace": "const CLIMB_MIN_SPEED := 0.0\n"
+   }
+  ]
  }
 ]

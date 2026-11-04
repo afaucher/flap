@@ -5,7 +5,8 @@ extends RefCounted
 
 ## Steering stick. x: -1 full left bank .. +1 full right bank. y: -1 full push (nose down, speed up,
 ## wings tuck past -0.5) .. +1 full pull (nose up, bleeds speed, flares past the stall).
-## 0 is the best-glide angle of attack and wings level. While perched or on the ground, x turns the bird
+## 0 is the best-glide angle of attack and wings level (with flap held, the climb trim: FlightModel.climb_alpha).
+## While perched or on the ground, x turns the bird
 ## to look around.
 var stick := Vector2.ZERO
 ## Flap this tick (Space / left trigger). From a perch or the ground: take off.

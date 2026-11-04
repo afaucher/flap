@@ -51,7 +51,9 @@ func setup() -> void:
 	var per_tick := float(Time.get_ticks_usec() - t0) / 240.0
 	print("six birds, trees ticked by hand: %.0f us per physics tick (all of it, flight included)" % per_tick)
 	check(climbed, "the tree's Climb branch flew the bird up past 14 m")
-	check(absf(birds[0].global_position.y - 14.0) < 4.0, "then its Level branch held it near there (%.1f m)" % birds[0].global_position.y)
+	var gamma_now: float = (birds[0].controller as TreePilot).tree.blackboard.get_value("gamma", 1.0)
+	check(gamma_now == 0.0, "then the tree went over to its Level branch (asking for %.1f deg)" % rad_to_deg(gamma_now))
+	check(absf(birds[0].global_position.y - 14.0) < 4.0, "and it held the bird near there (%.1f m)" % birds[0].global_position.y)
 	var t1 := Time.get_ticks_usec()
 	for i in 1000:
 		(birds[0].controller as TreePilot).tree.tick()
@@ -62,12 +64,14 @@ func setup() -> void:
 	finish()
 
 
-## Selector [ Sequence [Low?, Climb], Level ], built in code, a child of the bird, ticked by hand.
+## Selector [ ReactiveSequence [Low?, Climb], Level ], built in code, a child of the bird, ticked by hand. The sequence
+## is the reactive kind, so Low? is asked again every tick: a plain one resumes at its RUNNING Climb and never gets
+## back to Low?, so Level never ran (the bird only came out near 14 m while its flapping climb was slow).
 func _build(b: Bird) -> BeehaveTree:
 	var tree := BeehaveTree.new()
 	tree.process_thread = BeehaveTree.ProcessThread.MANUAL
 	var root := SelectorComposite.new()
-	var seq := SequenceComposite.new()
+	var seq := SequenceReactiveComposite.new()
 	seq.add_child(Low.new())
 	seq.add_child(Climb.new())
 	root.add_child(seq)

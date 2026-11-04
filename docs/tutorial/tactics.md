@@ -54,6 +54,8 @@ only rests you.
 
 Height is stored speed, and speed is how you turn and escape.
 - Flapping costs stamina; a weak beat (low on stamina) costs double. Gliding is free. Resting on a perch restores it.
+- Hold flap with the stick centred and the bird climbs as efficiently as it can, at its best-glide speed (a crow
+  about 3.4 m/s up, a hawk 2.7, a falcon 4.7). To sprint instead, push a little while you flap.
 - **Low and slow is where birds die**: no height to dive for speed, no speed to turn, the ground under you. A
   stalled wing drops the nose: let it, don't keep pulling.
 - Diving trades height for speed; a pull-out shares the wing's lift with any turn you're making. Pull out first,

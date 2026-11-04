@@ -75,9 +75,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   know of threats; `--return-fire` has the target shoot back.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
-- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: the game without the tack; Fight: a screen
-  to pick your bird, each side's pod (rockets, seekers or gun: `Menu.fight_pods`), the 3 v 3 match (at recruit | pilot | ace) or target practice, with the
-  mode's rules; `Menu.fight_options()`; Lab), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+- `scripts/app/menu.gd`: run with no arguments, the menu (Flight: a screen to pick your bird and how it flies,
+  Novice | Realistic (`--flying`), then the game without the tack, `Menu.flight_options()`; Fight: a screen to pick your
+  bird, each pod's weapon (rockets | seekers | gun, `--loadout <left>,<right>`), Novice | Realistic, the 3 v 3 match (at
+  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; `--page flight|fight`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
   `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
   look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they
