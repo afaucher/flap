@@ -680,15 +680,17 @@ func _heath_cover() -> void:
 			var size := _rng.randf_range(0.3, 0.75) * lerpf(0.6, 1.0, fade)   # (knee high and under, below the fence wire)
 			tx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.9, size * _rng.randf_range(0.6, 1.2), size * 1.9)), at))
 			var drift := _vnoise(Vector2(x, z) * 0.11 + Vector2(5.0, 8.0))
-			tc.append(Color(1.05, 0.95, 0.7).lerp(Color(0.78, 0.82, 0.55), clampf(drift * 1.3 - 0.15 + _rng.randf_range(-0.2, 0.2), 0.0, 1.0)) * _rng.randf_range(0.72, 1.02))
+			tc.append(Color(1.05, 0.95, 0.7).lerp(Color(0.78, 0.82, 0.55), clampf(drift * 1.3 - 0.15 + _rng.randf_range(-0.2, 0.2), 0.0, 1.0)) * _rng.randf_range(0.55, 0.88))
 		else:
 			var size := _rng.randf_range(0.45, 0.95)
 			hx.append(Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(size * 1.6, size * 0.55, size * 1.6)), at))
-			hc.append(Color(0.48, 0.27, 0.36).lerp(Color(0.36, 0.3, 0.26), _rng.randf()) * _rng.randf_range(0.55, 0.85))
+			hc.append(Color(0.62, 0.38, 0.48).lerp(Color(0.5, 0.42, 0.36), _rng.randf()) * _rng.randf_range(0.75, 1.0))
 	tufts = _batch("tufts", _tuft_cards(), tx, tc)
-	tufts.material_override = _grass_mat("sward")
+	tufts.material_override = _grass_mat("sward", true)
 	heather = _batch("heather", _tuft_cards(), hx, hc)
-	heather.material_override = _grass_mat()
+	heather.material_override = _grass_mat("grass", true)
+	for mi in [tufts, heather]:   # (as games do grass: its self-shadowing faked in the shader, not cast)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## Stands of pines out on the hills (and along the escarpment's top, behind it).
@@ -920,8 +922,12 @@ func _tuft_cards() -> ArrayMesh:
 
 ## The grass cards' material: the foliage shader on FoliageTex's `tex` (grass: a tussock, for the heather; sward:
 ## meadow grass, for the sward) (the arena builder's, as the bracken's).
-func _grass_mat(tex := "grass") -> Material:
-	return ArenaBuilder._foliage_mat(tex, {"tex": tex, "tint": Color(1, 1, 1)}, {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6})
+## With `heath`, lit as grass (foliage.gdshader's `grass`: normals up, root darkening faked, not cast).
+func _grass_mat(tex := "grass", heath := false) -> Material:
+	var extra := {"bend": 0.15, "clump_normal": 0.8, "sway": 0.02, "flutter": 0.01, "backlight": 0.6}
+	if heath:
+		extra.merge({"grass": 1.0, "root_ao": 0.35}, true)
+	return ArenaBuilder._foliage_mat(tex, {"tex": tex, "tint": Color(1, 1, 1)}, extra)
 
 
 ## A grass tuft as geometry: blades fanning up and out from a point (unit size, vertex colour darker at the root).

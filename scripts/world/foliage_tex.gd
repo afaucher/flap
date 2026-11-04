@@ -292,7 +292,7 @@ static func _sward(size: int, s: int) -> ImageTexture:
 		var dir := Vector2(lean * 0.4, -1.0).normalized()
 		var segs := 6
 		var w := rng.randf_range(1.8, 3.6)
-		var col := Color(0.3, 0.33, 0.15).lerp(Color(0.44, 0.43, 0.2), rng.randf())
+		var col := Color(0.42, 0.42, 0.2).lerp(Color(0.52, 0.5, 0.25), rng.randf())   # (not dark: the shader darkens the root)
 		var tip_col := Color(0.8, 0.72, 0.44).lerp(Color(0.62, 0.62, 0.34), rng.randf())
 		for k in segs:
 			var f := float(k + 1) / segs

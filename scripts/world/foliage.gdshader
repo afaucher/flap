@@ -23,6 +23,13 @@ uniform float clump_normal = 0.75;   // 0 the card's own normal .. 1 out from th
 uniform float sway = 0.05;           // m
 uniform float flutter = 0.02;
 uniform float bend = 0.0;            // ferns: how far the tip droops, of the frond's length
+// Grass (the heath's sward and heather: cards with no clump of their own), as games light grass: the normal mostly
+// up -- rounded out to the card's side at the root, straight up at the tip (the bright tips) -- instead of out from
+// a clump; and its self-shadowing faked, not cast: darker toward the root (root_ao), fading out with distance
+// (ao_fade, m), since dark spots far off look wrong. The cards cast no shadows (EdgeBuilder).
+uniform float grass = 0.0;           // 0 foliage (clump normals) .. 1 grass normals
+uniform float root_ao = 1.0;         // how bright the root is, of the tip (1: no darkening)
+uniform vec2 ao_fade = vec2(25.0, 90.0);
 
 varying vec3 clump_n;
 
@@ -53,7 +60,14 @@ void fragment() {
 	ALPHA_SCISSOR_THRESHOLD = scissor;
 	vec3 cn = normalize((VIEW_MATRIX * vec4(clump_n, 0.0)).xyz);
 	vec3 own = FRONT_FACING ? NORMAL : -NORMAL;
-	NORMAL = normalize(mix(own, cn, clump_normal));
+	vec3 fn = normalize(mix(own, cn, clump_normal));
+	float tip = 1.0 - UV.y;   // (the cards' v: base 1 -> tip 0)
+	vec3 up = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+	vec3 gn = normalize(mix(normalize(up + own * 0.6), up, tip));
+	NORMAL = normalize(mix(fn, gn, grass));
+	float far_k = smoothstep(ao_fade.x, ao_fade.y, length(VERTEX));
+	AO = mix(mix(root_ao, 1.0, tip), 1.0, far_k);
+	AO_LIGHT_AFFECT = 0.8 * grass;
 	ROUGHNESS = 0.72;
 	SPECULAR = 0.3;
 	BACKLIGHT = ALBEDO * backlight;
