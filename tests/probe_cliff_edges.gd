@@ -1,7 +1,7 @@
 extends TestCase
 ## The escarpment's structure, exactly, from its model (Escarpment): for tools/cliff_edges.py to draw as a front
 ## elevation (along the cliff x height) and a top view (along the cliff x out from the middle), and to measure.
-##   Godot --path . --headless -- --run-test probe_cliff_edges --out <json> [--seed 7]
+##   .\probe.ps1 -Headless probe_cliff_edges --out <json> [--seed 7]
 ## Writes: the sampling; a depth image of the wall seen from the front (how far back the face stands, m, at each
 ## (arc, z)); the ground's height seen from above (at each (arc, r)); and the structure as lines -- each bed's foot,
 ## each joint (the bed it cuts, its arc), the lips (a bed's foot jutting past the top of the bed under it), the ledges,

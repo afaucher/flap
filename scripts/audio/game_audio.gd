@@ -7,9 +7,10 @@ extends Node
 ##   - Every watched bird: perch catch, take-off push, ground landing, bonk; its species' alarm call when hurt or bonked
 ##     hard, now and then its contact call.
 ##   - Combat: each round's launch and its motor (a loop riding the round, Doppler from the camera), its burst (on a
-##     bird, a trunk, the ground, or a fizzle), feather puffs, the downed flutter. The gun (Projectile GUN) has no cues
-##     of its own yet: each shot is a quiet, high rocket_launch (GUN_SHOT), no motor; a bullet striking wood or the ground
-##     a quiet, high burst_wood / burst_ground (GUN_STRIKE); one hitting a bird only its feather puff (struck).
+##     bird, a trunk, the ground, or a fizzle), feather puffs, the downed flutter. The gun (Projectile GUN): each shot its
+##     own crack and bolt clatter (gun_shot, no motor), a bullet striking a trunk or the ground its thwack or thup
+##     (gun_strike_wood / _ground), one hitting a bird its feather puff (struck); someone else's bullet passing within
+##     ZIP_NEAR of you zips by (bullet_zip, where it passed).
 ##   - Your launcher: the lock building (beeps faster and higher with the lock), the locked tone, the dry click, the
 ##     weapon switch, "hold fire" when you shoot with a teammate in the line, the rack refilling on the base (a clink a
 ##     round, then a chime); what the HUD warns you of (CombatWorld.warnings_for): a lock on you (a low pulse) and a
@@ -22,8 +23,7 @@ const INSECT_TOP := 10.0      ## m: the insects fade out by here
 const CALL_GAP := 0.8         ## s: the least time between one bird's calls
 const CHATTER := Vector2(8.0, 20.0)   ## s between a watched AI bird's contact calls
 const RACK_FILL := 0.9        ## of Launcher.RESTOCK_TIME: the clinks are spread over this much of it
-const GUN_SHOT := [-12.0, 1.9]    ## dB, pitch: a gun's shot, on rocket_launch until it has its own cue
-const GUN_STRIKE := [-16.0, 2.2]  ## dB, pitch: a bullet on wood or the ground, on the burst cues likewise
+const ZIP_NEAR := 1.5          ## m: a bullet passing you closer than this zips by
 const BELT_CLINK := 10        ## gun rounds a rearm clink stands for
 
 var sfx: Sfx
@@ -36,6 +36,7 @@ const MAX_EVENTS := 400
 
 var _birds := {}              ## watched Bird -> {state, speed, next_call, last_call}
 var _motors := {}             ## Projectile -> [player node, cue]
+var _bullets := {}            ## a live bullet's id -> where it was last frame (Vector3), or false once it has zipped by
 var _rng := RandomNumberGenerator.new()
 var _t := 0.0
 var _height := 0.0            ## your bird's height (telemetry)
@@ -115,6 +116,7 @@ func _process(dt: float) -> void:
 	if world != null and world.player != null and is_instance_valid(world.player.bird):
 		_launcher_tick(world.player)
 		_threats_tick(world.player.bird)
+		_zips_tick(world.player.bird)
 		_score_tick()
 	if forest:
 		_forest_tick()
@@ -168,7 +170,7 @@ func _call(b: Bird, kind: String) -> void:
 
 func _on_launched(p: Projectile) -> void:
 	if p.kind == Projectile.Kind.GUN:
-		cue("rocket_launch", p.pos, GUN_SHOT[0], GUN_SHOT[1])
+		cue("gun_shot", p.pos)
 		return
 	var seeker := p.kind == Projectile.Kind.SEEKER
 	cue("seeker_launch" if seeker else "rocket_launch", p.pos)
@@ -190,7 +192,7 @@ func _motors_tick() -> void:
 func _on_burst(at: Vector3, why: String, kind: int, surface: String) -> void:
 	if kind == Projectile.Kind.GUN:
 		if why == "impact":
-			cue("burst_ground" if surface == "ground" else "burst_wood", at, GUN_STRIKE[0], GUN_STRIKE[1])
+			cue("gun_strike_ground" if surface == "ground" else "gun_strike_wood", at)
 		return
 	if why == "expired":
 		cue("fizzle", at)
@@ -202,6 +204,28 @@ func _on_burst(at: Vector3, why: String, kind: int, surface: String) -> void:
 			cue("burst_wood", at)
 		_:
 			cue("burst", at)
+
+
+## Someone else's bullets going by `me`: one passing within ZIP_NEAR zips, once, at the point it passed (its path since
+## the last frame, so a pass between frames isn't missed; still closing, it waits).
+func _zips_tick(me: Bird) -> void:
+	var ear := me.global_position
+	var live := {}
+	for p: Projectile in world.projectiles:
+		if p.kind != Projectile.Kind.GUN or not p.alive or p.shooter == me:
+			continue
+		live[p.id] = true
+		var was: Variant = _bullets.get(p.id, p.last_pos)
+		if was is bool:
+			continue
+		_bullets[p.id] = p.pos
+		var c := Geometry3D.get_closest_point_to_segment(ear, was, p.pos)
+		if c.distance_to(ear) < ZIP_NEAR and c.distance_squared_to(p.pos) > 1e-8:
+			cue("bullet_zip", c)
+			_bullets[p.id] = false
+	for id: int in _bullets.keys():
+		if not live.has(id):
+			_bullets.erase(id)
 
 
 func _on_struck(b: Bird, _at: Vector3, _keys: Array) -> void:

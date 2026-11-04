@@ -60,7 +60,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   0.27 m, sparrow 0.09) and hurts only that bird: no stun, a nudge, one feather -- inside the recovery window a third
   of one (`CombatWorld.GUN_CHIP`), so a stream chips about a feather a second. Drawn as tracer streaks with muzzle
   flashes; sparks on wood and ground (`CombatFx`); `launched` / `burst` carry `kind` GUN (`burst` why `"hit"` on a bird,
-  `"impact"`; none when it runs out). `GameAudio` maps it to quiet, high rocket / burst cues until it has its own.
+  `"impact"`; none when it runs out). `GameAudio`: its own shot (crack and bolt clatter), strikes on wood and ground, and a zip for someone else's
+  bullet passing within `ZIP_NEAR` of you.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
   that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
@@ -73,6 +74,13 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   range: you and a wingman v the target, your base by the clearing and theirs the farthest outpost. Warnings:
   `CombatWorld.warnings_for(bird)` (rounds coming at it, locks on it) -- what the HUD shows and all an AI may
   know of threats; `--return-fire` has the target shoot back.
+- Landing: the highlighted perch (`Bird.candidate`) is the one the predicted flight path (`Bird.predicted_path`: its
+  sink and turn, not the nose) passes closest, a perch in reach now winning; the perch assist keeps the old pick, the
+  nearest perch ahead (`Bird._ahead`: the AI's flying is tuned on it). `--flying novice|realistic` (default
+  realistic; `FlightAssist.configure`, `fit` on the player's bird): novice blends the player's input toward
+  `AIPilot.steer`'s approach while catch is held (`FlightAssist.strength`, 0 = off), the perch assist works from
+  further out on the candidate and brakes for height (`Bird.novice_landing`), and `EnergyModel` gives every bird 1.5x stamina, 2x
+  recovery, 1.3x burst refill. `test_perch_highlight`, `test_landing_assist`, `test_energy`.
 - HUD (`FlightHud`, `CombatHud`): `FlightHud.style` classic (default: status top left, a green / red landing bar on the perch while
   catch is held, instruments under F3), ring, or dev (`--hud`).
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: a screen to pick your bird and how it flies,
@@ -110,7 +118,14 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - Looks: `ForestLight.LOOKS` (golden by default, afternoon, misty_morning, overcast; `--look`, F6), graded as in
   `docs/design/color_grading.md` (`tests/probe_grade.gd` renders fixed views; `tools/grade_scopes.py` charts them
   beside the concept art).
-- `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name.
+- `tests/test_*.gd` run in `-TestAll`; `tests/probe_*.gd` are diagnostics, run by name: `.\probe.ps1 probe_x [args]`
+  (`-Headless` where no renderer is needed). **Keep windowed runs off the user's screen**: many sessions run tests and
+  renders at once, and each Godot window used to pop up over whatever the user was doing and take focus. The test
+  runner, `mutation_check.ps1`, `probe.ps1`, `run.ps1 --shot/--sheet` (or `-Hidden`) and `perf.ps1 -Hidden` start
+  Godot on a desktop of its own (`test_lib.ps1`, `FlapHidden`): it renders on the GPU as usual (the GPU tests' numbers
+  are the same) but is never on screen, never in the taskbar, never focused, and dies with the script that started
+  it. Don't launch a windowed Godot directly (`& $godot --path . -- ...`) for a render or check; use these.
+  `FLAP_SHOW_WINDOWS=1` puts them on the user's desktop, to watch one.
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch tree and requires the named tests to fail (KILLED); a
   SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code. Entries run in

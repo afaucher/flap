@@ -80,6 +80,7 @@ func _ready() -> void:
 	with_wingman = not args.has("--no-wingman")
 	return_fire = args.has("--return-fire")
 	match_mode = args.has("--match")
+	FlightAssist.configure(args)   # (--flying novice: the landing assist, more stamina)
 	if Boot.arg_value(args, "--skill") in ["recruit", "pilot", "ace"]:
 		match_skill = Boot.arg_value(args, "--skill")
 	var team_ids := _ids(Boot.arg_value(args, "--team"), 2)
@@ -177,6 +178,7 @@ func restart() -> void:
 		weapons = AICombat.new()
 		(weapons as AICombat).prefer = Launcher.Weapon.SEEKERS if start_seekers else Launcher.weapon_of((loadout if not loadout.is_empty() else ["rockets"])[0])
 	bird = _spawn(bird_id, flight, "Player")
+	FlightAssist.fit(bird)   # (novice: perches highlighted from further out)
 	audio.player = bird
 	var mine := loadout if not loadout.is_empty() else Array(Saddle.DEFAULT_LOADOUT)
 	if target_pilot != null:

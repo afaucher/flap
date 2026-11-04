@@ -2,7 +2,7 @@ extends TestCase
 ## The menu's outpost (MenuBackdrop: the pine wood, its late-afternoon sun, birds on the rail) framed as
 ## docs/images/concepts/r4_aces_outpost.jpg is -- from above the deck's front corner, looking across it to the
 ## hangar and the trunk -- at the concept's size, to set side by side with it; or a close look at a part of it. Windowed:
-##   Godot --path . -- --run-test probe_outpost_concept --out <png> [--view concept | under | roundel | opening | far_end] [--warm]
+##   .\probe.ps1 probe_outpost_concept --out <png> [--view concept | under | roundel | opening | far_end] [--warm]
 
 const VIEWS := {   ## [camera, looking at] from the deck's middle (world: out +z, the hangar's side -x)
 	"concept": [Vector3(0.95, 1.05, 1.75), Vector3(-0.12, -0.05, -0.1)],

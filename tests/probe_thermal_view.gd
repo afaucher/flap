@@ -1,6 +1,6 @@
 extends TestCase
 ## The pine wood's clearing thermal as a soaring bird sees it: from inside the column at 30 m, and from its edge.
-##   Godot --path . -- --run-test probe_thermal_view --out <prefix>
+##   .\probe.ps1 probe_thermal_view --out <prefix>
 
 
 func _init() -> void:

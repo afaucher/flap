@@ -3,7 +3,7 @@ extends TestCase
 ## outer edge (the planks' ends), the hangar's corner, the rail's end, the bearers and braces from below, the deck
 ## and hangar framed like docs/images/concepts/r4_aces_outpost.jpg, the roundel on the hangar's front. `--warm`: a low warm sun
 ## (the concept's light) in place of the game's. Windowed:
-##   Godot --path . -- --run-test probe_timber --out <png> [--warm]
+##   .\probe.ps1 probe_timber --out <png> [--warm]
 
 const VIEWS := [   ## [label, camera, looking at] (outpost frame: the deck's middle at y 1, out +z, its side -x)
 	["Deck edge: the plank ends", Vector3(0.35, 1.05, 1.15), Vector3(0.0, 0.96, 0.52)],

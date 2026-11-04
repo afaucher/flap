@@ -2,7 +2,7 @@ extends TestCase
 ## The menu's outpost close up (a bird on the rail, the deck in and out of shadow) under switches, to find where
 ## speckle comes from: the soft sun (--ang 0: hard), the shadow filter, TAA, SSAO, volumetric fog. (2026-11-03: none
 ## of the shadow / SSAO / fog switches changed it; TAA halved it; the wood's relief made the deck's.) Windowed:
-##   Godot --path . -- --run-test probe_shadow_noise --out <png> [--ang <deg>] [--filter <0-5>] [--taa] [--blur <x>] [--no-ssao] [--no-vfog] [--ssao-q <0-3>]
+##   .\probe.ps1 probe_shadow_noise --out <png> [--ang <deg>] [--filter <0-5>] [--taa] [--blur <x>] [--no-ssao] [--no-vfog] [--ssao-q <0-3>]
 
 
 func _init() -> void:

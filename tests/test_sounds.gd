@@ -4,7 +4,8 @@ extends TestCase
 ## locking you are far apart in pitch; loops wrap without a jump; a burst hits at once; a rocket launch is over in
 ## 0.2 s, so four a second stay apart); the owl's wingbeat is next to silent beside the crow's; and GameAudio asks for
 ## the right cue at the right moment: launches with their motors, each kind of burst, hits with the species' alarm,
-## the lock's beeps rising and quickening then the locked tone (and nothing without a target), what the HUD warns you
+## the gun's shot (its own, no motor), its strikes on wood and the ground, a bullet zipping by when it passes you
+## close (not your own, not far off), the lock's beeps rising and quickening then the locked tone (and nothing without a target), what the HUD warns you
 ## of (someone locking you; a seeker closing on you, the warble quickening), the dry click, the weapon switch, a clink per missing round on
 ## the base then the chime (and none off the base), the talons catching on a landing (not on a teleport), and bonks
 ## louder the harder they hit.
@@ -83,6 +84,36 @@ func _recipes() -> void:
 	for take in 4:
 		var b := SoundRecipes.render("burst", take)
 		check(SoundDsp.rms(b, 0.0, 0.03) > SoundDsp.rms(b, 0.1, 0.4) * 3.0, "burst %d hits at once and dies away" % take)
+	# The gun: ten shots a second stay ten -- each over well before the next 100 ms on, its crack at once -- with the
+	# bolt's clatter after the crack (high clicks 15-55 ms on, then quiet); a bullet on wood brighter than one in the
+	# ground; a bullet going by falls in pitch, over in 0.16 s.
+	for take in SoundRecipes.files_of("gun_shot").size():
+		var g := SoundRecipes.render("gun_shot", take)
+		check(g.size() <= SoundDsp.n_of(0.1) and SoundDsp.rms(g, 0.06) < SoundDsp.rms(g, 0.0, 0.02) * 0.05,
+				"gun shot %d is over before the next, ten a second (%.0f ms long)" % [take + 1, g.size() * 1000.0 / SoundDsp.RATE])
+		check(SoundDsp.onset(g, 0.0, 12.0) < 0.002, "gun shot %d cracks at once" % (take + 1))
+		var hi := SoundDsp.highpass(g, 3000.0, 2)
+		var clatter := SoundDsp.rms(hi, 0.015, 0.055)
+		check(clatter > SoundDsp.rms(hi, 0.06, 0.085) * 4.0 and clatter > SoundDsp.rms(g, 0.0, 0.01) * 0.04,
+				"gun shot %d: the bolt clatters after the crack (%.4f, the crack %.4f)" % [take + 1, clatter, SoundDsp.rms(g, 0.0, 0.01)])
+	var bright := func(name: String) -> float:
+		var t := 0.0
+		for take in SoundRecipes.files_of(name).size():
+			var x := SoundRecipes.render(name, take)
+			t += SoundDsp.rms(SoundDsp.highpass(x, 2000.0, 2)) / maxf(SoundDsp.rms(x), 1e-6)
+		return t / SoundRecipes.files_of(name).size()
+	var wood: float = bright.call("gun_strike_wood")
+	var ground: float = bright.call("gun_strike_ground")
+	check(wood > ground * 1.8, "a bullet on wood is brighter than one in the ground (%.2f, %.2f of it above 2 kHz)" % [wood, ground])
+	for name: String in ["gun_strike_wood", "gun_strike_ground"]:
+		var x := SoundRecipes.render(name)
+		check(SoundDsp.rms(x, 0.0, 0.03) > SoundDsp.rms(x, 0.08) * 4.0, "%s hits at once and dies away" % name)
+	for take in SoundRecipes.files_of("bullet_zip").size():
+		var z := SoundRecipes.render("bullet_zip", take)
+		var sec := z.size() / float(SoundDsp.RATE)
+		var f0 := _crossings(SoundDsp.cut(z, 0.0, sec * 0.3))
+		var f1 := _crossings(SoundDsp.cut(z, sec * 0.7))
+		check(f1 < f0 * 0.85 and z.size() <= SoundDsp.n_of(0.16), "bullet zip %d falls in pitch as it passes (%d -> %d Hz), short" % [take + 1, f0, f1])
 	var r := SoundRecipes.render("rocket_launch")
 	check(SoundDsp.rms(r, 0.2) < SoundDsp.rms(r, 0.0, 0.2) * 0.15, "a rocket launch is over in 0.2 s")
 	for take in 3:
@@ -174,6 +205,29 @@ func _game_audio() -> void:
 	world.burst.emit(Vector3(3, 30, 3), "expired", Projectile.Kind.ROCKET, "air")
 	eq(ga.events.slice(n).map(func(e: Dictionary) -> String: return e.cue), ["burst_ground", "burst_wood", "burst", "fizzle"],
 			"a burst sounds like what it hit: the ground, a trunk, a bird, or nothing")
+	# The gun's bullets: on the ground and on a trunk, the gun's own strikes (not a rocket's burst); on a bird, only the
+	# hit's feathers (struck).
+	n = ga.events.size()
+	world.burst.emit(Vector3(3, 0.1, 3), "impact", Projectile.Kind.GUN, "ground")
+	world.burst.emit(Vector3(3, 6.0, 3), "impact", Projectile.Kind.GUN, "trunk")
+	world.burst.emit(Vector3(3, 30, 3), "hit", Projectile.Kind.GUN, "bird")
+	eq(ga.events.slice(n).map(func(e: Dictionary) -> String: return e.cue), ["gun_strike_ground", "gun_strike_wood"],
+			"a bullet strikes the ground or a trunk with the gun's own sounds; on a bird, nothing of its own")
+	# Shots: each its own gun shot, no rocket launch, no motor. b's bullet passing 0.8 m off you zips by once, where it
+	# passed (beside you); one 5 m off doesn't, nor does your own going by as close.
+	n = ga.events.size()
+	var me := a.global_position
+	world.spawn(Projectile.launch(Projectile.Kind.GUN, me + Vector3(0.8, 0, -12), Vector3.ZERO, Vector3(0, 0, 1), b))
+	world.spawn(Projectile.launch(Projectile.Kind.GUN, me + Vector3(5.0, 0, -12), Vector3.ZERO, Vector3(0, 0, 1), b))
+	world.spawn(Projectile.launch(Projectile.Kind.GUN, me + Vector3(-0.8, 0, -12), Vector3.ZERO, Vector3(0, 0, 1), a))
+	await frames(30)
+	eq(_events_of(ga, "gun_shot", n).size(), 3, "a gun shot for each bullet fired")
+	eq(_events_of(ga, "rocket_launch", n).size() + _events_of(ga, "rocket_motor", n).size(), 0, "the gun has no rocket's launch or motor")
+	var zips := _events_of(ga, "bullet_zip", n)
+	eq(zips.size(), 1, "a bullet passing close zips by, once; one far off or your own, nothing")
+	if zips.size() == 1:
+		var zp: Vector3 = zips[0].pos
+		check(zp.x > me.x + 0.5 and zp.x < me.x + 1.1, "the zip is where it passed (%.2f m to your side)" % (zp.x - me.x))
 	# A hit: feathers and the species' alarm.
 	n = ga.events.size()
 	world.hit(b, b.global_position + Vector3(0.5, 0, 0), 1.0, a)

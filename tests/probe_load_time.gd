@@ -1,6 +1,6 @@
 extends TestCase
 ## How long a pine wood takes to load: generating the layout, building it (by stage), and its first frames drawn.
-##   Godot --path . -- --run-test probe_load_time   (windowed, for the first frames' shader compiles)
+##   .\probe.ps1 probe_load_time   (windowed, for the first frames' shader compiles)
 
 
 func _init() -> void:
