@@ -64,8 +64,8 @@ static func _motes(n: int, life: float) -> GPUParticles3D:
 	m.turbulence_noise_scale = 6.0
 	m.turbulence_influence_min = 0.05
 	m.turbulence_influence_max = 0.15
-	m.scale_min = 0.6
-	m.scale_max = 1.3
+	m.scale_min = 0.4
+	m.scale_max = 1.1
 	var fade := Gradient.new()
 	fade.offsets = PackedFloat32Array([0.0, 0.12, 0.7, 1.0])
 	fade.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])

@@ -153,4 +153,5 @@ func _drawn() -> void:
 		var mat := quad.material as ShaderMaterial if quad != null else null
 		check(quad != null and quad.get_aabb().size.x < 0.06, "a mote is a speck: %s m across" % [quad.get_aabb().size.x if quad != null else -1.0])
 		check(mat != null and mat.shader.code.contains("blend_add"), "a mote adds light (a glint, not a pale disc)")
+		check(mat != null and not mat.shader.code.contains("unshaded") and mat.shader.code.contains("void light()"), "a mote is lit by the sun (it glints in the sunbeams, not in the shade)")
 	fx.queue_free()
