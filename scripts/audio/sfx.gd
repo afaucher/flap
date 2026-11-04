@@ -23,7 +23,7 @@ const CUES := {
 	"burst": {"bus": "SFX", "volume_db": 0.0, "pitch_jitter": 0.06, "max_voices": 6, "min_gap": 0.02, "positional": true, "unit_size": 8.0, "max_distance": 150.0},
 	"burst_wood": {"bus": "SFX", "volume_db": 0.0, "pitch_jitter": 0.05, "max_voices": 4, "min_gap": 0.02, "positional": true, "unit_size": 8.0, "max_distance": 150.0},
 	"burst_ground": {"bus": "SFX", "volume_db": -1.0, "pitch_jitter": 0.05, "max_voices": 4, "min_gap": 0.02, "positional": true, "unit_size": 8.0, "max_distance": 150.0},
-	"gun_shot": {"bus": "SFX", "volume_db": -8.0, "pitch_jitter": 0.04, "max_voices": 6, "positional": true, "unit_size": 3.0, "max_distance": 70.0},
+	"gun_shot": {"bus": "SFX", "volume_db": -4.0, "pitch_jitter": 0.04, "max_voices": 6, "positional": true, "unit_size": 4.0, "max_distance": 80.0},
 	"gun_strike_wood": {"bus": "SFX", "volume_db": -9.0, "pitch_jitter": 0.06, "max_voices": 4, "min_gap": 0.02, "positional": true, "unit_size": 3.0, "max_distance": 60.0},
 	"gun_strike_ground": {"bus": "SFX", "volume_db": -10.0, "pitch_jitter": 0.06, "max_voices": 4, "min_gap": 0.02, "positional": true, "unit_size": 3.0, "max_distance": 50.0},
 	"bullet_zip": {"bus": "SFX", "volume_db": -6.0, "pitch_jitter": 0.08, "max_voices": 3, "min_gap": 0.03, "positional": true, "unit_size": 2.0, "max_distance": 15.0},

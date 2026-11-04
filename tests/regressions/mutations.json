@@ -3886,5 +3886,19 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "sfx-3d-no-lead",
+  "bug": "Short 3D sounds unheard: an AudioStreamPlayer3D mixes at nothing until the physics tick after it starts, so the gun shot (all crack in its first 20 ms) was silent in the game and every 3D one-shot lost its attack; baked with no lead-in (2026-11-04). In code this is caught by the bake stamp (rebaking without the lead fails test_sounds' lead-in check and gpu_test_audible).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/sound_recipes.gd",
+    "find": "\tif is_loop(name) or not positional(name):\n\t\treturn s\n\tvar out := D.silence(LEAD_3D)\n",
+    "replace": "\treturn s\n\tvar out := D.silence(LEAD_3D)\n"
+   }
+  ]
  }
 ]

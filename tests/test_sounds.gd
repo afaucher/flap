@@ -49,6 +49,23 @@ func _baked() -> void:
 	eq(unknown, [], "every cue plays a baked sound")
 	for name: String in SoundRecipes.SOUNDS:
 		check(Sfx.CUES.has(name), "%s has a cue" % name)
+	# A 3D one-shot is baked with its lead-in (SoundRecipes.LEAD_3D: an AudioStreamPlayer3D mixes at nothing until the
+	# tick after it starts); a flat one and a loop without.
+	var lead := SoundDsp.n_of(SoundRecipes.LEAD_3D)
+	var unled := []
+	var led_flat := []
+	for name: String in SoundRecipes.SOUNDS:
+		var f: String = SoundRecipes.files_of(name)[0]
+		var w := SoundDsp.load_wav(Sfx.DIR + f + ".wav")
+		var quiet := SoundDsp.peak(SoundDsp.cut(w, 0.0, SoundRecipes.LEAD_3D * 0.9)) < 1e-3
+		if SoundRecipes.positional(name) and not SoundRecipes.is_loop(name):
+			if not quiet or w.size() < SoundRecipes.render(name).size() + lead - 2:
+				unled.append(name)
+		elif quiet and SoundRecipes.render(name).size() == w.size() - lead:
+			led_flat.append(name)
+	eq(unled, [], "every 3D one-shot is baked with its lead-in")
+	eq(led_flat, [], "no flat sound or loop is delayed")
+	check(SoundRecipes.positional("gun_shot") and not SoundRecipes.positional("lock_beep"), "(the gun shot is 3D, the lock beep flat)")
 
 
 ## Zero crossings a second over the loud part: the pitch of a tone.

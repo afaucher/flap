@@ -17,6 +17,7 @@ const FIREWORK := "res://assets/audio/third_party/freesound/336008__rudmer_rotte
 const CLAWS := "res://assets/audio/recordings/claws_on_cat_tree.wav"
 const SOURCE_PATH := "res://scripts/audio/sound_recipes.gd"
 const DSP_PATH := "res://scripts/audio/sound_dsp.gd"
+const SFX_PATH := "res://scripts/audio/sfx.gd"
 const STAMP_PATH := "res://assets/audio/sfx/baked_from.md5"
 
 ## name -> {takes, loop (s, or 0: a one-shot)}. The recipe is the method _<name>(rng, take).
@@ -61,6 +62,14 @@ static func is_loop(name: String) -> bool:
 	return float(SOUNDS[name].get("loop", 0.0)) > 0.0
 
 
+## A 3D sound starts silent: an AudioStreamPlayer3D gets its volume and panning on the physics tick after it starts
+## playing (until then it mixes at nothing, then ramps up), so a sound's first ~20 ms are lost in 3D. A gun shot is
+## all crack in that time and went unheard; every short 3D one-shot lost its attack. So each sound a positional cue
+## plays (Sfx.CUES) is baked with this much silence ahead of it: 30 ms, under two ticks, less than its own travel time
+## from 10 m off.
+const LEAD_3D := 0.03
+
+
 ## Take `take` (0-based) of `name`, as mono samples.
 static func render(name: String, take := 0) -> PackedFloat32Array:
 	var rng := RandomNumberGenerator.new()
@@ -71,10 +80,29 @@ static func render(name: String, take := 0) -> PackedFloat32Array:
 	return D.normalize(s, -1.0)
 
 
+## Take `take` of `name` as baked (tools/bake_sounds.gd): render() with LEAD_3D of silence ahead of a one-shot that a
+## positional cue plays.
+static func baked(name: String, take := 0) -> PackedFloat32Array:
+	var s := render(name, take)
+	if is_loop(name) or not positional(name):
+		return s
+	var out := D.silence(LEAD_3D)
+	out.append_array(s)
+	return out
+
+
+## Does a positional cue (Sfx.CUES) play `name`?
+static func positional(name: String) -> bool:
+	for c: String in Sfx.CUES:
+		if Sfx.sound_of(c) == name and bool(Sfx.CUES[c].get("positional", false)):
+			return true
+	return false
+
+
 ## The MD5 of the recipes, SoundDsp and the recordings together: tools/bake_sounds.gd stamps the baked set with it.
 static func source_md5() -> String:
 	var src := ""
-	for p: String in [SOURCE_PATH, DSP_PATH]:
+	for p: String in [SOURCE_PATH, DSP_PATH, SFX_PATH]:   # (the cues say which sounds get a 3D lead-in)
 		src += FileAccess.get_file_as_string(p).replace("\r\n", "\n")
 	for p: String in [FIREWORK, CLAWS] + CALL_SOURCES:
 		src += FileAccess.get_md5(p)

@@ -113,7 +113,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/audio/`: `GameAudio` (what plays when, from telemetry and the Bird / CombatWorld signals; `events` records every
   cue for tests), `Sfx` (pooled cue players), `FlightAudio` (live wind, whooshes, wingbeats), `SoundRecipes` +
   `SoundDsp` (every other sound, baked to `assets/audio/sfx/` by `tools/bake_sounds.gd`: re-run after changing a recipe;
-  `test_sounds` checks the stamp). Plan and status: `docs/design/audio_plan.md`.
+  `test_sounds` checks the stamp). A sound a 3D cue plays is baked with `SoundRecipes.LEAD_3D` of silence ahead (a 3D
+  player is silent until the tick after it starts: short sounds went unheard); `gpu_test_audible` records the master bus
+  to check they're heard, and `tests/probe_gun_audio.gd` records the range while firing. Plan and status: `docs/design/audio_plan.md`.
 - `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
   game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
   ticks per frame, worst frames, the machine's load while it ran). Rules and numbers: `docs/design/performance.md`.
