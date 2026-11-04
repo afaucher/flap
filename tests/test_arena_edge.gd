@@ -82,13 +82,23 @@ func _rock(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 		var h := v.y - ArenaLayout.GROUND_Y
 		if absf(u) < 0.33:
 			mid = maxf(mid, h)
-		elif u < -0.95:
+		elif u < -0.996:
 			left = maxf(left, h)
-		elif u > 0.95:
+		elif u > 0.996:
 			right = maxf(right, h)
 	print("EDGE rock: %.1f m tall in the middle (the tallest tree %.1f), %.1f and %.1f m at its ends" % [mid, tallest_tree, left, right])
 	check(mid > tallest_tree + 5.0, "the escarpment stands well above the wood (%.1f m, trees to %.1f)" % [mid, tallest_tree])
 	check(left < 1.0 and right < 1.0, "and comes down to the heath at both ends (%.1f, %.1f m)" % [left, right])
+	# Behind its top it levels off (a plateau, not a slope rising on for ever): 60 and 250 m back, the same height.
+	var cm := esc.column(esc.at)
+	var t0 := esc.top_start(cm)
+	var back_rise := esc.height_in(cm, t0 + 250.0) - esc.height_in(cm, t0 + 60.0)
+	print("EDGE behind the top, the ground 250 m back stands %.1f m over the ground 60 m back" % back_rise)
+	check(absf(back_rise) < 2.0, "behind its top the ground levels off (%.1f m higher 250 m back than 60)" % back_rise)
+	# Its ends: far round to either side and curving out away from the wood, so from the play area they're out of view.
+	var end_r := [layout.rock.foot_r(esc.at - Escarpment.HALF * 0.97), layout.rock.foot_r(esc.at + Escarpment.HALF * 0.97)]
+	print("EDGE its ends, %.0f deg round either side, stand %.0f and %.0f m out (the boundary %.0f)" % [rad_to_deg(Escarpment.HALF), end_r[0], end_r[1], layout.boundary])
+	check(Escarpment.HALF > deg_to_rad(100.0) and end_r[0] > layout.boundary * 2.5 and end_r[1] > layout.boundary * 2.5, "it runs on round both sides and curves away out of view (ends %.0f, %.0f m out)" % end_r)
 	# Ledges: up the middle column of the mesh, runs of level ground between steep rises, at several heights.
 	var nr := 0
 	while nr < verts.size() - 1 and _r(verts[nr + 1]) > _r(verts[nr]):
@@ -213,6 +223,19 @@ func _perches(layout: ArenaLayout, edge: EdgeBuilder) -> void:
 			falling = false
 	check(falling and counts[1] > counts[3] * 2, "fewer the higher they stand (%s)" % [counts])
 	check(on_top == 0, "none on the top (%d)" % on_top)
+	# The flat stones stand proud of the talus, as built: a ray down on each stone's top stops well above the talus
+	# there would be without it.
+	var proud := 0
+	for st in layout.rock.stones():
+		var c: Vector2 = st[0]
+		var side := Vector2(-c.y, c.x).normalized() * (float(st[1]) + 2.5)
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(c.x, 80.0, c.y), Vector3(c.x, -5.0, c.y)))
+		var top_y: float = hit.position.y - ArenaLayout.GROUND_Y if not hit.is_empty() else -INF
+		var round_it := layout.rock.talus_in(layout.rock.column(atan2(c.x, c.y)), c.length())   # (the talus under it)
+		if top_y > round_it + 0.8:
+			proud += 1
+	print("EDGE %d of %d flat stones stand proud of the talus" % [proud, layout.rock.stones().size()])
+	check(proud >= layout.rock.stones().size() - 1, "the flat stones stand proud of the talus round them (%d of %d)" % [proud, layout.rock.stones().size()])
 	check(floating == 0, "each on the rock as built (%d not)" % floating)
 	check(walled == 0, "each well inside the soft wall (%d at it)" % walled)
 	# The AI: from over the wood, routes in to the lowest perches.
@@ -380,7 +403,7 @@ func _hills(edge: EdgeBuilder) -> void:
 	for i in nt - 1:
 		for j in nr:
 			var r := _r(verts[i * nr + j])
-			if r < 200.0:
+			if r < 200.0 or absf(edge.esc.off(atan2(verts[i * nr + j].x, verts[i * nr + j].z))) < Escarpment.HALF:   # (the hills, not the cliff's far arms)
 				continue
 			worst = maxf(worst, absf(verts[i * nr + j].y - verts[(i + 1) * nr + j].y) / (r * TAU / (nt - 1)))
 	print("EDGE the hills' steepest step round the ring past 200 m: %.2f (rise over run)" % worst)

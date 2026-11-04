@@ -2,7 +2,7 @@ extends TestCase
 ## The arena's edge as it is today, from inside the pine wood looking out across the boundary: reference shots for
 ## designing what lies beyond it (a cliff, a river and a rival wood, a balloon line, heath). A falcon with its rider
 ## and tack in the chase camera's place in most of them. Windowed:
-##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence] [--look <name>] [--no-fog] [--tag <suffix>]
+##   Godot --path . -- --run-test probe_edge_view --out-dir <dir> [--seed 7] [--heading away | side | into | heath | cliff | fence | extents] [--look <name>] [--no-fog] [--tag <suffix>]
 ## Views: chase_canopy (at crown height, the edge 40 m ahead), chase_above (over the canopy), low_trunks (among the
 ## trunks at 6 m), overview (60 m up from the far side, the whole wood to its far edge).
 
@@ -66,6 +66,17 @@ func setup() -> void:
 		["low_trunks", null, d * (edge - 30.0) + Vector3.UP * 6.0, d * (edge + 40.0) + Vector3.UP * 8.0],
 		["overview", null, -d * 40.0 + Vector3.UP * 60.0, d * edge * 0.7],
 	]
+	if heading == "extents":   # (from the play area's far reaches at the ceiling: the far side, and either flank)
+		var at := float(layout.escarpment.at)
+		var mid := Vector3(sin(at), 0.0, cos(at))
+		var side := Vector3.UP.cross(mid).normalized()
+		var hgt := layout.ceiling - 2.0
+		views = [
+			["extents_far", null, -mid * (edge - 2.0) + Vector3.UP * hgt, mid * layout.rock.foot + Vector3.UP * 25.0],
+			["extents_left", null, side * (edge - 2.0) + Vector3.UP * hgt, mid * layout.rock.foot * 0.6 + side * 40.0 + Vector3.UP * 25.0],
+			["extents_right", null, -side * (edge - 2.0) + Vector3.UP * hgt, mid * layout.rock.foot * 0.6 - side * 40.0 + Vector3.UP * 25.0],
+			["extents_flank_out", null, side * (edge - 2.0) + Vector3.UP * hgt, side * 400.0 + mid * 150.0 + Vector3.UP * 30.0],
+		]
 	if heading == "ortho":   # (the cliff straight on, a long lens with no perspective, the wood and the heath's cover
 		# hidden: to set beside docs/images/edge/concept_cliff_ortho.png and measure with tools/cliff_edges.py)
 		await _ortho(layout, arena, cam, out_dir)

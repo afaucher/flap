@@ -11,7 +11,7 @@ const GRASS_IN := 15.0      ## m inside the posts the heath's grass reaches, thi
 const GRASS_FULL := 3.0     ## m past the posts it's at its thickest
 const GRASS_TO := 300.0     ## m: as far out as it's sown; it ends where the ground rises into the hills (GRASS_RISE)
 const GRASS_RISE := Vector2(1.0, 7.0)   ## m above the valley floor: where it starts thinning, and where it's gone
-const HILLS_FROM := 150.0    ## m: where the hills mesh takes over from the ground plane and the escarpment's grid
+const HILLS_FROM := 150.0
 const HILLS_TO := 1100.0
 const WIRES := [0.6, 1.15]   ## m: the fence's two strands, up the posts
 const WIRE_R := 0.012
@@ -94,6 +94,7 @@ func hill(x: float, z: float) -> float:
 	return k * maxf(0.0, near + far + rough + 4.0)
 
 
+
 # --- The escarpment -------------------------------------------------------------------------
 
 ## The rock: a polar grid over the sector (fine across the tiers, coarser over the top), skipping the flat ground
@@ -102,13 +103,14 @@ func _rock() -> void:
 	var thetas := _thetas(0.5, esc.foot)
 	var radii := PackedFloat32Array()
 	var r := layout.boundary + 1.0   # (the talus reaches out almost to the boundary)
-	while r < minf(esc.foot + 40.0, HILLS_FROM + 2.0):
+	while r < esc.foot + 40.0:
 		radii.append(r)
 		r += 0.3
-	while r < HILLS_FROM + 2.0:
+	var far := esc.foot + Escarpment.BEND + 50.0   # (out to where the curving ends run)
+	while r < far:
 		radii.append(r)
-		r += 2.0
-	radii.append(HILLS_FROM + 2.0)
+		r += 1.5 if r < esc.foot + 90.0 else 3.0
+	radii.append(far)
 	var heights := PackedFloat32Array()
 	for t in thetas:
 		var col := esc.column(t)
@@ -121,7 +123,7 @@ func _rock() -> void:
 	rock.material_override = _rock_mat("marble_cliff_05", 7.0, Color(0.9, 0.92, 0.97), 1.0, true)
 	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_steep", true)   # (the wall draws those)
 	# (not out at the sector's ends, where the wall is low and its sheet thin: there the height field draws its steps)
-	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_sector", Vector2(esc.at, Escarpment.HALF * 0.8))
+	(rock.material_override as ShaderMaterial).set_shader_parameter("cut_sector", Vector2(esc.at, Escarpment.HALF))
 	(rock.material_override as ShaderMaterial).set_shader_parameter("fracture", 0.4)
 	add_child(rock)
 	var faces := PackedVector3Array()
@@ -133,6 +135,9 @@ func _rock() -> void:
 	var rows := range(0, nr, 1)
 	if rows[-1] != nr - 1:
 		rows.append(nr - 1)
+	var reach_at := PackedFloat32Array()
+	for ci in cols.size():
+		reach_at.append(esc.reach(thetas[cols[ci]], layout.boundary))
 	for ci in cols.size() - 1:
 		for rj in rows.size() - 1:
 			var pa := v[cols[ci] * nr + rows[rj]]
@@ -140,6 +145,8 @@ func _rock() -> void:
 			var pc := v[cols[ci + 1] * nr + rows[rj + 1]]
 			var pd := v[cols[ci] * nr + rows[rj + 1]]
 			if maxf(maxf(pa.y, pb.y), maxf(pc.y, pd.y)) - ArenaLayout.GROUND_Y < 0.02:
+				continue
+			if Vector2(pa.x, pa.z).length() > reach_at[ci] + 6.0:   # (solid only where a bird can get to)
 				continue
 			faces.append_array([pa, pb, pc, pa, pc, pd])   # (wound as the mesh is)
 	rock_body = StaticBody3D.new()
@@ -374,6 +381,8 @@ func _scree_blocks(sets: Array) -> void:
 		if _rng.randf() < 0.95 * smoothstep(0.35, 0.55, _soil(p)):   # (bare earth in patches: few blocks there)
 			continue
 		var size := lerpf(0.5, 2.6, toe) * _rng.randf_range(0.6, 1.35) * (1.8 if _rng.randf() < 0.08 else 1.0) * lerpf(0.6, 1.0, w)
+		if r - size * 0.8 < layout.boundary + 1.5:   # (its whole width clear of the fence)
+			continue
 		var dims := Vector3(size, size * _rng.randf_range(0.4, 0.75), size * _rng.randf_range(0.55, 1.0))
 		var h := esc.height_in(col, r)
 		var at := Vector3(p.x, ArenaLayout.GROUND_Y + h, p.y)

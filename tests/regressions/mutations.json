@@ -2893,8 +2893,8 @@
   "edits": [
    {
     "file": "scripts/world/edge_builder.gd",
-    "find": "\twhile r < minf(esc.foot + 40.0, HILLS_FROM + 2.0):",
-    "replace": "\twhile r < esc.foot + 60.0:"
+    "find": "\tvar far := esc.foot + Escarpment.BEND + 50.0   # (out to where the curving ends run)",
+    "replace": "\tvar far := esc.foot + Escarpment.BEND + 50.0   # (out to where the curving ends run)\n\tr = esc.foot + 30.0"
    }
   ]
  },
@@ -3021,6 +3021,20 @@
     "file": "scripts/world/escarpment.gd",
     "find": "\t\t\t\th0 = maxf(h0, float(st[2]) * (1.0 - smoothstep(float(st[1]), rim, d) * 0.7))",
     "replace": "\t\t\t\th0 = maxf(h0, 0.0 * (1.0 - smoothstep(float(st[1]), rim, d) * 0.7))"
+   }
+  ]
+ },
+ {
+  "id": "edge-cliff-ends-in-view",
+  "bug": "The escarpment covered a third of the ring and tapered down into the heath: flying near the play area's sides, its ends stood in plain view (2026-11-03). It now runs most of the way round and curves away out of view.",
+  "tests": [
+   "test_arena_edge"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/escarpment.gd",
+    "find": "const BEND := 230.0",
+    "replace": "const BEND := 0.0"
    }
   ]
  }

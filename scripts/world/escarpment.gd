@@ -20,7 +20,11 @@ extends RefCounted
 ## perches (perch_spots): flat stones on the scree and spots on the ledges, many low down and fewer the higher they
 ## are (PERCH_EVERY), none on the top -- the cliff is somewhere to drop in on, not to sit above the fight.
 
-const HALF := deg_to_rad(52.0)      ## the sector's half width
+const HALF := deg_to_rad(115.0)     ## the sector's half width: most of the ring
+## Toward its ends the cliff curves outward, away from the wood, BEND m by its very ends, from BEND_FROM of the way
+## along: from anywhere a bird can fly, its ends lie hidden behind its own face, far off.
+const BEND := 230.0
+const BEND_FROM := 0.45
 const RAKE := deg_to_rad(50.0)      ## how far round from straight away from the sun its middle stands (so the sun
                                     ## rakes across the face and every block casts a shadow)
 const FOOT := 26.0                  ## m past the boundary: the cliff's mean foot (its talus reaches out in front)
@@ -97,7 +101,7 @@ func off(theta: float) -> float:
 ## 1 in the middle of the sector, falling to 0 at its ends (the cliff coming down into the heath).
 func taper(theta: float) -> float:
 	var u := absf(off(theta)) / HALF
-	return 1.0 - smoothstep(0.5 + 0.1 * _n1(theta * 3.0 + 7.0), 0.94, u)
+	return 1.0 - smoothstep(0.86 + 0.04 * _n1(theta * 3.0 + 7.0), 0.99, u)   # (full height until far round its curve)
 
 
 ## The height of the ground above GROUND_Y at (x, z): 0 off the escarpment.
@@ -264,8 +268,10 @@ func _column(theta: float) -> PackedFloat32Array:
 	col.append_array([w, r0, theta, top, rows])
 	var last_r := r0
 	for b in n:
-		var z0 := (_beds[b] + lift) * w
-		var z1 := (_beds[b + 1] + lift) * w
+		# (the beds keep their thickness toward the ends: the top comes down through them, so the cliff ends as a low
+		# wall of a bed or two, not a staircase of thin ones)
+		var z0 := _beds[b] + lift
+		var z1 := _beds[b + 1] + lift
 		var bed_back := _benches(b, arc) + cleft
 		var zc := (z0 + z1) * 0.5
 		for f in ROW_F:
@@ -400,7 +406,7 @@ func stones() -> Array:
 	if not _stones.is_empty():
 		return _stones
 	for i in STONES:
-		var u := (float(i) + 0.5) / STONES * 1.2 - 0.6 + (_h(i * 3.1 + 0.7) - 0.5) * 0.1
+		var u := ((float(i) + 0.5) / STONES * 1.2 - 0.6 + (_h(i * 3.1 + 0.7) - 0.5) * 0.1) * 0.7
 		var theta := at + u * HALF
 		var col := column(theta)
 		var tw := talus(col)
@@ -437,7 +443,7 @@ func perch_spots() -> Array:
 func _ledge_spot(i: int, arc: float) -> Array:
 	var theta := at + arc / foot
 	var col := column(theta)
-	if col.is_empty() or col[0] < 0.7:
+	if col.is_empty() or col[0] < 0.7 or absf(off(theta)) / HALF > BEND_FROM:   # (not where it curves away)
 		return []
 	var band: Vector2 = LEDGE_BANDS[i] + Vector2.ONE * talus(col).y
 	for l in ledges(col):
@@ -447,10 +453,10 @@ func _ledge_spot(i: int, arc: float) -> Array:
 		var depth: float = float(l[1]) - float(l[0])
 		var r: float = float(l[0]) + clampf(depth * 0.45, 0.6, 1.2)   # (back from the lip, on the level)
 		h = height_in(col, r)
-		var level := true
-		for side in [-1.0, 1.0]:
+		var level := true   # (level a metre either way along, and half a metre in and out)
+		for side in [-1.0, -0.4, 0.4, 1.0]:
 			var t2: float = theta + float(side) / r
-			if absf(height_in(column(t2), r) - h) > 0.25:
+			if absf(height_in(column(t2), r) - h) > 0.25 or absf(height_in(col, r + float(side) * 0.5) - h) > 0.25:
 				level = false
 		if not level:
 			continue
@@ -464,13 +470,14 @@ func _ledge_spot(i: int, arc: float) -> Array:
 func reach(theta: float, boundary: float) -> float:
 	if absf(off(theta)) > HALF:
 		return boundary
-	return lerpf(boundary, foot + REACH, smoothstep(0.0, 0.3, taper(theta)))
+	return lerpf(boundary, minf(foot_r(theta), foot + 8.0) + REACH, smoothstep(0.0, 0.3, taper(theta)) * (1.0 - smoothstep(BEND_FROM, BEND_FROM + 0.12, absf(off(theta)) / HALF)))
 
 
 ## The wall's mean foot toward angle `theta`: bays and buttresses tens of metres across, a little wander over them.
 func foot_r(theta: float) -> float:
 	var arc := off(theta) * foot
-	return foot + BAY.y * (_n1(arc / BAY.x + 2.0) - 0.5) * 2.0 + BUTTRESS * 0.4 * (_n1(arc / 9.0 + 5.0) - 0.5) * 2.0
+	var bend := smoothstep(BEND_FROM, 1.0, absf(off(theta)) / HALF)
+	return foot + BEND * bend * bend + BAY.y * (_n1(arc / BAY.x + 2.0) - 0.5) * 2.0 + BUTTRESS * 0.4 * (_n1(arc / 9.0 + 5.0) - 0.5) * 2.0
 
 
 ## The talus in column `col`: (how far out in front of the wall's foot it reaches, how high it stands against it). Its
