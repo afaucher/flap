@@ -6,7 +6,7 @@ extends Node3D
 
 const MOTE_SIZE := 0.035      ## m across, a mote (a seed head or a speck of dust catching the sun): a point of light
 const MOTES := preload("res://scripts/world/air_motes.gdshader")   ## (never under 2 px on screen, dimmer far off)
-const PER_M2 := 3.0          ## motes in the air per m^2 of a thermal's floor (its core's): specks need numbers to read as a column
+const PER_M2 := 0.9          ## motes in the air per m^2 of a thermal's floor (its core's)
 
 
 func build(air: AirField) -> void:
@@ -14,7 +14,7 @@ func build(air: AirField) -> void:
 		var r: float = th.radius
 		var top: float = th.top
 		var lift: float = th.lift
-		var p := _motes(int(clampf(PI * r * r * PER_M2, 150.0, 3000.0)), (top - AirField.THERMAL_FLOOR.x) / maxf(lift * 0.8, 0.3))
+		var p := _motes(int(clampf(PI * r * r * PER_M2, 60.0, 900.0)), (top - AirField.THERMAL_FLOOR.x) / maxf(lift * 0.8, 0.3))
 		var m := p.process_material as ParticleProcessMaterial
 		m.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
 		m.emission_ring_axis = Vector3.UP
