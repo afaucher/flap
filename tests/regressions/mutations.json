@@ -2745,8 +2745,8 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "rings := [], cap := true) -> void:",
-    "replace": "rings := [], cap := false) -> void:"
+    "find": "rings := [], cap := true, dome := 0.35) -> void:",
+    "replace": "rings := [], cap := false, dome := 0.35) -> void:"
    }
   ]
  },
@@ -2972,6 +2972,39 @@
     "file": "scripts/combat/ai/combat_tree.gd",
     "find": "\t\tif rel.length() < PATROL_RADIUS * 0.5:",
     "replace": "\t\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "treetop-perch-floats",
+  "bug": "Treetop perches sat 5 cm over the trunk's full height while the drawn trunk stopped 15 cm short of it under a dome: the perch (and a bird on it) floated over the top (2026-11-03).",
+  "tests": [
+   "test_tree_tops"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top,",
+    "replace": "t.top() + Vector3.UP * 0.05,"
+   },
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\tvar y := (t.height + 0.15) * u - 0.15",
+    "replace": "\t\tvar y := t.height * u - 0.15"
+   }
+  ]
+ },
+ {
+  "id": "settle-perches-too-fast",
+  "bug": "A bird striking a perch's top up to 1.6x the catch speed was caught as if it had settled there: flying fast at a treetop caught it (2026-11-03).",
+  "tests": [
+   "test_perching"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "_perch_under(at) if v.length() <= profile.grab_speed_max else null",
+    "replace": "_perch_under(at)"
    }
   ]
  }
