@@ -10,11 +10,17 @@ extends RefCounted
 ##           of the floor
 ##   dirt    the same for bare dirt, DIRT_SHARE of what isn't moss
 ##   open    1 well inside an opening (the clearing, the glade, the gaps), 0 outside, over its edge
+## Round each pine and oak, its foot (`feet`): the root plate a low dome, and the roots running out from the trunk's
+## flare lobes (ArenaBuilder._trunk's four, where its mesh swells) and a couple of smaller ones between, ridges
+## that taper off a few metres out; moss in the hollows between them on the shady side.
 
 const RES := 0.5            ## m between the grid's points
 const MOUND_H := 0.22       ## m: the mounds at their highest
 const MOSS_SHARE := 0.2     ## of the floor
 const DIRT_SHARE := 0.08
+const FOOT := {"dome": Vector2(0.1, 1.6), "ridge": Vector3(0.2, 0.3, 2.6), "oak": 1.7}   ## dome: height m, its reach
+	## past the trunk m; ridge: height at the trunk m, half width m, length m; an oak's foot that much bigger
+static var feet := true      ## the trunks' feet in the floor (off: the floor runs flat up to the trunks, for A/B)
 const BAND := 0.05          ## the signals' half width about their edges (noise units: the shader's ragged edge works in it)
 
 var n := 0                  ## points a side
@@ -51,6 +57,13 @@ static func build(a: ArenaLayout, extent: float) -> FloorField:
 				var e := Pinewood.edge(o, p)
 				var v := clampf((e + 1.0 - p.distance_to(c)) / 3.0, 0.0, 1.0)
 				opens[j * n + i] = maxf(opens[j * n + i], v)
+	var foot_h := PackedFloat32Array()
+	foot_h.resize(n * n)
+	var foot_moss := PackedFloat32Array()
+	foot_moss.resize(n * n)
+	foot_moss.fill(-1.0)   # (no moss of their own outside the feet)
+	if feet:
+		_feet(a, f, foot_h, foot_moss)
 	f.data.resize(n * n * 4)
 	for j in n:
 		for i in n:
@@ -63,11 +76,78 @@ static func build(a: ArenaLayout, extent: float) -> FloorField:
 			var lit := (1.0 - smoothstep(-1.0, 0.0, ms)) * (1.0 - smoothstep(-1.0, 0.0, ds) * 0.8) * (1.0 - op)
 			var hh := smoothstep(0.3, 0.75, mound[k])
 			var fade := 1.0 - smoothstep(f.fade_r - 12.0, f.fade_r, p.length())
-			f.data[k * 4] = MOUND_H * hh * lit * fade
-			f.data[k * 4 + 1] = ms
+			f.data[k * 4] = maxf(MOUND_H * hh * lit * fade, foot_h[k])
+			f.data[k * 4 + 1] = maxf(ms, foot_moss[k])
 			f.data[k * 4 + 2] = ds
 			f.data[k * 4 + 3] = op
 	return f
+
+
+## Each pine's and oak's foot into `h` (height, m) and `moss` (the moss signal) over the grid round it.
+static func _feet(a: ArenaLayout, f: FloorField, h: PackedFloat32Array, moss: PackedFloat32Array) -> void:
+	var n := f.n
+	var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+	var shade_dir := -Vector2(to_sun.x, to_sun.z).normalized()   # (the side of a trunk away from the sun)
+	for t in a.trees:
+		if t.kind != ArenaLayout.Kind.PINE and t.kind != ArenaLayout.Kind.BROADLEAF:
+			continue
+		var k := float(FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+		var c: Vector2 = t.base
+		var roots := roots_of(t)
+		var reach: float = t.radius + float(FOOT.ridge.z) * k * 1.3
+		var i0 := maxi(0, int((c.x - reach - f.origin.x) / RES))
+		var i1 := mini(n - 1, int((c.x + reach - f.origin.x) / RES) + 1)
+		var j0 := maxi(0, int((c.y - reach - f.origin.y) / RES))
+		var j1 := mini(n - 1, int((c.y + reach - f.origin.y) / RES) + 1)
+		for j in range(j0, j1 + 1):
+			for i in range(i0, i1 + 1):
+				var p := f.origin + Vector2(i, j) * RES
+				var d := p - c
+				var r := d.length()
+				var out := maxf(r - t.radius, 0.0)   # (m out from the bark)
+				var dome: float = float(FOOT.dome.x) * k * (1.0 - smoothstep(0.0, float(FOOT.dome.y) * k, out))
+				var ridge := 0.0
+				for rt in roots:
+					var dir: Vector2 = rt[0]
+					var along: float = d.dot(dir) - t.radius
+					if along < -t.radius * 0.5:
+						continue
+					var across := absf(d.dot(Vector2(-dir.y, dir.x)))
+					var w: float = float(rt[3]) * (1.0 - 0.5 * clampf(along / float(rt[2]), 0.0, 1.0))   # (narrowing out)
+					ridge = maxf(ridge, ridge_at(along, float(rt[1]), float(rt[2])) * exp(-(across * across) / (w * w)))
+				var kk := j * n + i
+				h[kk] = maxf(h[kk], dome + ridge)
+				# Moss in the hollows between the roots, near the trunk, on its shady side.
+				if r > 0.01 and out < 2.0 * k:
+					var shady := smoothstep(-0.2, 0.6, (d / r).dot(shade_dir))
+					var hollow := 1.0 - smoothstep(0.03, 0.09, ridge)
+					var near := 1.0 - smoothstep(1.0 * k, 2.0 * k, out)
+					moss[kk] = maxf(moss[kk], (shady * hollow * near) * 1.6 - 0.6)
+
+
+## Tree `t`'s roots running out from its foot: [direction (Vector2), height at the trunk m, length m, half width m]:
+## one from each of the trunk's four flare lobes (ArenaBuilder._trunk's, where its mesh swells) and two smaller between.
+## The floor's ridges over them (here) and the bark-covered roots drawn along them (ArenaBuilder._roots) both read these.
+static func roots_of(t: ArenaLayout.TreeData) -> Array:
+	var k := float(FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+	var seed := fmod(t.id * 0.6180339, 1.0)   # (as ArenaBuilder._pinewood gives the trunk its lobes)
+	var out := []
+	for q in 4:   # (where the trunk's mesh swells: sin(4a + seed * 7) = 1; its ring at angle a points (-sin a, -cos a))
+		var ang := (PI * 0.5 - seed * 7.0) / 4.0 + q * PI * 0.5 + (_hash(t.id * 3.3 + q) - 0.5) * 0.25
+		out.append([Vector2(-sin(ang), -cos(ang)), FOOT.ridge.x * k * (0.75 + 0.5 * _hash(t.id * 4.1 + q)), FOOT.ridge.z * k * (0.7 + 0.6 * _hash(t.id * 2.3 + q)), FOOT.ridge.y * k])
+	for q in 2:
+		var ang := (PI * 0.5 - seed * 7.0) / 4.0 + (q * 2 + 1) * PI * 0.25 + (_hash(t.id * 7.7 + q) - 0.5) * 0.4
+		out.append([Vector2(-sin(ang), -cos(ang)), FOOT.ridge.x * k * 0.55, FOOT.ridge.z * k * 0.6, FOOT.ridge.y * k * 0.7])
+	return out
+
+
+## A root ridge's height `along` m out from the bark (of `height` at the trunk, `length` long).
+static func ridge_at(along: float, height: float, length: float) -> float:
+	return height * pow(1.0 - clampf(along / length, 0.0, 1.0), 1.5)
+
+
+static func _hash(x: float) -> float:
+	return fposmod(sin(x * 127.1) * 43758.5453, 1.0)
 
 
 ## Godot's noise sampled over the grid (`freq` per metre, `octaves`), 0..1, as a flat array.

@@ -6,7 +6,9 @@ extends TestCase
 ##     down meets the floor at ArenaLayout.ground; the big plane draws only round the fine mesh, no gap;
 ##   - a crow settling onto the top of a mound stands on it (not in it), and on the floor between them too;
 ##   - a round coming down onto a mound bursts on its surface;
-##   - grass thick in the openings, thin under the trees.
+##   - round each pine's foot the floor rises (its root plate), higher along its roots than between them, mossy on its
+##     shady side;
+##   - grass thick in the openings, thin under the trees (where it stands: ArenaBuilder.placed).
 
 
 func _init() -> void:
@@ -29,10 +31,20 @@ func setup() -> void:
 	var moss := 0
 	var dirt := 0
 	var cells := 0
+	var feet := []   # (the trunks' feet: their own checks below; the mounds' checks leave them out)
+	for t in layout.trees:
+		if t.kind == ArenaLayout.Kind.PINE or t.kind == ArenaLayout.Kind.BROADLEAF:
+			var k := float(FloorField.FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+			feet.append([t, t.radius + float(FloorField.FOOT.ridge.z) * k * 1.3 + 0.5])
+	var near_foot := func(p: Vector2) -> bool:
+		for ft in feet:
+			if p.distance_to(ft[0].base) < float(ft[1]):
+				return true
+		return false
 	for j in range(0, ff.n, 2):
 		for i in range(0, ff.n, 2):
 			var p := ff.origin + Vector2(i, j) * FloorField.RES
-			if p.length() > layout.boundary - 5.0:
+			if p.length() > layout.boundary - 5.0 or near_foot.call(p):
 				continue
 			var k := (j * ff.n + i) * 4
 			var h := ff.data[k]
@@ -50,9 +62,48 @@ func setup() -> void:
 	check(on_moss < 0.04, "none in the moss hollows (%.3f m)" % on_moss)
 	check(absf(float(moss) / cells - FloorField.MOSS_SHARE) < 0.06 and dirt > 0, "moss about its share (%.0f %%), dirt too" % (100.0 * moss / cells))
 	var in_open := 0.0
-	for o in layout.openings:
-		in_open = maxf(in_open, layout.ground(o.centre.x, o.centre.y))
+	for o in layout.openings:   # (away from any tree's foot: the clearing's oak stands on its own)
+		for q in 24:
+			var p: Vector2 = o.centre + Vector2.from_angle(q * TAU / 24.0) * float(o.r) * 0.45
+			if not near_foot.call(p):
+				in_open = maxf(in_open, layout.ground(p.x, p.y))
 	check(in_open < 0.01, "flat in the openings (%.3f m)" % in_open)
+	# The trunks' feet: the floor rises round each pine (its root plate), higher along its roots than between them,
+	# and has moss on its shady side, not its sunny one.
+	var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+	var sun2 := Vector2(to_sun.x, to_sun.z).normalized()
+	var rise := 0.0
+	var along := 0.0
+	var between := 0.0
+	var shady_moss := 0
+	var sunny_moss := 0
+	var pines := 0
+	for ft in feet:
+		var t: ArenaLayout.TreeData = ft[0]
+		if t.kind != ArenaLayout.Kind.PINE or Pinewood.in_opening(layout, t.base, 2.0):
+			continue
+		pines += 1
+		var c: Vector2 = t.base
+		rise += layout.ground(c.x + t.radius + 0.3, c.y)
+		var roots := FloorField.roots_of(t)
+		var d0: Vector2 = roots[0][0]
+		var on := c + d0 * (t.radius + 0.6)
+		var off := c + d0.rotated(PI * 0.125) * (t.radius + 0.6)   # (between a main root and the small one beside it)
+		along += layout.ground(on.x, on.y)
+		between += layout.ground(off.x, off.y)
+		for side in [[-sun2, true], [sun2, false]]:
+			var p: Vector2 = c + (side[0] as Vector2).rotated(0.4) * (t.radius + 0.9)
+			var kk := (int(roundf((p.y - ff.origin.y) / FloorField.RES)) * ff.n + int(roundf((p.x - ff.origin.x) / FloorField.RES))) * 4
+			if ff.data[kk + 1] > 0.0:
+				if side[1]:
+					shady_moss += 1
+				else:
+					sunny_moss += 1
+	print("FLOOR pines' feet (%d): the floor beside the bark %.2f m on average; along a root %.2f m, between two %.2f m; moss on the shady side of %d, the sunny side of %d" % [pines, rise / pines, along / pines, between / pines, shady_moss, sunny_moss])
+	check(rise / pines > 0.08, "the floor rises round a pine's foot (%.2f m)" % (rise / pines))
+	# (the field is half a metre fine: it holds a root as a broad hump; the root itself is drawn, ArenaBuilder._roots)
+	check(along / pines > between / pines + 0.015, "higher along its roots than between them (%.3f v %.3f)" % [along / pines, between / pines])
+	check(shady_moss > sunny_moss * 2 and shady_moss > pines / 4, "moss on the shady side of the feet, not the sunny (%d v %d)" % [shady_moss, sunny_moss])
 	# Drawn and solid the same.
 	var ground: Node = arena.get_node("Ground")
 	var fine := ground.get_node_or_null("FloorMounds") as MeshInstance3D
@@ -111,17 +162,13 @@ func setup() -> void:
 	print("FLOOR a round dropped onto the mound bursts at %.3f m (the mound %.3f m)" % [burst.y, top_h])
 	check(absf(burst.y - top_h) < 0.08, "a round bursts on the mound's surface (%.3f v %.3f m)" % [burst.y, top_h])
 	# Grass: per square metre, in the openings against under the trees.
-	var grass: MultiMeshInstance3D = null
-	for c in arena.get_children():
-		if c is MultiMeshInstance3D and c.name == "Batch_grass":
-			grass = c
-	check(grass != null, "grass is drawn")
-	if grass != null:
+	var grass: PackedVector3Array = arena.placed.get("grass", PackedVector3Array())
+	check(grass.size() > 1000, "grass is drawn (%d tussocks)" % grass.size())
+	if grass.size() > 0:
 		var inside := 0
 		var outside := 0
 		var off := 0.0
-		for i in grass.multimesh.instance_count:
-			var o := grass.multimesh.get_instance_transform(i).origin
+		for o in grass:
 			off = maxf(off, absf(o.y - ArenaLayout.GROUND_Y - layout.ground(o.x, o.z)))
 			if Pinewood.in_opening(layout, Vector2(o.x, o.z)):
 				inside += 1

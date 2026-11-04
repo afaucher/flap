@@ -9,6 +9,7 @@ const WORLD_LAYER := 1
 
 var layout: ArenaLayout
 var tree_bodies: Array[StaticBody3D] = []   ## by tree id
+var placed := {}   ## key -> PackedVector3Array: where each batch's instances stand (_batch)
 var highlight: MeshInstance3D      ## the landing mark (show_candidate)
 var _hl_mat: StandardMaterial3D
 var _mats := {}
@@ -375,6 +376,8 @@ func _pinewood_trees(i0: int, i1: int) -> void:
 			tree_bodies.append(body)
 			continue
 		_trunk(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
+		if FloorField.feet and (t.kind == ArenaLayout.Kind.PINE or oak):
+			_roots(_cell(cells, cell, "oak_trunk" if oak else "pine_trunk"), t, seed)
 		for lb in t.limbs:
 			_tube(_cell(cells, cell, lb[2]), lb[0], lb[1], 9 if float(lb[1][0]) > 0.05 else 6, _TILE[lb[2]], fmod(seed + (lb[0] as PackedVector3Array)[0].y * 0.37, 1.0))
 		for br in t.branches:
@@ -497,6 +500,33 @@ func _tube(arr: Array, pts: PackedVector3Array, radii: PackedFloat32Array, segs:
 
 
 ## A trunk: tapering, flared at its foot, a little out of round and wobbling up its height; capped at the top.
+## Tree `t`'s roots as drawn (FloorField.roots_of): each a tapering bark-covered tube leaving the trunk's flare a
+## little above the floor and running out along the floor's ridge over it, half buried in the litter, then under it.
+func _roots(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
+	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
+	var k := float(FloorField.FOOT.oak) if t.kind == ArenaLayout.Kind.BROADLEAF else 1.0
+	for rt in FloorField.roots_of(t):
+		var dir := Vector3(rt[0].x, 0.0, rt[0].y)
+		var h: float = rt[1]
+		var length: float = rt[2]
+		var r0 := 1.1 * h + 0.04 * k   # (thick where it leaves the trunk, a lobe of its flare)
+		var pts := PackedVector3Array()
+		var radii := PackedFloat32Array()
+		for i in 9:
+			var u := float(i) / 8.0
+			var along := lerpf(-t.radius * 0.6, length * 0.7, u)
+			var r := r0 * pow(1.0 - u * 0.85, 1.4)
+			var ground := ArenaLayout.GROUND_Y + layout.ground(c.x + dir.x * (t.radius + along), c.z + dir.z * (t.radius + along))
+			# (its back out of the litter near the trunk, sinking under it within a metre or so)
+			var show := lerpf(0.55, -1.3, smoothstep(0.15, 0.8, u))
+			var top := ground + r * show
+			if along < 0.0:   # (inside the trunk's flare: up into it)
+				top += -along * 0.9
+			pts.append(c + dir * (t.radius + along) + Vector3.UP * (top - r - ArenaLayout.GROUND_Y) + dir.cross(Vector3.UP) * (sin(u * 5.0 + seed * 9.0) * 0.05 * u))
+			radii.append(r)
+		_tube(arr, pts, radii, 7, _TILE["oak_trunk" if t.kind == ArenaLayout.Kind.BROADLEAF else "pine_trunk"], fmod(seed + h, 1.0))
+
+
 func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
@@ -534,6 +564,11 @@ func _bark(key: String) -> ShaderMaterial:
 	for k in (spec[2] as Dictionary):
 		m.set_shader_parameter(k, spec[2][k])
 	m.set_shader_parameter("built", true)
+	if FloorField.feet and (key == "pine_trunk" or key == "oak_trunk"):   # (a moss collar on the shady side of the foot)
+		var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+		m.set_shader_parameter("moss_h", 1.6 if key == "oak_trunk" else 1.2)
+		m.set_shader_parameter("shade_dir", -Vector3(to_sun.x, 0.0, to_sun.z).normalized())
+		m.set_shader_parameter("moss_tex", load("res://assets/textures/ground/forest_leaves_02/forest_leaves_02_diff_4k.jpg"))
 	return m
 
 
@@ -554,8 +589,10 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], cus
 	mm.use_custom_data = not customs.is_empty()
 	mm.mesh = mesh
 	mm.instance_count = xfs.size()
+	var at := PackedVector3Array()   # (where they stand, for tests: headless, a MultiMesh's transforms don't read back)
 	for i in xfs.size():
 		mm.set_instance_transform(i, xfs[i])
+		at.append((xfs[i] as Transform3D).origin)
 		if mm.use_colors:
 			mm.set_instance_color(i, colors[i])
 		if mm.use_custom_data:
@@ -563,6 +600,7 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], cus
 	var mi := MultiMeshInstance3D.new()
 	mi.name = "Batch_" + key
 	mi.multimesh = mm
+	placed[key] = at
 	var m := _mat("pw_" + key, color)
 	m.vertex_color_use_as_albedo = mm.use_colors
 	mi.material_override = m
