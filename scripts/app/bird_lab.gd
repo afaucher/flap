@@ -10,6 +10,7 @@ extends Node3D
 ## Keys: 1-5 bird, Up/Down scenario, Space pause, . step, R restart, -/= speed, O onion skin, F follow,
 ##       V next view, T trail, B bones (off / over the bird / bones only), K rider; drag to orbit, wheel to zoom.
 ## Crows, falcons and hawks carry their war tack and rider (Tack), as in the game.
+## Combat scenarios (LabFight) set up the real fight round the bird: a CombatWorld, the other bird, real rounds.
 ## Bones (BoneView): every bone and joint of the rig as it was solved, drawn on top -- the shoulder, elbow,
 ## wrist, hip, knee, ankle, the neck's joints, head and tail, coloured by chain.
 
@@ -33,6 +34,7 @@ var cam: Camera3D
 var bird: Bird
 var pose_rig: BirdRig
 var pilot: LabPilot
+var fight: LabFight = null   ## a combat scenario's fight (LabFight)
 var bird_id := "crow"
 var scenario: Dictionary = LabScenarios.LIST[0]
 var speed := 0.5
@@ -149,6 +151,9 @@ func restart() -> void:
 	_trail.clear()
 	_clear_ghosts()
 	_tack = null
+	if fight != null:
+		fight.free_all()
+		fight = null
 	if bird != null:
 		bird.queue_free()
 		bird = null
@@ -173,7 +178,10 @@ func restart() -> void:
 		bird.setup(p, layout, null)
 		bird.arena = arena
 		pilot = LabScenarios.start(scenario, bird, layout)
-		if Tack.RIDDEN.has(p.id):
+		if scenario.get("kind", "") == "fight":
+			fight = LabFight.start(scenario, bird, layout, world, arena)
+			_tack = fight.tack_of(bird)
+		elif Tack.RIDDEN.has(p.id):
 			_tack = Tack.fit(bird.rig, bird)
 	if _tack != null and is_instance_valid(_tack):
 		_tack.visible = rider
@@ -295,6 +303,8 @@ func _status() -> String:
 		var t := bird.telemetry()
 		lines.append("%s   %.1f m/s   catch %s at %.0f m/s" % [STATE_NAMES[bird.state], t.speed, CATCH_NAMES[int(t.candidate_status)] if bird.candidate != null else "-", t.grab_speed])
 		lines.append("flare %.2f   landing %.0f%%   neck %.2f   fold %.2f" % [t.flare, 100.0 * float(t.landing_t), bird.rig.neck_ext, bird.rig.fold])
+		if fight != null:
+			lines.append(fight.status())
 	elif pose_rig != null:
 		lines.append("neck %.2f   fluff %.2f   fold %.2f" % [pose_rig.neck_ext, pose_rig.fluff, pose_rig.fold])
 	if bones > 0:
@@ -445,7 +455,7 @@ func _build_ui() -> void:
 	var info := PanelContainer.new()
 	info.anchor_left = 1.0
 	info.anchor_right = 1.0
-	info.offset_left = -430
+	info.offset_left = -560
 	info.offset_right = -12
 	info.offset_top = 12
 	layer.add_child(info)

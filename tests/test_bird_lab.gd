@@ -3,8 +3,12 @@ extends TestCase
 ## (the too-fast one never catches at speed), take-offs leave the perch and climb, the drop-off falls away,
 ## the ground take-off gets airborne. The lab scene itself loads, runs a scenario, leaves ghosts, steps
 ## while paused and switches species.
+## Combat scenarios (LabFight), for a crow and a hawk: the gun burst fires from the lab bird's pods and chips the bird
+## ahead; the rocket knocks feathers out of the lab bird, a burst beside it; the seeker locks (no sooner than
+## LOCK_TIME) then launches and hits; the downed bird is down and out of control (stunned) through the down stun, gliding down; on the base the empty pods refill
+## and the lost feathers grow back, after RESTOCK_TIME and not before. The lab scene opens on one with its fight.
 
-const SHARDS := 2   ## (the species split over two processes; the lab scene with the second)
+const SHARDS := 3   ## (the species split over two processes, the lab scene with the second; the combat scenes a third)
 
 
 func _init() -> void:
@@ -12,6 +16,11 @@ func _init() -> void:
 
 
 func setup() -> void:
+	if in_shard(2):
+		await _fights()
+	if not in_shard(0) and not in_shard(1):
+		finish()
+		return
 	var layout := ArenaLayout.lab()
 	var arena := ArenaBuilder.new()
 	add_child(arena)
@@ -91,6 +100,73 @@ func setup() -> void:
 	lab._pick_bird(3)
 	await frames(5)
 	check(lab.bird.profile.id == BirdProfile.IDS[3], "switching species restarts with that bird")
+	lab._pick_scenario(LabScenarios.LIST.find(LabScenarios.by_id("fight_gun")))
+	await frames(90)
+	check(lab.fight != null and lab.fight.shooter.shots > 0, "the lab opens a combat scene with its fight (%d rounds)" % (lab.fight.shooter.shots if lab.fight != null else -1))
 	lab.queue_free()
 	Engine.time_scale = 1.0
 	finish()
+
+
+func _fights() -> void:
+	var layout := ArenaLayout.lab()
+	var arena := ArenaBuilder.new()
+	add_child(arena)
+	arena.build(layout)
+	await frames(2)
+	for id in ["crow", "hawk"]:
+		var p := BirdProfile.by_id(id)
+		for s in LabScenarios.LIST:
+			if s.get("kind", "") != "fight":
+				continue
+			var b := Bird.new()
+			add_child(b)
+			b.setup(p, layout, null)
+			b.arena = arena
+			LabScenarios.start(s, b, layout)
+			var f := LabFight.start(s, b, layout, self, arena)
+			var what := "%s, %s" % [id, s.id]
+			var locked_at := -1.0
+			var hit_at := -1.0
+			var down_at := -1.0
+			var down_y := 0.0
+			var fell := 0.0
+			var stunned := true
+			var full_at := -1.0
+			var seeker_flew := false
+			for i in 270:
+				await frames(1)
+				var t := i / 60.0
+				if f.shooter.locked() and locked_at < 0.0:
+					locked_at = t
+				if f.knocked_out() > 0 and hit_at < 0.0:
+					hit_at = t
+				for pr in f.world.projectiles:
+					seeker_flew = seeker_flew or (pr as Projectile).kind == Projectile.Kind.SEEKER
+				if f.target != null and f.target.is_down():
+					if down_at < 0.0:
+						down_at = t
+						down_y = f.target.global_position.y
+					elif t < down_at + CombatWorld.DOWN_STUN - 0.1:
+						fell = down_y - f.target.global_position.y
+						stunned = stunned and f.target.stun > 0.0
+				if f.what == "rearm" and f.shooter.full() and full_at < 0.0:
+					full_at = t
+			var gun := Launcher.Weapon.GUN
+			match f.what:
+				"gun":
+					check(f.shooter.carried(gun) > 0 and f.shooter.shots >= 8, "%s: the lab bird fires a burst from its gun pods (%d rounds)" % [what, f.shooter.shots])
+					check(f.knocked_out() >= 1 and not f.target.is_down(), "%s: and chips the bird ahead (%d feathers out)" % [what, f.knocked_out()])
+				"rocket":
+					check(f.knocked_out() >= 2, "%s: the rocket knocks feathers out of the lab bird (%d)" % [what, f.knocked_out()])
+				"seeker":
+					check(locked_at >= LabFight.FIRE_AT + Launcher.LOCK_TIME - 0.05 or (locked_at >= Launcher.LOCK_TIME - 0.05), "%s: it locks, no sooner than LOCK_TIME (%.2f s)" % [what, locked_at])
+					check(seeker_flew and hit_at > locked_at and locked_at > 0.0, "%s: then launches, and the seeker hits (at %.2f s)" % [what, hit_at])
+				"downed":
+					check(f.target.is_down(), "%s: the burst downs the lab bird" % what)
+					check(stunned and fell > 0.3, "%s: and glides down out of control through the down stun (%.1f m)" % [what, fell])
+				"rearm":
+					check(full_at >= Launcher.RESTOCK_TIME - 0.05, "%s: on the base, rearmed and mended after %.1f s (%.2f s)" % [what, Launcher.RESTOCK_TIME, full_at])
+			f.free_all()
+			b.queue_free()
+			await frames(2)
