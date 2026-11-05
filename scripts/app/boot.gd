@@ -20,6 +20,7 @@ func _ready() -> void:
 	if i >= 0 and i + 1 < args.size():
 		_run_test(args[i + 1])
 		return
+	Settings.load_saved()
 	var scene := arg_value(args, "--scene")
 	if scene == "":
 		scene = MENU_SCENE if args.is_empty() else GAME_SCENE

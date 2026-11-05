@@ -48,6 +48,11 @@ const PAD_AXES := {
 	"look_up": [JOY_AXIS_RIGHT_Y, -1.0],
 	"look_down": [JOY_AXIS_RIGHT_Y, 1.0],
 }
+const MOUSE_NAMES := {MOUSE_BUTTON_LEFT: "Left mouse", MOUSE_BUTTON_MIDDLE: "Middle mouse", MOUSE_BUTTON_RIGHT: "Right mouse"}
+const PAD_NAMES := {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
+	JOY_BUTTON_BACK: "Back", JOY_BUTTON_START: "Start", JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB"}
+const AXIS_NAMES := {JOY_AXIS_TRIGGER_LEFT: "LT", JOY_AXIS_TRIGGER_RIGHT: "RT", JOY_AXIS_LEFT_X: "Left stick",
+	JOY_AXIS_LEFT_Y: "Left stick", JOY_AXIS_RIGHT_X: "Right stick", JOY_AXIS_RIGHT_Y: "Right stick"}
 const STICK_DEADZONE := 0.12
 const TRIGGER_DEADZONE := 0.35
 
@@ -81,3 +86,22 @@ static func ensure_actions() -> void:
 static func _add(action: String) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
+
+
+## What sets off `action` on the keyboard and mouse ("Left mouse / F"), from the bindings above; "" for none.
+static func keys_for(action: String) -> String:
+	var names := []
+	if MOUSE.has(action):
+		names.append(MOUSE_NAMES.get(MOUSE[action], "Mouse %d" % MOUSE[action]))
+	for k in KEYS.get(action, []):
+		names.append(OS.get_keycode_string(k))
+	return " / ".join(names)
+
+
+## What sets it off on a gamepad ("RT"); "" for none.
+static func pad_for(action: String) -> String:
+	if PAD_BUTTONS.has(action):
+		return PAD_NAMES.get(PAD_BUTTONS[action], "Button %d" % PAD_BUTTONS[action])
+	if PAD_AXES.has(action):
+		return AXIS_NAMES.get(PAD_AXES[action][0], "Axis %d" % PAD_AXES[action][0])
+	return ""

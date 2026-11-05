@@ -7,7 +7,8 @@ extends Control
 ## FlightAssist; Realistic: none). Fight opens one too: your bird, what each pod carries (rockets, seekers or the
 ## machine gun, left and right; two kinds, and Q switches), how it flies, the mode (the 3 v 3 match, or target
 ## practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot | ace), with the
-## rules of the mode chosen. Enter starts either, Esc goes back.
+## rules of the mode chosen. Enter starts either, Esc goes back. Settings: which way the mouse and the gamepad's stick
+## climb (Settings, saved at once), and every control, read from InputSetup's bindings.
 ## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
 ## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight`: on the Fight
 ## screen); `--no-backdrop` leaves the birds out.
@@ -17,6 +18,7 @@ const CHOICES := [
 	["Flight", "flight", []],
 	["Fight", "fight", []],
 	["Lab", "res://scenes/bird_lab.tscn", []],
+	["Settings", "settings", []],
 	["Quit", "", []],
 ]
 const RANGE := "res://scenes/combat_range.tscn"
@@ -53,6 +55,29 @@ const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon.  Esc: free the mouse."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
 R: start over.  Esc: free the mouse."
+const MOUSE_Y := [   ## the Settings screen's mouse choice: [label, what it means] (Settings.invert_mouse_y off, on)
+	["Toward you", "Move the mouse toward you to climb, away to dive: a flight stick's pull and push."],
+	["Away", "Move the mouse away from you to climb, toward you to dive: the nose follows the mouse."],
+]
+const PAD_Y := [     ## and the stick's (Settings.invert_pad_y)
+	["Back", "Pull the left stick back to climb, push it forward to dive, as a flight stick."],
+	["Forward", "Push the left stick forward to climb, pull it back to dive."],
+]
+const CONTROL_ROWS := [   ## [what, InputSetup action] or [what, keyboard and mouse, gamepad], each an action or the text
+	["Steer", "Mouse", "Left stick"],
+	["Look about", "", "Right stick"],
+	["Flap (hold to keep flapping)", "flap"],
+	["Catch a perch, or let go", "catch"],
+	["Centre the stick", "center_stick"],
+	["Fire", "fire"],
+	["Switch weapon", "weapon_next"],
+	["Zoom the camera", "Mouse wheel", ""],
+	["Start over", "respawn"],
+	["Change bird", "1 - 5", "cycle_bird"],
+	["Autopilot", "toggle_autopilot"],
+	["Instruments", "toggle_debug"],
+	["Free the mouse", "release_mouse"],
+]
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
@@ -64,12 +89,15 @@ static var fight_skill := "pilot"
 static var flight_bird := "crow"   ## the Flight screen's
 static var novice := true          ## both screens' Flying choice (Novice from the menu; the command line's default is realistic)
 
-var page := "main"   ## "main" | "flight" | "fight"
+var page := "main"   ## "main" | "flight" | "fight" | "settings"
 var backdrop: MenuBackdrop
 var _ui: Control   ## the pages
 var _main: VBoxContainer
 var _flight: VBoxContainer
 var _fight: VBoxContainer
+var _settings: VBoxContainer
+var _mouse_note: Label
+var _pad_note: Label
 var _blurb: Label
 var _flight_blurb: Label
 var _flying_notes: Array[Label] = []   ## (one on each screen)
@@ -86,7 +114,7 @@ func _ready() -> void:
 	if not Boot.args().has("--no-backdrop"):
 		backdrop = MenuBackdrop.new()
 		add_child(backdrop)
-	if Boot.arg_value(Boot.args(), "--page") in ["fight", "flight"]:
+	if Boot.arg_value(Boot.args(), "--page") in ["fight", "flight", "settings"]:
 		page = Boot.arg_value(Boot.args(), "--page")
 	_build()
 	var shot := Boot.arg_value(Boot.args(), "--shot")
@@ -112,6 +140,7 @@ func _build() -> void:
 		b.pressed.connect(choose.bind(i))
 		_main.add_child(b)
 	_build_flight()
+	_build_settings()   # (before Fight's, whose _refresh() fills Settings' notes too)
 	_build_fight()
 	_show(page)
 
@@ -189,6 +218,72 @@ func _build_fight() -> void:
 	_refresh()
 
 
+func _build_settings() -> void:
+	_settings = _page("SETTINGS", false)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 48)
+	_settings.add_child(cols)
+	var pick := _column(380.0)
+	var side := _column(560.0)
+	cols.add_child(pick)
+	cols.add_child(side)
+	pick.add_child(_heading("To climb, move the mouse"))
+	pick.add_child(_row(MOUSE_Y.map(func(m: Array) -> String: return m[0]), 1 if Settings.invert_mouse_y else 0,
+		func(i: int) -> void:
+			Settings.invert_mouse_y = i == 1
+			Settings.save()
+			_refresh(), "MouseY"))
+	_mouse_note = _note(380.0)
+	pick.add_child(_mouse_note)
+	pick.add_child(_heading("To climb, move the stick"))
+	pick.add_child(_row(PAD_Y.map(func(m: Array) -> String: return m[0]), 1 if Settings.invert_pad_y else 0,
+		func(i: int) -> void:
+			Settings.invert_pad_y = i == 1
+			Settings.save()
+			_refresh(), "PadY"))
+	_pad_note = _note(380.0)
+	pick.add_child(_pad_note)
+	side.add_child(_heading("Controls"))
+	var grid := GridContainer.new()
+	grid.name = "Controls"
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 6)
+	for text in ["", "Keyboard and mouse", "Gamepad"]:
+		grid.add_child(_cell(text, true))
+	for r: Array in CONTROL_ROWS:
+		grid.add_child(_cell(r[0], false))
+		var keys: String = r[1]
+		var pad: String = r[2] if r.size() > 2 else r[1]
+		grid.add_child(_cell(InputSetup.keys_for(keys) if _is_action(keys) else keys, false))
+		grid.add_child(_cell(InputSetup.pad_for(pad) if _is_action(pad) else pad, false))
+	side.add_child(grid)
+	var go := HBoxContainer.new()
+	go.alignment = BoxContainer.ALIGNMENT_CENTER
+	var back := _button("Back  (Esc)", 20, Vector2(200, 48))
+	back.name = "SettingsBack"
+	back.pressed.connect(_show.bind("main"))
+	go.add_child(back)
+	_settings.add_child(go)
+
+
+static func _is_action(s: String) -> bool:
+	return InputSetup.KEYS.has(s) or InputSetup.MOUSE.has(s) or InputSetup.PAD_BUTTONS.has(s) or InputSetup.PAD_AXES.has(s)
+
+
+## One cell of the controls table (a heading cell `dim`).
+func _cell(text: String, dim: bool) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", 16)
+	if dim:
+		l.add_theme_font_override("font", MenuStyle.font(MenuStyle.BODY_FONT, 600))
+		l.add_theme_color_override("font_color", MenuStyle.DIM)
+	else:
+		l.add_theme_font_override("font", MenuStyle.font(MenuStyle.NOTES_FONT))
+	return l
+
+
 ## The Flying choice (Novice | Realistic) and what it means, into `box`; its buttons are named <prefix><i>.
 func _flying_row(box: VBoxContainer, prefix: String) -> void:
 	box.add_child(_heading("Flying"))
@@ -223,6 +318,8 @@ func _unhandled_input(e: InputEvent) -> void:
 	if page != "main":
 		if key == KEY_ESCAPE:
 			_show("main")
+		elif page == "settings":
+			pass
 		elif key == KEY_ENTER or key == KEY_KP_ENTER:
 			if page == "fight":
 				start_fight()
@@ -238,7 +335,7 @@ func choose(i: int) -> void:
 	var c: Array = CHOICES[i]
 	if c[1] == "":
 		get_tree().quit()
-	elif c[1] in ["fight", "flight"]:
+	elif c[1] in ["fight", "flight", "settings"]:
 		_show(c[1])
 	else:
 		Boot.extra = PackedStringArray(c[2])
@@ -274,11 +371,14 @@ func _show(p: String) -> void:
 	_main.get_meta("page").visible = p == "main"
 	_flight.get_meta("page").visible = p == "flight"
 	_fight.get_meta("page").visible = p == "fight"
+	_settings.get_meta("page").visible = p == "settings"
 	_refresh()
 	if p == "main":
 		(_main.find_child("Choice0", true, false) as Button).grab_focus()
 	elif p == "flight":
 		(_flight.find_child("FlightStart", true, false) as Button).grab_focus()
+	elif p == "settings":
+		(_settings.find_child("SettingsBack", true, false) as Button).grab_focus()
 	else:
 		(_fight.find_child("Start", true, false) as Button).grab_focus()
 
@@ -301,6 +401,8 @@ func _refresh() -> void:
 			if b != null:
 				b.set_pressed_no_signal(i == (0 if novice else 1))
 	_rules.text = MODES[0 if fight_match else 1][1]
+	_mouse_note.text = MOUSE_Y[1 if Settings.invert_mouse_y else 0][1]
+	_pad_note.text = PAD_Y[1 if Settings.invert_pad_y else 0][1]
 	_skill_box.visible = fight_match
 	for k in SKILLS:
 		if k[0] == fight_skill:

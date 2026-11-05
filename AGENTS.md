@@ -101,7 +101,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: a screen to pick your bird and how it flies,
   Novice | Realistic (`--flying`), then the game without the tack, `Menu.flight_options()`; Fight: a screen to pick your
   bird, each pod's weapon (rockets | seekers | gun, `--loadout <left>,<right>`), Novice | Realistic, the 3 v 3 match (at
-  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; `--page flight|fight`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; Settings: which way the
+  mouse and the stick climb (`Settings`, `user://settings.cfg`, loaded by `Boot` but not for tests; `PlayerController`
+  takes it when made) and the controls, read from `InputSetup`'s bindings (`keys_for` / `pad_for`); `--page flight|fight|settings`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
   `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
   look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they

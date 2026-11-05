@@ -32,6 +32,8 @@ centre); mouse and keyboard work too.
     Its straights are long enough to lock, its turns break the lock, and it breaks away when you lock or shoot it
     (T: it flies straight).
 - **Lab**: the bird lab, for looking at the birds, their poses, take-offs and landings.
+- **Settings**: which way the mouse climbs (toward you, as a flight stick's pull, or away) and the same for the
+  gamepad's stick, saved for next time; and every control.
 
 **Novice or Realistic** (both screens; Novice is the menu's default). *Novice*: hold catch near a perch and the
 bird lines itself up and lands for you; every bird gets half as much stamina again, recovers it twice as fast and
@@ -41,7 +43,7 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 
 | Gamepad | Mouse + keyboard | What it does |
 |---|---|---|
-| Left stick | Mouse (click to capture it, Esc lets go) | Bank left / right. Pull back: climb, slow down, flare. Push: dive, speed up, tuck. |
+| Left stick | Mouse (click to capture it, Esc lets go) | Bank left / right. Pull back (the mouse toward you): climb, slow down, flare. Push: dive, speed up, tuck. Settings turns either round. |
 | (let go) | C or middle mouse | Centre: wings level, best glide |
 | Left trigger | Space | Flap (hold to keep flapping); take off from a perch or the ground |
 | A (hold) | Ctrl (hold) | Catch: hold it through the approach to land on a perch; on a perch, press again to drop off |

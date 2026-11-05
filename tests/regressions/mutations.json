@@ -4298,5 +4298,61 @@
     "replace": "\tcue(\"bonk\", at, _by_speed(lost, 3.0))"
    }
   ]
+ },
+ {
+  "id": "mouse-invert-ignored",
+  "bug": "The mouse's invert setting did nothing: the mouse toward you still pulled (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "\tstick.y += rel.y * sensitivity * (-1.0 if invert_mouse else 1.0)",
+    "replace": "\tstick.y += rel.y * sensitivity"
+   }
+  ]
+ },
+ {
+  "id": "pad-invert-ignored",
+  "bug": "The stick's invert setting did nothing (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "\t\tif invert_pad:\n\t\t\ts.y = -s.y",
+    "replace": "\t\tif false:\n\t\t\ts.y = -s.y"
+   }
+  ]
+ },
+ {
+  "id": "controller-ignores-settings",
+  "bug": "A new PlayerController didn't take the saved mouse setting: the game flew uninverted whatever the menu said (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "var invert_mouse := Settings.invert_mouse_y",
+    "replace": "var invert_mouse := false"
+   }
+  ]
+ },
+ {
+  "id": "settings-not-saved",
+  "bug": "The Settings screen's mouse choice wasn't saved: it was gone next run (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/menu.gd",
+    "find": "\t\t\tSettings.invert_mouse_y = i == 1\n\t\t\tSettings.save()",
+    "replace": "\t\t\tSettings.invert_mouse_y = i == 1"
+   }
+  ]
  }
 ]

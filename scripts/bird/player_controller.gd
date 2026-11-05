@@ -11,7 +11,8 @@ extends RefCounted
 
 var sensitivity := 0.0045       ## mouse: stick per pixel (~220 px for full deflection)
 var return_rate := Vector2(0.7, 1.1)   ## mouse: per second, exponential drift back to centre (x bank, y pitch)
-var invert_pitch := false       ## both devices: push forward = nose up instead
+var invert_mouse := Settings.invert_mouse_y   ## mouse: up climbs (default: toward you climbs, a stick's pull)
+var invert_pad := Settings.invert_pad_y       ## gamepad: the stick forward climbs (default: back climbs)
 var stick := Vector2.ZERO       ## mouse virtual stick
 var look := Vector2.ZERO        ## right stick, -1..1 (x: look right, y: look down)
 var using_gamepad := false
@@ -23,15 +24,20 @@ func handle_event(e: InputEvent) -> void:
 		var rel: Vector2 = e.relative
 		if rel.length() > 0.5:
 			using_gamepad = false
-		stick.x += rel.x * sensitivity
-		stick.y += rel.y * sensitivity * (-1.0 if invert_pitch else 1.0)
-		stick = stick.clamp(Vector2(-1, -1), Vector2(1, 1))
+		mouse_moved(rel)
 	elif e is InputEventJoypadMotion and absf(e.axis_value) > 0.3:
 		using_gamepad = true
 	elif e is InputEventJoypadButton and e.pressed:
 		using_gamepad = true
 	elif e is InputEventKey and e.pressed:
 		using_gamepad = false
+
+
+## The captured mouse moved `rel` px: the virtual stick follows (down, toward you, pulls; up with invert_mouse).
+func mouse_moved(rel: Vector2) -> void:
+	stick.x += rel.x * sensitivity
+	stick.y += rel.y * sensitivity * (-1.0 if invert_mouse else 1.0)
+	stick = stick.clamp(Vector2(-1, -1), Vector2(1, 1))
 
 
 ## Gentle near centre, full at the edge: v * (0.35 + 0.65 |v|), applied to the radius.
@@ -52,7 +58,7 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 	var s := stick
 	if using_gamepad or pad.length() > 0.0:
 		s = shape(pad)
-		if invert_pitch:
+		if invert_pad:
 			s.y = -s.y
 		stick = Vector2.ZERO
 	var inp := FlightInput.new(s, Input.is_action_just_pressed("flap"), Input.is_action_pressed("flap"),
