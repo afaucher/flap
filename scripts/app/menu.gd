@@ -40,6 +40,8 @@ const MODES := [   ## [label, rules]
 	["Target practice", "A target bird flies a racetrack over the clearing, with your crow wingman circling above it.\n" +
 		"- Practise leading with rockets and locking with seekers: its straights are long enough to lock, its turns break it.\n" +
 		"- It breaks away when it's locked or shot at (T: it flies straight). Eight feathers down it; it comes back a moment later.\n" +
+		"- Balloons ride on cables round the clearing: bullets hole them and they sink, a rocket sets one alight. Each is winched up again.
+" +
 		"- Perch on your base's rail for two seconds to rearm."],
 ]
 const SKILLS := [   ## [CombatSkill preset, label, what it means]

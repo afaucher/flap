@@ -48,6 +48,10 @@ var cable := 10.0                      ## m of cable the winch has out
 var breeze := Vector3(1.0, 0.0, 0.35).normalized()   ## the way the air goes (it rides nose into it)
 var auto := true                       ## step itself each physics tick (probes step it by hand)
 var leak := LEAK                       ## (probes hold a stage still with 0)
+var respawn_after := 0.0               ## s it lies on the ground before a fresh one is winched up (0: never; the range's 12)
+var last_hit_by: Object = null         ## who last holed it or set it alight (CombatWorld credits them when it's down)
+var counted := false                   ## (CombatWorld: its downing has been credited)
+var hit_ids := {}                      ## (CombatWorld: the bullets that have holed it, by id: each holes it once)
 
 var gas := 1.0
 var holes: Array = []                  ## Vector4: rest-space centre, radius
@@ -194,6 +198,68 @@ func centre() -> Vector3:
 	return body.global_position
 
 
+## A fresh balloon at the winch, its cable paying out: it rises to ride at the top of it (the old one's gone).
+func reset() -> void:
+	gas = 1.0
+	holes.clear()
+	hit_ids.clear()
+	burn_r = -1.0
+	falling = false
+	landed = -1.0
+	last_hit_by = null
+	counted = false
+	_vel = Vector3.ZERO
+	_fall_tilt = 0.0
+	_puffs.clear()
+	_scorch.visible = false
+	_ring = Vector3(0.0, STUMP_H + 0.06, 0.0)
+	body.position = _ring + Vector3(0.0, RADIUS + RIG_DROP, 0.0)
+	_key = ""
+	step(0.0)
+
+
+## How far `p` (world) is from the envelope (a capsule down its axis, the nose and tail's taper aside); 0 inside.
+func distance_to(p: Vector3) -> float:
+	var q := body.global_transform.affine_inverse() * p
+	var half := LENGTH * 0.36
+	var on := Vector3(0.0, 0.0, clampf(q.z, -half, half))
+	return maxf(0.0, q.distance_to(on) - RADIUS * 0.9)
+
+
+## Where the segment a -> b (world) first comes within `reach` of the envelope (a rocket's fuse), or null. Up and
+## riding only (alight or down, it's no longer a target).
+func fuse_point(a: Vector3, b: Vector3, reach: float) -> Variant:
+	if is_down():
+		return null
+	var n := maxi(2, int(ceil(a.distance_to(b) / 0.1)))
+	for i in n + 1:
+		var p := a.lerp(b, float(i) / n)
+		if distance_to(p) <= reach:
+			return p
+	return null
+
+
+## Up to `n` moorings round `centre` (world, on the ground) in `layout`'s wood, `cables` m of cable each in turn, clear
+## of its trunks and crowns (clear_spot) and at least `apart` m from each other: their stumps' feet.
+static func moorings(layout: ArenaLayout, centre: Vector2, n: int, cables: Array, apart := 5.0, radii := [12.0, 14.0, 10.0, 16.0, 8.0]) -> Array:
+	var out := []
+	for k in 96:
+		if out.size() >= n:
+			break
+		var ang := k * 2.39996   # (the golden angle: each next try well round from the last, so they spread all round)
+		var cable_m: float = cables[out.size() % cables.size()]
+		for rr: float in radii:
+			var p := Vector3(centre.x + rr * cos(ang), 0.0, centre.y + rr * sin(ang))
+			p.y = ArenaLayout.GROUND_Y + layout.ground(p.x, p.z)
+			var far := true
+			for q in out:
+				far = far and Vector2((q as Vector3).x - p.x, (q as Vector3).z - p.z).length() > apart
+			if far and clear_spot(layout, p, cable_m):
+				out.append(p)
+				break
+	return out
+
+
 ## Can a balloon moored at `at` (on the ground) on `cable` m ride clear of `layout`'s wood and foliage, by `room` m?
 ## (Its cable's whole sweep, nearly upright, and the balloon at the top.)
 static func clear_spot(layout: ArenaLayout, at: Vector3, cable_m: float, room := 1.5) -> bool:
@@ -283,6 +349,9 @@ func step(dt: float) -> void:
 	var heap := _heap_y()
 	if landed >= 0.0:
 		landed += dt
+		if respawn_after > 0.0 and landed > respawn_after:
+			reset()
+			return
 	elif falling:
 		_vel.y = move_toward(_vel.y, -FALL_SPEED, 9.8 * dt)
 		_vel.x = move_toward(_vel.x, breeze.x * 0.6, dt)

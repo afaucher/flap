@@ -109,13 +109,17 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
   smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
   and flutter to the ground; down; ruffled coverts; shedding.
-- `scripts/combat/target_balloon.gd`: `TargetBalloon`, a prototype target (not in the range yet): a Caquot kite balloon at
+- `scripts/combat/target_balloon.gd`: `TargetBalloon`, target practice's balloons (five round the clearing, `combat_range.gd`
+  `_moor_balloons`, `TargetBalloon.moorings`; `--no-balloons`): a Caquot kite balloon at
   the riders' 1:20.6 (1.36 m), moored to a hand winch on a stump, nose into `breeze`. Stages (`stage()`): UP, HOLED
   (`bullet_hit`: a hole in and out, each leaking `LEAK` of its gas a second), SINKING (soft: the nose cups, the tail
   and fins droop, lower on its cable), DOWN (a limp heap on the ground), BURNING (`burst_near`: the fire runs over it
   from where it caught, `balloon.gdshader`), FALLING, WRECK. Holes and the burn are in rest space (CUSTOM0).
-  `clear_spot` checks a mooring is clear of wood and crowns. `tests/probe_balloon.gd` renders each stage in the
-  clearing; `test_target_balloon`.
+  `clear_spot` checks a mooring is clear of wood and crowns. In `CombatWorld.balloons`: a bullet through one holes it
+  and flies on, a rocket's or seeker's fuse takes one, a burst within `BALLOON_IGNITE` sets it alight; down, the last
+  to hit it is credited (`stats.balloons`, `balloon_downed`; the HUD counts yours), and `respawn_after` s on the ground
+  a fresh one is winched up. Birds fly through them (no collision yet), and seekers don't lock on them.
+  `tests/probe_balloon.gd` renders each stage in the clearing; `test_target_balloon`, `test_balloon_range`.
 - `scripts/combat/ai/`: the combat AI (`docs/design/combat_ai.md`, section 11 for what's built): `CombatSense` (what a
   bird can see) -> `CombatBrain` (a Beehave tree, `CombatTree`, built in code; `addons/beehave`) -> an `Intent` that
   `CombatPilot` flies through `AIPilot.steer()` and `AICombat` fires by (`FireControl` flies the real `Projectile`).

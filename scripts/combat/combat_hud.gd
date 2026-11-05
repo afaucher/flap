@@ -102,7 +102,10 @@ func _draw() -> void:
 		_score(Vector2(size.x - 24, 78))
 		var s := world.stats
 		var acc := 100.0 * float(s.hits) / maxf(float(s.shots), 1.0)
-		_text(Vector2(size.x - 24, 34), "shots %d   hits %d   downed %d   %d%%" % [s.shots, s.hits, s.kills, roundi(acc)], INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
+		var line := "shots %d   hits %d   downed %d" % [s.shots, s.hits, s.kills]
+		if not world.balloons.is_empty():
+			line += "   balloons %d" % int(s.get("balloons", 0))
+		_text(Vector2(size.x - 24, 34), line + "   %d%%" % roundi(acc), INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
 		if note != "":
 			_text(Vector2(size.x - 24, 54), note, DIM, 13, HORIZONTAL_ALIGNMENT_RIGHT)
 
@@ -328,6 +331,8 @@ func _draw_styled() -> void:
 		_home_marker(cam, home, l.bird.global_position.distance_to(home))
 	if world != null:
 		_score(Vector2(size.x - 24, 38))
+		if not world.balloons.is_empty():
+			_text(Vector2(size.x - 24, 62), "balloons %d" % int(world.stats.get("balloons", 0)), INK, 14, HORIZONTAL_ALIGNMENT_RIGHT)
 
 
 ## The score at `p` (right aligned): your side's downed enemies, in FRIEND, against the other side's, in ENEMY.
