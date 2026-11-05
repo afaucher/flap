@@ -4916,5 +4916,19 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "race-rail-no-reset",
+  "bug": "Landing back on the start rail with gates still to take left the clock running: it should reset the run (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\tif perch == course.start:   # (back on the rail before the course is done: the run starts over)\n\t\t_reset()\n",
+    "replace": "\tif perch == course.start and false:\n\t\t_reset()\n"
+   }
+  ]
  }
 ]

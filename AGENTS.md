@@ -58,7 +58,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   (`flown_line`) clear by half a wingspan and turning no tighter than that circle, posts and ropes off the line, the
   next gate seen from the one before (and the one after it, unless the turn is tight: `marked`); `problems()` lists
   any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
-  the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken; misses;
+  the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken (landing there
+  sooner resets the run); misses;
   splits within the tick), `RacePilot` an
   AI racer (a FlightInput only): it follows the course's planned line by an L1 pursuit, its skill (`CombatSkill`
   presets) degrading look-ahead, bank, reaction, aim and pace; a missed gate it goes round on a planned Dubins path
