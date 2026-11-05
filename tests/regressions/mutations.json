@@ -4349,9 +4349,9 @@
   ],
   "edits": [
    {
-    "file": "scripts/app/menu.gd",
-    "find": "\t\t\tSettings.invert_mouse_y = i == 1\n\t\t\tSettings.save()",
-    "replace": "\t\t\tSettings.invert_mouse_y = i == 1"
+    "file": "scripts/ui/settings_panel.gd",
+    "find": "\t\t\t\t\tSettings.invert_mouse_y = i == 1\n\t\t\t\t\tSettings.save()",
+    "replace": "\t\t\t\t\tSettings.invert_mouse_y = i == 1"
    }
   ]
  },
@@ -4392,7 +4392,7 @@
   "edits": [
    {
     "file": "scripts/ui/pause_menu.gd",
-    "find": "\tget_tree().paused = true\n\tInput.mouse_mode = Input.MOUSE_MODE_VISIBLE\n",
+    "find": "\tget_tree().paused = true\n\t_mouse(Input.MOUSE_MODE_VISIBLE)\n",
     "replace": "\tget_tree().paused = true\n"
    }
   ]
@@ -4422,6 +4422,20 @@
     "file": "scripts/app/combat_range.gd",
     "find": "\tpause = PauseMenu.attach(self, [player_ctl])\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pause-mouse-not-recaptured",
+  "bug": "Resuming left the mouse free: a click to capture it again, and that click could fire (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\t\tc.take_settings()\n\t_mouse(Input.MOUSE_MODE_CAPTURED)\n",
+    "replace": "\t\tc.take_settings()\n"
    }
   ]
  }

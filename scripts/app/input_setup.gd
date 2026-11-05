@@ -88,14 +88,17 @@ static func _add(action: String) -> void:
 		InputMap.add_action(action)
 
 
-## What sets off `action` on the keyboard and mouse ("Left mouse / F"), from the bindings above; "" for none.
+## What sets off `action` on the keyboard ("Space"), from the bindings above; "" for none.
 static func keys_for(action: String) -> String:
 	var names := []
-	if MOUSE.has(action):
-		names.append(MOUSE_NAMES.get(MOUSE[action], "Mouse %d" % MOUSE[action]))
 	for k in KEYS.get(action, []):
 		names.append(OS.get_keycode_string(k))
 	return " / ".join(names)
+
+
+## On the mouse ("Left mouse"); "" for none.
+static func mouse_for(action: String) -> String:
+	return MOUSE_NAMES.get(MOUSE[action], "Mouse %d" % MOUSE[action]) if MOUSE.has(action) else ""
 
 
 ## What sets it off on a gamepad ("RT"); "" for none.

@@ -32,8 +32,9 @@ centre); mouse and keyboard work too.
     Its straights are long enough to lock, its turns break the lock, and it breaks away when you lock or shoot it
     (T: it flies straight).
 - **Lab**: the bird lab, for looking at the birds, their poses, take-offs and landings.
-- **Settings**: which way the mouse climbs (toward you, as a flight stick's pull, or away) and the same for the
-  gamepad's stick, saved for next time; and every control.
+- **Settings**: tabs for the keyboard, the mouse and the gamepad, each listing its controls; the Mouse tab sets which
+  way the mouse climbs (toward you, as a flight stick's pull, or away), the Gamepad tab the same for the stick, saved
+  for next time. (The bindings can't be changed yet.)
 
 **Esc** in the game pauses it (so does switching away from the window): Resume, Settings (the same screen) or Leave,
 back to this menu.

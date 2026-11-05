@@ -15,6 +15,7 @@ var controllers: Array = []       ## PlayerControllers given the settings on res
 var pause_on_focus_out := true
 var change_scene := true          ## Leave opens the start menu (a test turns it off and watches `left`)
 var page := ""                    ## "" closed | "pause" | "settings"
+static var mouse_wanted := -1     ## the mouse mode last asked for (headless, Input.mouse_mode never captures: tests read this)
 var _ui: Control
 var _pause: VBoxContainer
 var _settings: VBoxContainer
@@ -70,7 +71,7 @@ func open() -> void:
 	if is_open() or not is_inside_tree():
 		return
 	get_tree().paused = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_mouse(Input.MOUSE_MODE_VISIBLE)
 	_show("pause")
 
 
@@ -82,7 +83,7 @@ func resume() -> void:
 	get_tree().paused = false
 	for c in controllers:
 		c.take_settings()
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_mouse(Input.MOUSE_MODE_CAPTURED)
 
 
 ## Back to the start menu.
@@ -93,6 +94,11 @@ func leave() -> void:
 	if change_scene:
 		Boot.extra = PackedStringArray()
 		get_tree().change_scene_to_file(MENU)
+
+
+static func _mouse(mode: Input.MouseMode) -> void:
+	mouse_wanted = mode
+	Input.mouse_mode = mode
 
 
 func _unhandled_input(e: InputEvent) -> void:

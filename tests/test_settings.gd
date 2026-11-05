@@ -111,6 +111,7 @@ func _screen() -> void:
 	Settings.invert_mouse_y = false
 	Settings.invert_pad_y = false
 	Boot.extra = PackedStringArray(["--no-backdrop"])
+	SettingsPanel.tab = 0
 	var menu: Menu = load("res://scenes/menu.tscn").instantiate()
 	add_child(menu)
 	await frames(2)
@@ -121,6 +122,13 @@ func _screen() -> void:
 	var back := menu.find_child("SettingsBack", true, false) as Button
 	check(back.is_visible_in_tree() and not (menu.find_child("Choice0", true, false) as Button).is_visible_in_tree(),
 		"Settings opens its own screen")
+	# The tabs: Keyboard first, Mouse with the mouse's choice, Gamepad with the stick's.
+	check(_shown(menu, "Tab0") and _shown(menu, "Tab1") and _shown(menu, "Tab2"), "tabs for the keyboard, the mouse and the gamepad")
+	check(_shown(menu, "ControlsKeyboard") and not _shown(menu, "MouseY0") and not _shown(menu, "PadY0"), "the keyboard's shown, no choices on it")
+	(menu.find_child("Tab2", true, false) as Button).pressed.emit()
+	check(_shown(menu, "PadY0") and _shown(menu, "ControlsGamepad") and not _shown(menu, "MouseY0") and not _shown(menu, "ControlsKeyboard"), "the gamepad's tab: the stick's choice and its controls")
+	(menu.find_child("Tab1", true, false) as Button).pressed.emit()
+	check(_shown(menu, "MouseY0") and _shown(menu, "ControlsMouse") and not _shown(menu, "PadY0"), "the mouse's tab: its choice and controls")
 	check((menu.find_child("MouseY0", true, false) as Button).button_pressed, "the mouse's default is shown")
 	check(_text(menu).contains(SettingsPanel.MOUSE_Y[0][1]), "with what it means")
 	(menu.find_child("MouseY1", true, false) as Button).pressed.emit()
@@ -130,22 +138,31 @@ func _screen() -> void:
 	Settings.invert_mouse_y = false
 	Settings.load_saved()
 	check(Settings.invert_mouse_y, "and saves it at once")
+	(menu.find_child("Tab2", true, false) as Button).pressed.emit()
 	(menu.find_child("PadY1", true, false) as Button).pressed.emit()
 	(menu.find_child("MouseY0", true, false) as Button).pressed.emit()
 	Settings.load_saved()
 	check(Settings.invert_pad_y and not Settings.invert_mouse_y, "the stick's choice too, and back again")
 	# The controls, from the bindings: each row's cells as drawn.
-	var grid := menu.find_child("Controls", true, false) as GridContainer
-	var rows := {}
-	var cells := grid.get_children()
-	for r in cells.size() / 3:
-		rows[(cells[r * 3] as Label).text] = [(cells[r * 3 + 1] as Label).text, (cells[r * 3 + 2] as Label).text]
-	eq(rows.get("Flap (hold to keep flapping)"), ["Space", "LT"], "flap: Space, LT")
-	eq(rows.get("Fire"), ["Left mouse / F", "RT"], "fire: the left mouse or F, RT")
-	eq(rows.get("Catch a perch, or let go"), ["Ctrl", "A"], "catch: Ctrl, A")
-	eq(rows.get("Change bird"), ["1 - 5", "Back"], "change bird: 1-5, Back")
+	var keys := _rows(menu, "Keyboard")
+	var mouse := _rows(menu, "Mouse")
+	var pad := _rows(menu, "Gamepad")
+	eq([keys.get("Flap (hold to keep flapping)"), mouse.get("Flap (hold to keep flapping)"), pad.get("Flap (hold to keep flapping)")],
+		["Space", null, "LT"], "flap: Space, LT, nothing on the mouse")
+	eq([keys.get("Fire"), mouse.get("Fire"), pad.get("Fire")], ["F", "Left mouse", "RT"], "fire: F, the left mouse, RT")
+	eq([keys.get("Centre the stick"), mouse.get("Centre the stick"), pad.get("Centre the stick")], ["C", "Middle mouse", null], "centre: C, the middle mouse")
+	eq([keys.get("Steer"), mouse.get("Steer"), pad.get("Steer")], [null, "Move the mouse", "Left stick"], "steer: the mouse, the left stick")
+	eq([keys.get("Change bird"), pad.get("Change bird")], ["1 - 5", "Back"], "change bird: 1-5, Back")
+	eq(keys.get("Pause: resume, settings, leave"), "Escape", "pause: Escape")
 	for r: Array in SettingsPanel.CONTROL_ROWS:
-		check(rows.has(r[0]) and (rows[r[0]][0] != "" or rows[r[0]][1] != ""), "a row for %s, set off by something" % r[0])
+		check(keys.has(r[0]) or mouse.has(r[0]) or pad.has(r[0]), "%s is on a tab" % r[0])
+	var plates := (menu.find_child("ControlsKeyboard", true, false) as GridContainer).find_children("*", "Button", true, false)
+	check(plates.size() > 5 and plates.all(func(b: Button) -> bool: return b.disabled), "the bindings are plates, not rebindable yet")
+	# The tab shown last is shown next time.
+	var again := SettingsPanel.new()
+	check((again.find_child("Tab2", true, false) as Button).button_pressed, "the tab shown last (the gamepad's) comes up again")
+	again.free()
+	SettingsPanel.tab = -1
 	var esc := InputEventKey.new()
 	esc.keycode = KEY_ESCAPE
 	esc.pressed = true
@@ -154,6 +171,20 @@ func _screen() -> void:
 	check(not back.is_visible_in_tree() and (menu.find_child("Choice0", true, false) as Button).is_visible_in_tree(), "Esc goes back")
 	menu.queue_free()
 	await frames(2)
+
+
+## A tab's controls, what -> binding as drawn on its plate.
+func _rows(menu: Node, tab: String) -> Dictionary:
+	var cells := (menu.find_child("Controls" + tab, true, false) as GridContainer).get_children()
+	var rows := {}
+	for r in cells.size() / 2:
+		rows[(cells[r * 2] as Label).text] = (cells[r * 2 + 1] as Button).text
+	return rows
+
+
+func _shown(n: Node, child: String) -> bool:
+	var c := n.find_child(child, true, false) as Control
+	return c != null and c.is_visible_in_tree()
 
 
 func _text(n: Node) -> String:

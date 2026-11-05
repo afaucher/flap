@@ -49,7 +49,7 @@ func _game() -> void:
 	check(get_tree().paused and pause.is_open(), "Esc pauses")
 	check(_shown(pause, "PauseResume") and _shown(pause, "PauseSettings") and _shown(pause, "PauseLeave"),
 		"and shows Resume, Settings and Leave")
-	eq(Input.mouse_mode, Input.MOUSE_MODE_VISIBLE, "the mouse is free")
+	eq(PauseMenu.mouse_wanted, Input.MOUSE_MODE_VISIBLE, "the mouse is freed")
 	var at := b.global_position
 	for i in 10:
 		await get_tree().physics_frame
@@ -57,7 +57,8 @@ func _game() -> void:
 	# Settings, from the pause menu.
 	(pause.find_child("PauseSettings", true, false) as Button).pressed.emit()
 	await frames(1)
-	check(_shown(pause, "MouseY1") and not _shown(pause, "PauseResume"), "Settings opens the settings")
+	check(_shown(pause, "Tab1") and not _shown(pause, "PauseResume"), "Settings opens the settings")
+	(pause.find_child("Tab1", true, false) as Button).pressed.emit()
 	(pause.find_child("MouseY1", true, false) as Button).pressed.emit()
 	check(Settings.invert_mouse_y, "a choice there sets it")
 	await _esc()
@@ -66,6 +67,7 @@ func _game() -> void:
 	await _esc()
 	check(not get_tree().paused and not pause.is_open(), "Esc again resumes")
 	check(game.player.invert_mouse, "with the new setting in the player's controller")
+	eq(PauseMenu.mouse_wanted, Input.MOUSE_MODE_CAPTURED, "and the mouse captured at once")
 	at = b.global_position
 	for i in 10:
 		await get_tree().physics_frame
