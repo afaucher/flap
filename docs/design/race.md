@@ -85,7 +85,8 @@ and seeing the next gate, not the hawk, are what keep the gates in the open.
 ## The rules of a run (`race_run.gd`)
 
 - The race starts and ends on the outpost's rail: the clock starts the tick the bird leaves it and stops the tick it
-  lands back on it with every gate taken (landing elsewhere, or there with a gate to go, doesn't stop it). The way home
+  lands back on it with every gate taken. Landing on it with a gate still to go resets the run (ready to start again,
+  the clock at 0); landing anywhere else doesn't stop the clock. The way home
   from the last gate is free: no line, no rules but the landing.
 - A gate counts only through its window the way it faces, and only the next one: a later gate flown first doesn't
   count. Crossing the next gate's plane beside its window (within 10 m) is a miss; the gate stays next, to go back for.

@@ -9,7 +9,8 @@ extends RefCounted
 ##   - crossing the next gate's plane outside its window (within MISS_NEAR) is a miss: the gate stays the next one,
 ##     to go back for (the time lost is the penalty);
 ##   - each gate's split is the moment the bird crossed it, found within the tick (so splits don't round to 1/60 s);
-##   - landing anywhere else, or on the rail with a gate still to take, doesn't stop the clock.
+##   - landing on the rail with a gate still to take resets the run (ready to start again, the clock at 0); landing
+##     anywhere else doesn't stop the clock.
 
 enum Phase { READY, RUNNING, FINISHED }
 
@@ -21,7 +22,8 @@ var splits: Array[float] = []   ## s at each gate passed
 var misses := 0
 var missed_at: Array[int] = []  ## the gate each miss was at
 var time := INF           ## the finish time
-var event := ""           ## this tick's: "start", "gate", "miss", "finish" (landed home) or ""
+var event := ""           ## this tick's: "start", "gate", "miss", "finish" (landed home), "reset" (landed on the rail
+                          ## with gates to go) or ""
 
 
 func _init(c: RaceCourse) -> void:
@@ -52,6 +54,10 @@ func step(a: Vector3, b: Vector3, dt: float, perch: Perch) -> void:
 			time = clock
 			event = "finish"
 		return
+	if perch == course.start:   # (back on the rail before the course is done: the run starts over)
+		_reset()
+		event = "reset"
+		return
 	var g: RaceCourse.Gate = course.gates[next]
 	var f := g.crossing(a, b)
 	if f >= 0.0:
@@ -62,6 +68,15 @@ func step(a: Vector3, b: Vector3, dt: float, perch: Perch) -> void:
 		misses += 1
 		missed_at.append(next)
 		event = "miss"
+
+
+func _reset() -> void:
+	phase = Phase.READY
+	clock = 0.0
+	next = 0
+	splits.clear()
+	misses = 0
+	missed_at.clear()
 
 
 func finished() -> bool:

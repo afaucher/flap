@@ -2,7 +2,7 @@ extends TestCase
 ## Race mode (RaceCourse, RaceRun, RaceRecord): a gate counts only through its window the way it faces; the gates go
 ## in order; the clock starts off the start rail and stops when the bird lands back on it with every gate taken (not
 ## before, not on another perch); a miss is counted and the gate stays next; best times are kept only when better, and
-## the average of the last three finishes counts the slower ones too. The AI field (pilots and aces) takes every gate
+## landing on the rail with gates to go resets the run; the average of the last three finishes counts the slower ones too. The AI field (pilots and aces) takes every gate
 ## without bonking and lands home (all but the falcon: AIPilot can't land it on a rail yet). The generated course keeps its rules on two seeds, every bird can fly it
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
 ## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
@@ -81,6 +81,7 @@ func _run_rules() -> void:
 	for i in 30:
 		r.step(at, at, DT, st)
 	eq(r.phase, RaceRun.Phase.READY, "on the perch: not started")
+	eq(r.event, "", "no start (or reset) while it waits there")
 	eq(r.clock, 0.0, "the clock waits on the perch")
 	r.step(at, at + Vector3(0, 0, -0.2), DT, null)
 	eq(r.event, "start", "off the perch: started")
@@ -97,8 +98,6 @@ func _run_rules() -> void:
 	r.step(Vector3(0, 5, -9.75), Vector3(0, 5, -10.75), DT, null)
 	eq(r.next, 1, "through the first gate")
 	near(r.splits[0], t0 + DT * 0.25, 1e-6, "its split, within the tick")
-	r.step(at, at, DT, st)
-	check(not r.finished() and r.phase == RaceRun.Phase.RUNNING, "landing on the rail with gates to go doesn't finish")
 	r.step(Vector3(0, 5, -19.9), Vector3(0, 5, -20.1), DT, null)
 	eq(r.next, 2, "then the second")
 	check(r.splits[1] > r.splits[0], "splits in order")
@@ -121,6 +120,25 @@ func _run_rules() -> void:
 	for i in 60:
 		r.step(at, at + Vector3(0, 0, -1), DT, null)
 	near(r.clock, r.time, 1e-6, "the clock stops at the finish")
+	r.step(at, at, DT, st)
+	check(r.finished() and r.next == 3, "landing on the rail again once finished changes nothing")
+	# Back on the rail with gates to go: the run starts over.
+	var r2 := RaceRun.new(c)
+	r2.step(at, at + Vector3(0, 0, -0.2), DT, null)
+	r2.step(Vector3(4, 5, -9.5), Vector3(4, 5, -10.5), DT, null)
+	r2.step(Vector3(0, 5, -9.5), Vector3(0, 5, -10.5), DT, null)
+	eq(r2.next, 1, "a gate taken")
+	r2.step(at, at, DT, elsewhere)
+	eq(r2.phase, RaceRun.Phase.RUNNING, "another perch: still running")
+	r2.step(at, at, DT, st)
+	eq(r2.event, "reset", "on the rail with gates to go: reset")
+	check(r2.phase == RaceRun.Phase.READY and r2.next == 0 and r2.clock == 0.0 and r2.splits.is_empty() and r2.misses == 0,
+		"ready to start again: the first gate next, the clock, splits and misses cleared")
+	for i in 30:
+		r2.step(at, at, DT, st)
+	eq(r2.clock, 0.0, "the clock waits on the rail again")
+	r2.step(at, at + Vector3(0, 0, -0.2), DT, null)
+	check(r2.event == "start" and is_equal_approx(r2.clock, DT), "off the rail: a new run")
 
 
 ## A better time replaces the best; a worse one doesn't.

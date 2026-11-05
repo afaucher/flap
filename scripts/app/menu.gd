@@ -65,7 +65,8 @@ const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
 	["pilot", "Pilots", "One of each other bird. They hold the line well; a miss costs them a loop."],
 	["ace", "Aces", "One of each other bird, flying the line as cleanly as it can be flown."],
 ]
-const RACE_RULES := "- Start on the outpost's rail. The clock runs from when you leave it until you land back on it.
+const RACE_RULES := "- Start on the outpost's rail. The clock runs from when you leave it until you land back on it
+  with every gate taken. Land on it sooner and the run starts over.
 - Ten gates. Fly through each in the course's direction, coming from the gate before it; backwards doesn't count.
 - Take them in order: the bright gate is next. Skip one and none after it count until you go back for it."
 const COL_W := 540.0     ## px: the choices' column
