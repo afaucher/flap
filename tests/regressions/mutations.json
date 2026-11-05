@@ -4452,5 +4452,47 @@
     "replace": "\t\treturn DIVE_RUN"
    }
   ]
+ },
+ {
+  "id": "race-ai-uturn-long",
+  "bug": "A go-around's U-turn came out four times as long: the one-circle case (start and end on the same circle) was skipped (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n",
+    "replace": "\t\t\t\tif dd < 1e-3:\n\t\t\t\t\tcontinue\n\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-stuck-on-ground",
+  "bug": "A racer that came down on the ground never took off again: AIPilot's take-off waited on its own clock, which nothing advanced (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tguide.clock = _clock   # (its take-off from the ground times its rest by this)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "race-ai-height-too-near",
+  "bug": "The racer took its height from a point 0.3 s ahead: the fast birds pitched up and down and bonked into the gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "const VERT_LOOK := 0.6",
+    "replace": "const VERT_LOOK := 0.3"
+   }
+  ]
  }
 ]

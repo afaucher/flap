@@ -5,7 +5,7 @@ extends TestCase
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
 ## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
 
-const SHARDS := 5
+const SHARDS := 7
 const DT := 1.0 / 60.0
 
 
@@ -19,6 +19,7 @@ func setup() -> void:
 		_run_rules()
 		_record()
 		_rules_by_hand()
+		_dubins()
 		_course_rules(11)
 	if in_shard(1):
 		await _course_in_the_wood(7)
@@ -28,6 +29,11 @@ func setup() -> void:
 		await _flyable(11)
 	if in_shard(4):
 		await _flyable(7)
+	if in_shard(5):
+		await _field_finishes(7)
+	if in_shard(6):
+		await _goes_round(7)
+		await _takes_off_again(7)
 	finish()
 
 
@@ -227,6 +233,121 @@ func _flyable(s: int) -> void:
 	for id in BirdProfile.IDS:
 		var n: int = res[id].filter(func(lg): return lg.ok).size()
 		check(n >= c.gates.size() - 1, "seed %d: the %s flies %d of %d legs" % [s, id, n, c.gates.size()])
+
+
+## Every bird at pilot and ace finishes seed 7's course, without bonking; a recruit, where it finishes, is slower
+## than the ace of its species (2026-11-05: pilot 18.6-24.6 s, ace 18.7-24.5, recruits 25.4-32.6 or out).
+func _field_finishes(s: int) -> void:
+	var l := Pinewood.generate(s)
+	var c := RaceCourse.generate(l, s)
+	var trial := RaceTrial.new()
+	add_child(trial)
+	trial.setup(l, c)
+	var i := 0
+	for sk in ["recruit", "pilot", "ace"]:
+		for id in BirdProfile.IDS:
+			trial.add_ai(id, sk, 100 + i)
+			i += 1
+	await trial.run(120.0)
+	var by := {}
+	for r in trial.results():
+		by["%s %s" % [r.skill, r.id]] = r
+	var pairs := 0
+	for id in BirdProfile.IDS:
+		for sk in ["pilot", "ace"]:
+			var r: Dictionary = by["%s %s" % [sk, id]]
+			check(r.time < INF, "seed %d: the %s %s finishes (%d of 10 gates)" % [s, sk, id, r.gates])
+			check(r.bonks == 0, "seed %d: the %s %s doesn't bonk (%d)" % [s, sk, id, r.bonks])
+		var rec: Dictionary = by["recruit %s" % id]
+		var ace: Dictionary = by["ace %s" % id]
+		if rec.time < INF and ace.time < INF:
+			pairs += 1
+			check(rec.time > ace.time, "seed %d: the recruit %s (%.1f s) is slower than the ace (%.1f s)" % [s, id, rec.time, ace.time])
+	check(pairs >= 2, "seed %d: recruits finished to compare (%d)" % [s, pairs])
+	trial.queue_free()
+
+
+## The go-around's path (RacePilot.dubins): a U-turn either way is half a circle; a straight run is the straight line;
+## each ends where it should, heading the way it should.
+func _dubins() -> void:
+	for side: float in [1.0, -1.0]:
+		var pts := RacePilot.dubins(Vector2.ZERO, Vector2.RIGHT, Vector2(0, 20.0 * side), Vector2.LEFT, 10.0)
+		near(_length(pts), PI * 10.0, 0.5, "a U-turn (%+.0f) is half a 10 m circle" % side)
+		check(pts[-1].distance_to(Vector2(0, 20.0 * side)) < 0.01, "the U-turn (%+.0f) ends there" % side)
+		check((pts[-1] - pts[-2]).normalized().dot(Vector2.LEFT) > 0.99, "heading back (%+.0f)" % side)
+	near(_length(RacePilot.dubins(Vector2.ZERO, Vector2.RIGHT, Vector2(40, 0), Vector2.RIGHT, 5.0)), 40.0, 0.01, "straight on: the straight line")
+
+
+static func _length(pts: PackedVector2Array) -> float:
+	var n := 0.0
+	for i in pts.size() - 1:
+		n += pts[i].distance_to(pts[i + 1])
+	return n
+
+
+## A racer put down on the ground mid-race takes off again and flies on.
+func _takes_off_again(s: int) -> void:
+	var l := Pinewood.generate(s)
+	var c := RaceCourse.generate(l, s)
+	var trial := RaceTrial.new()
+	add_child(trial)
+	trial.setup(l, c)
+	var e := trial.add_ai("crow", "pilot", 5)
+	e.run.phase = RaceRun.Phase.RUNNING
+	e.run.next = 2
+	var g := c.gates[2]
+	var at := g.centre - g.normal * 20.0
+	at.y = l.ground(at.x, at.z) + 0.3
+	var pilot: RacePilot = e.pilot
+	e.bird.controller = ScriptedInput.new()   # (set it down first, as test_ground_takeoff does; then the racer flies)
+	e.bird.fly_from(at, (g.normal + Vector3.DOWN).normalized(), 1.0)
+	e.prev = at
+	for f in 60:
+		await trial.step()
+		if e.bird.state == Bird.State.GROUNDED:
+			break
+	check(e.bird.state == Bird.State.GROUNDED, "set down by the ground, it stands on it")
+	e.bird.controller = pilot
+	var flew_again := false
+	for f in 60 * 12:
+		await trial.step()
+		var b: Bird = e.bird
+		flew_again = flew_again or (b.state == Bird.State.FLYING and b.global_position.y - l.ground(b.global_position.x, b.global_position.z) > 2.0)
+	check(flew_again, "the racer takes off again (2 m up within 12 s)")
+	trial.queue_free()
+
+
+## Put beside a gate on a clear line (a miss, left and right), a racer goes round and comes back through it.
+func _goes_round(s: int) -> void:
+	var l := Pinewood.generate(s)
+	var c := RaceCourse.generate(l, s)
+	var trial := RaceTrial.new()
+	add_child(trial)
+	trial.setup(l, c)
+	var k := 3
+	var g := c.gates[k]
+	var es := []
+	for id in ["crow", "hawk"]:   # (not the falcon: turning back it loses ~6 m even flapping, too much beside a 7 m gate)
+		for side: float in [-1.0, 1.0]:
+			var e := trial.add_ai(id, "pilot", 7)
+			e.run.phase = RaceRun.Phase.RUNNING
+			e.run.next = k
+			var at := g.centre - g.normal * 3.0 + g.right() * side * (g.half_w + 3.0)
+			for out: float in [3.0, 4.5, 6.0, 8.0]:   # (beside it, on a line clear of the wood: going round, not a bonk)
+				at = g.centre - g.normal * 3.0 + g.right() * side * (g.half_w + out)
+				if l.segment_clear(at, at + g.normal * 12.0, 1.0):
+					break
+			check(l.segment_clear(at, at + g.normal * 12.0, 1.0), "a clear line beside gate %d (%+.0f)" % [k, side])
+			e.bird.fly_from(at, g.normal, e.bird.profile.v_best)
+			e.prev = at
+			es.append([e, id, side])
+	for f in 60 * 25:
+		await trial.step()
+	for x in es:
+		var e: Dictionary = x[0]
+		check(e.run.next > k, "the %s put %s of gate %d goes round and through it (go-arounds %d)" % [x[1], "left" if x[2] < 0.0 else "right", k, e.pilot.go_arounds])
+		check(e.pilot.go_arounds >= 1, "the %s put %s of gate %d went round" % [x[1], "left" if x[2] < 0.0 else "right", k])
+	trial.queue_free()
 
 
 ## An AI racer leaves the start and flies through the first gate (the pipeline works; how well it races is

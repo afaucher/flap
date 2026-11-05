@@ -96,8 +96,8 @@ four kinds each, about half of them post gates (they fit anywhere in the open); 
 but each winds round 200-300 deg in all, like a circuit. Every leg's flown line turns wider than the hawk's 6.9 m
 circle (7-50 m).
 
-Fifteen AI racers (every bird at every skill) on seeds 7 and 11: one finish (the ace hawk on seed 7, 74.7 s, five
-misses on the way). Where they missed says as much about the course as the AI:
+With the first AI racer (it aimed at a point on each gate's axis), fifteen racers (every bird at every skill) on seeds
+7 and 11 made one finish (the ace hawk on seed 7, 74.7 s, five misses on the way). Where they missed says as much about the course as the AI:
 - the gates right after a turn over 60 deg (the `marked` ones: hidden until the turn, and the line into them is the
   tightest): on seed 7 nearly every racer stalled at gate 2, after a 69 deg turn, and again at gate 4, after 61 deg;
 - low post gates (window 0.8 m off the ground), worst as the first gate off the start rail: on seed 11 most racers
@@ -106,11 +106,45 @@ misses on the way). Where they missed says as much about the course as the AI:
 These were AI-trial results on the first rules; probe_flyable since showed most of those legs were the course's
 (dives out of hard turns), and the rules now leave them out. The AI's own misses are separate work.
 
+## The AI racer (`race_pilot.gd`)
+
+It flies the course's planned line (the one probe_flyable proved), by the same kind of L1 pursuit as LinePilot, through
+a FlightInput only. Its skill takes away from a perfect pilot:
+
+| | look-ahead | bank (of the limit) | input lag | aim drift (sd) | pace (x v*) |
+|---|---|---|---|---|---|
+| recruit | 0.8 s | 0.7 | 0.18 s | 0.6 m | 1.0 |
+| pilot | 0.65 s | 0.85 | 0.1 s | 0.3 m | 1.05 |
+| ace | 0.55 s | 0.95 | 0.05 s | 0.1 m | 1.12 |
+
+Height comes from a point 0.6 s ahead (nearer made the fast birds porpoise into the gates); under its line by more than
+a metre it banks no more than 45 deg and flaps until it's back up. A wood guard hands the tick to AIPilot.steer's
+avoidance when 0.4 s straight on meets wood, and below 1.25x its stall speed (after a bonk) AIPilot.steer's low-speed
+recovery flies it. Lost (past the gate's plane outside its window, or 5 m off its line), it plans a go-around: the
+shortest turn-straight-turn (Dubins) path clear of wood, from where it is and the way it's flying, on the circle it
+can turn at its speed at no more than 60 deg of bank (x1.15), to a point out in front of the gate facing through it;
+the loop climbs 3 m, the run-in comes down to the gate. It follows that as it follows the course.
+
+What it does (2026-11-05, `probe_race`, every bird at every skill on seeds 3, 5, 7, 9 and 11, 25 runs a skill):
+
+| | finished | mean time | bonks (all runs) |
+|---|---|---|---|
+| pilot | 23 of 25 | 23.6 s | 2 |
+| ace | 23 of 25 | 23.6 s | 3 |
+| recruit | 11 of 25 | 39.9 s | 36 |
+
+(The first AI racer made one finish in 30.) The four pilot and ace runs that didn't finish are all the falcon's (seeds
+5, 9, 11): a miss, then go-arounds it can't hold its height through. Recruits are slower and miss far more: their
+wider look-ahead, input lag and aim drift take them off the line, and the go-arounds cost them 10-40 s. The ace is no
+faster than the pilot yet: its edge (bank, lag, drift) doesn't buy time on these courses, where every bird flies the
+same line; a racing line of its own (cutting corners, carrying speed) would.
+
 ## Open questions
 
 - Gate designs (the prop sheet: banded trunks with bunting, willow hoops, balloon gates over the open ground) and
   soft rope contact.
 - Course markers for `marked` turns (chevron boards, marker balloons).
-- The AI racer's gate-hitting (separate work): it lines up on a carrot along the gate's axis and gets down to the
-  window early, but low windows after a hard turn still beat it, and its go-arounds are slow.
+- The falcon turning back: even flapping it loses ~6 m in a 180 deg turn at 45-65 deg of bank, so a go-around beside a
+  low gate can put it on the ground. The course rules' turning circle (85% of the bank limit, level) is optimistic for
+  it: a course rule from its sustained level turn would be truer.
 - Courses per class (agile birds vs the hawk and falcon), ghosts, the menu entry.

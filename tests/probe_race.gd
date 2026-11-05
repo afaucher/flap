@@ -25,6 +25,7 @@ func setup() -> void:
 	var skills := (Boot.arg_value(args, "--skills") if Boot.arg_value(args, "--skills") != "" else "recruit,pilot,ace").split(",")
 	var birds := (Boot.arg_value(args, "--birds") if Boot.arg_value(args, "--birds") != "" else ",".join(BirdProfile.IDS)).split(",")
 	var seconds := float(Boot.arg_value(args, "--seconds")) if Boot.arg_value(args, "--seconds") != "" else 150.0
+	var pilot_seed := int(Boot.arg_value(args, "--pilot-seed")) if Boot.arg_value(args, "--pilot-seed") != "" else 100   # (the first racer's; the next +1 ...)
 
 	var layout := Pinewood.generate(arena_seed)
 	RaceCourse.debug = true
@@ -44,7 +45,7 @@ func setup() -> void:
 		var i := 0
 		for s in skills:
 			for id in birds:
-				trial.add_ai(id, s, 100 + i)
+				trial.add_ai(id, s, pilot_seed + i)
 				i += 1
 		var t0 := Time.get_ticks_msec()
 		var trace := Boot.arg_value(args, "--trace")   # (<skill>,<bird>: its flight, every 0.25 s, near the gate it's on)
