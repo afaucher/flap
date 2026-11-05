@@ -3942,5 +3942,187 @@
     "replace": "\treturn saddle.global_transform * saddle.round_launch(kind, i)"
    }
   ]
+ },
+ {
+  "id": "glance-is-bonk",
+  "bug": "Every touch of wood at 1 m/s or more was a bonk: a slow, shallow brush cost 40% of the bird's speed and 0.35 s of no control (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif hit >= GLANCE_MIN and is_glance(n, v, not brace.is_empty()):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "glance-stuns",
+  "bug": "A glance took the controls away like a bonk (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t_glance_push = n * profile.hop_speed * GLANCE_PUSH\n",
+    "replace": "\t_glance_push = n * profile.hop_speed * GLANCE_PUSH\n\tstun = STUN_TIME\n"
+   }
+  ]
+ },
+ {
+  "id": "glance-keeps-bonk-loss",
+  "bug": "A glance lost 40% of the bird's speed, as the old bonk did, not just the claws' drag (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvt *= maxf(0.0, 1.0 - GLANCE_FRICTION * hit / maxf(along, 1e-3))\n\tmodel.velocity = vt\n",
+    "replace": "\tvt *= 0.6\n\tmodel.velocity = vt\n"
+   }
+  ]
+ },
+ {
+  "id": "bonk-flat-stun",
+  "bug": "Every bonk stunned for the full 0.35 s, a touch at 1 m/s as long as a head-on hit (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tstun = lerpf(STUN_MIN, STUN_TIME, smoothstep(BONK_MIN, BONK_HARD, hit))",
+    "replace": "\t\tstun = STUN_TIME"
+   }
+  ]
+ },
+ {
+  "id": "glance-no-steer-away",
+  "bug": "After a glance the bird held its stick into the wood: no steer away (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tctl = _steer_away(ctl, glance_assist * _glance_turn / GLANCE_TURN_TIME)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "brace-rolls-toward",
+  "bug": "The brace banked toward the wood, which rolls the back to it, not the belly and feet (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\ts.x = lerpf(s.x, signf(away) * minf(1.0, BRACE_BANK / profile.max_bank_deg), brace_assist)",
+    "replace": "\t\ts.x = lerpf(s.x, -signf(away) * minf(1.0, BRACE_BANK / profile.max_bank_deg), brace_assist)"
+   }
+  ]
+ },
+ {
+  "id": "brace-not-unloaded",
+  "bug": "Braced with its wings still lifting, rolled away the bird turned off the wood: a dodge, never a kick-off with the feet (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\ts.y = lerpf(s.y, minf(s.y, unload), brace_assist)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "brace-on-landing",
+  "bug": "A bird braced (rolled and folded) for the branch it was landing on (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\tor inp.catch_held or _grab_buffer > 0.0:",
+    "replace": "\t\t\tor false:"
+   }
+  ]
+ },
+ {
+  "id": "brace-assist-ignored",
+  "bug": "brace_assist 0 left the brace on: every assist must switch off (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif brace_assist <= 0.0 or layout == null",
+    "replace": "\tif layout == null"
+   }
+  ]
+ },
+ {
+  "id": "rake-foot-side-offset",
+  "bug": "The raking foot was offset sideways in the rig's frame, which on a flank touch is into the wood: claws 1.3 cm inside it (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_rake_foot[i] = hip - n * off - dir * _L * 0.06\n",
+    "replace": "\t_rake_foot[i] = hip - n * off - dir * _L * 0.06 + Vector3(SIDES[i] * _L * 0.03, 0.0, 0.0)\n"
+   }
+  ]
+ },
+ {
+  "id": "rake-stale-bark",
+  "bug": "The feet raked a flat plane where the bird first touched (and as of the latest tick, ahead of the drawn bird): on a trunk, which curves away, the claws hung 34 cm off the bark (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif gl.has(\"cap\"):   # (the wood itself",
+    "replace": "\tif false:   # (the wood itself"
+   }
+  ]
+ },
+ {
+  "id": "glance-plays-bonk",
+  "bug": "A glance played the bonk's thud, not the claws' scrape (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))",
+    "replace": "\tcue(\"bonk\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))"
+   }
+  ]
+ },
+ {
+  "id": "glance-alarm",
+  "bug": "A bird cried in alarm at a glance (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))",
+    "replace": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))\n\t_call(b, \"alarm\")"
+   }
+  ]
  }
 ]

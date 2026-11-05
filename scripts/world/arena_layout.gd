@@ -612,6 +612,149 @@ func obstacle_distance(pos: Vector3, search := 12.0) -> float:
 	return best
 
 
+## The wood within `m` of the segment a .. b, as capsules [p, q, radius, tree id]: the trunks, the solid branches (those at
+## its height) and the outposts' decks and hangars (deck_lines). For many queries along a short stretch of flight (a
+## bird's look-ahead and its wings: Bird's reflexes): first_touch_among, wing_touch.
+func wood_near(a: Vector3, b: Vector3, m: float) -> Array:
+	var lo := Vector3(minf(a.x, b.x), minf(a.y, b.y), minf(a.z, b.z)) - Vector3.ONE * (m + BOX_MARGIN)
+	var hi := Vector3(maxf(a.x, b.x), maxf(a.y, b.y), maxf(a.z, b.z)) + Vector3.ONE * (m + BOX_MARGIN)
+	var caps := []
+	var a2 := Vector2(a.x, a.z)
+	var b2 := Vector2(b.x, b.z)
+	var c0 := _cell(Vector2(lo.x, lo.z) - Vector2.ONE * (4.0 + max_tree_reach))   # (as trees_near_segment: a tree's wood
+	var c1 := _cell(Vector2(hi.x, hi.z) + Vector2.ONE * (4.0 + max_tree_reach))   # reaches 4 m + max_tree_reach from its axis)
+	for cx in range(c0.x, c1.x + 1):
+		for cz in range(c0.y, c1.y + 1):
+			for tid in _tree_hash.get(Vector2i(cx, cz), []):
+				var t: TreeData = trees[tid]
+				if _dist_to_segment_2d(t.base, a2, b2) - t.reach() >= m + BOX_MARGIN:   # (cheap, flat: most trees end here)
+					continue
+				var base := Vector3(t.base.x, GROUND_Y - 1.0, t.base.y)
+				var cp := Geometry3D.get_closest_points_between_segments(a, b, base, t.top())
+				var d := cp[0].distance_to(cp[1])
+				if d >= t.reach() + m + BOX_MARGIN:
+					continue
+				if d < t.radius + m + BOX_MARGIN:
+					caps.append([base, t.top(), t.radius, t.id])
+				var bands := t.bands()   # (the solid branches at the segment's height; one reaching across bands may come twice)
+				var seen := {}
+				for kb in range(floori(lo.y / BAND), floori(hi.y / BAND) + 1):
+					for br in bands.get(kb, []):
+						if seen.has(br):
+							continue
+						seen[br] = true
+						var rr: float = br.radius
+						if minf(br.root.x, br.tip.x) - rr > hi.x or maxf(br.root.x, br.tip.x) + rr < lo.x 								or minf(br.root.z, br.tip.z) - rr > hi.z or maxf(br.root.z, br.tip.z) + rr < lo.z:
+							continue
+						caps.append([br.root, br.tip, rr, t.id])
+	for o in outposts:
+		if Vector2(o.centre.x - a.x, o.centre.z - a.z).length() < a.distance_to(b) + m + o.width + o.depth:
+			for seg in deck_lines(o):
+				caps.append([seg[0], seg[1], float(seg[2]), o.tree_id])
+	return caps
+
+
+## Where a ball of radius `r` flown along the polyline `pts` first touches wood (a trunk, a solid branch, an outpost's
+## deck or hangar, as deck_lines has them), or {}: {k: the chord (pts[k] .. pts[k + 1]), f: how far along it (0..1),
+## n: out of the wood at the touch, at: the wood's surface there, centre: the ball's, cap: the wood [p, q, radius,
+## tree id]}.
+func first_touch(pts: PackedVector3Array, r: float) -> Dictionary:
+	if pts.size() < 2:
+		return {}
+	var a := pts[0]
+	var b := pts[pts.size() - 1]
+	var bow := 0.0   # (how far the polyline strays from its chord)
+	for p in pts:
+		bow = maxf(bow, p.distance_to(Geometry3D.get_closest_point_to_segment(p, a, b)))
+	return first_touch_among(wood_near(a, b, r + bow), pts, r)
+
+
+## first_touch against `caps` (wood_near of the stretch `pts` lies in; `skip_tree`: a tree to leave out).
+static func first_touch_among(caps: Array, pts: PackedVector3Array, r: float, skip_tree := -1) -> Dictionary:
+	for k in pts.size() - 1:
+		var p0 := pts[k]
+		var p1 := pts[k + 1]
+		var best_f := INF
+		var best: Array = []
+		for c: Array in caps:
+			if skip_tree >= 0 and int(c[3]) == skip_tree:
+				continue
+			var rad := float(c[2]) + r
+			var cp := Geometry3D.get_closest_points_between_segments(p0, p1, c[0], c[1])
+			if cp[0].distance_to(cp[1]) >= rad:
+				continue
+			# (the first touch along the chord, between its start and where it passes closest: bisected)
+			var f_lo := 0.0
+			var f_hi := clampf((cp[0] - p0).length() / maxf(p0.distance_to(p1), 1e-6), 0.0, 1.0)
+			var q0 := Geometry3D.get_closest_point_to_segment(p0, c[0], c[1])
+			if p0.distance_to(q0) < rad:
+				f_hi = 0.0
+			else:
+				for i in 10:
+					var f := (f_lo + f_hi) * 0.5
+					var x := p0.lerp(p1, f)
+					if x.distance_to(Geometry3D.get_closest_point_to_segment(x, c[0], c[1])) < rad:
+						f_hi = f
+					else:
+						f_lo = f
+			if f_hi < best_f:
+				best_f = f_hi
+				best = c
+		if not best.is_empty():
+			var centre := p0.lerp(p1, best_f)
+			var q := Geometry3D.get_closest_point_to_segment(centre, best[0], best[1])
+			var n := (centre - q).normalized() if centre.distance_to(q) > 1e-6 else -(p1 - p0).normalized()
+			return {"k": k, "f": best_f, "n": n, "at": q + n * float(best[2]), "centre": centre, "cap": best}
+	return {}
+
+
+## Where the segment root .. tip (a wing, shoulder to tip) is in wood of `caps` (thickened by `pad`), or {}: {s: how far
+## out along it (0 at the root .. 1 the tip), at: the point on it, cap}; the touch nearest the root.
+static func wing_touch(caps: Array, root: Vector3, tip: Vector3, pad: float, skip_tree := -1) -> Dictionary:
+	var best := {}
+	var best_s := INF
+	var l := maxf(root.distance_to(tip), 1e-6)
+	for c: Array in caps:
+		if skip_tree >= 0 and int(c[3]) == skip_tree:
+			continue
+		var cp := Geometry3D.get_closest_points_between_segments(root, tip, c[0], c[1])
+		if cp[0].distance_to(cp[1]) < float(c[2]) + pad:
+			var sv := root.distance_to(cp[0]) / l
+			if sv < best_s:
+				best_s = sv
+				best = {"s": sv, "at": cp[0], "cap": c}
+	return best
+
+
+## The wood nearest `pos` within `within` m of it (a trunk, a solid branch, an outpost's deck or hangar), or {}:
+## {at: the nearest point of its surface, n: out of it there, d: how far `pos` is from it, cap: the wood [p, q, radius]}. (A glancing bird's feet
+## follow the bark with it: Bird.glance.)
+func nearest_wood(pos: Vector3, within: float) -> Dictionary:
+	var best := {}
+	var best_d := within
+	var consider := func(p: Vector3, q: Vector3, r: float) -> void:
+		var c := Geometry3D.get_closest_point_to_segment(pos, p, q)
+		var d := pos.distance_to(c) - r
+		if d < best_d and pos.distance_to(c) > 1e-6:
+			best_d = d
+			var n := (pos - c).normalized()
+			best = {"at": c + n * r, "n": n, "d": d, "cap": [p, q, r]}
+	for t in trees_near_segment(pos, pos, within):
+		var base := Vector3(t.base.x, GROUND_Y - 1.0, t.base.y)
+		var axis_d := Vector2(pos.x, pos.z).distance_to(t.base)
+		if axis_d - t.reach() >= best_d:
+			continue
+		consider.call(base, t.top(), t.radius)
+		for br in t.branches:
+			if br.solid:
+				consider.call(br.root, br.tip, br.radius)
+	for o in outposts:
+		if Vector2(o.centre.x - pos.x, o.centre.z - pos.z).length() < within + o.width + o.depth:
+			for seg in deck_lines(o):
+				consider.call(seg[0], seg[1], float(seg[2]))
+	return best
+
+
 ## Trunks per 1000 m^2 that reach above height `h` (the density-by-height curve).
 func trunk_density_above(h: float) -> float:
 	var n := 0

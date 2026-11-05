@@ -14,6 +14,10 @@ extends CharacterBody3D
 signal perched(perch: Perch)
 signal released(perch: Perch)
 signal bonked(normal: Vector3, speed: float)
+## A glance (see GLANCE_DEG): `normal` out of the wood, `speed` into it, `along` the speed along it.
+signal glanced(normal: Vector3, speed: float, along: float)
+## A wing struck wood (side -1 left, 1 right; `lost` the speed it cost, m/s).
+signal wing_struck(side: int, at: Vector3, lost: float)
 
 enum State { FLYING, LANDING, PERCHED, GROUNDED }
 
@@ -23,10 +27,49 @@ const ASSIST_REACH := 6.0      ## m from the candidate the perch assist starts
 const ASSIST_FULL := 2.5       ## m from it the assist is fully on (scaled with a further reach)
 const GRAB_BUFFER := 0.25      ## s a quick CATCH tap stays live (holding catch keeps it live indefinitely)
 const RELEASE_LOCK := 0.6      ## s before the perch just left can be caught again
-const STUN_TIME := 0.35        ## s of no control after hitting a tree
-const BOUNCE := 0.3            ## restitution off trunks
-const BONK_KEEP := 0.6         ## share of speed kept after a bounce
+const STUN_TIME := 0.35        ## s of no control after hitting a tree hard (BONK_HARD into it or more)
+const STUN_MIN := 0.1          ## ... after the softest bonk (BONK_MIN into it); the stun grows with the hit between
+const BONK_HARD := 9.0         ## m/s into a surface for the full STUN_TIME (about a head-on hit at cruise)
+const BOUNCE := 0.18           ## restitution off trunks: the speed into the wood that comes back out of it
+const BONK_FRICTION := 0.6     ## a bonk's speed lost along the surface, per m/s into it (the bark's grip on the body)
 const BONK_MIN := 1.0          ## m/s into a surface for a hit to count as a bonk (less is a graze)
+## A glance: a touch of wood on the belly or a flank, coming in at most GLANCE_DEG off along it -- at any speed -- and
+## not on the back. No stun: the speed into the wood stops, the claws drag GLANCE_FRICTION of it off the speed along it
+## (so a hard side hit costs a lot), the legs push the bird off (GLANCE_PUSH of its hop speed, over GLANCE_PUSH_TIME),
+## then it steers away for GLANCE_TURN_TIME (glance_assist). Anything squarer is a bonk.
+const GLANCE_DEG := 40.0       ## deg off along the surface at most
+const GLANCE_MIN := 0.4        ## m/s into it for a touch to count as a glance (less just slides along)
+const GLANCE_FRICTION := 0.4
+const GLANCE_PUSH := 0.3
+const GLANCE_PUSH_TIME := 0.1  ## s
+const GLANCE_TURN_TIME := 0.35 ## s
+const GLANCE_BANK := 0.6       ## the steer away: at most this much stick of bank away from the wood
+const GLANCE_RAKE := 0.16      ## s the claws stay on the wood (the rig; a contact again within it is the same glance)
+const GLANCE_SHOWN := 0.4      ## s a glance stays in the telemetry (the rig's strike, rake and tuck)
+## Reflexes: every tick the bird looks REFLEX_AHEAD s on along its flight (position, velocity and this tick's
+## acceleration: the turn and the sink it's in) at the layout's wood (ArenaLayout.wood_near / first_touch_among):
+##  - wood coming at it from the side (a glance on the way), or within a spread wing's reach of its path: the wings
+##    pull in (tuck_reflex) TUCK_LEAD s before -- all the way for its body, enough to clear for a wing -- paying the
+##    lost lift (FlightModel.tuck), and for a side touch its feet come out for the wood (`brace`, the rig);
+##  - wood ahead, square on (a bonk on the way): it flares, an airbrake FLARE_LEAD s before (flare_reflex), so it hits
+##    slower and is stunned less;
+##  - a novice (avoid_assist, FlightAssist): it rolls away from either AVOID_LEAD s before, with its lift, turning off
+##    the wood, and pays for it in speed (AVOID_DRAG of a flare).
+## None while catching a perch or leaving one. Each is an assist: 0 turns it off.
+const REFLEX_AHEAD := 0.25     ## s
+const TUCK_LEAD := 0.12        ## s
+const FLARE_LEAD := 0.25       ## s
+const FLARE_REFLEX := 1.0      ## the reflex flare's strength (FlightModel.flare)
+const AVOID_LEAD := 0.25       ## s
+const AVOID_BANK := 50.0       ## deg away from the wood at most
+const AVOID_DRAG := 0.3        ## of a full flare while it avoids: the speed it costs
+const WING_SIDE := 0.5         ## wood at least this far to a side (out of it across the bird) is in a wing's way
+## Wing strikes: each wing, shoulder to tip as spread or folded now (BirdProfile.span, fold_span_cut), against the wood
+## each tick: in it, the bird loses WING_STRIKE_LOSS of its speed for the whole wing (less the further out it strikes:
+## a tip clip 30% of that); no stun. The same wing strikes again after WING_STRIKE_GAP at the soonest.
+const WING_STRIKE_LOSS := 0.35
+const WING_STRIKE_GAP := 0.25  ## s
+const WING_PAD := 0.01         ## m: the wing's thickness against the wood
 const TURN_RATE := 150.0       ## deg/s a full stick turns a sitting bird
 const AIM_AHEAD := 2.5         ## the landing point is sought along this many catch radii of flight path
 const FLARE_PITCH := 55.0      ## deg, how far the body pitches up mid-landing (the braking flare)
@@ -71,6 +114,36 @@ var novice_landing := false
 var candidate_lock: Perch = null
 var bonks := 0
 var stun := 0.0
+var glances := 0
+## 0..1: after a glance, the bird steers away from the wood for GLANCE_TURN_TIME (the stick's bank blended toward
+## GLANCE_BANK away, a little pull off wood below). An assist: 0 turns it off; the glance itself (the claws, the
+## push) stays.
+var glance_assist := 1.0
+## The last glance (world): {at: where it touched, n: out of the wood, dir: the way along it, t: when (sim s),
+## collider}; empty before the first.
+var glance := {}
+var _glance_push := Vector3.ZERO   ## the legs' push off the wood still to come (m/s, world)
+var _glance_push_left := 0.0
+var _glance_turn := 0.0
+## The reflexes (REFLEX_AHEAD), each 0..1 (an assist: 0 off): the wings pulled in for wood from the side or in a
+## wing's way, the flare for wood square ahead, and a novice's roll away (FlightAssist sets it; realistic 0).
+var tuck_reflex := 1.0
+var flare_reflex := 1.0
+var avoid_assist := 0.0
+var reflex := ""               ## this tick's: "tuck", "flare", "avoid" or "" (tests, telemetry)
+var tucks := 0                 ## reflexes begun, each kind (tests, probes)
+var flares := 0
+var avoids := 0
+var braces := 0                ## side touches the feet came out for
+## The side touch coming (world): {at, n, dir, t: when it touches (sim s), cap}, for the feet (the rig); else empty.
+var brace := {}
+var wing_strikes := 0
+var _prev_vel := Vector3.ZERO
+var _reflex_flare := 0.0
+var _avoid := {}               ## the wood a novice's bird is rolling away from: {n}
+var _caps: Array = []          ## the wood near this tick's flight (ArenaLayout.wood_near)
+var _strike_cool := [0.0, 0.0]
+var _pass_tree := -1           ## the tree the bird is leaving (passing through it)
 ## Battle damage: the flight feathers a hit knocked out (BirdRig.feather_key -> true), up to DOWN_FEATHERS; they
 ## cost their wing its area (FlightModel.wing_loss) and the rig leaves them out. mend() grows them back.
 var lost_feathers := {}
@@ -155,6 +228,10 @@ func fly_from(pos: Vector3, dir: Vector3, spd: float) -> void:
 	global_position = pos
 	model.launch(pos, dir, spd)
 	global_basis = model.body_basis()
+	_glance_push_left = 0.0
+	_glance_turn = 0.0
+	brace = {}
+	_prev_vel = model.velocity
 	reset_physics_interpolation()
 
 
@@ -181,6 +258,7 @@ func _physics_process(dt: float) -> void:
 	else:
 		_state_age += dt
 	_push_left = maxf(0.0, _push_left - dt)
+	_glance_push_left = maxf(0.0, _glance_push_left - dt)
 	Perf.add("bird.move", p0)
 	_sim_t += dt
 	if _per_frame:
@@ -242,6 +320,15 @@ func _fly(dt: float, inp: FlightInput) -> void:
 	if stun > 0.0:
 		stun -= dt
 		ctl = FlightInput.new()
+	elif _glance_turn > 0.0 and glance_assist > 0.0:
+		ctl = _steer_away(ctl, glance_assist * _glance_turn / GLANCE_TURN_TIME)
+	_glance_turn = maxf(0.0, _glance_turn - dt)
+	var p1 := Perf.t()
+	_follow_glance()
+	_reflexes(dt, inp)
+	Perf.add("bird.reflex", p1)
+	if not _avoid.is_empty():
+		ctl = _avoid_in(ctl)
 	_apply_assists()
 	model.position = global_position
 	var floor_y := ArenaLayout.GROUND_Y + layout.ground(global_position.x, global_position.z)   # (the floor's mounds)
@@ -254,6 +341,9 @@ func _fly(dt: float, inp: FlightInput) -> void:
 		_on_collision(col)
 		if state != State.FLYING:
 			return
+	var p2 := Perf.t()
+	_wing_strikes(dt)
+	Perf.add("bird.reflex", p2)
 	model.position = global_position
 	# Belly on the ground and settling: stand (even if the contact came through a seam the collision missed).
 	if _grace <= 0.0 and global_position.y < floor_y + _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
@@ -490,6 +580,8 @@ func _apply_assists() -> void:
 		push += lateral * 4.0 * assist * near_k
 	if _push_left > 0.0:   # (the leap: the legs extending speed the bird up over the push, not in one tick)
 		push += _leap / PUSH_TIME
+	if _glance_push_left > 0.0:   # (a glance: the legs push it off the wood)
+		push += _glance_push / GLANCE_PUSH_TIME
 	var horiz := Vector2(global_position.x, global_position.z)
 	var wall := layout.reach(horiz)   # (the boundary; out by the cliff in the escarpment's sector)
 	if horiz.length() > wall:
@@ -497,6 +589,7 @@ func _apply_assists() -> void:
 		push += Vector3(back.x, 0.0, back.y)
 	if global_position.y > layout.ceiling:
 		push.y -= (global_position.y - layout.ceiling) * 2.0
+	model.flare = maxf(model.flare, _reflex_flare)   # (the reflexes' airbrake: a flare for wood ahead, a novice's avoid)
 	model.extra_accel = push
 
 
@@ -518,18 +611,213 @@ func _on_collision(col: KinematicCollision3D) -> void:
 		else:
 			_land_on_ground(at.y)
 		return
-	if into < -BONK_MIN:
-		v -= (1.0 + BOUNCE) * into * n
-		v *= BONK_KEEP
-		model.velocity = v
-		stun = STUN_TIME
+	var hit := -into
+	var vt := v - into * n   # (along the surface)
+	var along := vt.length()
+	if hit >= GLANCE_MIN and is_glance(n, v):
+		_glance(col, n, vt, hit)
+	elif hit >= BONK_MIN:
+		# Friction for what it hit: the speed along the surface goes by BONK_FRICTION of the hit (a square hit loses
+		# it all, a shallow one little), BOUNCE of the hit comes back out; the stun grows with the hit.
+		vt *= maxf(0.0, 1.0 - BONK_FRICTION * hit / maxf(along, 1e-3))
+		model.velocity = vt + n * BOUNCE * hit
+		stun = lerpf(STUN_MIN, STUN_TIME, smoothstep(BONK_MIN, BONK_HARD, hit))
 		bonks += 1
-		bonked.emit(n, -into)
+		bonked.emit(n, hit)
 	elif into < 0.0:
 		model.velocity = v - into * n   # a graze: just slide along it
 		var rest := col.get_remainder().slide(n)
 		if rest.length() > 1e-4:
 			move_and_collide(rest)
+
+
+## A touch of the surface `n` (out of it, world) at velocity `v` is a glance: at most GLANCE_DEG off along it, and on
+## the belly or a flank (not the back: the feet can't reach it).
+func is_glance(n: Vector3, v: Vector3) -> bool:
+	var hit := -v.dot(n)
+	if hit <= 0.0:
+		return false
+	if hit > v.length() * sin(deg_to_rad(GLANCE_DEG)):
+		return false
+	return global_basis.y.normalized().dot(-n) < 0.5   # (the wood over its back: a bonk)
+
+
+## The glance: the speed into the wood stops on the feet, the claws drag GLANCE_FRICTION of the hit off the speed along
+## it, and the legs push the bird off over GLANCE_PUSH_TIME; then it steers away (glance_assist). A touch of the same
+## wood again within GLANCE_RAKE is the same glance going on (the claws still on it): no new one.
+func _glance(col: KinematicCollision3D, n: Vector3, vt: Vector3, hit: float) -> void:
+	var along := vt.length()
+	vt *= maxf(0.0, 1.0 - GLANCE_FRICTION * hit / maxf(along, 1e-3))
+	model.velocity = vt
+	var same: bool = not glance.is_empty() and _sim_t - float(glance.t) < GLANCE_RAKE and glance.collider == col.get_collider()
+	var dir := vt.normalized() if vt.length() > 1e-3 else model.flight_dir()
+	if same:
+		glance.at = col.get_position()
+		glance.n = n
+		glance.dir = dir
+	else:
+		glance = {"at": col.get_position(), "n": n, "dir": dir, "t": _sim_t, "collider": col.get_collider()}
+		if not brace.is_empty() and brace.has("cap"):
+			glance.cap = brace.cap
+		glances += 1
+		glanced.emit(n, hit, along)
+	brace = {}
+	_glance_push = n * profile.hop_speed * GLANCE_PUSH
+	_glance_push_left = GLANCE_PUSH_TIME
+	_glance_turn = GLANCE_TURN_TIME
+	var rest := col.get_remainder().slide(n)
+	if rest.length() > 1e-4:
+		move_and_collide(rest)
+
+
+## A glance's wood as the layout has it (glance.cap: [p, q, radius], the trunk or branch it touched), for the feet to
+## follow the bark as the bird goes on along it (a trunk curves away under it): the rig finds the bark nearest each
+## hip as drawn. (Wood the layout doesn't have keeps the touch's plane.)
+func _follow_glance() -> void:
+	if glance.is_empty() or glance.has("cap") or layout == null or _sim_t - float(glance.t) > GLANCE_SHOWN:
+		return
+	var w := layout.nearest_wood(global_position, _radius * 1.5)
+	if not w.is_empty() and (w.n as Vector3).dot(glance.n) > 0.7:
+		glance.cap = w.cap
+
+
+## The reflexes for this tick (REFLEX_AHEAD): look along the flight for wood and set the wings' tuck, the flare, the
+## feet (brace) and a novice's roll away (_avoid); keep the wood near for the wing strikes.
+func _reflexes(dt: float, inp: FlightInput) -> void:
+	var v := model.velocity
+	var acc := ((v - _prev_vel) / maxf(dt, 1e-4)).limit_length(30.0)
+	_prev_vel = v
+	var prev := reflex
+	reflex = ""
+	var had_brace := not brace.is_empty()
+	brace = {}
+	model.tuck = 0.0
+	_reflex_flare = 0.0
+	_avoid = {}
+	_caps = []
+	if layout == null:
+		return
+	var half := profile.span * 0.5
+	var pts := PackedVector3Array()
+	for k in 5:
+		var t := REFLEX_AHEAD * k / 4.0
+		pts.append(global_position + v * t + acc * (0.5 * t * t))
+	var bow := 0.0
+	for q in pts:
+		bow = maxf(bow, q.distance_to(Geometry3D.get_closest_point_to_segment(q, pts[0], pts[4])))
+	_caps = layout.wood_near(pts[0], pts[4], half + bow + WING_PAD)
+	if _caps.is_empty() or stun > 0.0 or _grace > 0.0 or _pass_body != null or inp.catch_held or _grab_buffer > 0.0:
+		return
+	var right := global_basis.x.normalized()
+	var body := ArenaLayout.first_touch_among(_caps, pts, _radius)
+	var wing := ArenaLayout.first_touch_among(_caps, pts, half + WING_PAD)
+	var away_n := Vector3.ZERO   # (the wood to avoid, out of it)
+	var t_away := INF
+	if not body.is_empty():
+		var t_body := REFLEX_AHEAD * (float(body.k) + float(body.f)) / 4.0
+		var n: Vector3 = body.n
+		var v_hit := v + acc * t_body
+		away_n = n
+		t_away = t_body
+		if is_glance(n, v_hit):
+			if t_body <= TUCK_LEAD and tuck_reflex > 0.0:
+				reflex = "tuck"
+				model.tuck = tuck_reflex
+			var vt := v_hit - n * v_hit.dot(n)
+			brace = {"at": body.at, "n": n, "dir": vt.normalized() if vt.length() > 1e-3 else model.flight_dir(), "t": _sim_t + t_body, "cap": body.cap}
+			if not had_brace:
+				braces += 1
+		elif t_body <= FLARE_LEAD and flare_reflex > 0.0:
+			reflex = "flare"
+			_reflex_flare = FLARE_REFLEX * flare_reflex
+	elif not wing.is_empty() and absf((wing.n as Vector3).dot(right)) >= WING_SIDE:
+		var t_wing := REFLEX_AHEAD * (float(wing.k) + float(wing.f)) / 4.0
+		away_n = wing.n
+		t_away = t_wing
+		if t_wing <= TUCK_LEAD and tuck_reflex > 0.0:
+			# (pulled in enough that the wing passes clear of the wood at the path's nearest to it)
+			var cap: Array = wing.cap
+			var clear := INF
+			for q in pts:
+				clear = minf(clear, q.distance_to(Geometry3D.get_closest_point_to_segment(q, cap[0], cap[1])) - float(cap[2]))
+			var need := clampf((1.0 - (clear - WING_PAD * 3.0) / half) / profile.fold_span_cut, 0.0, 1.0)
+			if need > 0.0:
+				reflex = "tuck"
+				model.tuck = need * tuck_reflex
+	if avoid_assist > 0.0 and away_n != Vector3.ZERO and t_away <= AVOID_LEAD:
+		_avoid = {"n": away_n}
+		if reflex == "":
+			reflex = "avoid"
+		_reflex_flare = maxf(_reflex_flare, AVOID_DRAG * avoid_assist)
+	if reflex != prev:
+		match reflex:
+			"tuck": tucks += 1
+			"flare": flares += 1
+			"avoid": avoids += 1
+
+
+## A novice's roll away from wood coming (avoid_assist): the stick's bank blended toward AVOID_BANK away from it -- with
+## its lift, turning it off the wood.
+func _avoid_in(inp: FlightInput) -> FlightInput:
+	var n: Vector3 = _avoid.n
+	var dir := model.flight_dir()
+	var right := dir.cross(Vector3.UP)
+	right = right.normalized() if right.length() > 0.1 else global_basis.x
+	var away := n.dot(right)   # (+: the wood on its left, roll right)
+	var s := inp.stick
+	var want := signf(away) * minf(1.0, AVOID_BANK / profile.max_bank_deg) if absf(away) > 0.2 else s.x
+	s.x = lerpf(s.x, want, avoid_assist)
+	if n.y > 0.5:   # (wood below: pull up off it; above: ease down)
+		s.y = lerpf(s.y, maxf(s.y, 0.4), avoid_assist)
+	elif n.y < -0.5:
+		s.y = lerpf(s.y, minf(s.y, -0.3), avoid_assist)
+	return FlightInput.new(s, inp.flap_pressed, inp.flap_held, inp.catch_pressed, inp.catch_held)
+
+
+## The wings against the wood (this tick's _caps): each, shoulder to tip as spread or folded now, in wood costs speed
+## (WING_STRIKE_LOSS), wing_struck. Not the tree it's leaving, nor (catch armed) the one it's landing in.
+func _wing_strikes(dt: float) -> void:
+	_strike_cool[0] = maxf(0.0, float(_strike_cool[0]) - dt)
+	_strike_cool[1] = maxf(0.0, float(_strike_cool[1]) - dt)
+	if _caps.is_empty():
+		return
+	var skip := _pass_tree if _pass_body != null else -1
+	var landing_tree := candidate.tree_id if candidate != null and (last_input.catch_held or _grab_buffer > 0.0) else -2
+	var half := profile.span * 0.5 * (1.0 - profile.fold_span_cut * model.fold)
+	var right := global_basis.x.normalized()
+	for i in 2:
+		if float(_strike_cool[i]) > 0.0:
+			continue
+		var side := -1 if i == 0 else 1
+		var root := global_position + right * side * _radius * 0.6
+		var tip := global_position + right * side * half
+		var w := ArenaLayout.wing_touch(_caps, root, tip, WING_PAD, skip)
+		if w.is_empty() or int((w.cap as Array)[3]) == landing_tree:
+			continue
+		var spd := model.velocity.length()
+		var lost := spd * WING_STRIKE_LOSS * (1.0 - 0.7 * float(w.s))
+		model.velocity = model.velocity * (maxf(0.0, spd - lost) / maxf(spd, 1e-3))
+		_strike_cool[i] = WING_STRIKE_GAP
+		wing_strikes += 1
+		wing_struck.emit(side, w.at, lost)
+
+
+## The glance's steer away from the wood, on `inp` (k: 1 just after the glance .. 0 at GLANCE_TURN_TIME): the stick's
+## bank blended toward GLANCE_BANK away from it unless already turning away harder, and a little pull off wood below.
+func _steer_away(inp: FlightInput, k: float) -> FlightInput:
+	var n: Vector3 = glance.n
+	var dir := model.flight_dir()
+	var right := dir.cross(Vector3.UP)
+	right = right.normalized() if right.length() > 0.1 else global_basis.x
+	var away := clampf(n.dot(right) * 2.0, -1.0, 1.0)   # (+: the wood on its left, bank right)
+	var s := inp.stick
+	var want := away * GLANCE_BANK
+	if (want - s.x) * signf(away) > 0.0:
+		s.x = lerpf(s.x, want, k)
+	if n.y > 0.3:
+		s.y = maxf(s.y, lerpf(s.y, 0.4 * n.y, k))
+	var out := FlightInput.new(s, inp.flap_pressed, inp.flap_held, inp.catch_pressed, inp.catch_held)
+	return out
 
 
 ## The perch whose wood the bird has settled on at `at` (the contact point), or null.
@@ -673,6 +961,7 @@ func _pass_through(tree_id: int) -> void:
 	if _pass_body != null and is_instance_valid(_pass_body):
 		remove_collision_exception_with(_pass_body)
 	_pass_body = arena.tree_bodies[tree_id]
+	_pass_tree = tree_id
 	_pass_left = LEAVE_PASS
 	add_collision_exception_with(_pass_body)
 
@@ -782,12 +1071,33 @@ func telemetry() -> Dictionary:
 		"altitude": global_position.y,
 		"bonks": bonks,
 		"stunned": stun > 0.0,
+		"glances": glances,
+		"bracing": not brace.is_empty(),
+		"reflex": reflex,
+		"wing_strikes": wing_strikes,
+		"glance": _glance_shown(),
 		"health": health(),
 		"lost_feathers": lost_feathers,
 		"wing_loss": model.wing_loss,
 		"landing_t": clampf(_land_t / _land_dur, 0.0, 1.0) if state == State.LANDING else 0.0,
 		"state_age": _state_age,
 	}
+
+
+## The last glance while the rig still shows it (GLANCE_SHOWN), or the one it's bracing for (age < 0): {at, n, dir
+## (world), age (s), and cap (the wood [p, q, radius]) when the layout has it}; else empty.
+func _glance_shown() -> Dictionary:
+	if state != State.FLYING:
+		return {}
+	var g := brace   # (bracing: the touch to come, at a negative age)
+	if g.is_empty():
+		if glance.is_empty() or _sim_t - float(glance.t) > GLANCE_SHOWN:
+			return {}
+		g = glance
+	var out := {"at": g.at, "n": g.n, "dir": g.dir, "age": _sim_t - float(g.t)}
+	if g.has("cap"):
+		out.cap = g.cap
+	return out
 
 
 ## Where the head looks: the perch being landed on or caught, else ahead (sitting: where it faces, tilted

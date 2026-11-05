@@ -7,8 +7,9 @@ extends TestCase
 ## the gun's shot (its own, no motor), its strikes on wood and the ground, a bullet zipping by when it passes you
 ## close (not your own, not far off), the lock's beeps rising and quickening then the locked tone (and nothing without a target), what the HUD warns you
 ## of (someone locking you; a seeker closing on you, the warble quickening), the dry click, the weapon switch, a clink per missing round on
-## the base then the chime (and none off the base), the talons catching on a landing (not on a teleport), and bonks
-## louder the harder they hit.
+## the base then the chime (and none off the base), the talons catching on a landing (not on a teleport), bonks
+## louder the harder they hit, a glance's claw scrape (a bright scrape, louder the harder; no thud, no cry), and a
+## wing strike's feathers on the bark (louder the more speed it cost; no cry).
 
 
 class _Press:
@@ -137,6 +138,14 @@ func _recipes() -> void:
 		var low := SoundDsp.lowpass(SoundRecipes.render("bonk", take), 300.0, 2)
 		var ring := SoundDsp.rms(low, 0.08, 0.25) / maxf(SoundDsp.rms(low, 0.0, 0.03), 1e-6)
 		check(ring < 0.04, "bonk %d is a thud with no low ring after it (a held tone sounds like a honk): %.3f" % [take + 1, ring])
+	var brightness := func(x: PackedFloat32Array) -> float:   # (over 2 kHz against under 300 Hz)
+		return SoundDsp.rms(SoundDsp.highpass(x, 2000.0, 2)) / maxf(SoundDsp.rms(SoundDsp.lowpass(x, 300.0, 2)), 1e-6)
+	var thud: float = brightness.call(SoundRecipes.render("bonk", 0))
+	for take in SoundRecipes.files_of("claw_scrape").size():
+		var c := SoundRecipes.render("claw_scrape", take)
+		var sec := c.size() / float(SoundDsp.RATE)
+		var k: float = brightness.call(c)
+		check(sec > 0.12 and sec < 0.5 and k > 1.2 and k > thud * 4.0, "claw scrape %d is a scrape: %.2f s, bright (%.2f over 2 kHz to under 300 Hz; a bonk's thud %.2f)" % [take + 1, sec, k, thud])
 	var lengths := {}
 	for take in SoundRecipes.files_of("perch_catch").size():
 		var c := SoundRecipes.render("perch_catch", take)
@@ -338,6 +347,31 @@ func _game_audio() -> void:
 	if bonks.size() == 2:
 		check(float(bonks[1].db) > float(bonks[0].db) + 6.0, "a hard bonk is louder than a soft one")
 	eq(_events_of(ga, "alarm_crow", n).size(), 1, "only the hard one makes the crow cry")
+
+	# A glance: the claws scrape on the wood, louder the harder it brushed; no thud, no cry.
+	await frames(int(GameAudio.CALL_GAP * 60) + 2)
+	n = ga.events.size()
+	b.glanced.emit(Vector3.RIGHT, 0.5, 5.0)
+	await frames(10)
+	b.glanced.emit(Vector3.RIGHT, 2.8, 9.0)
+	var scrapes := _events_of(ga, "claw_scrape", n)
+	eq(scrapes.size(), 2, "two glances: two claw scrapes")
+	if scrapes.size() == 2:
+		check(float(scrapes[1].db) > float(scrapes[0].db) + 4.0, "a hard glance scrapes louder than a light one")
+	eq(_events_of(ga, "bonk", n).size(), 0, "a glance is no bonk's thud")
+	eq(_events_of(ga, "alarm_crow", n).size(), 0, "and the bird doesn't cry at a glance")
+
+	# A wing strike: the feathers on the bark, louder the more speed it cost; no cry.
+	await frames(10)
+	n = ga.events.size()
+	b.wing_struck.emit(-1, b.global_position, 0.3)
+	await frames(10)
+	b.wing_struck.emit(1, b.global_position, 2.5)
+	var strikes := _events_of(ga, "wing_strike", n)
+	eq(strikes.size(), 2, "two wing strikes: two feather-on-bark sounds")
+	if strikes.size() == 2:
+		check(float(strikes[1].db) > float(strikes[0].db) + 4.0, "a wing strike that costs more speed sounds louder")
+	eq(_events_of(ga, "alarm_crow", n).size(), 0, "and the bird doesn't cry at a wing strike")
 
 	for x in [a, b]:
 		x.queue_free()

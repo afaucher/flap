@@ -8,8 +8,9 @@ extends RefCounted
 ##   TAKEOFF   sit for `wait` s, press FLAP, beat for 2.4 s (wings level until up to speed, then pulling gently),
 ##             then glide.
 ##   DROP      sit for `wait` s, press CATCH (let go), then glide.
+##   GLIDE     hands off: wings level, best glide (into the trunk: the glances and bonks).
 
-enum Kind { APPROACH, TAKEOFF, DROP }
+enum Kind { APPROACH, TAKEOFF, DROP, GLIDE }
 
 var kind := Kind.APPROACH
 var target := Vector3.ZERO
@@ -43,6 +44,8 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 			var press := not _pressed
 			_pressed = true
 			return FlightInput.new(Vector2.ZERO, false, false, press)
+		Kind.GLIDE:
+			return FlightInput.new()
 	return _approach(bird, dt)
 
 

@@ -24,6 +24,12 @@ const LIST := [
 	{"id": "land_along", "label": "Landing: along the branch", "kind": "land", "from": Vector3(9, 0.6, -0.5), "dir": Vector3(-1, 0, 0.05), "speed": 1.0},
 	{"id": "land_slow", "label": "Landing: slow, short final", "kind": "land", "from": Vector3(0, 0.7, -5), "dir": Vector3(0, 0, 1), "speed": 0.75},
 	{"id": "land_fast", "label": "Landing: too fast (no braking)", "kind": "land", "from": Vector3(0, 0.5, -12), "dir": Vector3(0, 0, 1), "speed": 1.5, "bleed": false},
+	{"id": "glance_left", "label": "Glance: brushing the trunk on its left", "kind": "hit", "deg": 15.0, "side": -1.0, "speed": 1.0},
+	{"id": "glance_right", "label": "Glance: brushing the trunk on its right", "kind": "hit", "deg": 15.0, "side": 1.0, "speed": 1.0},
+	{"id": "bonk_steep", "label": "Bonk: into the trunk at 60 deg", "kind": "hit", "deg": 60.0, "side": -1.0, "speed": 1.0},
+	{"id": "bonk_slow", "label": "Bonk: square on, slow", "kind": "hit", "deg": 90.0, "side": -1.0, "speed": 0.5},
+	{"id": "head_on", "label": "Head-on: the flare reflex brakes", "kind": "hit", "deg": 90.0, "side": -1.0, "speed": 1.0},
+	{"id": "wing_clip", "label": "Wing past the trunk: the tuck reflex", "kind": "hit", "gap": 0.12, "side": -1.0, "speed": 1.0},
 ]
 
 
@@ -72,4 +78,14 @@ static func start(s: Dictionary, bird: Bird, layout: ArenaLayout) -> LabPilot:
 			var k := maxf(1.0, p.v_best / 9.0)
 			pilot.room = k
 			bird.fly_from(pilot.target + Vector3(from.x * k, from.y, from.z * k), (s.dir as Vector3).normalized(), speed)
+		"hit":
+			pilot.kind = LabPilot.Kind.GLIDE
+			bird.perch_assist = 0.0
+			# (a straight line past the axis at b meets the trunk -- R + r out, the body's sphere on its bark -- at
+			# acos(b / (R + r)) off along its surface; heading +z the bird's left is +x)
+			var tree: ArenaLayout.TreeData = layout.trees[0]
+			var rr := tree.radius + maxf(0.06, p.body_length * 0.28)
+			var b := rr * cos(deg_to_rad(float(s.deg))) * 0.995 if not s.has("gap") else rr + float(s.gap)   # (gap: passing clear)
+			var axis := Vector3(tree.base.x, perch.position.y - 2.0, tree.base.y)
+			bird.fly_from(axis + Vector3(float(s.side) * b, 0.0, -6.0), Vector3(0, 0, 1), p.v_best * float(s.speed))
 	return pilot

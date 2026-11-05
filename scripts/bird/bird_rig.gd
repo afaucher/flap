@@ -78,6 +78,14 @@ var look_dir := Vector3.FORWARD ## rig space, where the head looks
 var world_up := Vector3.UP      ## rig space, for head stabilisation
 var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _land_foot: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## each foot target at the catch (rig space)
+const RAKE_STRIKE := 0.035   ## s for a foot to strike the wood of a glance from tucked
+const RAKE_LEAD := 0.1       ## s before a braced glance's touch the foot starts reaching for the wood
+var _rake_held := PackedFloat32Array([0.0, 0.0])   ## per leg: how far it has reached for this glance's wood
+const RAKE_GRIP := 0.0       ## the toes on the wood as the claws rake it (open: the claws hooked at their tips)
+var rake_w := PackedFloat32Array([0.0, 0.0])   ## per leg: 0 .. 1 on the wood of a glance (_rake)
+var _rake_foot: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## where each raking foot is on the wood (rig space)
+var _rake_n := Vector3.UP     ## out of the wood (rig space)
+var _rake_fwd := Vector3.FORWARD   ## along it, the way the bird slides
 var _prev_state := -1            ## the Bird's state last tick (animate): a landing settles, a spawn snaps
 var leg_reach := PackedFloat32Array([1.0, 1.0])   ## per leg: 0 tucked (the knee folds toward the belly) .. 1 reaching for
                                                   ## or standing on something (the ankle bends back in the world)
@@ -1619,6 +1627,9 @@ func copy_pose_from(src: BirdRig) -> void:
 	for key in ["flap", "hand_lift", "fold", "sweep", "twist", "alula", "slot", "tail_spread", "tail_pitch", "tail_twist", "look_dir", "world_up", "toe_grip", "neck_ext", "head_offset", "fluff", "breath"]:
 		set(key, src.get(key))
 	foot_targets = src.foot_targets.duplicate()
+	rake_w = src.rake_w.duplicate()
+	_rake_n = src._rake_n
+	_rake_fwd = src._rake_fwd
 	apply_pose()
 
 
@@ -1785,10 +1796,20 @@ func animate(t: Dictionary, dt: float) -> void:
 	# (in the air, where wingbeats and the leap jolt the body, it lags less: a long lag stretches the neck)
 	head_offset = (inv * _head_world - _neck_target(Vector3.ZERO)).limit_length(_L * (0.1 if sitting else 0.05))
 
-	# Feet: on the grip point when there is one in reach, reaching forward in a flare, else tucked.
+	# Feet: on the grip point when there is one in reach, reaching forward in a flare, else tucked -- or striking the
+	# wood of a glance (_rake).
+	var gl: Dictionary = t.get("glance", {})
+	var raking := false
+	for i in 2:
+		rake_w[i] = 0.0
+		if gl.is_empty():
+			_rake_held[i] = 0.0
+		elif not sitting and not landing:
+			_rake(i, gl, inv)
+		raking = raking or rake_w[i] > 0.0
 	for i in 2:
 		var want_foot := _tucked_foot(i)
-		var grip := 0.0
+		var grip := RAKE_GRIP if raking else 0.0
 		if t.has_grip:
 			var g: Vector3 = inv * (t.grip as Vector3)
 			var side_off := Vector3(SIDES[i] * _L * 0.04, 0.0, 0.0)
@@ -1806,7 +1827,10 @@ func animate(t: Dictionary, dt: float) -> void:
 			foot_targets[i] = _land_foot[i].lerp(want_foot, smoothstep(0.0, 0.85, float(t.landing_t)))
 		else:
 			foot_targets[i] = foot_targets[i].lerp(want_foot, 1.0 if sitting else 1.0 - exp(-12.0 * dt))
-		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-10.0 * dt))
+		if rake_w[i] > 0.0:   # (a glance: the foot thrown out onto the wood, faster than any smoothing)
+			foot_targets[i] = foot_targets[i].lerp(_rake_foot[i], rake_w[i])
+			leg_reach[i] = maxf(leg_reach[i], rake_w[i])
+		toe_grip = lerpf(toe_grip, grip, 1.0 - exp(-(30.0 if raking else 10.0) * dt))
 	grip_radius = float(t.get("grip_radius", 0.0)) if t.has_grip else 0.0
 	_prev_state = state
 	var lw_t := 1.0 if sitting or landing or flare > 0.2 or t.has_grip else 0.0
@@ -1939,6 +1963,46 @@ func _start_blink() -> void:
 		return
 	_blink_t = 0.0
 	_blink_cool = 0.5
+
+
+## A glance (telemetry "glance": {at, n, dir, age}, world; age < 0 while the bird braces for it): leg `i` strikes the
+## wood if it's on that side (or under the bird): reaching for it from RAKE_LEAD before a braced touch, or thrown out
+## from tucked onto it over RAKE_STRIKE after an unbraced one, the claws raking along it under the hip (the foot on
+## the plane of the wood where the bird touched, a little behind the hip) until Bird.GLANCE_RAKE, then tucked back by
+## Bird.GLANCE_SHOWN; off at once once the wood is out of the leg's reach. The wood is the plane where it touched, or,
+## when the telemetry has the wood itself (cap), the bark nearest the hip as drawn this frame. Sets rake_w[i] (0..1), _rake_foot[i] and the
+## sole's frame (_rake_n, _rake_fwd), rig space.
+func _rake(i: int, gl: Dictionary, inv: Transform3D) -> void:
+	var hip: Vector3 = _hip[i]
+	var n: Vector3 = (inv.basis * (gl.n as Vector3)).normalized()
+	var at: Vector3 = inv * (gl.at as Vector3)
+	if gl.has("cap"):   # (the wood itself: the bark nearest this hip as drawn now, where the trunk has curved to)
+		var cap: Array = gl.cap
+		var c := Geometry3D.get_closest_point_to_segment(hip, inv * (cap[0] as Vector3), inv * (cap[1] as Vector3))
+		if hip.distance_to(c) > 1e-5:
+			n = (hip - c).normalized()
+			at = c + n * float(cap[2]) * (inv.basis * Vector3.RIGHT).length()
+	var side := -n.x   # (+: the wood on the bird's right)
+	if SIDES[i] * side < -0.3:
+		return   # (the wood is on the other side)
+	var reach := body.femur + _tib + _tars
+	var off := (hip - at).dot(n)   # (the hip's height over the wood)
+	var dir: Vector3 = inv.basis * (gl.dir as Vector3)
+	dir = (dir - n * n.dot(dir))
+	dir = dir.normalized() if dir.length() > 1e-3 else Vector3.FORWARD
+	var age: float = gl.age
+	# (bracing, age < 0: reaching out for the wood to come; touched unbraced, thrown out over RAKE_STRIKE; on the wood
+	# already, kept there)
+	var strike := smoothstep(-RAKE_LEAD, -0.01, age) if age < 0.0 else maxf(smoothstep(0.0, RAKE_STRIKE, age), _rake_held[i])
+	_rake_held[i] = strike if age < 0.0 else maxf(_rake_held[i], strike)
+	var w := strike * (1.0 - smoothstep(Bird.GLANCE_RAKE, Bird.GLANCE_SHOWN, age))
+	w *= 1.0 - smoothstep(reach * 0.85, reach * 0.98, off)
+	if w <= 0.0:
+		return
+	rake_w[i] = w
+	_rake_n = n
+	_rake_fwd = dir
+	_rake_foot[i] = hip - n * off - dir * _L * 0.06
 
 
 func _tucked_foot(i: int) -> Vector3:
@@ -2247,7 +2311,15 @@ func apply_pose() -> void:
 	var up_w: Vector3 = Vector3.UP.slerp(frame[0], leg_world).normalized()   # (in cruising flight, the body's own)
 	var fwd_h: Vector3 = Vector3.FORWARD.slerp(frame[1], leg_world)
 	fwd_h = (fwd_h - up_w * up_w.dot(fwd_h)).normalized()
+	var up_w0 := up_w
+	var fwd_h0 := fwd_h
 	for i in 2:
+		up_w = up_w0
+		fwd_h = fwd_h0
+		if rake_w[i] > 0.0:   # (a glance: the sole turned onto the wood, the toes along the way the bird slides)
+			up_w = up_w0.slerp(_rake_n, rake_w[i]).normalized()
+			fwd_h = fwd_h0.slerp(_rake_fwd, rake_w[i])
+			fwd_h = (fwd_h - up_w * up_w.dot(fwd_h)).normalized()
 		var hip: Vector3 = _hip[i]
 		var target: Vector3 = foot_targets[i]
 		var fdir := (fwd_h * 0.9 - up_w * 0.3).normalized()

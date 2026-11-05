@@ -48,6 +48,8 @@ const CUES := {
 	"perch_catch": {"bus": "SFX", "volume_db": -6.0, "pitch_jitter": 0.06, "max_voices": 3, "min_gap": 0.05, "positional": true, "unit_size": 3.0, "max_distance": 35.0},
 	"takeoff_push": {"bus": "SFX", "volume_db": -10.0, "pitch_jitter": 0.06, "max_voices": 3, "positional": true, "unit_size": 3.0, "max_distance": 35.0},
 	"ground_land": {"bus": "SFX", "volume_db": -8.0, "pitch_jitter": 0.06, "max_voices": 3, "positional": true, "unit_size": 3.0, "max_distance": 35.0},
+	"wing_strike": {"bus": "SFX", "volume_db": -6.0, "pitch_jitter": 0.08, "max_voices": 3, "min_gap": 0.08, "positional": true, "unit_size": 4.0, "max_distance": 45.0},
+	"claw_scrape": {"bus": "SFX", "volume_db": -5.0, "pitch_jitter": 0.08, "max_voices": 3, "min_gap": 0.08, "positional": true, "unit_size": 4.0, "max_distance": 45.0},
 	"bonk": {"bus": "SFX", "volume_db": -3.0, "pitch_jitter": 0.06, "max_voices": 3, "min_gap": 0.05, "positional": true, "unit_size": 5.0, "max_distance": 60.0},
 	"call_crow": {"bus": "SFX", "volume_db": -6.0, "pitch_jitter": 0.04, "max_voices": 4, "positional": true, "unit_size": 8.0, "max_distance": 120.0},
 	"alarm_crow": {"bus": "SFX", "volume_db": -4.0, "pitch_jitter": 0.04, "max_voices": 4, "positional": true, "unit_size": 8.0, "max_distance": 120.0},

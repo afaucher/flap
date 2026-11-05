@@ -17,6 +17,9 @@ extends RefCounted
 ##     lets go.
 ## `strength` 0 turns all of it off (fit() again after changing it).
 ##
+## WOOD AVOIDED (the player's bird): it rolls away from wood its flight is about to strike, body or wing, at AVOID
+## strength (Bird.avoid_assist), paying for it in speed; realistic, 0 (the reflexes that soften a touch stay on).
+##
 ## MORE POWER AND ENDURANCE (EnergyModel, every bird in the scene): stamina lasts STAMINA x as many wingbeats, comes
 ## back RECOVERY x as fast, and the burst refills BURST_REGEN x as fast. The profiles' readable numbers and the polar
 ## are untouched.
@@ -36,6 +39,7 @@ const MAX_BANK_ADD := 0.35     ## of full stick: the most bank the assist adds t
 const STAMINA := 1.5           ## novice: wingbeats a full stamina lasts, x the profile's
 const RECOVERY := 2.0          ## novice: stamina regained gliding and perched, x
 const BURST_REGEN := 1.3       ## novice: burst refill, x (more full-strength wingbeats in a sprint)
+const AVOID := 0.5             ## novice: the bird rolls away from wood coming (Bird.avoid_assist), this strong, at a speed cost
 
 var inner: Object = null       ## the controller it wraps (sample()); null when applied by a PlayerController
 var engage := 0.0              ## 0..1, eased in while on
@@ -58,6 +62,7 @@ static func fit(bird: Bird) -> void:
 	var on := novice and strength > 0.0
 	bird.approach_radius = APPROACH if on else Bird.APPROACH_RADIUS
 	bird.novice_landing = on
+	bird.avoid_assist = AVOID if novice else 0.0
 
 
 static func stamina_scale() -> float:
