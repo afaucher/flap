@@ -3,7 +3,8 @@ extends TestCase
 ## sinking, down, alight, falling, wreck -- each looked at close, and all of them from across the clearing.
 ## The close views clip what stands nearer the camera than the balloon (the understory in the way). Windowed:
 ##   .\probe.ps1 probe_balloon --out <prefix>
-## writes <prefix>_<stage>.png (1376 x 768) for each, <prefix>_wide.png, and <prefix>_sheet.png (the eight, 4 x 2).
+## writes <prefix>_<stage>.png (1376 x 768) for each, <prefix>_wide.png, <prefix>_up_close / _holed_close.png, and
+## <prefix>_sheet.png (the eight, 4 x 2).
 
 const STAGES := ["up", "holed", "sinking", "down", "alight", "falling", "wreck"]
 const DT := 1.0 / 60.0
@@ -120,6 +121,18 @@ func setup() -> void:
 	cam.look_at(mid + Vector3.UP * 4.0)
 	cam.near = 6.0
 	shots.append(await _shot(vp, out, "wide"))
+	# Up close, to see the canvas: the whole one and the holed one from a metre and a half.
+	for k in ["up", "holed"]:
+		var b: TargetBalloon = balloons[k]
+		var bx := b.body.global_basis.x
+		if bx.dot(to_sun) < 0.0:
+			bx = -bx
+		var c := b.centre()
+		cam.fov = 50.0
+		cam.position = c + bx * 1.35 - b.body.global_basis.z * 0.5 + Vector3.UP * 0.15
+		cam.look_at(c + b.body.global_basis.z * 0.05)
+		cam.near = 0.3
+		await _shot(vp, out, k + "_close")
 	if out != "":
 		var tile := Vector2i(688, 384)
 		var sheet := Image.create(tile.x * 4, tile.y * 2, false, Image.FORMAT_RGB8)

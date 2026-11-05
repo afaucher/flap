@@ -33,7 +33,7 @@ const FIN_U := 0.82                    ## along the envelope, the fins' middle
 const LEAK := 0.01                     ## of its gas a second, through each hole
 const LIMP := 0.85                     ## of its gas under which it goes soft
 const DOWN_GAS := 0.3                  ## of its gas under which it can't hold itself up
-const HOLE_R := 0.012                  ## m, a bullet hole as drawn (and its scorch to 2.4x that)
+const HOLE_R := 0.007                  ## m, a bullet hole as drawn (and its scorch to 2.4x that)
 const MAX_HOLES := 24
 const BURN_SPEED := 0.6                ## m/s the fire runs over the envelope
 const FALL_FROM := 0.3                 ## of it burnt, it falls
@@ -41,6 +41,7 @@ const FALL_SPEED := 4.5                ## m/s, a burning wreck's fall
 const SINK_TIME := 1.2                 ## s it takes to settle to a new height on its cable
 const DRAG := 0.22                     ## the breeze's push on it over its lift: how far it leans downwind
 const HEAP_ON := 0.14                  ## m, the grass and ferns a heap lies on
+const ENVELOPE_LAYER := 1 << 10        ## a render layer of the envelope's own (out of its fire light's reach)
 const SMOULDER := 10.0                 ## s a wreck smokes on the ground
 
 var cable := 10.0                      ## m of cable the winch has out
@@ -97,9 +98,11 @@ func _ready() -> void:
 	_mat.shader = preload("res://scripts/combat/balloon.gdshader")
 	_mat.set_shader_parameter("radius", RADIUS)
 	_mat.set_shader_parameter("roundel_z", (0.3 - 0.5) * LENGTH)
-	_mat.set_shader_parameter("roundel_r", RADIUS * 0.36)
+	_mat.set_shader_parameter("roundel_r", RADIUS * 0.52)
 	_env = MeshInstance3D.new()
 	_env.name = "Envelope"
+	_env.layers = 1 | ENVELOPE_LAYER   # (the fire's light leaves it out: its burning edge glows of itself, and the light
+	                                   # so close blew out the lining seen through the burn)
 	body.add_child(_env)
 	_line_mesh = ImmediateMesh.new()
 	_lines = MeshInstance3D.new()
@@ -129,11 +132,11 @@ func _ready() -> void:
 	_scorch = MeshInstance3D.new()
 	_scorch.name = "Scorch"
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(1.8, 1.8)
+	pm.size = Vector2(2.6, 2.6)
 	_scorch.mesh = pm
 	var sm := StandardMaterial3D.new()
 	sm.albedo_texture = _soft_tex()
-	sm.albedo_color = Color(0.03, 0.025, 0.02, 0.85)
+	sm.albedo_color = Color(0.02, 0.018, 0.015, 0.95)
 	sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	sm.roughness = 1.0
 	_scorch.material_override = sm
@@ -143,6 +146,7 @@ func _ready() -> void:
 	_light = OmniLight3D.new()
 	_light.light_color = Color(1.0, 0.55, 0.2)
 	_light.omni_range = 3.0
+	_light.light_cull_mask = ~ENVELOPE_LAYER
 	_light.light_energy = 0.0
 	_light.visible = false
 	body.add_child(_light)
@@ -556,6 +560,7 @@ func _update_material() -> void:
 	_mat.set_shader_parameter("hole_n", holes.size())
 	_mat.set_shader_parameter("burn", Vector4(burn_at.x, burn_at.y, burn_at.z, burn_r if burn_r >= 0.0 else -1.0))
 	_mat.set_shader_parameter("flicker", 0.5 + 0.5 * sin(clock * 23.0) * sin(clock * 7.3))
+	_mat.set_shader_parameter("smoulder", 1.0 - smoothstep(0.0, SMOULDER, landed) if landed >= 0.0 and burn_r >= 0.0 else 0.0)
 
 
 # --- Rigging, cable, basket, winch ----------------------------------------------------------------------------
@@ -722,6 +727,27 @@ static func _soft_tex() -> Texture2D:
 	return _soft
 
 
+## A flame's shape: a teardrop, broad and bright at its foot, licking up to a ragged tip (64 x 128, white; its alpha
+## the shape).
+static var _flame: Texture2D
+static func _flame_tex() -> Texture2D:
+	if _flame == null:
+		var img := Image.create(64, 128, false, Image.FORMAT_RGBA8)
+		var n := FastNoiseLite.new()
+		n.seed = 7
+		n.frequency = 0.08
+		for y in 128:
+			var t := 1.0 - y / 127.0   # (0 at the foot, 1 at the tip)
+			var half := 0.5 * pow(sin(PI * clampf(0.15 + 0.85 * t, 0.0, 1.0)), 0.7) * (1.0 - 0.75 * t)
+			for x in 64:
+				var u := (x / 63.0 - 0.5) + 0.08 * n.get_noise_2d(x, y) * t
+				var a := 1.0 - smoothstep(half * 0.55, half, absf(u))
+				a *= smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.75, 1.0, t + 0.15 * n.get_noise_2d(x * 2.0, y * 0.5)))
+				img.set_pixel(x, y, Color(1, 1, 1, clampf(a, 0.0, 1.0)))
+		_flame = ImageTexture.create_from_image(img)
+	return _flame
+
+
 func _fx_node(m: ImmediateMesh, hot: bool) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = m
@@ -731,7 +757,7 @@ func _fx_node(m: ImmediateMesh, hot: bool) -> MeshInstance3D:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.vertex_color_use_as_albedo = true
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_texture = _soft_tex()
+	mat.albedo_texture = _flame_tex() if hot else _soft_tex()
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if hot else BaseMaterial3D.BLEND_MODE_MIX
 	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -775,8 +801,10 @@ func _step_fx(dt: float) -> void:
 		for q in rim:
 			m += q
 		if not rim.is_empty():
-			_light.position = _light.position.lerp(m / rim.size() * 1.3, 0.3)   # (by the flames, a little outside)
-	_light.light_energy = 2.5 * f * (0.8 + 0.3 * sin(clock * 31.0) * sin(clock * 11.0))
+			var out := m / rim.size()
+			out += Vector3(out.x, out.y, 0.0).normalized() * RADIUS * 1.5 + Vector3.UP * 0.15
+			_light.position = _light.position.lerp(out, 0.3)   # (in the flames, outside the envelope: they light the canvas round them, not its lining)
+	_light.light_energy = 1.6 * f * (0.8 + 0.3 * sin(clock * 31.0) * sin(clock * 11.0))
 	# Smoke puffs: thick off the fire, a thin wisp from a smouldering wreck.
 	var rate := 60.0 * f
 	if landed >= 0.0 and landed < SMOULDER and burn_r >= 0.0:
@@ -814,12 +842,32 @@ func _draw_fx(eye: Vector3) -> void:
 		_fire_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 		var rim := _rim_points(40)
 		for i in rim.size():
-			var at: Vector3 = body.global_transform * rim[i]
+			var q: Vector3 = rim[i]
+			# (the tongue's foot just outside the canvas, so the fire's light doesn't wash over the hole it's made)
+			var at: Vector3 = body.global_transform * (q + Vector3(q.x, q.y, 0.0).normalized() * 0.03)
 			var fl := 0.6 + 0.4 * sin(clock * 17.0 + i * 2.3)
-			var sz := (0.1 + 0.1 * fl) * (0.5 + 0.5 * f)
-			_billboard(_fire_mesh, at + Vector3(0.0, sz * 0.6, 0.0), eye, sz, Color(1.0, 0.5 + 0.2 * fl, 0.12, 0.9 * f))
-			_billboard(_fire_mesh, at + Vector3(0.0, sz * 1.4, 0.0), eye, sz * 0.7, Color(1.0, 0.75, 0.3, 0.6 * f * fl))
+			var big := 0.6 + 0.8 * fmod(i * 0.618 + _seed, 1.0)   # (some tongues big, most small)
+			var sz := (0.07 + 0.07 * fl) * big * (0.5 + 0.5 * f)
+			var lean := Vector3(breeze.x, 0.0, breeze.z) * 0.35   # (the breeze bends them)
+			_tongue(_fire_mesh, at, eye, sz * 0.6, sz * (2.0 + 1.4 * fl), Color(1.0, 0.3 + 0.1 * fl, 0.04, 0.4 * f), lean)
+			_tongue(_fire_mesh, at, eye, sz * 0.32, sz * (1.2 + 0.8 * fl), Color(1.0, 0.6, 0.2, 0.28 * f), lean)
 		_fire_mesh.surface_end()
+
+
+## A flame's tongue: a quad standing up from `base`, `w` half wide and `h` tall, turned to the eye about the vertical
+## (the fire texture's teardrop in it: _flame_tex, its foot at the quad's foot).
+static func _tongue(m: ImmediateMesh, base: Vector3, eye: Vector3, w: float, h: float, col: Color, lean := Vector3.ZERO) -> void:
+	var to := eye - base
+	to.y = 0.0
+	var right := Vector3.UP.cross(to.normalized()) if to.length() > 1e-4 else Vector3.RIGHT
+	var tip := (Vector3.UP + lean) * h
+	var pts := [base - right * w, base + right * w, base + right * w + tip, base - right * w + tip]
+	# (UV v from 1 at the foot to 0 at the tip; the fire material's texture is the flame, not a round puff)
+	var uvs := [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
+	for k in [0, 1, 2, 0, 2, 3]:
+		m.surface_set_color(col)
+		m.surface_set_uv(uvs[k])
+		m.surface_add_vertex(pts[k])
 
 
 static func _billboard(m: ImmediateMesh, c: Vector3, eye: Vector3, r: float, col: Color) -> void:
