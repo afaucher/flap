@@ -5,7 +5,8 @@ extends TestCase
 ## while paused and switches species.
 ## Combat scenarios (LabFight), for a crow and a hawk: the gun burst fires from the lab bird's pods and chips the bird
 ## ahead; the rocket knocks feathers out of the lab bird, a burst beside it; the seeker locks (no sooner than
-## LOCK_TIME) then launches and hits; the downed bird is down and out of control (stunned) through the down stun, gliding down; on the base the empty pods refill
+## LOCK_TIME) then launches and hits; the downed bird flutters down (its wings flailing, as drawn) and comes down on the ground, and
+## sits there, no bonk -- with CombatWorld.down_flutter off (the range's), it only glides down, stunned; on the base the empty pods refill
 ## and the lost feathers grow back, after RESTOCK_TIME and not before. The lab scene opens on one with its fight.
 
 const SHARDS := 3   ## (the species split over two processes, the lab scene with the second; the combat scenes a third)
@@ -131,7 +132,8 @@ func _fights() -> void:
 			var down_at := -1.0
 			var down_y := 0.0
 			var fell := 0.0
-			var stunned := true
+			var low := INF
+			var flail := Vector2(INF, -INF)   # (the drawn wings' flap angle, its range while tumbling)
 			var full_at := -1.0
 			var seeker_flew := false
 			for i in 270:
@@ -147,9 +149,10 @@ func _fights() -> void:
 					if down_at < 0.0:
 						down_at = t
 						down_y = f.target.global_position.y
-					elif t < down_at + CombatWorld.DOWN_STUN - 0.1:
-						fell = down_y - f.target.global_position.y
-						stunned = stunned and f.target.stun > 0.0
+					low = minf(low, f.target.global_position.y)
+					fell = down_y - low
+					if f.target.tumbling():
+						flail = Vector2(minf(flail.x, f.target.rig.flap), maxf(flail.y, f.target.rig.flap))
 				if f.what == "rearm" and f.shooter.full() and full_at < 0.0:
 					full_at = t
 			var gun := Launcher.Weapon.GUN
@@ -164,9 +167,31 @@ func _fights() -> void:
 					check(seeker_flew and hit_at > locked_at and locked_at > 0.0, "%s: then launches, and the seeker hits (at %.2f s)" % [what, hit_at])
 				"downed":
 					check(f.target.is_down(), "%s: the burst downs the lab bird" % what)
-					check(stunned and fell > 0.3, "%s: and glides down out of control through the down stun (%.1f m)" % [what, fell])
+					check(fell > 5.0, "%s: and flutters down out of the fight (%.1f m)" % [what, fell])
+					check(rad_to_deg(flail.y - flail.x) > 40.0, "%s: its wings flailing as it goes (%.0f deg of flap)" % [what, rad_to_deg(flail.y - flail.x)])
+					check(not f.target.tumbling() and f.target.state == Bird.State.GROUNDED and f.target.bonks == 0, "%s: then comes down on the ground and sits there (%s, %d bonks)" % [what, Bird.State.keys()[f.target.state], f.target.bonks])
 				"rearm":
 					check(full_at >= Launcher.RESTOCK_TIME - 0.05, "%s: on the base, rearmed and mended after %.1f s (%.2f s)" % [what, Launcher.RESTOCK_TIME, full_at])
 			f.free_all()
 			b.queue_free()
 			await frames(2)
+		# Without the flutter (the range, for now): downed, it only glides on, stunned.
+		var g := Bird.new()
+		add_child(g)
+		g.setup(p, layout, null)
+		g.arena = arena
+		var sd: Dictionary = LabScenarios.by_id("fight_downed")
+		LabScenarios.start(sd, g, layout)
+		var gf := LabFight.start(sd, g, layout, self, arena)
+		gf.world.down_flutter = false
+		var g_y := INF
+		var g_low := INF
+		for i in 240:
+			await frames(1)
+			if g.is_down():
+				g_y = minf(g_y, g.global_position.y) if g_y == INF else g_y
+				g_low = minf(g_low, g.global_position.y)
+		check(not g.tumbling() and g_y - g_low < 3.0, "%s, down_flutter off: downed, it only glides on (%.1f m)" % [id, g_y - g_low])
+		gf.free_all()
+		g.queue_free()
+		await frames(2)

@@ -47,6 +47,7 @@ var ground_height := INF        ## m from the bird's underside to the ground bel
 var wind := Vector3.ZERO        ## m/s, the air's velocity where the bird is (set by the Bird each tick: AirField)
 ## Battle damage: the share of each wing's area its lost flight feathers took (x left, y right; Bird.lose_feathers).
 ## The wings lose that lift, and the weaker wing drops: the bird rolls toward it unless the stick holds it level.
+var lift_scale := 1.0       ## 0..1 of the wing's lift that's working (a downed bird's flailing wings: Bird.tumble)
 var wing_loss := Vector2.ZERO
 const LOSS_ROLL := 1.0          ## bank the stick must hold off, as a share of max bank per unit of loss difference
 
@@ -371,7 +372,7 @@ func step(dt: float, input: FlightInput) -> void:
 	var induced_cut := p.k_induced * 0.5 * ground_effect * cl * cl
 	cd = drag_coefficient(cl, alpha, fold) - induced_cut + 1.2 * flare
 	var aero_fade := smoothstep(0.5, 2.0, speed)   # no aero at a standstill (dropping off a perch)
-	var a_lift := q * area * cl / p.mass * aero_fade
+	var a_lift := q * area * cl / p.mass * aero_fade * lift_scale
 	var a_drag := q * area * cd / p.mass * aero_fade
 	_last_drag_accel = a_drag
 	load_factor = a_lift / BirdProfile.G

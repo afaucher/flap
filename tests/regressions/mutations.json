@@ -3942,5 +3942,52 @@
     "replace": "\treturn saddle.global_transform * saddle.round_launch(kind, i)"
    }
   ]
+ },
+ {
+  "id": "down-flutter-never-starts",
+  "bug": "A downed bird glided on through the down stun, losing about a metre, so a down didn't read as one (2026-11-04; the lab's downed scene showed it).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif down_flutter:\n\t\t\tb.start_tumble()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-bonks-the-ground",
+  "bug": "A fluttering bird met the ground faster than a settle, so it bonked and bounced instead of coming down on it.",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif _grace <= 0.0 and n.y > 0.7 and (v.length() < profile.grab_speed_max * 1.6 or tumble):",
+    "replace": "\tif _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:"
+   },
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "model.velocity.y <= 0.0 and (model.velocity.length() < profile.grab_speed_max * 1.6 or tumble):",
+    "replace": "model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:"
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-wings-still",
+  "bug": "The downed bird's wings held still while it tumbled (nothing drawn of the flutter).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif t.get(\"tumbling\", false) and not sitting:",
+    "replace": "\tif false:"
+   }
+  ]
  }
 ]

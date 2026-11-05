@@ -40,6 +40,10 @@ const GUN_CHIP := 1.0 / 3.0     ## of a feather, a bullet's inside the recovery 
 const GUN_SHOVE := 0.6          ## m/s, a bullet's nudge
 const TRACER_LEN := 0.012       ## s of a bullet's flight its streak covers (about 1.3 m)
 const DOWN_STUN := 2.5      ## s
+## A downed bird flutters down out of the fight to the ground (Bird.start_tumble: its wings flail, it drops and rolls,
+## and comes down on the ground and sits there) rather than gliding on through the down stun. Off in the range for now; the bird lab's
+## combat scenes have it on.
+var down_flutter := false
 const SMOKE_EVERY := 0.025  ## s between smoke points
 const SMOKE_LIFE := 2.2     ## s
 
@@ -353,6 +357,8 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null, kind := Proj
 	struck.emit(b, at, keys)
 	if was_up and b.is_down():
 		b.stun = DOWN_STUN
+		if down_flutter:
+			b.start_tumble()
 		if by_player:
 			stats.kills += 1
 		if is_instance_valid(by) and teams.has(by) and not friends(by, b):

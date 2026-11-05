@@ -9,8 +9,9 @@ extends RefCounted
 ##           burst beside it knocks out flight feathers, which flutter down.
 ##   seeker  the lab bird, seekers, behind a bird SEEKER_OFF m off its line: it holds it in the cone to lock
 ##           (Launcher.LOCK_TIME) and fires once locked; the seeker steers onto it.
-##   downed  the lab bird is the target with DOWN_FEATHERS - 1 feathers gone: the rocket's burst downs it, and it glides
-##           on out of control through the down stun (CombatWorld.DOWN_STUN; the range then brings it back at its base).
+##   downed  the lab bird is the target with DOWN_FEATHERS - 1 feathers gone: the rocket's burst downs it, and it
+##           flutters down out of the fight (CombatWorld.down_flutter, on here: Bird.start_tumble) and comes down on the
+##           ground.
 ##   rearm   the lab bird on the branch as its base, its pods empty and REARM_LOST feathers gone: after
 ##           Launcher.RESTOCK_TIME on it, rearmed and mended.
 
@@ -45,6 +46,7 @@ static func start(s: Dictionary, bird: Bird, layout: ArenaLayout, parent: Node, 
 	f.world = CombatWorld.new()
 	f.world.name = "LabCombat"
 	f.world.layout = layout
+	f.world.down_flutter = true
 	parent.add_child(f.world)
 	var p := bird.profile
 	var dir := Vector3(0.0, -sin(p.glide_angle), cos(p.glide_angle))

@@ -1660,6 +1660,12 @@ func animate(t: Dictionary, dt: float) -> void:
 		_beat_flap = deg_to_rad(10.0 + 45.0 * cos(ph * TAU))   # top at 0, bottom at 0.5
 		_beat_lift = 50.0 * sin((ph - 0.5) * TAU) if ph > 0.5 else 0.0
 		beating = true
+	if t.get("tumbling", false) and not sitting:
+		# Downed, fluttering down: the wings flail out of time, wide and ragged, not beating.
+		var tt: float = t.tumble_t
+		_beat_flap = deg_to_rad(15.0 + 38.0 * sin(tt * 5.3 * TAU) + 14.0 * sin(tt * 8.9 * TAU))
+		_beat_lift = 30.0 * sin(tt * 7.1 * TAU)
+		beating = true
 	var fold_t: float = t.fold
 	var sweep_t := 12.0 * flare
 	var twist_t := clampf(alpha * 0.6, deg_to_rad(-8.0), deg_to_rad(18.0))
