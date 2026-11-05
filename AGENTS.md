@@ -48,6 +48,19 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
+- `scripts/race/`: race mode, a prototype (`docs/design/race.md`; `.\run.ps1 --race [--race-ai recruit|pilot|ace]
+  [--course <n>] [--plan-for <birds>]`; not on the menu yet). `RaceCourse` generates 10 gates from the layout (posts on
+  open ground, low or tall; between two pines; hoops hung from a limb or a rope between two pines) from an outpost's
+  rail, by a beam search under planning rules from the birds' performance (`Envelope`: the widest turning circle and
+  wings of the birds racing, the hawk's by default): a clear way in and out of each window, each leg's flown line
+  (`flown_line`) clear by half a wingspan and turning no tighter than that circle, posts and ropes off the line, the
+  next gate seen from the one before (and the one after it, unless the turn is tight: `marked`); `problems()` lists
+  any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
+  the way it faces, in order; the clock off the perch to the finish; misses; splits within the tick), `RacePilot` an
+  AI racer through `AIPilot.steer` (a FlightInput only; skill = `CombatSkill` presets), `RaceView` placeholder gates,
+  `RaceHud`, `RaceRecord` best times. `RaceTrial` (test_support) races birds headless; `tests/probe_race.gd` prints a
+  course leg by leg against each bird's turning circle, races every bird at every skill, writes an SVG map
+  (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). `test_race`.
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
   burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).

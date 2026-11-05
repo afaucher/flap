@@ -4298,5 +4298,131 @@
     "replace": "\tcue(\"bonk\", at, _by_speed(lost, 3.0))"
    }
   ]
+ },
+ {
+  "id": "race-gate-backwards",
+  "bug": "A gate counted when flown through the wrong way (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\tif not (da < 0.0 and db >= 0.0):\n\t\t\treturn -1.0",
+    "replace": "\t\tif not ((da < 0.0) != (db < 0.0)):\n\t\t\treturn -1.0"
+   }
+  ]
+ },
+ {
+  "id": "race-hoop-square",
+  "bug": "A hoop's window taken as the square round it: its corners counted (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\tif kind == \"hoop\":\n\t\t\treturn x * x",
+    "replace": "\t\tif false:\n\t\t\treturn x * x"
+   }
+  ]
+ },
+ {
+  "id": "race-clock-on-perch",
+  "bug": "The race clock ran while the bird sat on the start perch (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tif perched:\n\t\t\treturn\n",
+    "replace": "\t\tif false:\n\t\t\treturn\n"
+   }
+  ]
+ },
+ {
+  "id": "race-split-rounded",
+  "bug": "Splits and the finish rounded to the tick, not the moment the bird crossed (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tvar t := t0 + dt * f",
+    "replace": "\t\tvar t := clock"
+   }
+  ]
+ },
+ {
+  "id": "race-gates-any-order",
+  "bug": "A later gate counted before the next one, skipping gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\tvar f := g.crossing(a, b)\n",
+    "replace": "\tvar f := g.crossing(a, b)\n\tfor j in range(next + 1, course.gates.size()):\n\t\tif f < 0.0 and course.gates[j].crossing(a, b) >= 0.0:\n\t\t\tnext = j\n\t\t\tg = course.gates[j]\n\t\t\tf = g.crossing(a, b)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-best-keeps-slower",
+  "bug": "A slower time replaced the best (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_record.gd",
+    "find": "float(b.time) <= time",
+    "replace": "float(b.time) <= -1.0"
+   }
+  ]
+ },
+ {
+  "id": "race-start-in-crown",
+  "bug": "The course started on the treetop start perch, inside its own crown's needles: no gate could be seen from it and the course came out empty (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif out.is_empty():\n\t\tout.append(l.start_perch())",
+    "replace": "\tout = [l.start_perch()]\n\tif out.is_empty():\n\t\tout.append(l.start_perch())"
+   }
+  ]
+ },
+ {
+  "id": "race-turn-too-tight",
+  "bug": "Legs planned tighter than the hawk can turn (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\treturn _leg_radius(all, k) >= envelope.turn_r - 0.01",
+    "replace": "\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "race-lanes-unchecked",
+  "bug": "Gates planned with wood in their way in or out (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "func lanes_clear(g: Gate) -> bool:\n",
+    "replace": "func lanes_clear(g: Gate) -> bool:\n\treturn true\n"
+   }
+  ]
  }
 ]

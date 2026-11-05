@@ -292,6 +292,22 @@ func add_posts() -> void:
 ## The escarpment (`escarpment` set): its shape for the queries, a ROCK entry in `trees` standing in as its perches'
 ## tree (no trunk, no branches; not in the tree hash: the queries test the rock itself, rock_clear), and its perches
 ## (Escarpment.perch_spots: stones on the scree, ledges, fewer the higher).
+## A post standing at `p` (a race gate's: RaceCourse), `h` m tall: solid and drawn like the edge posts, with no
+## perch on it. Returns it.
+func add_post(p: Vector2, h: float, r: float) -> TreeData:
+	var t := TreeData.new()
+	t.id = trees.size()
+	t.kind = Kind.POST
+	t.tier = Tier.UNDERSTORY
+	t.base = p
+	t.height = h
+	t.radius = r
+	t.crown_base = h
+	trees.append(t)
+	_add_to_hash(_tree_hash, p, t.id)
+	return t
+
+
 func add_rock() -> void:
 	rock = Escarpment.of(self)
 	if rock == null:
