@@ -27,7 +27,7 @@ extends Node3D
 ## (--team crow,hawk) against three combat-AI birds (--enemy falcon,owl,crow) out from the far base, at --skill
 ## recruit | pilot (default) | ace. Each AI bird carries its species' round (CombatStyle). The score is the match.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
-## T target evasion on/off, R restart, Esc release the mouse.
+## T target evasion on/off, R restart, Esc pauses (PauseMenu: Resume, Settings, Leave).
 
 const CIRCUIT_CENTRE := Vector3(0.0, 20.0, 0.0)   ## over the clearing, up among the emergent trees
 const CIRCUIT_LENGTH := 40.0   ## m of straight: time to lock
@@ -45,6 +45,7 @@ var audio: GameAudio
 var flight_hud: FlightHud
 var combat_hud: CombatHud
 var player_ctl := PlayerController.new()
+var pause: PauseMenu   ## Esc: Resume, Settings, Leave, the range paused
 var bird: Bird
 var target: Bird
 var target_pilot: CircuitPilot
@@ -140,6 +141,7 @@ func _ready() -> void:
 	combat_hud = CombatHud.new()
 	layer.add_child(combat_hud)
 	await screen.run([["Saddling the birds", restart, 1.0]], 0.97)
+	pause = PauseMenu.attach(self, [player_ctl])
 	is_loaded = true
 	loaded.emit()
 	screen.finish()
@@ -425,8 +427,6 @@ func _unhandled_input(e: InputEvent) -> void:
 	PlayerCombat.handle_event(e, Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)   # (before capturing: that click doesn't fire)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	if e.is_action_pressed("release_mouse"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F7:
 		print("TAA ", "on" if Antialias.toggle(self) else "off")
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:

@@ -20,7 +20,7 @@ const KEYS := {
 	"bird_3": [KEY_3],
 	"bird_4": [KEY_4],
 	"bird_5": [KEY_5],
-	"release_mouse": [KEY_ESCAPE],
+	"pause": [KEY_ESCAPE],
 	"fire": [KEY_F],
 	"weapon_next": [KEY_Q],
 }

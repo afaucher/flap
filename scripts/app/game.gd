@@ -24,7 +24,7 @@ extends Node3D
 ##   --calm             still air: no thermals (AirField.enabled)
 ##   --flying <mode>    realistic (default) | novice: a landing assist while catch is held, more stamina (FlightAssist)
 ##   --no-taa           no temporal anti-aliasing (Antialias; F7 toggles in game)
-## The mouse wheel zooms the chase camera in and out.
+## The mouse wheel zooms the chase camera in and out. Esc (or the window losing focus) pauses: PauseMenu.
 ## The arena grows behind a loading screen (Loading): the layout on a worker thread, the wood built a step a frame,
 ## the birds spawned; `loaded` fires (and `is_loaded` turns true) when it's ready to fly.
 
@@ -35,6 +35,7 @@ var camera: ChaseCamera
 var hud: FlightHud
 var audio: GameAudio
 var player := PlayerController.new()
+var pause: PauseMenu   ## Esc: Resume, Settings, Leave, the game paused
 var autopilot: AIPilot
 var ai_birds: Array[Bird] = []
 var profile_id := "crow"
@@ -118,6 +119,7 @@ func _ready() -> void:
 	if shot != "":
 		var after_arg := Boot.arg_value(args, "--shot-after")
 		_screenshot(shot, float(after_arg) if after_arg != "" else 3.0)
+	pause = PauseMenu.attach(self, [player])
 	is_loaded = true
 	loaded.emit()
 	await screen.finish()
@@ -220,8 +222,6 @@ func _unhandled_input(e: InputEvent) -> void:
 	player.handle_event(e)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	if e.is_action_pressed("release_mouse"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if e is InputEventMouseButton and e.pressed and (e.button_index == MOUSE_BUTTON_WHEEL_UP or e.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 		camera.zoom_by(-1.0 if e.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0)   # (the wheel: up in, down out)
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F7:

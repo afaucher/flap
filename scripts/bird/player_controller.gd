@@ -33,6 +33,12 @@ func handle_event(e: InputEvent) -> void:
 		using_gamepad = false
 
 
+## The settings as they now stand (Settings: the pause menu calls this on resuming).
+func take_settings() -> void:
+	invert_mouse = Settings.invert_mouse_y
+	invert_pad = Settings.invert_pad_y
+
+
 ## The captured mouse moved `rel` px: the virtual stick follows (down, toward you, pulls; up with invert_mouse).
 func mouse_moved(rel: Vector2) -> void:
 	stick.x += rel.x * sensitivity

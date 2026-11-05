@@ -4354,5 +4354,75 @@
     "replace": "\t\t\tSettings.invert_mouse_y = i == 1"
    }
   ]
+ },
+ {
+  "id": "pause-runs-on",
+  "bug": "The pause menu opened over a game that kept running (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tget_tree().paused = true\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pause-settings-not-taken",
+  "bug": "A setting changed in the pause menu didn't reach the player's controller until the next run (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\t\tc.take_settings()\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "pause-mouse-held",
+  "bug": "Pausing kept the mouse captured: no cursor to click Resume (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tget_tree().paused = true\n\tInput.mouse_mode = Input.MOUSE_MODE_VISIBLE\n",
+    "replace": "\tget_tree().paused = true\n"
+   }
+  ]
+ },
+ {
+  "id": "pause-focus-out-ignored",
+  "bug": "Alt-tabbing away left the game running with the mouse free (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tif what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_out:",
+    "replace": "\tif what == NOTIFICATION_APPLICATION_FOCUS_IN and pause_on_focus_out:"
+   }
+  ]
+ },
+ {
+  "id": "range-no-pause",
+  "bug": "Esc in the range had no pause menu (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/combat_range.gd",
+    "find": "\tpause = PauseMenu.attach(self, [player_ctl])\n",
+    "replace": ""
+   }
+  ]
  }
 ]

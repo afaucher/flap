@@ -122,11 +122,11 @@ func _screen() -> void:
 	check(back.is_visible_in_tree() and not (menu.find_child("Choice0", true, false) as Button).is_visible_in_tree(),
 		"Settings opens its own screen")
 	check((menu.find_child("MouseY0", true, false) as Button).button_pressed, "the mouse's default is shown")
-	check(_text(menu).contains(Menu.MOUSE_Y[0][1]), "with what it means")
+	check(_text(menu).contains(SettingsPanel.MOUSE_Y[0][1]), "with what it means")
 	(menu.find_child("MouseY1", true, false) as Button).pressed.emit()
 	await frames(1)
 	check(Settings.invert_mouse_y, "picking Away sets the mouse to climb away")
-	check(_text(menu).contains(Menu.MOUSE_Y[1][1]) and not _text(menu).contains(Menu.MOUSE_Y[0][1]), "and says so")
+	check(_text(menu).contains(SettingsPanel.MOUSE_Y[1][1]) and not _text(menu).contains(SettingsPanel.MOUSE_Y[0][1]), "and says so")
 	Settings.invert_mouse_y = false
 	Settings.load_saved()
 	check(Settings.invert_mouse_y, "and saves it at once")
@@ -144,7 +144,7 @@ func _screen() -> void:
 	eq(rows.get("Fire"), ["Left mouse / F", "RT"], "fire: the left mouse or F, RT")
 	eq(rows.get("Catch a perch, or let go"), ["Ctrl", "A"], "catch: Ctrl, A")
 	eq(rows.get("Change bird"), ["1 - 5", "Back"], "change bird: 1-5, Back")
-	for r: Array in Menu.CONTROL_ROWS:
+	for r: Array in SettingsPanel.CONTROL_ROWS:
 		check(rows.has(r[0]) and (rows[r[0]][0] != "" or rows[r[0]][1] != ""), "a row for %s, set off by something" % r[0])
 	var esc := InputEventKey.new()
 	esc.keycode = KEY_ESCAPE

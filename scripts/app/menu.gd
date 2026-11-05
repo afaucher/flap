@@ -8,7 +8,7 @@ extends Control
 ## machine gun, left and right; two kinds, and Q switches), how it flies, the mode (the 3 v 3 match, or target
 ## practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot | ace), with the
 ## rules of the mode chosen. Enter starts either, Esc goes back. Settings: which way the mouse and the gamepad's stick
-## climb (Settings, saved at once), and every control, read from InputSetup's bindings.
+## climb and every control (SettingsPanel, the pause menu's too). The pages are built by MenuStyle's helpers.
 ## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
 ## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight`: on the Fight
 ## screen); `--no-backdrop` leaves the birds out.
@@ -52,32 +52,9 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 	["ace", "Ace", "Near-instant reactions, sees almost all round, fine aim; drags your seekers through the trunks."],
 ]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
-Left mouse / F: fire.  Q: switch weapon.  Esc: free the mouse."
+Left mouse / F: fire.  Q: switch weapon.  Esc: pause."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
-R: start over.  Esc: free the mouse."
-const MOUSE_Y := [   ## the Settings screen's mouse choice: [label, what it means] (Settings.invert_mouse_y off, on)
-	["Toward you", "Move the mouse toward you to climb, away to dive: a flight stick's pull and push."],
-	["Away", "Move the mouse away from you to climb, toward you to dive: the nose follows the mouse."],
-]
-const PAD_Y := [     ## and the stick's (Settings.invert_pad_y)
-	["Back", "Pull the left stick back to climb, push it forward to dive, as a flight stick."],
-	["Forward", "Push the left stick forward to climb, pull it back to dive."],
-]
-const CONTROL_ROWS := [   ## [what, InputSetup action] or [what, keyboard and mouse, gamepad], each an action or the text
-	["Steer", "Mouse", "Left stick"],
-	["Look about", "", "Right stick"],
-	["Flap (hold to keep flapping)", "flap"],
-	["Catch a perch, or let go", "catch"],
-	["Centre the stick", "center_stick"],
-	["Fire", "fire"],
-	["Switch weapon", "weapon_next"],
-	["Zoom the camera", "Mouse wheel", ""],
-	["Start over", "respawn"],
-	["Change bird", "1 - 5", "cycle_bird"],
-	["Autopilot", "toggle_autopilot"],
-	["Instruments", "toggle_debug"],
-	["Free the mouse", "release_mouse"],
-]
+R: start over.  Esc: pause."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
@@ -96,8 +73,6 @@ var _main: VBoxContainer
 var _flight: VBoxContainer
 var _fight: VBoxContainer
 var _settings: VBoxContainer
-var _mouse_note: Label
-var _pad_note: Label
 var _blurb: Label
 var _flight_blurb: Label
 var _flying_notes: Array[Label] = []   ## (one on each screen)
@@ -133,85 +108,85 @@ func _build() -> void:
 	_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ui.theme = MenuStyle.theme()
 	add_child(_ui)
-	_main = _page("FLAP", true)
+	_main = MenuStyle.page(_ui, "FLAP", true)
 	for i in CHOICES.size():
-		var b := _button("%d   %s" % [i + 1, CHOICES[i][0]], 22, Vector2(320, 48))
+		var b := MenuStyle.button("%d   %s" % [i + 1, CHOICES[i][0]], 22, Vector2(320, 48))
 		b.name = "Choice%d" % i
 		b.pressed.connect(choose.bind(i))
 		_main.add_child(b)
 	_build_flight()
-	_build_settings()   # (before Fight's, whose _refresh() fills Settings' notes too)
 	_build_fight()
+	_build_settings()
 	_show(page)
 
 
 func _build_flight() -> void:
-	_flight = _page("FLIGHT", false)
+	_flight = MenuStyle.page(_ui, "FLIGHT", false)
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 48)
 	_flight.add_child(cols)
-	var pick := _column(COL_W)
-	var side := _column(RULES_W)
+	var pick := MenuStyle.column(COL_W)
+	var side := MenuStyle.column(RULES_W)
 	cols.add_child(pick)
 	cols.add_child(side)
-	pick.add_child(_heading("Your bird"))
-	pick.add_child(_row(BirdProfile.IDS.map(func(id: String) -> String: return BirdProfile.by_id(id).display_name),
+	pick.add_child(MenuStyle.heading("Your bird"))
+	pick.add_child(MenuStyle.row(BirdProfile.IDS.map(func(id: String) -> String: return BirdProfile.by_id(id).display_name),
 		BirdProfile.IDS.find(flight_bird), func(i: int) -> void:
 			flight_bird = BirdProfile.IDS[i]
 			_refresh(), "FlightBird"))
-	_flight_blurb = _note(COL_W)
+	_flight_blurb = MenuStyle.note(COL_W)
 	pick.add_child(_flight_blurb)
 	_flying_row(pick, "FlightFlying")
-	side.add_child(_heading("Controls"))
-	var controls := _note(RULES_W)
+	side.add_child(MenuStyle.heading("Controls"))
+	var controls := MenuStyle.note(RULES_W)
 	controls.text = FLIGHT_CONTROLS
 	side.add_child(controls)
 	_flight.add_child(_go(start_flight, "FlightStart"))
 
 
 func _build_fight() -> void:
-	_fight = _page("FIGHT", false)
+	_fight = MenuStyle.page(_ui, "FIGHT", false)
 	var cols := HBoxContainer.new()
 	cols.add_theme_constant_override("separation", 48)
 	_fight.add_child(cols)
-	var pick := _column(COL_W)   # the choices, left; the rules, right
-	var rules := _column(RULES_W)
+	var pick := MenuStyle.column(COL_W)   # the choices, left; the rules, right
+	var rules := MenuStyle.column(RULES_W)
 	cols.add_child(pick)
 	cols.add_child(rules)
-	pick.add_child(_heading("Your bird"))
-	pick.add_child(_row(BirdProfile.IDS.map(func(id: String) -> String: return BirdProfile.by_id(id).display_name),
+	pick.add_child(MenuStyle.heading("Your bird"))
+	pick.add_child(MenuStyle.row(BirdProfile.IDS.map(func(id: String) -> String: return BirdProfile.by_id(id).display_name),
 		BirdProfile.IDS.find(fight_bird), func(i: int) -> void:
 			fight_bird = BirdProfile.IDS[i]
 			_refresh(), "Bird"))
-	_blurb = _note(COL_W)
+	_blurb = MenuStyle.note(COL_W)
 	pick.add_child(_blurb)
 	for p in 2:
-		pick.add_child(_heading(["Left pod", "Right pod"][p]))
-		pick.add_child(_row(WEAPONS.map(func(w: Array) -> String: return w[1]),
+		pick.add_child(MenuStyle.heading(["Left pod", "Right pod"][p]))
+		pick.add_child(MenuStyle.row(WEAPONS.map(func(w: Array) -> String: return w[1]),
 			WEAPONS.map(func(w: Array) -> String: return w[0]).find(fight_pods[p]), func(i: int) -> void:
 				fight_pods[p] = WEAPONS[i][0]
 				_refresh(), ["Left", "Right"][p]))
-	_weapon_note = _note(COL_W)
+	_weapon_note = MenuStyle.note(COL_W)
 	pick.add_child(_weapon_note)
-	pick.add_child(_heading("Mode"))
-	pick.add_child(_row(MODES.map(func(m: Array) -> String: return m[0]), 0 if fight_match else 1, func(i: int) -> void:
+	pick.add_child(MenuStyle.heading("Mode"))
+	pick.add_child(MenuStyle.row(MODES.map(func(m: Array) -> String: return m[0]), 0 if fight_match else 1, func(i: int) -> void:
 		fight_match = i == 0
 		_refresh(), "Mode"))
-	_skill_box = _column(COL_W)
-	_skill_box.add_child(_heading("Their skill (and your wingmen's)"))
-	_skill_box.add_child(_row(SKILLS.map(func(k: Array) -> String: return k[1]),
+	_skill_box = MenuStyle.column(COL_W)
+	_skill_box.add_child(MenuStyle.heading("Their skill (and your wingmen's)"))
+	_skill_box.add_child(MenuStyle.row(SKILLS.map(func(k: Array) -> String: return k[1]),
 		SKILLS.map(func(k: Array) -> String: return k[0]).find(fight_skill), func(i: int) -> void:
 			fight_skill = SKILLS[i][0]
 			_refresh(), "Skill"))
-	_skill_note = _note(COL_W)
+	_skill_note = MenuStyle.note(COL_W)
 	_skill_box.add_child(_skill_note)
 	pick.add_child(_skill_box)
 	_flying_row(rules, "Flying")
-	rules.add_child(_heading("Rules"))
-	_rules = _note(RULES_W)
+	rules.add_child(MenuStyle.heading("Rules"))
+	_rules = MenuStyle.note(RULES_W)
 	rules.add_child(_rules)
-	rules.add_child(_heading("Controls"))
-	var controls := _note(RULES_W)
+	rules.add_child(MenuStyle.heading("Controls"))
+	var controls := MenuStyle.note(RULES_W)
 	controls.text = CONTROLS
 	rules.add_child(controls)
 	_fight.add_child(_go(start_fight, "Start"))
@@ -219,78 +194,24 @@ func _build_fight() -> void:
 
 
 func _build_settings() -> void:
-	_settings = _page("SETTINGS", false)
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 48)
-	_settings.add_child(cols)
-	var pick := _column(380.0)
-	var side := _column(560.0)
-	cols.add_child(pick)
-	cols.add_child(side)
-	pick.add_child(_heading("To climb, move the mouse"))
-	pick.add_child(_row(MOUSE_Y.map(func(m: Array) -> String: return m[0]), 1 if Settings.invert_mouse_y else 0,
-		func(i: int) -> void:
-			Settings.invert_mouse_y = i == 1
-			Settings.save()
-			_refresh(), "MouseY"))
-	_mouse_note = _note(380.0)
-	pick.add_child(_mouse_note)
-	pick.add_child(_heading("To climb, move the stick"))
-	pick.add_child(_row(PAD_Y.map(func(m: Array) -> String: return m[0]), 1 if Settings.invert_pad_y else 0,
-		func(i: int) -> void:
-			Settings.invert_pad_y = i == 1
-			Settings.save()
-			_refresh(), "PadY"))
-	_pad_note = _note(380.0)
-	pick.add_child(_pad_note)
-	side.add_child(_heading("Controls"))
-	var grid := GridContainer.new()
-	grid.name = "Controls"
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 24)
-	grid.add_theme_constant_override("v_separation", 6)
-	for text in ["", "Keyboard and mouse", "Gamepad"]:
-		grid.add_child(_cell(text, true))
-	for r: Array in CONTROL_ROWS:
-		grid.add_child(_cell(r[0], false))
-		var keys: String = r[1]
-		var pad: String = r[2] if r.size() > 2 else r[1]
-		grid.add_child(_cell(InputSetup.keys_for(keys) if _is_action(keys) else keys, false))
-		grid.add_child(_cell(InputSetup.pad_for(pad) if _is_action(pad) else pad, false))
-	side.add_child(grid)
+	_settings = MenuStyle.page(_ui, "SETTINGS", false)
+	_settings.add_child(SettingsPanel.new())
 	var go := HBoxContainer.new()
 	go.alignment = BoxContainer.ALIGNMENT_CENTER
-	var back := _button("Back  (Esc)", 20, Vector2(200, 48))
+	var back := MenuStyle.button("Back  (Esc)", 20, Vector2(200, 48))
 	back.name = "SettingsBack"
 	back.pressed.connect(_show.bind("main"))
 	go.add_child(back)
 	_settings.add_child(go)
 
 
-static func _is_action(s: String) -> bool:
-	return InputSetup.KEYS.has(s) or InputSetup.MOUSE.has(s) or InputSetup.PAD_BUTTONS.has(s) or InputSetup.PAD_AXES.has(s)
-
-
-## One cell of the controls table (a heading cell `dim`).
-func _cell(text: String, dim: bool) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", 16)
-	if dim:
-		l.add_theme_font_override("font", MenuStyle.font(MenuStyle.BODY_FONT, 600))
-		l.add_theme_color_override("font_color", MenuStyle.DIM)
-	else:
-		l.add_theme_font_override("font", MenuStyle.font(MenuStyle.NOTES_FONT))
-	return l
-
-
 ## The Flying choice (Novice | Realistic) and what it means, into `box`; its buttons are named <prefix><i>.
 func _flying_row(box: VBoxContainer, prefix: String) -> void:
-	box.add_child(_heading("Flying"))
-	box.add_child(_row(FLYING.map(func(f: Array) -> String: return f[1]), 0 if novice else 1, func(i: int) -> void:
+	box.add_child(MenuStyle.heading("Flying"))
+	box.add_child(MenuStyle.row(FLYING.map(func(f: Array) -> String: return f[1]), 0 if novice else 1, func(i: int) -> void:
 		novice = i == 0
 		_refresh(), prefix))
-	var note := _note(box.custom_minimum_size.x)
+	var note := MenuStyle.note(box.custom_minimum_size.x)
 	_flying_notes.append(note)
 	box.add_child(note)
 
@@ -300,10 +221,10 @@ func _go(start: Callable, start_name: String) -> HBoxContainer:
 	var go := HBoxContainer.new()
 	go.alignment = BoxContainer.ALIGNMENT_CENTER
 	go.add_theme_constant_override("separation", 16)
-	var back := _button("Back  (Esc)", 20, Vector2(200, 48))
+	var back := MenuStyle.button("Back  (Esc)", 20, Vector2(200, 48))
 	back.name = start_name + "Back"
 	back.pressed.connect(_show.bind("main"))
-	var b := _button("Start  (Enter)", 20, Vector2(240, 48))
+	var b := MenuStyle.button("Start  (Enter)", 20, Vector2(240, 48))
 	b.name = start_name
 	b.pressed.connect(start)
 	go.add_child(back)
@@ -401,102 +322,7 @@ func _refresh() -> void:
 			if b != null:
 				b.set_pressed_no_signal(i == (0 if novice else 1))
 	_rules.text = MODES[0 if fight_match else 1][1]
-	_mouse_note.text = MOUSE_Y[1 if Settings.invert_mouse_y else 0][1]
-	_pad_note.text = PAD_Y[1 if Settings.invert_pad_y else 0][1]
 	_skill_box.visible = fight_match
 	for k in SKILLS:
 		if k[0] == fight_skill:
 			_skill_note.text = k[2]
-
-
-## A page: a panel (MenuStyle's) holding a column under its title, centred on the screen, or `left` of it (the
-## main page, clear of the birds).
-func _page(title_text: String, left: bool) -> VBoxContainer:
-	var holder := Control.new()
-	holder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ui.add_child(holder)
-	var at: Container = CenterContainer.new() if not left else MarginContainer.new()
-	at.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	at.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if left:
-		at.add_theme_constant_override("margin_left", 110)
-		at.add_theme_constant_override("margin_top", 120)
-	holder.add_child(at)
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	at.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	panel.add_child(box)
-	box.set_meta("page", holder)
-	var title := Label.new()
-	title.text = title_text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if not left else HORIZONTAL_ALIGNMENT_LEFT
-	title.add_theme_font_override("font", MenuStyle.font(MenuStyle.TITLE_FONT, 700))
-	title.add_theme_font_size_override("font_size", 64 if left else 52)
-	title.add_theme_color_override("font_color", MenuStyle.ACCENT)
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	title.add_theme_constant_override("shadow_offset_y", 3)
-	box.add_child(title)
-	var rule := ColorRect.new()   # a brass line under the title
-	rule.color = MenuStyle.EDGE
-	rule.custom_minimum_size = Vector2(0, 2)
-	box.add_child(rule)
-	if left:
-		var sub := Label.new()
-		sub.text = "Hedgerow air corps"
-		sub.add_theme_font_size_override("font_size", 18)
-		sub.add_theme_color_override("font_color", MenuStyle.DIM)
-		box.add_child(sub)
-	return box
-
-
-## A row of toggle buttons, one pressed at a time; `pick(i)` on a press. Its buttons are named <prefix><i>.
-func _row(labels: Array, on: int, pick: Callable, prefix: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var group := ButtonGroup.new()
-	for i in labels.size():
-		var b := _button(String(labels[i]), 18, Vector2(100, 40))
-		b.name = "%s%d" % [prefix, i]
-		b.toggle_mode = true
-		b.button_group = group
-		b.button_pressed = i == on
-		b.pressed.connect(pick.bind(i))
-		row.add_child(b)
-	return row
-
-
-static func _button(text: String, font: int, min_size: Vector2) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = min_size
-	b.add_theme_font_size_override("font_size", font)
-	return b
-
-
-func _heading(text: String) -> Label:
-	var l := Label.new()
-	l.text = text.to_upper()
-	l.add_theme_font_size_override("font_size", 19)
-	l.add_theme_font_override("font", MenuStyle.font(MenuStyle.BODY_FONT, 600))
-	l.add_theme_color_override("font_color", MenuStyle.DIM)
-	return l
-
-
-static func _column(width: float) -> VBoxContainer:
-	var c := VBoxContainer.new()
-	c.custom_minimum_size.x = width
-	c.add_theme_constant_override("separation", 10)
-	return c
-
-
-func _note(width: float) -> Label:
-	var l := Label.new()
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(width, 0)
-	l.add_theme_font_size_override("font_size", 16)
-	l.add_theme_font_override("font", MenuStyle.font(MenuStyle.NOTES_FONT))
-	return l

@@ -103,7 +103,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   bird, each pod's weapon (rockets | seekers | gun, `--loadout <left>,<right>`), Novice | Realistic, the 3 v 3 match (at
   recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; Settings: which way the
   mouse and the stick climb (`Settings`, `user://settings.cfg`, loaded by `Boot` but not for tests; `PlayerController`
-  takes it when made) and the controls, read from `InputSetup`'s bindings (`keys_for` / `pad_for`); `--page flight|fight|settings`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+  takes it when made) and the controls, read from `InputSetup`'s bindings (`keys_for` / `pad_for`), the panel `SettingsPanel`, its parts `MenuStyle`'s
+  (`page`, `row`, `button`, ...); in the game and the range Esc or losing focus opens `PauseMenu` (`scripts/ui/`: the tree
+  paused, Resume / Settings / Leave; resuming recaptures the mouse and `take_settings()`; `tests/probe_pause_shot.gd`); `--page flight|fight|settings`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
   `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
   look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they
