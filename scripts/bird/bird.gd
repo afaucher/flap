@@ -788,14 +788,13 @@ func _avoid_in(inp: FlightInput) -> FlightInput:
 
 
 ## The wings against the wood (this tick's _caps): each, shoulder to tip as spread or folded now, in wood costs speed
-## (WING_STRIKE_LOSS), wing_struck. Not the tree it's leaving, nor (catch armed) the one it's landing in.
+## (WING_STRIKE_LOSS), wing_struck. Not the tree it's leaving.
 func _wing_strikes(dt: float) -> void:
 	_strike_cool[0] = maxf(0.0, float(_strike_cool[0]) - dt)
 	_strike_cool[1] = maxf(0.0, float(_strike_cool[1]) - dt)
 	if _caps.is_empty():
 		return
 	var skip := _pass_tree if _pass_body != null else -1
-	var landing_tree := candidate.tree_id if candidate != null and (last_input.catch_held or _grab_buffer > 0.0) else -2
 	var half := profile.span * 0.5 * (1.0 - profile.fold_span_cut * model.fold)
 	var right := global_basis.x.normalized()
 	for i in 2:
@@ -805,7 +804,7 @@ func _wing_strikes(dt: float) -> void:
 		var root := global_position + right * side * _radius * 0.6
 		var tip := global_position + right * side * half
 		var w := ArenaLayout.wing_touch(_caps, root, tip, WING_PAD, skip)
-		if w.is_empty() or int((w.cap as Array)[3]) == landing_tree:
+		if w.is_empty():
 			continue
 		var spd := model.velocity.length()
 		var lost := spd * WING_STRIKE_LOSS * (1.0 - 0.7 * float(w.s))

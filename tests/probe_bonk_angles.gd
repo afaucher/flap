@@ -1,5 +1,5 @@
 extends TestCase
-## Diagnostic: how birds hit wood -- every bonk's speed, speed into the surface and angle of approach (0 skimming
+## Diagnostic: how birds hit wood -- every bonk's speed (side touches are glances now: counted, not listed), speed into the surface and angle of approach (0 skimming
 ## along it .. 90 square on), and which side of the bird took it (belly, back, flank, chest), in three settings:
 ##   flock    the AI flock (AIPilot) in the pine wood, 90 s;
 ##   straight unguided birds glided straight through the pine wood from random points, headings and speeds (a
@@ -7,8 +7,6 @@ extends TestCase
 ##   match    a 3 v 3 of combat-AI birds (pilot), 120 s.
 ## BONK_MODE=flock|straight|match (default all). Headless: .\probe.ps1 probe_bonk_angles -Headless
 
-const GLANCE_INTO := 3.0     ## m/s: the proposed glance's limit into the surface
-const GLANCE_DEG := 35.0     ## deg: and of approach angle
 
 var stats := {}
 
@@ -27,10 +25,8 @@ func setup() -> void:
 			Perf._acc.clear()
 			var rows: Array = await call("_" + m)
 			_report(m, rows)
-			print("  braces %d (%d ended in a glance, %d touched nothing: a false alarm), glances %d in all; %.1f bird-minutes; brace check %.1f us per bird-tick" % [
-				stats.braces, stats.braced_glances, stats.missed, stats.glances, stats.ticks / 3600.0, float(Perf._acc.get("bird.brace", 0)) / maxf(stats.ticks, 1)])
-			for k2 in ["bird.brace", "x.brace.dist", "x.brace.touch"]:
-				print("  PERF %s %.1f us per bird-tick" % [k2, float(Perf._acc.get(k2, 0)) / maxf(stats.ticks, 1)])
+			print("  braces %d (%d ended in a glance, %d touched nothing: a false alarm), glances %d in all; %.1f bird-minutes; reflexes and wing strikes %.1f us per bird-tick" % [
+				stats.braces, stats.braced_glances, stats.missed, stats.glances, stats.ticks / 3600.0, float(Perf._acc.get("bird.reflex", 0)) / maxf(stats.ticks, 1)])
 			Perf.on = false
 			all += rows
 	if mode == "":
@@ -192,7 +188,6 @@ func _report(name: String, rows: Array) -> void:
 	by_into.fill(0)
 	var sides := {}
 	var glance := 0
-	var lost_glance := 0.0
 	for r: Dictionary in rows:
 		for i in bins.size():
 			if r.deg < bins[i]:
@@ -203,9 +198,8 @@ func _report(name: String, rows: Array) -> void:
 				by_into[i] += 1
 				break
 		sides[r.side] = int(sides.get(r.side, 0)) + 1
-		if r.into < GLANCE_INTO and r.deg < GLANCE_DEG and r.side != "back":
+		if r.deg <= Bird.GLANCE_DEG and r.side != "back":
 			glance += 1
-			lost_glance += r.speed * 0.4   # (what the old bonk cost: it kept 60% of the speed)
 	var line := "  angle (deg):"
 	var lo := 0.0
 	for i in bins.size():
@@ -225,7 +219,7 @@ func _report(name: String, rows: Array) -> void:
 		mean_spd += r.speed / n
 		mean_into += r.into / n
 	print("  mean speed %.1f m/s, mean into %.1f m/s" % [mean_spd, mean_into])
-	print("  would glance (into < %.0f m/s, under %.0f deg, not on the back): %d of %d (%.0f%%), which the old bonk cost %.1f m/s each on average" % [GLANCE_INTO, GLANCE_DEG, glance, n, 100.0 * glance / n, lost_glance / maxf(glance, 1)])
+	print("  side hits (a glance: within %.0f deg, not on the back): %d of %d (%.0f%%)" % [Bird.GLANCE_DEG, glance, n, 100.0 * glance / n])
 	if OS.get_environment("BONK_ROWS") != "":
 		for r: Dictionary in rows:
 			print("  ROW %-7s v %4.1f into %4.1f deg %4.1f %-5s y %.1f" % [r.id, r.speed, r.into, r.deg, r.side, r.y])

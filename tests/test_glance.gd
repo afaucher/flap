@@ -16,7 +16,8 @@ extends TestCase
 ##  - a crow passing 12 cm clear (its spread wing would reach the bark): with the tuck reflex its wings pull in and it
 ##    strikes nothing but sinks for it; with tuck_reflex 0 its wing strikes and costs speed;
 ##  - a novice's crow (avoid_assist) brushing it: rolls away, touches nothing, and brakes for it.
-## Landing on the lab branch (catch held): no reflex and no wing strike for the tree it lands in.
+## Landing on the lab branch (catch held), out along it and close in by the trunk: no reflex, no wing strike. Novice flying
+## (FlightAssist.fit) turns the avoid on for the player's bird; realistic, off.
 
 const WALL_X := 0.0
 
@@ -113,6 +114,40 @@ func setup() -> void:
 	check(lb.tucks + lb.flares + lb.braces == 0, "and no reflex fires for the branch it lands on")
 	eq(lb.wing_strikes, 0, "nor do its wings strike the tree it lands in")
 	lb.queue_free()
+	# ... close in by the trunk, its spread wing reaching the bark as it comes in.
+	var nb := Bird.new()
+	add_child(nb)
+	nb.setup(BirdProfile.crow(), layout, null)
+	nb.arena = arena
+	nb.rig.visible = false
+	var perch: Perch = layout.perches[0]
+	var pilot := LabScenarios.start(LabScenarios.by_id("land_level"), nb, layout)
+	pilot.target = perch.a.lerp(perch.b, 0.04)
+	nb.fly_from(pilot.target + Vector3(0.0, 0.5, -12.0), Vector3(0, 0, 1), nb.profile.v_best)
+	var reach_trunk := false
+	for f in 300:
+		await get_tree().physics_frame
+		var tr0: ArenaLayout.TreeData = layout.trees[0]
+		reach_trunk = reach_trunk or Vector2(nb.global_position.x - tr0.base.x, nb.global_position.z - tr0.base.y).length() - tr0.radius < nb.profile.span * 0.5
+		if nb.state == Bird.State.PERCHED:
+			break
+	print("landing by the trunk (%.2f m out along the branch): state %d, its wing within reach of the bark %s, reflexes %d, wing strikes %d" % [pilot.target.x, nb.state, reach_trunk, nb.tucks + nb.flares + nb.braces, nb.wing_strikes])
+	check(nb.state == Bird.State.PERCHED and reach_trunk, "landing by the trunk: lands, its wing within reach of the bark")
+	check(nb.tucks + nb.flares + nb.braces == 0, "landing by the trunk: no reflex for its own tree")
+	eq(nb.wing_strikes, 0, "landing by the trunk: its wings don't strike the tree it lands in")
+	nb.queue_free()
+	# Novice flying turns the avoid on for the player's bird (FlightAssist.fit); realistic, off.
+	var was: bool = FlightAssist.novice
+	var ab := Bird.new()
+	ab.setup(BirdProfile.crow(), layout, null)
+	FlightAssist.novice = true
+	FlightAssist.fit(ab)
+	eq(ab.avoid_assist, FlightAssist.AVOID, "novice flying: the player's bird avoids wood")
+	FlightAssist.novice = false
+	FlightAssist.fit(ab)
+	eq(ab.avoid_assist, 0.0, "realistic: it doesn't")
+	ab.free()
+	FlightAssist.novice = was
 	arena.queue_free()
 	await frames(2)
 	finish()

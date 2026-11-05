@@ -35,6 +35,15 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   (the menu's outpost framed like the concept, `--view`, `--warm`). The arena's edge (`Escarpment`, `EdgeBuilder`;
   `docs/design/arena_edge.md`; on hold: off unless `--cliff`, `Pinewood.cliff`, the heath all round): after changing the cliff, `.\tools\cliff_measure.ps1` scores it against its concept
   (`docs/design/cliff_from_concept.md`: the process, what it measures and how far to trust each number).
+- Touching wood (`Bird`, `docs/design/flight_model.md` Collisions): a side touch (within `GLANCE_DEG`, 40, of along it, any
+  speed) glances -- no stun, speed lost by how hard, the feet kick off the bark (the rig's claws on it), `claw_scrape`; squarer
+  bonks, the stun scaled 0.1-0.35 s by the speed into the wood (full at `BONK_HARD`, 9 m/s). Wings strike too (shoulder to
+  tip against the layout's wood each tick: speed lost, no stun, `wing_strike`). Reflexes look 0.25 s ahead
+  (`ArenaLayout.wood_near` / `first_touch_among`): the wings tuck for wood from the side or in a wing's way (`tuck_reflex`,
+  `FlightModel.tuck`), a flare for wood square ahead (`flare_reflex`), and a novice's bird rolls away at a speed cost
+  (`avoid_assist`, `FlightAssist.AVOID`); each off at 0. `test_glance`; lab scenarios `glance_left` / `_right`,
+  `bonk_steep`, `bonk_slow`, `head_on`, `wing_clip`; probes `probe_bonk_angles` (how birds hit wood, braces and false
+  alarms, the look-ahead's cost), `probe_glance_close` (renders a glance up close), `probe_reflex_trace`, `probe_touch_cost`.
 - `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.

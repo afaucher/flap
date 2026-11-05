@@ -4020,15 +4020,29 @@
  },
  {
   "id": "glance-is-bonk",
-  "bug": "Every touch of wood at 1 m/s or more was a bonk: a slow, shallow brush cost 40% of the bird's speed and 0.35 s of no control (2026-11-04).",
+  "bug": "Every touch of wood at 1 m/s or more was a bonk: a shallow side brush cost 40% of the speed and 0.35 s of no control (2026-11-04).",
   "tests": [
    "test_glance"
   ],
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\tif hit >= GLANCE_MIN and is_glance(n, v, not brace.is_empty()):",
+    "find": "\tif hit >= GLANCE_MIN and is_glance(n, v):",
     "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "glance-by-speed",
+  "bug": "A side hit counted as a glance only under 3 m/s into the wood, so at speed every side hit stunned (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar hit := -v.dot(n)\n\tif hit <= 0.0:\n\t\treturn false",
+    "replace": "\tvar hit := -v.dot(n)\n\tif hit <= 0.0 or hit >= 3.0:\n\t\treturn false"
    }
   ]
  },
@@ -4048,7 +4062,7 @@
  },
  {
   "id": "glance-keeps-bonk-loss",
-  "bug": "A glance lost 40% of the bird's speed, as the old bonk did, not just the claws' drag (2026-11-04).",
+  "bug": "A glance lost 40% of the bird's speed, as the old bonk did, not the claws' drag for how hard it hit (2026-11-04).",
   "tests": [
    "test_glance"
   ],
@@ -4089,58 +4103,129 @@
   ]
  },
  {
-  "id": "brace-rolls-toward",
-  "bug": "The brace banked toward the wood, which rolls the back to it, not the belly and feet (2026-11-04).",
+  "id": "tuck-reflex-missing",
+  "bug": "No tuck for wood coming from the side: the wings stayed spread into the touch (2026-11-04).",
   "tests": [
    "test_glance"
   ],
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\t\ts.x = lerpf(s.x, signf(away) * minf(1.0, BRACE_BANK / profile.max_bank_deg), brace_assist)",
-    "replace": "\t\ts.x = lerpf(s.x, -signf(away) * minf(1.0, BRACE_BANK / profile.max_bank_deg), brace_assist)"
+    "find": "\t\t\t\tmodel.tuck = tuck_reflex\n",
+    "replace": "\t\t\t\tmodel.tuck = 0.0\n"
    }
   ]
  },
  {
-  "id": "brace-not-unloaded",
-  "bug": "Braced with its wings still lifting, rolled away the bird turned off the wood: a dodge, never a kick-off with the feet (2026-11-04).",
+  "id": "tuck-reflex-slow",
+  "bug": "The reflex tuck folded at a dive's 3 per second, too slow to have the wings in by the touch (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tfold = move_toward(fold, fold_target, (TUCK_RATE if reflexive else 3.0) * dt)",
+    "replace": "\tfold = move_toward(fold, fold_target, 3.0 * dt)"
+   }
+  ]
+ },
+ {
+  "id": "wing-tuck-missing",
+  "bug": "No tuck for wood in a wing's way: a bird passing clear of a trunk struck it with its wing (2026-11-04).",
   "tests": [
    "test_glance"
   ],
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\ts.y = lerpf(s.y, minf(s.y, unload), brace_assist)\n",
+    "find": "\t\t\t\tmodel.tuck = need * tuck_reflex",
+    "replace": "\t\t\t\tmodel.tuck = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "flare-reflex-missing",
+  "bug": "No flare for wood square ahead: the bird hit at full speed (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\t_reflex_flare = FLARE_REFLEX * flare_reflex",
+    "replace": "\t\t\t_reflex_flare = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "reflex-on-landing",
+  "bug": "The reflexes fired for the branch the bird was landing on: the flare braked a too-fast approach into a catch (2026-11-04).",
+  "tests": [
+   "test_perching",
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif _caps.is_empty() or stun > 0.0 or tumble or _grace > 0.0 or _pass_body != null or inp.catch_held or _grab_buffer > 0.0:",
+    "replace": "\tif _caps.is_empty() or stun > 0.0 or tumble or _grace > 0.0 or _pass_body != null:"
+   }
+  ]
+ },
+ {
+  "id": "wing-strike-free",
+  "bug": "A wing striking wood cost nothing (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tmodel.velocity = model.velocity * (maxf(0.0, spd - lost) / maxf(spd, 1e-3))\n",
     "replace": ""
    }
   ]
  },
  {
-  "id": "brace-on-landing",
-  "bug": "A bird braced (rolled and folded) for the branch it was landing on (2026-11-04).",
+  "id": "avoid-no-roll",
+  "bug": "The novice's avoid didn't roll away: it touched the wood (2026-11-04).",
   "tests": [
    "test_glance"
   ],
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\t\t\tor inp.catch_held or _grab_buffer > 0.0:",
-    "replace": "\t\t\tor false:"
+    "find": "\ts.x = lerpf(s.x, want, avoid_assist)",
+    "replace": "\tpass"
    }
   ]
  },
  {
-  "id": "brace-assist-ignored",
-  "bug": "brace_assist 0 left the brace on: every assist must switch off (2026-11-04).",
+  "id": "avoid-free",
+  "bug": "The novice's avoid cost no speed (2026-11-04).",
   "tests": [
    "test_glance"
   ],
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\tif brace_assist <= 0.0 or layout == null",
-    "replace": "\tif layout == null"
+    "find": "\t\t_reflex_flare = maxf(_reflex_flare, AVOID_DRAG * avoid_assist)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "novice-avoid-unwired",
+  "bug": "Novice flying didn't turn the avoid on for the player's bird (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tbird.avoid_assist = AVOID if novice else 0.0",
+    "replace": "\tbird.avoid_assist = 0.0"
    }
   ]
  },
@@ -4160,7 +4245,7 @@
  },
  {
   "id": "rake-stale-bark",
-  "bug": "The feet raked a flat plane where the bird first touched (and as of the latest tick, ahead of the drawn bird): on a trunk, which curves away, the claws hung 34 cm off the bark (2026-11-04).",
+  "bug": "The feet raked a flat plane where the bird first touched, as of the latest tick (ahead of the drawn bird): on a trunk, which curves away, the claws hung 34 cm off the bark (2026-11-04).",
   "tests": [
    "test_glance"
   ],
@@ -4181,8 +4266,8 @@
   "edits": [
    {
     "file": "scripts/audio/game_audio.gd",
-    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))",
-    "replace": "\tcue(\"bonk\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))"
+    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))",
+    "replace": "\tcue(\"bonk\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))"
    }
   ]
  },
@@ -4195,8 +4280,22 @@
   "edits": [
    {
     "file": "scripts/audio/game_audio.gd",
-    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))",
-    "replace": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, Bird.GLANCE_INTO + 1.5))\n\t_call(b, \"alarm\")"
+    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))",
+    "replace": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))\n\t_call(b, \"alarm\")"
+   }
+  ]
+ },
+ {
+  "id": "wing-strike-silent",
+  "bug": "A wing strike played the bonk's thud, not the feathers on the bark (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tcue(\"wing_strike\", at, _by_speed(lost, 3.0))",
+    "replace": "\tcue(\"bonk\", at, _by_speed(lost, 3.0))"
    }
   ]
  }
