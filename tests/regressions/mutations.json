@@ -4424,5 +4424,33 @@
     "replace": "func lanes_clear(g: Gate) -> bool:\n\treturn true\n"
    }
   ]
+ },
+ {
+  "id": "race-dive-while-turning",
+  "bug": "Courses asked for a steep dive out of a hard turn (the turn's metres counted toward the dive): the faster birds couldn't get down to the next window (2026-11-05, found by LinePilot).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\treturn envelope.turn_r * (_flat(na).angle_to(ld) + ld.angle_to(_flat(nb)))",
+    "replace": "\treturn 0.0"
+   }
+  ]
+ },
+ {
+  "id": "race-falcon-run-in",
+  "bug": "The level run-in before a gate after a dive was 8 m whatever the bird: the falcon, fastest, couldn't settle into low windows (2026-11-05, found by LinePilot).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\treturn maxf(DIVE_RUN, v_fast * DIVE_RUN_S)",
+    "replace": "\t\treturn DIVE_RUN"
+   }
+  ]
  }
 ]

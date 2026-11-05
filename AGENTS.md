@@ -60,7 +60,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   AI racer through `AIPilot.steer` (a FlightInput only; skill = `CombatSkill` presets), `RaceView` placeholder gates,
   `RaceHud`, `RaceRecord` best times. `RaceTrial` (test_support) races birds headless; `tests/probe_race.gd` prints a
   course leg by leg against each bird's turning circle, races every bird at every skill, writes an SVG map
-  (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). `test_race`.
+  (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). Flyability apart from the AI:
+  `LinePilot` (test_support) flies the planned line exactly through the bird's own flight model, leg by leg;
+  `tests/probe_flyable.gd` marks each leg for each bird (a leg no bird can fly is the course's, one the AI misses the
+  AI's). `test_race` (every bird flies the course, by LinePilot).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
   burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).

@@ -18,8 +18,9 @@ extends RefCounted
 ##     and is clear of wood by half a wingspan and WING_MARGIN, of the gates' posts by POST_CLEAR and of every rope
 ##     by ROPE_CLEAR; the course never comes back within SPACING of a gate;
 ##   - a leg meets the gate it leaves and the one it enters within ENTRY_DEG of their way through (so a turn at a
-##     gate is at most 2 x ENTRY_DEG), climbs at most CLIMB_MAX and dives at most DIVE_MAX, leaving DIVE_RUN level
-##     before the gate (_grade_ok);
+##     gate is at most 2 x ENTRY_DEG), climbs at most CLIMB_MAX and dives at most DIVE_MAX, over the leg less the
+##     metres it spends turning (turn_arc: no steep dive or climb banked hard) and DIVE_RUN level before the gate
+##     (_grade_ok; LinePilot and probe_flyable found the legs that broke this);
 ##   - the next gate can be seen (its centre and 3 of 4 points round its rim, past trunks, branches and needles)
 ##     from the gate you're passing and from SIGHT_BACK m before it on the way in;
 ##   - so can the one after it, within NEXT_TWO_MAX m, unless the turn at the next gate is tighter than TIGHT_DEG
@@ -37,7 +38,8 @@ const START_DEG := 60.0           ## the first leg leaves the start perch within
 const CLIMB_MAX := 0.27           ## (15 deg)
 const DIVE_MAX := 0.7             ## (35 deg)
 const CLIMB_RUN := 4.0            ## m of a leg not counted for its climb (the zoom out of the gate before)
-const DIVE_RUN := 8.0             ## m of a leg flown level at the window's height before the gate
+const DIVE_RUN := 8.0             ## m of a leg flown level at the window's height before the gate, at least ...
+const DIVE_RUN_S := 0.9           ## ... s of it at the fastest racer's cruise (Envelope.dive_run: the falcon needs ~11 m)
 const RARITY := {"trunk": 1.5, "hoop limb": 1.5, "hoop span": 0.5}   ## score for the kinds that fit in fewer places
 const POST_TURN := 20.0           ## deg a post gate may be turned off its leg in, to find a clear way in
 const SPACING := 10.0             ## m between any two gates
@@ -69,6 +71,7 @@ const MISS_NEAR := 10.0           ## m: crossing a gate's plane this close outsi
 class Envelope:
 	var turn_r := 0.0      ## m: the widest cruise turning circle (AIPilot.cruise_turn_radius)
 	var half_span := 0.0   ## m: half the widest wingspan
+	var v_fast := 0.0      ## m/s: the fastest cruise (v*)
 	var birds: Array = []
 
 	static func of(ids: Array) -> Envelope:
@@ -78,7 +81,12 @@ class Envelope:
 			var p := BirdProfile.by_id(id)
 			e.turn_r = maxf(e.turn_r, AIPilot.cruise_turn_radius(p))
 			e.half_span = maxf(e.half_span, p.span * 0.5)
+			e.v_fast = maxf(e.v_fast, p.v_best)
 		return e
+
+	## m flown level at the window's height before a gate after a dive (settled out of it)
+	func dive_run() -> float:
+		return maxf(DIVE_RUN, v_fast * DIVE_RUN_S)
 
 	## m of straight, clear run in front of a gate's window (ENTRY_RUNS turning circles: rolled out and lined up)
 	func entry() -> float:
@@ -462,13 +470,14 @@ func _finish_score(p: Plan) -> float:
 		lo = minf(lo, g.centre.y)
 		hi = maxf(hi, g.centre.y)
 		kinds[g.kind] = int(kinds.get(g.kind, 0)) + 1
-	var s := (hi - lo) / 4.0 + kinds.size() * 1.5
+	var s := (hi - lo) / 2.0 + kinds.size() * 1.5
 	var left := p.turns.filter(func(t: float): return t > 15.0).size()
 	var right := p.turns.filter(func(t: float): return t < -15.0).size()
 	var wound := 0.0
 	for t in p.turns:
 		wound += t
-	return s + 2.0 * mini(left, right) - absf(wound) / 90.0
+	var posts: int = kinds.get("post", 0)
+	return s + 3.0 * mini(left, right) - absf(wound) / 45.0 - maxf(posts - GATES / 2, 0) * 1.5
 
 
 ## The plans one gate longer than `b`.
@@ -477,6 +486,7 @@ func _grow(b: Plan) -> Array[Plan]:
 	var has_last := not b.gates.is_empty()
 	var last_n: Vector3 = b.gates[-1].normal if has_last else Vector3.ZERO
 	var opts := []
+	var posts_so_far := b.gates.filter(func(g: Gate): return g.kind == "post").size()
 	for i in _near(from, LEG.y):
 		if b.used.has(i):
 			continue
@@ -485,13 +495,15 @@ func _grow(b: Plan) -> Array[Plan]:
 		var plan := Vector2(leg.x, leg.z).length()
 		if plan < LEG.x or plan > LEG.y:
 			continue
-		if not _grade_ok(leg.y, plan):
+		if not _grade_ok(leg.y, plan):   # (cheap first; the turn's share is checked once the gate's way is known)
 			continue
 		var ld := Vector3(leg.x, 0.0, leg.z) / plan
 		var n: Vector3 = ld if cand.kind == "post" else (cand.normal if cand.normal.dot(ld) >= 0.0 else -cand.normal)
 		if rad_to_deg(n.angle_to(ld)) > ENTRY_DEG:
 			continue
 		if has_last and rad_to_deg(last_n.angle_to(ld)) > ENTRY_DEG:
+			continue
+		if not _grade_ok(leg.y, plan, turn_arc(last_n if has_last else start.facing, ld, n)):
 			continue
 		if not has_last and rad_to_deg(_flat(start.facing).angle_to(ld)) > START_DEG:
 			continue
@@ -508,6 +520,8 @@ func _grow(b: Plan) -> Array[Plan]:
 			var in_leg := b.gates[-1].centre - prev_from
 			turn = rad_to_deg(AIPilot._signed_heading(Vector3(in_leg.x, 0.0, in_leg.z), ld)) * -1.0
 		var s := -absf(plan - 25.0) / 10.0 + minf(absf(leg.y), 8.0) / 4.0 + _rng.randf() * 0.8 + float(RARITY.get(cand.describe(), 0.0))
+		if cand.kind == "post" and posts_so_far >= GATES / 2 - 1:
+			s -= 2.0   # (posts fit anywhere: past half the course, the other kinds first)
 		if not b.gates.is_empty():
 			if cand.kind != b.gates[-1].kind:
 				s += 1.0
@@ -568,11 +582,30 @@ func _grow(b: Plan) -> Array[Plan]:
 
 
 ## Can a leg rising `dy` over `plan` m be flown: a climb at most CLIMB_MAX over the leg less CLIMB_RUN, a dive at most
-## DIVE_MAX over the leg less DIVE_RUN (the bird is down at the window's height that far before it)?
-static func _grade_ok(dy: float, plan: float) -> bool:
+## DIVE_MAX over the leg less the level run-in (Envelope.dive_run: the bird is down at the window's height that far
+## before it)?
+##   `arc`: m of the leg spent turning (turn_arc), which count for neither: a bird can't dive or climb steeply banked hard.
+func _grade_ok(dy: float, plan: float, arc := 0.0) -> bool:
 	if dy >= 0.0:
-		return dy <= maxf(plan - CLIMB_RUN, 0.0) * CLIMB_MAX + 1e-3
-	return -dy <= maxf(plan - DIVE_RUN, 0.0) * DIVE_MAX + 1e-3
+		return dy <= maxf(plan - CLIMB_RUN - arc, 0.0) * CLIMB_MAX + 1e-3
+	return -dy <= maxf(plan - envelope.dive_run() - arc, 0.0) * DIVE_MAX + 1e-3
+
+
+## m of a leg spent turning: from the way out of the gate before (`na`) to the leg's way (`ld`), then to the way into
+## its gate (`nb`), on the widest turning circle the course is planned for.
+func turn_arc(na: Vector3, ld: Vector3, nb: Vector3) -> float:
+	return envelope.turn_r * (_flat(na).angle_to(ld) + ld.angle_to(_flat(nb)))
+
+
+## Is leg `k`'s climb or dive flyable, the turn out of the gate before it left out (_grade_ok)?
+func leg_grade_ok(all: Array, k: int) -> bool:
+	var a := _from_at_all(all, k)
+	var g: Gate = all[k]
+	var leg := g.centre - a
+	var plan := Vector2(leg.x, leg.z).length()
+	var ld := Vector3(leg.x, 0.0, leg.z) / maxf(plan, 1e-3)
+	var na: Vector3 = _flat(start.facing) if k == 0 else all[k - 1].normal
+	return _grade_ok(leg.y, plan, turn_arc(na, ld, g.normal))
 
 
 ## Where the leg to the next gate of `b` starts: its last gate, or the start perch.
@@ -623,6 +656,8 @@ func _fits(b: Plan, g: Gate, marked: bool) -> String:
 	var all := b.gates.duplicate()
 	all.append(g)
 	var k := all.size() - 1
+	if not leg_grade_ok(all, k):
+		return "grade"
 	if not lanes_clear(g):
 		return "entry/exit"
 	if not turn_ok(all, k):
@@ -662,8 +697,8 @@ func lanes_clear(g: Gate) -> bool:
 
 
 ## The line a bird flies into gate `k`: leaving the gate before along its way through (or the start perch the way
-## it faces), arriving along gate k's, a smooth curve between (a cubic Bezier, handles a third of the way); down to
-## the window's height DIVE_RUN before it on a dive, climbing after CLIMB_RUN out on a climb.
+## it faces), arriving along gate k's, a smooth curve between (a cubic Bezier, handles a third of the way); the height
+## changing only once the turn is done (turn_arc), down to the window's height DIVE_RUN before it on a dive.
 func flown_line(all: Array, k: int) -> PackedVector3Array:
 	var a := _from_at_all(all, k)
 	var na: Vector3 = _flat(start.facing) if k == 0 else all[k - 1].normal
@@ -675,11 +710,13 @@ func flown_line(all: Array, k: int) -> PackedVector3Array:
 	var h := plan / 3.0
 	var p1 := p0 + Vector2(na.x, na.z).normalized() * h
 	var p2 := p3 - Vector2(nb.x, nb.z).normalized() * h
+	var arc := turn_arc(na, Vector3(p3.x - p0.x, 0.0, p3.y - p0.y).normalized(), nb)
 	var pts := PackedVector3Array()
 	for i in CURVE_STEPS + 1:
 		var t := float(i) / CURVE_STEPS
 		var q := (1.0 - t) * (1.0 - t) * (1.0 - t) * p0 + 3.0 * (1.0 - t) * (1.0 - t) * t * p1 + 3.0 * (1.0 - t) * t * t * p2 + t * t * t * p3
-		var f := smoothstep(0.0, maxf(1.0 - DIVE_RUN / maxf(plan, 1.0), 0.05), t) if b.y < a.y else smoothstep(minf(CLIMB_RUN / maxf(plan, 1.0), 0.95), 1.0, t)
+		var s0 := minf(arc / maxf(plan, 1.0), 0.9)   # (it turns first, then climbs or dives)
+		var f := smoothstep(s0, maxf(1.0 - envelope.dive_run() / maxf(plan, 1.0), s0 + 0.05), t) if b.y < a.y else smoothstep(minf(s0 + CLIMB_RUN / maxf(plan, 1.0), 0.95), 1.0, t)
 		pts.append(Vector3(q.x, lerpf(a.y, b.y, f), q.y))
 	return pts
 
@@ -845,8 +882,8 @@ func problems() -> PackedStringArray:
 			out.append("gate %d: wood by the posts" % k)
 		if plan < LEG.x - 0.01 or plan > LEG.y + 0.01:
 			out.append("gate %d: leg %.1f m" % [k, plan])
-		if not _grade_ok(leg.y, plan):
-			out.append("gate %d: climbs %.1f m in %.1f m" % [k, leg.y, plan])
+		if not leg_grade_ok(gates, k):
+			out.append("gate %d: climbs %.1f m in %.1f m, turning" % [k, leg.y, plan])
 		if rad_to_deg(g.normal.angle_to(ld)) > ENTRY_DEG + 0.01:
 			out.append("gate %d: entered %.0f deg off" % [k, rad_to_deg(g.normal.angle_to(ld))])
 		if k == 0 and rad_to_deg(_flat(start.facing).angle_to(ld)) > START_DEG + 0.01:

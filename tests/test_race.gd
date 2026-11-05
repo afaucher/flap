@@ -1,11 +1,11 @@
 extends TestCase
 ## Race mode (RaceCourse, RaceRun, RaceRecord): a gate counts only through its window the way it faces; the gates go
 ## in order; the clock starts off the perch and stops at the finish; a miss is counted and the gate stays next; best
-## times are kept only when better. The generated course keeps its rules on two seeds, and in the built wood (its
-## collision) each window's way in and out is open; birds flown through a gate in the simulation count it, and birds
-## flown beside it or through it backwards don't.
+## times are kept only when better. The generated course keeps its rules on two seeds, every bird can fly it
+## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
+## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
 
-const SHARDS := 3
+const SHARDS := 5
 const DT := 1.0 / 60.0
 
 
@@ -24,6 +24,10 @@ func setup() -> void:
 		await _course_in_the_wood(7)
 	if in_shard(2):
 		await _ai_takes_the_first_gate(7)
+	if in_shard(3):
+		await _flyable(11)
+	if in_shard(4):
+		await _flyable(7)
 	finish()
 
 
@@ -208,6 +212,21 @@ func _course_in_the_wood(s: int) -> void:
 		eq(e.run.next, 1 if cases[i][2] else 0, "a bird flown %s: gate 0 %s" % [label, "taken" if cases[i][2] else "not taken"])
 	check(es[0].run.splits.size() == 1 and es[0].run.splits[0] > 0.2 and es[0].run.splits[0] < 1.0, "its split: about 5 m at cruise (%s)" % str(es[0].run.splits))
 	trial.queue_free()
+
+
+## Every bird can fly the course's planned line (LinePilot: the line known exactly, the bird's own flight model): every
+## leg by at least four of the five birds, and every bird at least nine of the ten legs (2026-11-05: seed 11 all of
+## them; seed 7 all but the falcon's leg 1, a descent out of a 62 deg turn).
+func _flyable(s: int) -> void:
+	var l := Pinewood.generate(s)
+	var c := RaceCourse.generate(l, s)
+	var res := await LinePilot.fly_course(l, c, BirdProfile.IDS, self)
+	for k in c.gates.size():
+		var by := BirdProfile.IDS.filter(func(id): return res[id][k].ok)
+		check(by.size() >= 4, "seed %d leg %d: flown by %s" % [s, k, by])
+	for id in BirdProfile.IDS:
+		var n: int = res[id].filter(func(lg): return lg.ok).size()
+		check(n >= c.gates.size() - 1, "seed %d: the %s flies %d of %d legs" % [s, id, n, c.gates.size()])
 
 
 ## An AI racer leaves the start and flies through the first gate (the pipeline works; how well it races is

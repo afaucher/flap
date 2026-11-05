@@ -43,8 +43,11 @@ agile birds (3.4 m, 1.1 m): tighter courses.
   rope by 1.5 m (1 m from the ropes over the window it goes through).
 - **Turns the birds can make.** The flown line's tightest radius is at least the widest turning circle. Each leg
   leaves and meets its gates within 45 deg of their way through, so a turn at a gate is at most 90 deg.
-- **Climbs and dives.** A climb at most 15 deg over the leg less 4 m (the zoom out of the gate before); a dive at
-  most 35 deg over the leg less the 8 m level run-in.
+- **Climbs and dives.** A climb at most 15 deg, a dive at most 35 deg, over the leg less the metres it spends
+  turning (`turn_arc`: the leg's heading change on the widest turning circle; a bird can't dive or climb steeply
+  banked hard), less 4 m out of the gate before on a climb, and less a level run-in before the gate on a dive (0.9 s
+  at the fastest racer's cruise, at least 8 m: 11.3 m with the falcon racing). The planned line turns first, then
+  changes height.
 - **Seeing the way.** The next gate is in sight (its centre and 3 of 4 points round its rim, past trunks, branches
   and needles) from the gate you're passing and from 10 m before it. So is the gate after it, within 60 m, unless the
   turn at the next gate is over 60 deg: that gate is `marked`, for course markers round the turn (to come).
@@ -52,6 +55,28 @@ agile birds (3.4 m, 1.1 m): tighter courses.
 
 `problems()` lists any rule a course breaks; `test_race` checks generated courses keep them all, and hand-built
 courses that break the turn and the way-in rules are caught.
+
+## Flyability (`LinePilot`, `tests/probe_flyable.gd`)
+
+Whether a course asks more than a bird has is measured apart from the AI: `LinePilot` flies the planned line
+itself, known exactly, through the bird's own flight model (an L1 pursuit of a point 0.55 s ahead along the line,
+the full bank limit, the pull a bank needs, flapping when slow), with no avoidance, noise or reaction time. Each leg
+is flown from where the last left the bird; a leg it can't fly (more than 4 m off the line, or past the gate) is
+marked and the bird put back at that gate. `.\probe.ps1 -Headless probe_flyable --seed 7` prints each leg for each
+bird. A leg no bird can fly is the course's to fix; one they can and the AI misses is the AI's.
+
+What it found (2026-11-05): with the first rules, seed 7 had two legs three of the five birds couldn't fly, both
+steep dives straight out of a 61-69 deg turn. Leaving the turn out of the dive (`turn_arc`) fixed those; seeds 11, 3
+and 5 then showed six legs only the falcon couldn't fly, low windows it couldn't settle into from its speed, fixed by
+scaling the level run-in to the fastest bird. Now every bird flies every leg on seeds 3 and 9; four bird-legs are
+left on the other three: three of the falcon's (descents to a window out of a turn) and one of the sparrow's (a
+climb out of a 64 deg turn). `test_race` requires every leg flown by at least four of the five birds,
+and every bird to fly at least nine of the ten legs, on seeds 7 and 11.
+
+The price: these courses are mostly post gates (6-8 of 10: they face any way, so fit the rules most easily), with
+trunk gates and a hoop or two; they still wind round one way (200-290 deg). Planned for the agile birds only
+(`--plan-for crow,owl,sparrow`) crow, owl and sparrow fly every leg, with no more variety: the rules about the way in
+and seeing the next gate, not the hawk, are what keep the gates in the open.
 
 ## The rules of a run (`race_run.gd`)
 
@@ -78,8 +103,8 @@ misses on the way). Where they missed says as much about the course as the AI:
 - low post gates (window 0.8 m off the ground), worst as the first gate off the start rail: on seed 11 most racers
   never took gate 1, a low post gate 6 m below the rail.
 
-Candidate rules from this, not yet in: no turns over 60 deg until course markers exist (or a longer leg after one);
-no low gate first off the start.
+These were AI-trial results on the first rules; probe_flyable since showed most of those legs were the course's
+(dives out of hard turns), and the rules now leave them out. The AI's own misses are separate work.
 
 ## Open questions
 

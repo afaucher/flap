@@ -30,7 +30,7 @@ func setup() -> void:
 	RaceCourse.debug = true
 	var plan_for := (Boot.arg_value(args, "--plan-for") if Boot.arg_value(args, "--plan-for") != "" else ",".join(BirdProfile.IDS)).split(",")
 	var course := RaceCourse.generate(layout, course_seed, Array(plan_for))
-	print("RACE planned for %s: turning circle %.1f m, half span %.2f m, way in %.1f m, way out %.1f m" % [",".join(plan_for), course.envelope.turn_r, course.envelope.half_span, course.envelope.entry(), course.envelope.exit()])
+	print("RACE planned for %s: turning circle %.1f m, half span %.2f m, way in %.1f m, way out %.1f m, level run-in %.1f m" % [",".join(plan_for), course.envelope.turn_r, course.envelope.half_span, course.envelope.entry(), course.envelope.exit(), course.envelope.dive_run()])
 	print("RACE arena %d course %d: %d gates, %.0f m, built in %.0f ms; start perch %d at (%.1f, %.1f, %.1f)" % [arena_seed, course_seed,
 		course.gates.size(), course.length(), course.build_ms, course.start.id, course.start.position.x, course.start.position.y, course.start.position.z])
 	var probs := course.problems()
