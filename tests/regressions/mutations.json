@@ -2013,8 +2013,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
-    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
+    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
+    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
    }
   ]
  },
@@ -3412,8 +3412,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
-    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
    }
   ]
  },
@@ -4296,6 +4296,568 @@
     "file": "scripts/audio/game_audio.gd",
     "find": "\tcue(\"wing_strike\", at, _by_speed(lost, 3.0))",
     "replace": "\tcue(\"bonk\", at, _by_speed(lost, 3.0))"
+   }
+  ]
+ },
+ {
+  "id": "race-gate-backwards",
+  "bug": "A gate counted when flown through the wrong way (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\tif not (da < 0.0 and db >= 0.0):\n\t\t\treturn -1.0",
+    "replace": "\t\tif not ((da < 0.0) != (db < 0.0)):\n\t\t\treturn -1.0"
+   }
+  ]
+ },
+ {
+  "id": "race-hoop-square",
+  "bug": "A hoop's window taken as the square round it: its corners counted (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\tif kind == \"hoop\":\n\t\t\treturn x * x",
+    "replace": "\t\tif false:\n\t\t\treturn x * x"
+   }
+  ]
+ },
+ {
+  "id": "race-clock-on-perch",
+  "bug": "The race clock ran while the bird sat on the start perch (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tif perch != null:\n\t\t\treturn\n",
+    "replace": "\t\tif false:\n\t\t\treturn\n"
+   }
+  ]
+ },
+ {
+  "id": "race-split-rounded",
+  "bug": "Splits rounded to the tick, not the moment the bird crossed (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tsplits.append(t0 + dt * f)",
+    "replace": "\t\tsplits.append(clock)"
+   }
+  ]
+ },
+ {
+  "id": "race-gates-any-order",
+  "bug": "A later gate counted before the next one, skipping gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\tvar f := g.crossing(a, b)\n",
+    "replace": "\tvar f := g.crossing(a, b)\n\tfor j in range(next + 1, course.gates.size()):\n\t\tif f < 0.0 and course.gates[j].crossing(a, b) >= 0.0:\n\t\t\tnext = j\n\t\t\tg = course.gates[j]\n\t\t\tf = g.crossing(a, b)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-best-keeps-slower",
+  "bug": "A slower time replaced the best (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_record.gd",
+    "find": "b.is_empty() or time < float(b.time)",
+    "replace": "b.is_empty() or time < INF"
+   }
+  ]
+ },
+ {
+  "id": "race-start-in-crown",
+  "bug": "The course started on the treetop start perch, inside its own crown's needles: no gate could be seen from it and the course came out empty (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif out.is_empty():\n\t\tout.append(l.start_perch())",
+    "replace": "\tout = [l.start_perch()]\n\tif out.is_empty():\n\t\tout.append(l.start_perch())"
+   }
+  ]
+ },
+ {
+  "id": "race-turn-too-tight",
+  "bug": "Legs planned tighter than the hawk can turn (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\treturn _leg_radius(all, k) >= envelope.turn_r - 0.01",
+    "replace": "\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "race-lanes-unchecked",
+  "bug": "Gates planned with wood in their way in or out (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "func lanes_clear(g: Gate) -> bool:\n",
+    "replace": "func lanes_clear(g: Gate) -> bool:\n\treturn true\n"
+   }
+  ]
+ },
+ {
+  "id": "race-dive-while-turning",
+  "bug": "Courses asked for a steep dive out of a hard turn (the turn's metres counted toward the dive): the faster birds couldn't get down to the next window (2026-11-05, found by LinePilot).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\treturn envelope.turn_r * (_flat(na).angle_to(ld) + ld.angle_to(_flat(nb)))",
+    "replace": "\treturn 0.0"
+   }
+  ]
+ },
+ {
+  "id": "race-falcon-run-in",
+  "bug": "The level run-in before a gate after a dive was 8 m whatever the bird: the falcon, fastest, couldn't settle into low windows (2026-11-05, found by LinePilot).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\treturn maxf(DIVE_RUN, v_fast * DIVE_RUN_S)",
+    "replace": "\t\treturn DIVE_RUN"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-uturn-long",
+  "bug": "A go-around's U-turn came out four times as long: the one-circle case (start and end on the same circle) was skipped (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n",
+    "replace": "\t\t\t\tif dd < 1e-3:\n\t\t\t\t\tcontinue\n\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-stuck-on-ground",
+  "bug": "A racer that came down on the ground never took off again: AIPilot's take-off waited on its own clock, which nothing advanced (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tguide.clock = _clock   # (its take-off from the ground times its rest by this)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "race-ai-height-too-near",
+  "bug": "The racer took its height from a point 0.3 s ahead: the fast birds pitched up and down and bonked into the gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "const VERT_LOOK := 0.6",
+    "replace": "const VERT_LOOK := 0.3"
+   }
+  ]
+ },
+ {
+  "id": "mouse-invert-ignored",
+  "bug": "The mouse's invert setting did nothing: the mouse toward you still pulled (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "\tstick.y += rel.y * sensitivity * (-1.0 if invert_mouse else 1.0)",
+    "replace": "\tstick.y += rel.y * sensitivity"
+   }
+  ]
+ },
+ {
+  "id": "pad-invert-ignored",
+  "bug": "The stick's invert setting did nothing (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "\t\tif invert_pad:\n\t\t\ts.y = -s.y",
+    "replace": "\t\tif false:\n\t\t\ts.y = -s.y"
+   }
+  ]
+ },
+ {
+  "id": "controller-ignores-settings",
+  "bug": "A new PlayerController didn't take the saved mouse setting: the game flew uninverted whatever the menu said (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "var invert_mouse := Settings.invert_mouse_y",
+    "replace": "var invert_mouse := false"
+   }
+  ]
+ },
+ {
+  "id": "settings-not-saved",
+  "bug": "The Settings screen's mouse choice wasn't saved: it was gone next run (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/settings_panel.gd",
+    "find": "\t\t\t\t\tSettings.invert_mouse_y = i == 1\n\t\t\t\t\tSettings.save()",
+    "replace": "\t\t\t\t\tSettings.invert_mouse_y = i == 1"
+   }
+  ]
+ },
+ {
+  "id": "pause-runs-on",
+  "bug": "The pause menu opened over a game that kept running (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tget_tree().paused = true\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pause-settings-not-taken",
+  "bug": "A setting changed in the pause menu didn't reach the player's controller until the next run (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\t\tc.take_settings()\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "pause-mouse-held",
+  "bug": "Pausing kept the mouse captured: no cursor to click Resume (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tget_tree().paused = true\n\t_mouse(Input.MOUSE_MODE_VISIBLE)\n",
+    "replace": "\tget_tree().paused = true\n"
+   }
+  ]
+ },
+ {
+  "id": "pause-focus-out-ignored",
+  "bug": "Alt-tabbing away left the game running with the mouse free (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tif what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_out:",
+    "replace": "\tif what == NOTIFICATION_APPLICATION_FOCUS_IN and pause_on_focus_out:"
+   }
+  ]
+ },
+ {
+  "id": "range-no-pause",
+  "bug": "Esc in the range had no pause menu (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/combat_range.gd",
+    "find": "\tpause = PauseMenu.attach(self, [player_ctl], restart)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pause-mouse-not-recaptured",
+  "bug": "Resuming left the mouse free: a click to capture it again, and that click could fire (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\t\tc.take_settings()\n\t_mouse(Input.MOUSE_MODE_CAPTURED)\n",
+    "replace": "\t\tc.take_settings()\n"
+   }
+  ]
+ },
+ {
+  "id": "start-over-does-nothing",
+  "bug": "The pause menu's Start over only resumed: the bird flew on where it was (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tif start_over.is_valid():\n\t\tstart_over.call()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pad-start-respawns",
+  "bug": "The gamepad's Start still started over instead of pausing: no pause menu on the pad (2026-11-05).",
+  "tests": [
+   "test_pause",
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/input_setup.gd",
+    "find": "\t\"pause\": JOY_BUTTON_START,",
+    "replace": "\t\"respawn\": JOY_BUTTON_START,"
+   }
+  ]
+ },
+ {
+  "id": "race-start-over-perch",
+  "bug": "After the merge with the pause menu, its Start over in a race put you back on the perch you were on, not the course's start, and left the clock and the racers as they were (2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/game.gd",
+    "find": "\t_spawn_player(profile_id, course.start if race else (bird.perch if bird.perch != null else layout.start_perch()))\n\n\nfunc _unhandled_input",
+    "replace": "\t_spawn_player(profile_id, bird.perch if bird.perch != null else layout.start_perch())\n\n\nfunc _unhandled_input"
+   }
+  ]
+ },
+ {
+  "id": "menu-race-course-dropped",
+  "bug": "The Race screen's course choice not passed to the game: every course button raced the arena's own course (2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/menu.gd",
+    "find": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird, \"--course\", str(COURSES[race_course]),\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])",
+    "replace": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird,\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])"
+   }
+  ]
+ },
+ {
+  "id": "race-finish-at-last-gate",
+  "bug": "The race finished at the last gate, out in the wood: it starts and ends on the outpost's rail, the clock stopping when the bird lands back on it (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tnext += 1\n\t\tevent = \"gate\"",
+    "replace": "\t\tnext += 1\n\t\tevent = \"gate\"\n\t\tif next >= course.gates.size():\n\t\t\tphase = Phase.FINISHED\n\t\t\ttime = clock\n\t\t\tevent = \"finish\""
+   }
+  ]
+ },
+ {
+  "id": "race-finish-any-perch",
+  "bug": "Landing on any perch after the last gate finished the race, not just the start rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tif perch == course.start:",
+    "replace": "\t\tif perch != null:"
+   }
+  ]
+ },
+ {
+  "id": "race-recent-best-only",
+  "bug": "Only best times were kept, so the HUD's average of the last three ignored the slower finishes (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_record.gd",
+    "find": "\tr.append(time)\n",
+    "replace": "\tif b.is_empty() or time < float(b.time):\n\t\tr.append(time)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-never-home",
+  "bug": "AI racers, every gate taken, glided on instead of landing on the rail: none finished (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tif run.home():\n\t\treturn _home(bird, dt)\n",
+    "replace": "\tif run.home():\n\t\treturn guide._hold_glide(bird, dt)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-home-departure-clearance",
+  "bug": "Racers flying home kept AIPilot's departure clearance round the start rail's tree (the one they took off from), which pushed them off the final approach: the pilot sparrow circled the rail and never landed (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\tguide._last_tree = -1   # (the rail is where it's going now, not the tree it left: no departure clearance round it)\n\t\tguide._left_perch = -1\n\t\tguide._takeoff_pos = Vector3.INF\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "lead-mark-on-lead-point",
+  "bug": "The lead mark sat on the lead point itself: the camera rides above the line of fire, so the gunsight over it shot under a near balloon and over a far one (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn from + (lead_point(t) - from).normalized() * SIGHT_RANGE",
+    "replace": "\treturn lead_point(t)"
+   }
+  ]
+ },
+ {
+  "id": "hud-lead-at-lead-point",
+  "bug": "The HUD drew the lead mark at the lead point, not where the sight must be (lead_sight) (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+   }
+  ]
+ },
+ {
+  "id": "lead-no-drop",
+  "bug": "The lead left out the round's drop: a far balloon was shot under (2026-11-05).",
+  "tests": [
+   "test_aim_lead",
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn tp + tv * flight + Vector3.UP * 0.5 * Projectile.G * flight * flight",
+    "replace": "\treturn tp + tv * flight"
+   }
+  ]
+ },
+ {
+  "id": "target-birds-only",
+  "bug": "The HUD's target was birds only: a balloon on the sight got no bracket or lead mark (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tfor o in _birds + (_world.balloons if _world != null else []):",
+    "replace": "\tfor o in _birds:"
+   }
+  ]
+ },
+ {
+  "id": "target-down-balloon",
+  "bug": "A balloon that was down could still be the HUD's target (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\t\treturn not (o as TargetBalloon).is_down()",
+    "replace": "\t\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "target-no-hold",
+  "bug": "The HUD's target flicked between two near the sight: a pick wasn't held against one only a little nearer (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tvar best_a := held * PICK_KEEP if held < INF else PICK_CONE",
+    "replace": "\tvar best_a := held if held < INF else PICK_CONE"
+   }
+  ]
+ },
+ {
+  "id": "ai-targets-balloons",
+  "bug": "The AI's simple fire control took the HUD's target, so it shot at balloons (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\tvar t := l.target_bird()",
+    "replace": "\tvar t := l.target()"
    }
   ]
  }

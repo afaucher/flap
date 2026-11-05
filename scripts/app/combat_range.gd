@@ -11,7 +11,9 @@ extends Node3D
 ## (the HUD warns of its locks and rounds). Each side has a base: yours as above,
 ## theirs the outpost farthest from it. A downed bird comes back at its side's base once its down stun is over
 ## (mended, rearmed), and the circuit birds fly out from there and back to their racetracks. The score: the
-## enemy birds each side has downed.
+## enemy birds each side has downed. Round the clearing ride target balloons (TargetBalloon, --no-balloons: none): bullets
+## hole them and they sink, a rocket's burst sets one alight, and each is winched up again BALLOON_RESPAWN s after it's
+## down (the HUD counts yours).
 ##   .\range.ps1 [--bird <id>] [--target <id>] [--loadout <left>,<right>] [--seekers] [--no-evade] [--demo]
 ##       [--shot <png> --shot-after <s>]
 ## Every bird carries the war tack: a pod each side of the rider. Yours are --loadout <left>,<right>, each rockets
@@ -25,7 +27,7 @@ extends Node3D
 ## (--team crow,hawk) against three combat-AI birds (--enemy falcon,owl,crow) out from the far base, at --skill
 ## recruit | pilot (default) | ace. Each AI bird carries its species' round (CombatStyle). The score is the match.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
-## T target evasion on/off, R restart, Esc release the mouse.
+## T target evasion on/off, Esc pauses (PauseMenu: Resume, Start over, Settings, Leave).
 
 const CIRCUIT_CENTRE := Vector3(0.0, 20.0, 0.0)   ## over the clearing, up among the emergent trees
 const CIRCUIT_LENGTH := 40.0   ## m of straight: time to lock
@@ -43,6 +45,7 @@ var audio: GameAudio
 var flight_hud: FlightHud
 var combat_hud: CombatHud
 var player_ctl := PlayerController.new()
+var pause: PauseMenu   ## Esc: Resume, Settings, Leave, the range paused
 var bird: Bird
 var target: Bird
 var target_pilot: CircuitPilot
@@ -66,6 +69,10 @@ var match_skill := "pilot"
 var match_team: Array = ["crow", "hawk"]               ## your two AI wingmen
 var match_enemy: Array = ["falcon", "owl", "crow"]     ## the other side
 var match_birds: Array = []  ## the AI birds of a match (yours and theirs)
+var with_balloons := true    ## target practice's balloons round the clearing (--no-balloons: none)
+const BALLOON_CABLES := [6.0, 11.0, 8.0, 14.0, 9.5]   ## m: from just over the ferns to up among the crowns
+const BALLOON_BREEZE := Vector3(1.0, 0.0, 0.35)       ## the way they lie (the range's air is calm: AirField)
+const BALLOON_RESPAWN := 12.0                         ## s down before a fresh one goes up
 
 
 func _ready() -> void:
@@ -80,6 +87,7 @@ func _ready() -> void:
 	with_wingman = not args.has("--no-wingman")
 	return_fire = args.has("--return-fire")
 	match_mode = args.has("--match")
+	with_balloons = not args.has("--no-balloons")
 	FlightAssist.configure(args)   # (--flying novice: the landing assist, more stamina)
 	if Boot.arg_value(args, "--skill") in ["recruit", "pilot", "ace"]:
 		match_skill = Boot.arg_value(args, "--skill")
@@ -133,6 +141,7 @@ func _ready() -> void:
 	combat_hud = CombatHud.new()
 	layer.add_child(combat_hud)
 	await screen.run([["Saddling the birds", restart, 1.0]], 0.97)
+	pause = PauseMenu.attach(self, [player_ctl], restart)
 	is_loaded = true
 	loaded.emit()
 	screen.finish()
@@ -153,7 +162,7 @@ func restart() -> void:
 			world.remove_bird(b)
 			trails.untrack(b)
 			b.queue_free()
-	world.stats = {"shots": 0, "hits": 0, "kills": 0}
+	world.stats = {"shots": 0, "hits": 0, "kills": 0, "balloons": 0}
 	world.score = {YOUR_TEAM: 0, THEIR_TEAM: 0}
 	home = _home()
 	their_base = CombatWorld.far_base(layout, home.position)
@@ -166,6 +175,7 @@ func restart() -> void:
 		_start_match()
 	else:
 		_start_target()
+		_moor_balloons()
 	# You: coming into the clearing from the south, a little above the target (in a match, out from your base).
 	var flight: Object = player_ctl
 	var weapons: Object = PlayerCombat.new()
@@ -224,6 +234,33 @@ func _start_target() -> void:
 		_arm(wingman, wl, ai_pods())
 		trails.track(wingman, CombatHud.FRIEND)
 		_launch_wingman()
+
+
+## Target practice's balloons, moored round the clearing clear of its oak and the pines (TargetBalloon.moorings);
+## on a restart, the ones there are winched up fresh.
+func _moor_balloons() -> void:
+	if not with_balloons:
+		return
+	if not world.balloons.is_empty():
+		for bl: TargetBalloon in world.balloons:
+			bl.reset()
+		return
+	var centre := Vector2.ZERO
+	var open_r := 0.0
+	for o in layout.openings:
+		if o.kind == "clearing" and o.r > open_r:
+			centre = o.centre
+			open_r = o.r
+	var spots := TargetBalloon.moorings(layout, centre, BALLOON_CABLES.size(), BALLOON_CABLES)
+	for i in spots.size():
+		var bl := TargetBalloon.new(i)
+		bl.name = "Balloon %d" % (i + 1)
+		bl.cable = BALLOON_CABLES[i]
+		bl.breeze = BALLOON_BREEZE.normalized()
+		bl.respawn_after = BALLOON_RESPAWN
+		add_child(bl)
+		bl.position = spots[i]
+		world.balloons.append(bl)
 
 
 ## A team match: two combat-AI wingmen out from your base, three combat-AI birds out from theirs, each team sharing
@@ -390,16 +427,12 @@ func _unhandled_input(e: InputEvent) -> void:
 	PlayerCombat.handle_event(e, Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)   # (before capturing: that click doesn't fire)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	if e.is_action_pressed("release_mouse"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F7:
 		print("TAA ", "on" if Antialias.toggle(self) else "off")
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F6:
 		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
 		ForestLight.toggle_far_blur(self)
-	if e.is_action_pressed("respawn"):
-		restart()
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_T:
 		evade = not evade
 		if target_pilot != null:

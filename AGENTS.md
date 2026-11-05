@@ -48,6 +48,28 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
+- `scripts/race/`: race mode, a prototype (`docs/design/race.md`; the menu's Race screen, or `.\run.ps1 --race
+  [--race-ai recruit|pilot|ace] [--course <n>] [--plan-for <birds>]`; the pause menu's Start over restarts the race). `RaceCourse` generates 10 gates from the layout (posts on
+  open ground, low or tall; between two pines; hoops hung from a limb or a rope between two pines) from an outpost's
+  rail, by a beam search under planning rules from the birds' performance (`Envelope`: the widest turning circle and
+  wings of the birds racing, the hawk's by default): a clear way in and out of each window, each leg's flown line
+  (`flown_line`) clear by half a wingspan and turning no tighter than that circle, posts and ropes off the line, the
+  next gate seen from the one before (and the one after it, unless the turn is tight: `marked`); `problems()` lists
+  any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
+  the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken; misses;
+  splits within the tick), `RacePilot` an
+  AI racer (a FlightInput only): it follows the course's planned line by an L1 pursuit, its skill (`CombatSkill`
+  presets) degrading look-ahead, bank, reaction, aim and pace; a missed gate it goes round on a planned Dubins path
+  (`RacePilot.dubins`) to the gate's way in; AIPilot.steer only for wood ahead and low-speed recovery; home to the
+  rail, AIPilot.go_to_perch lands it; `RaceView` placeholder gates,
+  `RaceHud` (the clock top centre; best and the average of the last three top right), `RaceRecord` best and recent
+  times. `RaceTrial` (test_support) races birds headless; `tests/probe_race_home.gd` lands each bird on the rail from
+  the last gate (the AI falcon can't yet); `tests/probe_race.gd` prints a
+  course leg by leg against each bird's turning circle, races every bird at every skill, writes an SVG map
+  (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). Flyability apart from the AI:
+  `LinePilot` (test_support) flies the planned line exactly through the bird's own flight model, leg by leg;
+  `tests/probe_flyable.gd` marks each leg for each bird (a leg no bird can fly is the course's, one the AI misses the
+  AI's). `test_race` (every bird flies the course, by LinePilot).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
   burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
@@ -101,7 +123,13 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: a screen to pick your bird and how it flies,
   Novice | Realistic (`--flying`), then the game without the tack, `Menu.flight_options()`; Fight: a screen to pick your
   bird, each pod's weapon (rockets | seekers | gun, `--loadout <left>,<right>`), Novice | Realistic, the 3 v 3 match (at
-  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; `--page flight|fight`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
+  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Race: your bird, one of
+  `Menu.COURSES`, rivals (none | recruits | pilots | aces), Novice | Realistic, your best there (`RaceRecord`), the
+  rules, `Menu.race_options()`, the game's `--race` without the tack; Lab; Settings: which way the
+  mouse and the stick climb (`Settings`, `user://settings.cfg`, loaded by `Boot` but not for tests; `PlayerController`
+  takes it when made) and the controls, read from `InputSetup`'s bindings (`keys_for` / `pad_for`), the panel `SettingsPanel` (tabs Keyboard / Mouse / Gamepad, the bindings on disabled plates, ready for rebinding), its parts `MenuStyle`'s
+  (`page`, `row`, `button`, ...); in the game and the range Esc or losing focus opens `PauseMenu` (`scripts/ui/`: the tree
+  paused, Resume / Start over (the scene's: `Game.start_over`, the range's `restart`) / Settings / Leave; Esc or Start; resuming recaptures the mouse and `take_settings()`; `tests/probe_pause_shot.gd`); `--page flight|fight|settings`), in `MenuStyle`'s brass-on-leather look over `MenuBackdrop` (birds
   with riders idling on an outpost rail; `--no-backdrop`, `--shot <png>`, `--page fight`). The scenes read
   `Boot.args()` (the command line plus the menu's choice). The game and the range load behind `Loading` (the same
   look): the layout on a worker thread (headless: inline), `ArenaBuilder.steps()` a frame apart, the birds; they
@@ -109,6 +137,22 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/combat/`: the combat proof of concept (`.\range.ps1`). `CombatFx` (visual only): a burst's flash, light,
   smoke and embers; knocked-out feathers leave the wing as copies of the rig's own cards (`BirdRig.feather_copy`)
   and flutter to the ground; down; ruffled coverts; shedding.
+- `scripts/combat/target_balloon.gd`: `TargetBalloon`, target practice's balloons (five round the clearing, `combat_range.gd`
+  `_moor_balloons`, `TargetBalloon.moorings`; `--no-balloons`): a Caquot kite balloon at
+  the riders' 1:20.6 (1.36 m), moored to a hand winch on a stump, nose into `breeze`. Stages (`stage()`): UP, HOLED
+  (`bullet_hit`: a hole in and out, each leaking `LEAK` of its gas a second), SINKING (soft: the nose cups, the tail
+  and fins droop, lower on its cable), DOWN (a limp heap on the ground), BURNING (`burst_near`: the fire runs over it
+  from where it caught, `balloon.gdshader`), FALLING, WRECK. Holes and the burn are in rest space (CUSTOM0).
+  `clear_spot` checks a mooring is clear of wood and crowns. In `CombatWorld.balloons`: a bullet through one holes it
+  and flies on, a rocket's or seeker's fuse takes one, a burst within `BALLOON_IGNITE` sets it alight; down, the last
+  to hit it is credited (`stats.balloons`, `balloon_downed`; the HUD counts yours), and `respawn_after` s on the ground
+  a fresh one is winched up. Birds fly through them (no collision yet), and seekers don't lock on them. The HUD's
+  target (`Launcher.target`) is an enemy or a balloon still up, whichever is nearest the sight within `PICK_CONE` (20 deg;
+  held until another is nearer by `PICK_KEEP`), else the nearest enemy in front; the AI's is `target_bird` (birds only).
+  The lead mark is drawn at `Launcher.lead_sight`: where the gunsight must be for the round to meet the target (drop
+  allowed for, and the chase camera riding above the line of fire, so ring on mark hits at any range and zoom; the
+  lead point itself is right only at the sight's 25 m). `test_aim_lead`; `tests/probe_gun_aim.gd` measures the miss.
+  `tests/probe_balloon.gd` renders each stage in the clearing; `test_target_balloon`, `test_balloon_range`.
 - `scripts/combat/ai/`: the combat AI (`docs/design/combat_ai.md`, section 11 for what's built): `CombatSense` (what a
   bird can see) -> `CombatBrain` (a Beehave tree, `CombatTree`, built in code; `addons/beehave`) -> an `Intent` that
   `CombatPilot` flies through `AIPilot.steer()` and `AICombat` fires by (`FireControl` flies the real `Projectile`).

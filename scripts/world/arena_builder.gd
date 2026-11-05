@@ -1374,6 +1374,16 @@ func _timber(key: String, params: Dictionary) -> Material:
 		return _mat("pw_" + key, params.get("wood", Color(0.55, 0.44, 0.32)))
 	var k := "timber_" + key + str(params)
 	if not _mats.has(k):
+		_mats[k] = timber_material(params)
+	return _mats[k]
+
+
+## Weathered timber (planks.gdshader) with `params` set, for a TimberMesh built outside the arena (TargetBalloon's
+## winch); one per set of params, shared.
+static var _timber_cache := {}
+static func timber_material(params: Dictionary) -> Material:
+	var k := str(params)
+	if not _timber_cache.has(k):
 		var m := ShaderMaterial.new()
 		m.shader = PLANKS_SHADER
 		var w := "res://assets/textures/planks/weathered_planks/weathered_planks"
@@ -1384,5 +1394,5 @@ func _timber(key: String, params: Dictionary) -> Material:
 		m.set_shader_parameter("scan_tint", Color(1.58, 1.3, 1.0))
 		for p in params:
 			m.set_shader_parameter(p, params[p])
-		_mats[k] = m
-	return _mats[k]
+		_timber_cache[k] = m
+	return _timber_cache[k]

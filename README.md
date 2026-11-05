@@ -32,6 +32,12 @@ centre); mouse and keyboard work too.
     Its straights are long enough to lock, its turns break the lock, and it breaks away when you lock or shoot it
     (T: it flies straight).
 - **Lab**: the bird lab, for looking at the birds, their poses, take-offs and landings.
+- **Settings**: tabs for the keyboard, the mouse and the gamepad, each listing its controls; the Mouse tab sets which
+  way the mouse climbs (toward you, as a flight stick's pull, or away), the Gamepad tab the same for the stick, saved
+  for next time. (The bindings can't be changed yet.)
+
+**Esc** (or the gamepad's Start) in the game pauses it, as does switching away from the window: Resume, Start over,
+Settings (the same screen) or Leave, back to this menu.
 
 **Novice or Realistic** (both screens; Novice is the menu's default). *Novice*: hold catch near a perch and the
 bird lines itself up and lands for you; every bird gets half as much stamina again, recovers it twice as fast and
@@ -41,7 +47,7 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 
 | Gamepad | Mouse + keyboard | What it does |
 |---|---|---|
-| Left stick | Mouse (click to capture it, Esc lets go) | Bank left / right. Pull back: climb, slow down, flare. Push: dive, speed up, tuck. |
+| Left stick | Mouse (click to capture it) | Bank left / right. Pull back (the mouse toward you): climb, slow down, flare. Push: dive, speed up, tuck. Settings turns either round. |
 | (let go) | C or middle mouse | Centre: wings level, best glide |
 | Left trigger | Space | Flap (hold to keep flapping); take off from a perch or the ground |
 | A (hold) | Ctrl (hold) | Catch: hold it through the approach to land on a perch; on a perch, press again to drop off |
@@ -49,7 +55,7 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 | RB | Q | Switch weapon (when your two pods carry different kinds) |
 | Right stick | | Look around (the camera springs back) |
 | | Mouse wheel | Zoom the camera in and out |
-| Start | R | Start over |
+| Start | Esc | Pause: Resume, Start over, Settings, Leave |
 | | F1 | Show the key hints again |
 | | F3 | Instruments: speed tape, pitch ladder, bank arc, angle of attack, lift / drag |
 | | F6 | The light: golden (default), afternoon, clear, misty morning, overcast |
@@ -73,8 +79,9 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 
 Your rider's pods face forward: **you aim by flying the bird**. Each pod carries one kind:
 
-- **Rockets** (three a pod). Unguided, with a proximity fuse: fly the sight onto the lead mark (where the target
-  will be when the rocket arrives) and fire from 8-22 m behind.
+- **Rockets** (three a pod). Unguided, with a proximity fuse: fly the sight onto the lead mark (where the sight
+  must be for the rocket to meet the target, its drop and your view over the guns allowed for) and fire from 8-22 m
+  behind. The target is whatever is nearest your sight: a bird, or in target practice a balloon.
 - **Seekers** (two a pod). Guided. Hold an enemy within 15 deg of your nose for a second, 6-40 m away, to lock;
   then fire and they steer themselves. **The lock needs a clear line**: a trunk, a branch or a deck between you
   stops it building, and it drains if the line stays blocked. Leaves don't count.

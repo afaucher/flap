@@ -25,7 +25,14 @@ extends Node3D
 ##   --calm             still air: no thermals (AirField.enabled)
 ##   --flying <mode>    realistic (default) | novice: a landing assist while catch is held, more stamina (FlightAssist)
 ##   --no-taa           no temporal anti-aliasing (Antialias; F7 toggles in game)
-## The mouse wheel zooms the chase camera in and out.
+##   --race             race mode: a course of gates through the wood (RaceCourse) from an outpost's rail, against the
+##                      clock (RaceRun; best times kept, RaceRecord); no AI birds unless asked for; the pause menu's
+##                      Start over puts everyone back on the start
+##   --course <n>       the course's seed (default: the arena's)
+##   --race-ai <skill>  AI racers (RacePilot: recruit | pilot | ace) on the course with you, one of each other bird
+##   --plan-for <birds> the birds the course is planned for (RaceCourse.Envelope; default all five)
+##   --race-record <f>  keep race times in this file instead of user://race_best.cfg (RaceRecord.path: shots, tests)
+## The mouse wheel zooms the chase camera in and out. Esc (or the window losing focus) pauses: PauseMenu.
 ## The arena grows behind a loading screen (Loading): the layout on a worker thread, the wood built a step a frame,
 ## the birds spawned; `loaded` fires (and `is_loaded` turns true) when it's ready to fly.
 
@@ -36,12 +43,25 @@ var camera: ChaseCamera
 var hud: FlightHud
 var audio: GameAudio
 var player := PlayerController.new()
+var pause: PauseMenu   ## Esc: Resume, Settings, Leave, the game paused
 var autopilot: AIPilot
 var ai_birds: Array[Bird] = []
 var profile_id := "crow"
 var use_autopilot := false
 var rider := true            ## crows, falcons and hawks carry the war tack (--no-rider: none)
 var is_loaded := false       ## the arena built and the birds spawned (behind the loading screen until then)
+var race := false            ## --race
+var course: RaceCourse
+var race_run: RaceRun        ## the player's
+var race_view: RaceView
+var race_hud: RaceHud
+var race_key := ""           ## RaceRecord's for this course, bird and way of flying
+var racers: Array = []       ## AI racers: {bird, run, pilot, prev}
+var _race_prev := Vector3.ZERO
+var _race_skill := ""
+var _flying := "realistic"
+var _arena_seed := 7
+var _course_seed := 7
 signal loaded
 
 
@@ -53,7 +73,15 @@ func _ready() -> void:
 	var seed_arg := Boot.arg_value(args, "--seed")
 	var arena_seed := int(seed_arg) if seed_arg != "" else 7
 	var ai_arg := Boot.arg_value(args, "--ai")
-	var ai_count := int(ai_arg) if ai_arg != "" else 3
+	race = args.has("--race")
+	var ai_count := int(ai_arg) if ai_arg != "" else (0 if race else 3)
+	_arena_seed = arena_seed
+	_course_seed = int(Boot.arg_value(args, "--course")) if Boot.arg_value(args, "--course") != "" else arena_seed
+	_race_skill = Boot.arg_value(args, "--race-ai")
+	if Boot.arg_value(args, "--race-record") != "":
+		RaceRecord.path = Boot.arg_value(args, "--race-record")
+	_flying = "novice" if Boot.arg_value(args, "--flying") == "novice" else "realistic"
+	var plan_for: Array = Array(Boot.arg_value(args, "--plan-for").split(",")) if Boot.arg_value(args, "--plan-for") != "" else BirdProfile.IDS
 	use_autopilot = args.has("--autopilot")
 	rider = not args.has("--no-rider")
 	if args.has("--no-far-blur"):
@@ -84,12 +112,27 @@ func _ready() -> void:
 	else:
 		_environment()
 	Pinewood.cliff = args.has("--cliff")   # (the escarpment at the edge: on hold, off unless asked for)
-	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(arena_seed)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(arena_seed))
-	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
+	var hold := {}   # (the course, generated with the wood on the loading screen's worker, its posts put in before the build)
+	var want_race := race
+	var cs := _course_seed
+	var make := func() -> ArenaLayout:
+		var l := Pinewood.generate(arena_seed) if pinewood else ArenaLayout.generate(arena_seed)
+		if want_race:
+			var c := RaceCourse.generate(l, cs, plan_for)
+			c.apply(l)
+			hold.course = c
+		return l
+	layout = await screen.generate(make, 0.25, (1.5 if pinewood else 0.2) + (4.0 if race else 0.0))
+	if race:
+		course = hold.course
 	HdrOutput.add(self)
 	arena = ArenaBuilder.new()
 	add_child(arena)
 	await screen.run(arena.steps(layout), 0.85)
+	if race:
+		race_view = RaceView.new()
+		add_child(race_view)
+		race_view.build(course)
 	var air_fx := AirFx.new()   # (the thermals made visible: fluff rising in them)
 	add_child(air_fx)
 	air_fx.build(layout.air)
@@ -102,11 +145,20 @@ func _ready() -> void:
 	add_child(layer)
 	hud = FlightHud.new()
 	layer.add_child(hud)
+	if race:
+		race_hud = RaceHud.new()
+		layer.add_child(race_hud)
 	audio = GameAudio.new()
 	add_child(audio)
-	var birds := [["Saddling the birds", _spawn_player.bind(profile_id, layout.start_perch()), 1.0]]
+	var birds := [["Saddling the birds", _spawn_player.bind(profile_id, course.start if race else layout.start_perch()), 1.0]]
 	for i in ai_count:
 		birds.append(["Saddling the birds", _spawn_ai.bind(i, arena_seed), 1.0])
+	if race and _race_skill != "":
+		var k := 0
+		for id in BirdProfile.IDS:
+			if id != profile_id:
+				birds.append(["Saddling the birds", _spawn_racer.bind(id, k), 1.0])
+				k += 1
 	await screen.run(birds, 0.97)
 
 	var perf := Boot.arg_value(args, "--perf")
@@ -121,6 +173,7 @@ func _ready() -> void:
 	if shot != "":
 		var after_arg := Boot.arg_value(args, "--shot-after")
 		_screenshot(shot, float(after_arg) if after_arg != "" else 3.0)
+	pause = PauseMenu.attach(self, [player], start_over)
 	is_loaded = true
 	loaded.emit()
 	await screen.finish()
@@ -139,6 +192,38 @@ func _spawn_ai(i: int, arena_seed: int) -> void:
 	b.perch_at(layout.perches[(i * 97 + 13) % layout.perches.size()])
 	audio.watch(b)
 	ai_birds.append(b)
+
+
+## An AI racer of species `id` on the start perch.
+func _spawn_racer(id: String, k: int) -> void:
+	var b := Bird.new()
+	b.name = "Racer%d" % k
+	var run := RaceRun.new(course)
+	add_child(b)
+	var pilot := RacePilot.new(layout, course, run, CombatSkill.preset(_race_skill), 500 + k)
+	b.setup(BirdProfile.by_id(id), layout, pilot)
+	b.arena = arena
+	b.perch_at(course.start)
+	audio.watch(b)
+	racers.append({"bird": b, "run": run, "pilot": pilot, "prev": b.global_position, "id": id, "k": k})
+
+
+## Race mode: everyone back on the start, the clocks reset.
+func _restart_race() -> void:
+	race_run = RaceRun.new(course)
+	_race_prev = bird.global_position
+	race_view.set_next(0)
+	race_hud.new_best = false
+	race_hud.best = RaceRecord.best(race_key)
+	race_hud.average = RaceRecord.average(race_key)
+	for r in racers:
+		var run := RaceRun.new(course)
+		var pilot := RacePilot.new(layout, course, run, CombatSkill.preset(_race_skill), 500 + int(r.k))
+		r.run = run
+		r.pilot = pilot
+		r.bird.controller = pilot
+		r.bird.perch_at(course.start)
+		r.prev = r.bird.global_position
 
 
 func _environment() -> void:
@@ -182,7 +267,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	bird = Bird.new()
 	bird.name = "Player"
 	add_child(bird)
-	bird.setup(BirdProfile.by_id(pid), layout, autopilot if use_autopilot else player)
+	bird.setup(BirdProfile.by_id(pid), layout, _autopilot_for() if use_autopilot else player)
 	bird.arena = arena
 	FlightAssist.fit(bird)   # (novice: perches highlighted from further out)
 	if rider and Tack.RIDDEN.has(pid):
@@ -193,15 +278,48 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	camera.bird = bird
 	camera.snap()
 	hud.autopilot = use_autopilot
+	if race:
+		race_key = RaceRecord.key(_course_seed, _arena_seed, pid, _flying)
+		_restart_race()
+		if use_autopilot:
+			bird.controller = _autopilot_for()
+
+
+## The autopilot: in a race an ace racer flying your run, else the perch-to-perch AI.
+func _autopilot_for() -> Object:
+	if race and race_run != null:
+		return RacePilot.new(layout, course, race_run, CombatSkill.preset("ace"), 77)
+	return autopilot
 
 
 func _physics_process(_dt: float) -> void:
 	if bird == null or not is_loaded:
 		return
+	if race:
+		_race_tick(_dt)
 	var p0 := Perf.t()
 	var mark := bird.candidate if FlightHud.show_perch(bird.last_input.catch_held) else null
 	arena.show_candidate(mark, bird.candidate_too_fast(), bird.profile.grab_radius, bird.candidate_grip)
 	Perf.add("game.candidate", p0)
+
+
+## Each bird's last tick fed to its run (this runs before the birds move this tick: it sees the move they made last).
+func _race_tick(dt: float) -> void:
+	race_run.step(_race_prev, bird.global_position, dt, RaceRun.perch_of(bird))
+	_race_prev = bird.global_position
+	if race_run.event == "gate":
+		race_view.set_next(race_run.next)
+	if race_run.event == "finish":
+		race_hud.new_best = RaceRecord.offer(race_key, race_run.time, race_run.splits)
+		race_hud.average = RaceRecord.average(race_key)
+		race_hud.best = RaceRecord.best(race_key)
+		print("race: %s %.2f s%s" % [profile_id, race_run.time, " (best)" if race_hud.new_best else ""])
+	for r in racers:
+		var b: Bird = r.bird
+		r.run.step(r.prev, b.global_position, dt, RaceRun.perch_of(b))
+		r.prev = b.global_position
+		if r.run.event == "finish":
+			print("race: %s (%s AI) %.2f s" % [r.id, _race_skill, r.run.time])
 
 
 func _process(_dt: float) -> void:
@@ -213,8 +331,16 @@ func _process(_dt: float) -> void:
 		hud.gamepad = player.using_gamepad
 		hud.set_state(t)
 		audio.set_state(t)
+		if race:
+			race_hud.set_state(race_run.state(), bird.global_position)
 		Perf.add("game.hud_audio", p0)
 	camera.look_input = player.look
+
+
+## The pause menu's Start over: your bird back on its perch (the one it's on, else the start); in a race, everyone back
+## on the course's start, the clocks reset.
+func start_over() -> void:
+	_spawn_player(profile_id, course.start if race else (bird.perch if bird.perch != null else layout.start_perch()))
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -223,8 +349,6 @@ func _unhandled_input(e: InputEvent) -> void:
 	player.handle_event(e)
 	if e is InputEventMouseButton and e.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	if e.is_action_pressed("release_mouse"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if e is InputEventMouseButton and e.pressed and (e.button_index == MOUSE_BUTTON_WHEEL_UP or e.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 		camera.zoom_by(-1.0 if e.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0)   # (the wheel: up in, down out)
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F7:
@@ -237,16 +361,14 @@ func _unhandled_input(e: InputEvent) -> void:
 		hud.debug = not hud.debug
 	if e.is_action_pressed("toggle_autopilot"):
 		use_autopilot = not use_autopilot
-		bird.controller = autopilot if use_autopilot else player
+		bird.controller = _autopilot_for() if use_autopilot else player
 		hud.autopilot = use_autopilot
-	if e.is_action_pressed("respawn"):
-		_spawn_player(profile_id, bird.perch if bird.perch != null else layout.start_perch())
 	if e.is_action_pressed("cycle_bird"):
 		var next: String = BirdProfile.IDS[(BirdProfile.IDS.find(profile_id) + 1) % BirdProfile.IDS.size()]
-		_spawn_player(next, bird.perch if bird.perch != null else layout.start_perch())
+		_spawn_player(next, course.start if race else (bird.perch if bird.perch != null else layout.start_perch()))
 	for i in BirdProfile.IDS.size():
 		if e.is_action_pressed("bird_%d" % (i + 1)):
-			_spawn_player(BirdProfile.IDS[i], bird.perch if bird.perch != null else layout.start_perch())
+			_spawn_player(BirdProfile.IDS[i], course.start if race else (bird.perch if bird.perch != null else layout.start_perch()))
 
 
 func _screenshot(path: String, after: float) -> void:
