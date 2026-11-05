@@ -4003,5 +4003,19 @@
     "replace": ""
    }
   ]
+ },
+ {
+  "id": "flying-round-oversized",
+  "bug": "A rocket or seeker in flight was drawn as a plain capsule about 5x the length and 20x the thickness of the round its pod carries, half a crow long (2026-11-04: the user saw it in the lab).",
+  "tests": [
+   "test_flying_round"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "const ROUND_GROW := 2.0",
+    "replace": "const ROUND_GROW := 6.0"
+   }
+  ]
  }
 ]

@@ -48,7 +48,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
   Weapons: a pod each side of the rider (`Saddle` loadout, left and right, each `rockets` x3, `seekers` x2 or `gun`,
   a belt-fed machine gun with `Launcher.GUN_POD` (40) rounds; tilted in a trunnion). `Launcher` carries each kind
-  summed over the pods (`set_tack`, `carried` / `left`), fires each round from its own pod's muzzle
+  summed over the pods (`set_tack`, `carried` / `left`), fires each round from its own pod's muzzle (in flight, the very round the pod carries, `Saddle.flying_round`,
+  drawn true size leaving the pod and at most `CombatWorld.ROUND_GROW` (2x) further out; `test_flying_round`)
   (`Tack.muzzle_world`; two gun pods take turns), and Q / RB (`next_weapon`) switches between the two kinds when they
   differ. `--loadout <left>,<right>` (one value: both; `--seekers` = seekers,seekers; `.\range.ps1 -Loadout gun,rockets`)
   arms your bird; the menu's Fight screen picks each pod. The target and circuit wingman carry yours with a gun

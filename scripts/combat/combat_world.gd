@@ -78,8 +78,6 @@ var tracers_drawn: Array = []   ## [tail, head] of each bullet's streak as last 
 var _bodies: Array = []     ## MeshInstance3D per live projectile (pooled)
 var _rocket_mesh: Mesh
 var _seeker_mesh: Mesh
-var _brass: StandardMaterial3D
-var _red: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -90,20 +88,9 @@ func _ready() -> void:
 	add_child(_mesh_node(_tracer_mesh, CombatFx._material(true)))
 	fx = CombatFx.new()
 	add_child(fx)
-	_brass = StandardMaterial3D.new()
-	_brass.albedo_color = Color(0.78, 0.62, 0.3)
-	_brass.metallic = 0.7
-	_brass.roughness = 0.35
-	_red = StandardMaterial3D.new()
-	_red.albedo_color = Color(0.75, 0.15, 0.12)
-	var cap := CapsuleMesh.new()
-	cap.radius = 0.035
-	cap.height = 0.22
-	_rocket_mesh = cap
-	var cap2 := CapsuleMesh.new()
-	cap2.radius = 0.04
-	cap2.height = 0.3
-	_seeker_mesh = cap2
+	# The rounds as they fly: the very rocket and seeker the pods carry (Saddle.flying_round), at the riders' scale.
+	_rocket_mesh = Saddle.flying_round("rockets", Tack.rider_height)
+	_seeker_mesh = Saddle.flying_round("seekers", Tack.rider_height)
 
 
 static func _mesh_node(m: ImmediateMesh, mat: Material) -> MeshInstance3D:
@@ -379,6 +366,10 @@ func _process(_delta: float) -> void:
 	_smoke = _smoke.filter(func(s): return s.open or (s.pts.size() > 0 and _clock - float(s.pts[-1][1]) < SMOKE_LIFE))
 
 
+const ROUND_GROW := 2.0   ## a rocket or seeker in flight is drawn up to this x its true size
+const GROW_OVER := 4.0    ## m it flies before it's drawn that big
+
+
 ## Each projectile where it is at the drawn moment: between its last two ticks, as the birds are (placed here each
 ## frame, so not interpolated again by the engine). Returns {id: drawn position}, where its smoke starts.
 func _draw_bodies(lag: float) -> Dictionary:
@@ -402,11 +393,11 @@ func _draw_bodies(lag: float) -> Dictionary:
 			continue
 		mi.visible = true
 		mi.mesh = _rocket_mesh if p.kind == Projectile.Kind.ROCKET else _seeker_mesh
-		mi.material_override = _brass if p.kind == Projectile.Kind.ROCKET else _red
 		var d := p.vel.normalized() if p.vel.length() > 0.1 else Vector3.FORWARD
 		var side := d.cross(Vector3.UP if absf(d.y) < 0.95 else Vector3.RIGHT).normalized()
-		# (leaving the pod it's drawn at its true size, a few cm, growing to the readable size over its first metres)
-		var grow := lerpf(0.16 if p.kind == Projectile.Kind.ROCKET else 0.1, 1.0, smoothstep(0.0, 4.0, p.travelled))
+		# (leaving the pod at its true size, growing to ROUND_GROW of it over its first GROW_OVER m, so it still reads
+		# out there; its smoke trail carries it further)
+		var grow := lerpf(1.0, ROUND_GROW, smoothstep(0.0, GROW_OVER, p.travelled))
 		var at := p.last_pos.lerp(p.pos, f)
 		heads[p.id] = at
 		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)).scaled(Vector3.ONE * grow), at)   # capsule's long axis is Y
