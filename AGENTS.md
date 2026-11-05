@@ -48,8 +48,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
-- `scripts/race/`: race mode, a prototype (`docs/design/race.md`; `.\run.ps1 --race [--race-ai recruit|pilot|ace]
-  [--course <n>] [--plan-for <birds>]`; not on the menu yet). `RaceCourse` generates 10 gates from the layout (posts on
+- `scripts/race/`: race mode, a prototype (`docs/design/race.md`; the menu's Race screen, or `.\run.ps1 --race
+  [--race-ai recruit|pilot|ace] [--course <n>] [--plan-for <birds>]`; the pause menu's Start over restarts the race). `RaceCourse` generates 10 gates from the layout (posts on
   open ground, low or tall; between two pines; hoops hung from a limb or a rope between two pines) from an outpost's
   rail, by a beam search under planning rules from the birds' performance (`Envelope`: the widest turning circle and
   wings of the birds racing, the hawk's by default): a clear way in and out of each window, each leg's flown line
@@ -119,7 +119,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/app/menu.gd`: run with no arguments, the menu (Flight: a screen to pick your bird and how it flies,
   Novice | Realistic (`--flying`), then the game without the tack, `Menu.flight_options()`; Fight: a screen to pick your
   bird, each pod's weapon (rockets | seekers | gun, `--loadout <left>,<right>`), Novice | Realistic, the 3 v 3 match (at
-  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Lab; Settings: which way the
+  recruit | pilot | ace) or target practice, with the mode's rules, `Menu.fight_options()`; Race: your bird, one of
+  `Menu.COURSES`, rivals (none | recruits | pilots | aces), Novice | Realistic, your best there (`RaceRecord`), the
+  rules, `Menu.race_options()`, the game's `--race` without the tack; Lab; Settings: which way the
   mouse and the stick climb (`Settings`, `user://settings.cfg`, loaded by `Boot` but not for tests; `PlayerController`
   takes it when made) and the controls, read from `InputSetup`'s bindings (`keys_for` / `pad_for`), the panel `SettingsPanel` (tabs Keyboard / Mouse / Gamepad, the bindings on disabled plates, ready for rebinding), its parts `MenuStyle`'s
   (`page`, `row`, `button`, ...); in the game and the range Esc or losing focus opens `PauseMenu` (`scripts/ui/`: the tree

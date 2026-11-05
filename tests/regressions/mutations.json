@@ -4682,5 +4682,33 @@
     "replace": "\tif e.is_action_pressed(\"respawn\"):\n\t\tstart_over()\n\tif e.is_action_pressed(\"cycle_bird\"):"
    }
   ]
+ },
+ {
+  "id": "race-start-over-perch",
+  "bug": "After the merge with the pause menu, its Start over in a race put you back on the perch you were on, not the course's start, and left the clock and the racers as they were (2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/game.gd",
+    "find": "\t_spawn_player(profile_id, course.start if race else (bird.perch if bird.perch != null else layout.start_perch()))\n\n\nfunc _unhandled_input",
+    "replace": "\t_spawn_player(profile_id, bird.perch if bird.perch != null else layout.start_perch())\n\n\nfunc _unhandled_input"
+   }
+  ]
+ },
+ {
+  "id": "menu-race-course-dropped",
+  "bug": "The Race screen's course choice not passed to the game: every course button raced the arena's own course (2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/menu.gd",
+    "find": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird, \"--course\", str(COURSES[race_course]),\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])",
+    "replace": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird,\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])"
+   }
+  ]
  }
 ]

@@ -2,10 +2,13 @@
 
 A course of gates through the pine wood, flown against the clock. This first version validates how racing works:
 how a course is laid out in the wood, what turns and climbs it asks of each bird, and how the AI racers fly it. The
-gates are placeholders (frames, bars and rings); their designs and the menu entry come later.
+gates are placeholders (frames, bars and rings); their designs come later.
 
-Play it: `.\run.ps1 --race [--bird hawk] [--flying novice] [--race-ai recruit|pilot|ace] [--course <n>]`
-(`--autopilot` or P: an ace racer flies your bird). Measure it: `.\probe.ps1 -Headless probe_race [--seed n]`.
+Play it from the menu's Race screen (your bird, Course 1-3: seeds 7, 11 and 3, the ones probed most; rivals: none,
+recruits, pilots or aces, one of each other bird; Novice | Realistic; your best on that course shown), or
+`.\run.ps1 --race [--bird hawk] [--flying novice] [--race-ai recruit|pilot|ace] [--course <n>]` (`--autopilot` or P: an
+ace racer flies your bird). The menu's race has no rider or tack (`--no-rider`); the pause menu's Start over puts
+everyone back on the rail, the clocks reset. Measure it: `.\probe.ps1 -Headless probe_race [--seed n]`.
 
 ## The course (`scripts/race/race_course.gd`)
 
@@ -147,4 +150,4 @@ same line; a racing line of its own (cutting corners, carrying speed) would.
 - The falcon turning back: even flapping it loses ~6 m in a 180 deg turn at 45-65 deg of bank, so a go-around beside a
   low gate can put it on the ground. The course rules' turning circle (85% of the bank limit, level) is optimistic for
   it: a course rule from its sustained level turn would be truer.
-- Courses per class (agile birds vs the hawk and falcon), ghosts, the menu entry.
+- Courses per class (agile birds vs the hawk and falcon), ghosts, riders and tack in a race.

@@ -1,15 +1,19 @@
 extends TestCase
-## The start menu and what its choices open: the menu lists Flight, Fight and the Lab. Flight opens its own screen
+## The start menu and what its choices open: the menu lists Flight, Fight, Race and the Lab. Flight opens its own screen
 ## (Esc back): your bird and how it flies (Novice | Realistic, with what each means); Start asks for the game with
 ## that bird and no tack on any bird (without Flight's options the riders are back). Fight opens its own screen:
 ## your bird, each pod's weapon, how it flies (the same choice as Flight's), the mode and, for a match, the AI's
 ## skill, each shown with what it means; Start opens the range as chosen -- that species, what each pod carries (the left
-## pod's selected; Q switches to the right's when it differs), the 3 v 3 match at that skill, or target practice with no match. Behind the menu, birds
+## pod's selected; Q switches to the right's when it differs), the 3 v 3 match at that skill, or target practice with no match.
+## Race opens its own screen: your bird, the course, who races you (with what each means) and your best time on that
+## course for that bird and way of flying (none, then the one kept); Start opens the game in race mode on that course
+## with that bird, no tack, and AI racers of each other bird at that skill (none when racing alone); the pause menu's
+## Start over puts you and them back on the course's start, the clock reset. Behind the menu, birds
 ## perched on an outpost's rail, their feet on it (each under its own hip, the legs not crossed), idling: each looks about and, within a few seconds, moves its
 ## tail, wings, plumage or neck.
 
 
-const SHARDS := 2   ## (the menu and the game in one process, the range in another)
+const SHARDS := 3   ## (the menu and the game in one process, the range in another, the race screen and its game in a third)
 
 
 func _init() -> void:
@@ -21,6 +25,8 @@ func setup() -> void:
 		await _menu_and_flight()
 	if in_shard(1):
 		await _fights()
+	if in_shard(2):
+		await _race()
 	Boot.extra = PackedStringArray()
 	finish()
 
@@ -32,7 +38,7 @@ func _menu_and_flight() -> void:
 	var labels := []
 	for c in Menu.CHOICES:
 		labels.append(c[0])
-	for want in ["Flight", "Fight", "Lab"]:
+	for want in ["Flight", "Fight", "Race", "Lab"]:
 		check(labels.has(want), "the menu offers " + want)
 	eq(menu.find_children("Choice*", "Button", true, false).size(), Menu.CHOICES.size(), "a button per choice")
 	await _backdrop(menu)
@@ -196,6 +202,100 @@ func _fights() -> void:
 			check(r.target != null and r.match_birds.is_empty(), what + ": the racetrack target, no match")
 		r.queue_free()
 		await frames(2)
+
+
+func _race() -> void:
+	RaceRecord.path = "user://test_menu_race_best_%d.cfg" % OS.get_process_id()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(RaceRecord.path))
+	var menu: Menu = load("res://scenes/menu.tscn").instantiate()
+	add_child(menu)
+	await frames(2)
+	var i := Menu.CHOICES.map(func(c: Array) -> String: return c[0]).find("Race")
+	(menu.find_child("Choice%d" % i, true, false) as Button).pressed.emit()
+	await frames(2)
+	var start := menu.find_child("RaceStart", true, false) as Button
+	var choice0 := menu.find_child("Choice0", true, false) as Button
+	check(start.is_visible_in_tree() and not choice0.is_visible_in_tree(), "Race opens its own screen")
+	check(not (menu.find_child("Start", true, false) as Button).is_visible_in_tree() and not (menu.find_child("FlightStart", true, false) as Button).is_visible_in_tree(), "and only its own")
+	eq(menu.find_children("Course*", "Button", true, false).size(), Menu.COURSES.size(), "a button per course")
+	(menu.find_child("RaceBird2", true, false) as Button).pressed.emit()   # owl
+	(menu.find_child("Course1", true, false) as Button).pressed.emit()     # the second course
+	await frames(1)
+	var text := _text(menu)
+	check(text.contains(BirdProfile.by_id(BirdProfile.IDS[2]).blurb), "picking the owl shows what it's like")
+	check(text.contains(Menu.RIVALS[0][2]), "racing alone by default, and what it means is on screen")
+	check(text.contains("No time set"), "no best time yet")
+	check(text.contains("the way it faces"), "the race's rules are on screen")
+	eq(Array(Menu.race_options()), ["--race", "--no-rider", "--bird", BirdProfile.IDS[2], "--course", str(Menu.COURSES[1]), "--flying", "novice"],
+		"Start asks for a race on that course with that bird, no tack, no rivals")
+	for k in Menu.RIVALS.size():
+		(menu.find_child("Rivals%d" % k, true, false) as Button).pressed.emit()
+		await frames(1)
+		check(_text(menu).contains(Menu.RIVALS[k][2]), "%s: what it means is on screen" % Menu.RIVALS[k][1])
+		var o := Array(Menu.race_options())
+		check(o.has("--race-ai") == (k > 0) and (k == 0 or o[o.find("--race-ai") + 1] == Menu.RIVALS[k][0]), "%s: and Start asks for them (%s)" % [Menu.RIVALS[k][1], str(o)])
+	(menu.find_child("Rivals2", true, false) as Button).pressed.emit()     # pilots
+	RaceRecord.offer(RaceRecord.key(Menu.COURSES[1], Menu.ARENA_SEED, BirdProfile.IDS[2], "novice"), 31.25, [])
+	(menu.find_child("Course0", true, false) as Button).pressed.emit()     # (a time on another course isn't shown)
+	await frames(1)
+	check(_text(menu).contains("No time set"), "a best on another course isn't this one's")
+	(menu.find_child("Course1", true, false) as Button).pressed.emit()
+	await frames(1)
+	check(_text(menu).contains("0:31.2") or _text(menu).contains("0:31.3"), "the best kept on this course is shown")
+	(menu.find_child("RaceFlying1", true, false) as Button).pressed.emit() # realistic: a best of its own
+	await frames(1)
+	check(_text(menu).contains("No time set"), "a novice best isn't a realistic one")
+	check((menu.find_child("Flying1", true, false) as Button).button_pressed and (menu.find_child("FlightFlying1", true, false) as Button).button_pressed, "the other screens' Flying follow it")
+	(menu.find_child("RaceFlying0", true, false) as Button).pressed.emit()
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	menu._unhandled_input(esc)
+	await frames(1)
+	check(choice0.is_visible_in_tree() and not start.is_visible_in_tree(), "Esc goes back")
+	menu.queue_free()
+
+	for rivals in ["pilot", ""]:
+		Menu.race_rivals = rivals
+		Boot.extra = Menu.race_options()
+		var game: Game = load("res://scenes/game.tscn").instantiate()
+		add_child(game)
+		if not game.is_loaded:
+			await game.loaded
+		await frames(3)
+		var what := "race (%s)" % (rivals if rivals != "" else "alone")
+		check(game.race and game.course != null and game.course.gates.size() == RaceCourse.GATES, what + ": the game opens in race mode on a full course")
+		if game.course != null:
+			eq(game.course.seed, Menu.COURSES[1], what + ": the course picked")
+			check(game.bird.perch == game.course.start, what + ": you on its start")
+		eq(game.bird.profile.id, BirdProfile.IDS[2], what + ": you fly the bird picked")
+		if game.course != null and rivals != "":   # (the pause menu's Start over: everyone back on the start, the clocks reset)
+			var away: Perch = game.layout.perches[0] if game.layout.perches[0] != game.course.start else game.layout.perches[1]
+			game.bird.perch_at(away)
+			game.race_run.phase = RaceRun.Phase.RUNNING
+			game.racers[0].bird.perch_at(away)
+			game.start_over()   # (checked at once: the racers leave the rail on their next tick)
+			check(game.bird.perch == game.course.start and game.race_run.phase == RaceRun.Phase.READY, what + ": Start over puts you back on the start, the clock reset")
+			check(game.racers[0].bird.perch == game.course.start, what + ": and the racers")
+		eq(game.ai_birds.size(), 0, what + ": no perch-to-perch AI birds")
+		var tacks := 0
+		for c in game.bird.rig.get_children():
+			tacks += int(c is Tack)
+		eq(tacks, 0, what + ": no rider or weapons")
+		if rivals == "":
+			eq(game.racers.size(), 0, what + ": no one else on the course")
+		else:
+			var ids := {}
+			for r in game.racers:
+				ids[r.id] = true
+				eq(((r.pilot as RacePilot).skill as CombatSkill).name, rivals, what + ": the %s races at that skill" % r.id)
+			eq(ids.size(), BirdProfile.IDS.size() - 1, what + ": one of each other bird")
+			check(not ids.has(BirdProfile.IDS[2]), what + ": and not yours")
+		game.queue_free()
+		await frames(2)
+	Menu.race_rivals = ""
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(RaceRecord.path))
+	RaceRecord.path = "user://race_best.cfg"
 
 
 ## All the text on the menu's visible labels.

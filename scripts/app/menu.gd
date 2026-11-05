@@ -1,22 +1,25 @@
 class_name Menu
 extends Control
 ## The start menu (run with no arguments): Flight (the game: the arena and its birds, no rider, no weapons),
-## Fight and the Lab. A choice opens its scene with its options added to the command line's (Boot.extra).
-## Keys: 1..4, or click.
+## Fight, Race and the Lab. A choice opens its scene with its options added to the command line's (Boot.extra).
+## Keys: 1..6, or click.
 ## Flight opens a screen first: your bird and how it flies (Novice: the landing assist and more power and stamina,
 ## FlightAssist; Realistic: none). Fight opens one too: your bird, what each pod carries (rockets, seekers or the
 ## machine gun, left and right; two kinds, and Q switches), how it flies, the mode (the 3 v 3 match, or target
 ## practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot | ace), with the
-## rules of the mode chosen. Enter starts either, Esc goes back. Settings: which way the mouse and the gamepad's stick
+## rules of the mode chosen. Race opens one: your bird, how it flies, the course (one of COURSES) and who races you
+## (no one, or AI racers at recruit | pilot | ace, one of each other bird), with your best time on that course and the
+## rules (the game's --race, RaceCourse). Enter starts any of them, Esc goes back. Settings: which way the mouse and the gamepad's stick
 ## climb and every control (SettingsPanel, the pause menu's too). The pages are built by MenuStyle's helpers.
 ## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
-## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight`: on the Fight
-## screen); `--no-backdrop` leaves the birds out.
+## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight|flight|race|settings`:
+## on that screen); `--no-backdrop` leaves the birds out.
 
 ## [label, scene, options] ("fight": the Fight screen)
 const CHOICES := [
 	["Flight", "flight", []],
 	["Fight", "fight", []],
+	["Race", "race", []],
 	["Lab", "res://scenes/bird_lab.tscn", []],
 	["Settings", "settings", []],
 	["Quit", "", []],
@@ -55,6 +58,22 @@ const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon.  Esc: pause."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
 Esc: pause (start over, settings, leave)."
+const COURSES := [7, 11, 3]   ## the Race screen's courses: RaceCourse seeds, on the game's arena (ARENA_SEED)
+const ARENA_SEED := 7          ## the game's arena with no --seed (the best times are kept per arena too)
+const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
+	["", "None", "Just you and the clock."],
+	["recruit", "Recruits", "One of each other bird. They wander off the line and often miss a gate and go round."],
+	["pilot", "Pilots", "One of each other bird. They hold the line well; a miss costs them a loop."],
+	["ace", "Aces", "One of each other bird, flying the line as cleanly as it can be flown."],
+]
+const RACE_RULES := "Ten gates through the wood, from the outpost's rail to the finish.
+- The clock starts when you leave the rail and stops at the finish gate.
+- Fly each gate through its window the way it faces, in order: the bright one is next, the softer one after it.
+- Pass beside the next gate and it's a miss: go round and take it.
+- Your best time on each course, for each bird and way of flying, is kept, with its splits.
+- Esc, Start over: back on the rail, the clock reset."
+const RACE_CONTROLS := "Mouse: steer.  Space: flap.  P: let an ace fly your bird.
+Esc: pause (start over, settings, leave)."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
@@ -64,15 +83,22 @@ static var fight_pods := ["rockets", "rockets"]   ## left, right
 static var fight_match := true
 static var fight_skill := "pilot"
 static var flight_bird := "crow"   ## the Flight screen's
+static var race_bird := "crow"     ## the Race screen's
+static var race_course := 0        ## (into COURSES)
+static var race_rivals := ""       ## (RIVALS' first column)
 static var novice := true          ## both screens' Flying choice (Novice from the menu; the command line's default is realistic)
 
-var page := "main"   ## "main" | "flight" | "fight" | "settings"
+var page := "main"   ## "main" | "flight" | "fight" | "race" | "settings"
 var backdrop: MenuBackdrop
 var _ui: Control   ## the pages
 var _main: VBoxContainer
 var _flight: VBoxContainer
 var _fight: VBoxContainer
 var _settings: VBoxContainer
+var _race: VBoxContainer
+var _race_blurb: Label
+var _rivals_note: Label
+var _best: Label
 var _blurb: Label
 var _flight_blurb: Label
 var _flying_notes: Array[Label] = []   ## (one on each screen)
@@ -89,7 +115,7 @@ func _ready() -> void:
 	if not Boot.args().has("--no-backdrop"):
 		backdrop = MenuBackdrop.new()
 		add_child(backdrop)
-	if Boot.arg_value(Boot.args(), "--page") in ["fight", "flight", "settings"]:
+	if Boot.arg_value(Boot.args(), "--page") in ["fight", "flight", "race", "settings"]:
 		page = Boot.arg_value(Boot.args(), "--page")
 	_build()
 	var shot := Boot.arg_value(Boot.args(), "--shot")
@@ -116,6 +142,7 @@ func _build() -> void:
 		_main.add_child(b)
 	_build_flight()
 	_build_fight()
+	_build_race()
 	_build_settings()
 	_show(page)
 
@@ -190,7 +217,48 @@ func _build_fight() -> void:
 	controls.text = CONTROLS
 	rules.add_child(controls)
 	_fight.add_child(_go(start_fight, "Start"))
-	_refresh()
+
+
+func _build_race() -> void:
+	_race = MenuStyle.page(_ui, "RACE", false)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 48)
+	_race.add_child(cols)
+	var pick := MenuStyle.column(COL_W)
+	var side := MenuStyle.column(RULES_W)
+	cols.add_child(pick)
+	cols.add_child(side)
+	pick.add_child(MenuStyle.heading("Your bird"))
+	pick.add_child(MenuStyle.row(BirdProfile.IDS.map(func(id: String) -> String: return BirdProfile.by_id(id).display_name),
+		BirdProfile.IDS.find(race_bird), func(i: int) -> void:
+			race_bird = BirdProfile.IDS[i]
+			_refresh(), "RaceBird"))
+	_race_blurb = MenuStyle.note(COL_W)
+	pick.add_child(_race_blurb)
+	pick.add_child(MenuStyle.heading("Course"))
+	pick.add_child(MenuStyle.row(range(COURSES.size()).map(func(i: int) -> String: return "Course %d" % (i + 1)), race_course,
+		func(i: int) -> void:
+			race_course = i
+			_refresh(), "Course"))
+	_best = MenuStyle.note(COL_W)
+	pick.add_child(_best)
+	pick.add_child(MenuStyle.heading("Racing against"))
+	pick.add_child(MenuStyle.row(RIVALS.map(func(r: Array) -> String: return r[1]),
+		RIVALS.map(func(r: Array) -> String: return r[0]).find(race_rivals), func(i: int) -> void:
+			race_rivals = RIVALS[i][0]
+			_refresh(), "Rivals"))
+	_rivals_note = MenuStyle.note(COL_W)
+	pick.add_child(_rivals_note)
+	_flying_row(side, "RaceFlying")
+	side.add_child(MenuStyle.heading("Rules"))
+	var rules := MenuStyle.note(RULES_W)
+	rules.text = RACE_RULES
+	side.add_child(rules)
+	side.add_child(MenuStyle.heading("Controls"))
+	var controls := MenuStyle.note(RULES_W)
+	controls.text = RACE_CONTROLS
+	side.add_child(controls)
+	_race.add_child(_go(start_race, "RaceStart"))
 
 
 func _build_settings() -> void:
@@ -244,6 +312,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		elif key == KEY_ENTER or key == KEY_KP_ENTER:
 			if page == "fight":
 				start_fight()
+			elif page == "race":
+				start_race()
 			else:
 				start_flight()
 		return
@@ -256,7 +326,7 @@ func choose(i: int) -> void:
 	var c: Array = CHOICES[i]
 	if c[1] == "":
 		get_tree().quit()
-	elif c[1] in ["fight", "flight", "settings"]:
+	elif c[1] in ["fight", "flight", "race", "settings"]:
 		_show(c[1])
 	else:
 		Boot.extra = PackedStringArray(c[2])
@@ -277,6 +347,20 @@ static func flight_options() -> PackedStringArray:
 	return PackedStringArray(["--no-rider", "--bird", flight_bird, "--flying", "novice" if novice else "realistic"])
 
 
+## The game's options for the Race screen's: race mode on the course picked, no rider or weapons, the AI racers if any.
+static func race_options() -> PackedStringArray:
+	var o := PackedStringArray(["--race", "--no-rider", "--bird", race_bird, "--course", str(COURSES[race_course]),
+		"--flying", "novice" if novice else "realistic"])
+	if race_rivals != "":
+		o.append_array(["--race-ai", race_rivals])
+	return o
+
+
+func start_race() -> void:
+	Boot.extra = race_options()
+	get_tree().change_scene_to_file(GAME)
+
+
 func start_flight() -> void:
 	Boot.extra = flight_options()
 	get_tree().change_scene_to_file(GAME)
@@ -293,11 +377,14 @@ func _show(p: String) -> void:
 	_flight.get_meta("page").visible = p == "flight"
 	_fight.get_meta("page").visible = p == "fight"
 	_settings.get_meta("page").visible = p == "settings"
+	_race.get_meta("page").visible = p == "race"
 	_refresh()
 	if p == "main":
 		(_main.find_child("Choice0", true, false) as Button).grab_focus()
 	elif p == "flight":
 		(_flight.find_child("FlightStart", true, false) as Button).grab_focus()
+	elif p == "race":
+		(_race.find_child("RaceStart", true, false) as Button).grab_focus()
 	elif p == "settings":
 		(_settings.find_child("SettingsBack", true, false) as Button).grab_focus()
 	else:
@@ -307,6 +394,12 @@ func _show(p: String) -> void:
 func _refresh() -> void:
 	_blurb.text = BirdProfile.by_id(fight_bird).blurb
 	_flight_blurb.text = BirdProfile.by_id(flight_bird).blurb
+	_race_blurb.text = BirdProfile.by_id(race_bird).blurb
+	var best := RaceRecord.best(RaceRecord.key(COURSES[race_course], ARENA_SEED, race_bird, "novice" if novice else "realistic"))
+	_best.text = ("Your best here: " + RaceHud.clock_text(float(best.time))) if not best.is_empty() else "No time set here yet."
+	for r in RIVALS:
+		if r[0] == race_rivals:
+			_rivals_note.text = r[2]
 	var notes := []
 	for w in WEAPONS:
 		if fight_pods.has(w[0]):
@@ -316,7 +409,7 @@ func _refresh() -> void:
 	_weapon_note.text = "\n".join(notes)
 	for n in _flying_notes:
 		n.text = FLYING[0 if novice else 1][2]
-	for prefix in ["Flying", "FlightFlying"]:   # (both screens' rows show the one choice)
+	for prefix in ["Flying", "FlightFlying", "RaceFlying"]:   # (both screens' rows show the one choice)
 		for i in 2:
 			var b := find_child("%s%d" % [prefix, i], true, false) as Button
 			if b != null:
