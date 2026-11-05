@@ -104,23 +104,23 @@ func _ground() -> void:
 			sm.set_shader_parameter("field_origin", ff.origin)
 			sm.set_shader_parameter("field_size", ff.size)
 			sm.set_shader_parameter("field_res", FloorField.RES)
-			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart); the big plane draws only
-			# round it. Solid at the same height: a heightmap from the same field (so a bird stands, a round bursts and
-			# a feather settles on the mound it's drawn on).
-			var fine := MeshInstance3D.new()
+			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart), in tiles so the ones out
+			# of view or out of a shadow cascade are culled (floor_tiles); the big plane is a ring round it, a real
+			# hole (floor_ring). Solid at the same height: a heightmap from the same field (so a bird stands, a round
+			# bursts and a feather settles on the mound it's drawn on).
+			var fine := Node3D.new()
 			fine.name = "FloorMounds"
-			var grid := PlaneMesh.new()
-			grid.size = Vector2(ff.size, ff.size)
-			grid.subdivide_width = int(ff.size / FLOOR_STEP)
-			grid.subdivide_depth = int(ff.size / FLOOR_STEP)
-			fine.mesh = grid
 			fine.position = Vector3(ff.origin.x + ff.size * 0.5, ArenaLayout.GROUND_Y, ff.origin.y + ff.size * 0.5)
-			fine.custom_aabb = AABB(Vector3(-ff.size * 0.5, -0.1, -ff.size * 0.5), Vector3(ff.size, FloorField.MOUND_H + 0.2, ff.size))   # (the mounds rise in the shader)
 			var fm := sm.duplicate() as ShaderMaterial
 			fm.set_shader_parameter("displace", 1.0)
-			fine.material_override = fm
+			for tm in floor_tiles(ff.size):
+				var tile := MeshInstance3D.new()
+				tile.mesh = tm
+				tile.material_override = fm
+				fine.add_child(tile)
 			body.add_child(fine)
-			sm.set_shader_parameter("hole_r", ff.size * 0.5 - 1.0)
+			mi.mesh = floor_ring(ff.size * 0.5 - 1.0, plane.size.x * 0.5)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # (nothing lies under the ground for it to shade)
 			var hcs := CollisionShape3D.new()
 			hcs.name = "FloorMoundsShape"
 			var hm := HeightMapShape3D.new()
@@ -138,6 +138,97 @@ func _ground() -> void:
 
 const GRASS_PER_M2 := 3.5   ## grass tussocks sown to the square metre over the openings (_grass)
 const FLOOR_STEP := 0.4   ## m between the fine floor mesh's vertices (where the litter's mounds are drawn)
+const FLOOR_TILES := 8    ## the fine floor mesh's tiles a side, each culled on its own (one mesh was drawn whole in every pass)
+const RING_SIDES := 128   ## the big plane's hole, a polygon of this many sides (a multiple of 8: the square's corners on it)
+
+
+## The fine floor mesh, `size` m a side round the origin, as FLOOR_TILES x FLOOR_TILES tiles: one grid of vertices
+## FLOOR_STEP or less apart, laid out and triangulated as a PlaneMesh of it would be, each vertex computed from its
+## place in the one grid, so a tile's edge is its neighbour's to the bit and they meet without a crack.
+static func floor_tiles(size: float) -> Array[ArrayMesh]:
+	var segs := int(size / FLOOR_STEP) + 1
+	var step := size / segs
+	var cuts: Array[int] = []
+	for k in FLOOR_TILES + 1:
+		cuts.append(int(round(float(k) * segs / FLOOR_TILES)))
+	var indices := {}   # (the triangles of a tile w x d vertices: the same for every tile that size)
+	var out: Array[ArrayMesh] = []
+	for tj in FLOOR_TILES:
+		for ti in FLOOR_TILES:
+			var i0 := cuts[ti]
+			var j0 := cuts[tj]
+			var w := cuts[ti + 1] - i0 + 1
+			var d := cuts[tj + 1] - j0 + 1
+			var verts := PackedVector3Array()
+			verts.resize(w * d)
+			var k := 0
+			for j in d:
+				var z := -size * 0.5 + (j0 + j) * step
+				for i in w:
+					verts[k] = Vector3(size * 0.5 - (i0 + i) * step, 0.0, -z)   # (PlaneMesh's (-x, 0, -z))
+					k += 1
+			var key := Vector2i(w, d)
+			if not indices.has(key):
+				var idx := PackedInt32Array()
+				idx.resize((w - 1) * (d - 1) * 6)
+				var n := 0
+				for j in range(1, d):
+					var prev := (j - 1) * w
+					var row := j * w
+					for i in range(1, w):
+						idx[n] = prev + i - 1
+						idx[n + 1] = prev + i
+						idx[n + 2] = row + i - 1
+						idx[n + 3] = prev + i
+						idx[n + 4] = row + i
+						idx[n + 5] = row + i - 1
+						n += 6
+				indices[key] = idx
+			var m := _flat_mesh(verts, indices[key])
+			var x1 := size * 0.5 - i0 * step
+			var z0 := -size * 0.5 + j0 * step
+			m.custom_aabb = AABB(Vector3(x1 - (w - 1) * step, -0.1, -(z0 + (d - 1) * step)), Vector3((w - 1) * step, FloorField.MOUND_H + 0.2, (d - 1) * step))   # (the mounds rise in the shader)
+			out.append(m)
+	return out
+
+
+## The ground round the fine floor mesh: from a circle `inner` m round the middle (a polygon of RING_SIDES inside it)
+## out to a square `outer` m from the middle each way. A real hole, where a discard in the shader would cost the
+## whole plane its early depth test.
+static func floor_ring(inner: float, outer: float) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for k in RING_SIDES:
+		var dir := Vector2.from_angle(TAU * k / RING_SIDES)
+		var o := dir / maxf(absf(dir.x), absf(dir.y)) * outer
+		verts.append(Vector3(dir.x * inner, 0.0, dir.y * inner))
+		verts.append(Vector3(o.x, 0.0, o.y))
+	for k in RING_SIDES:
+		var a := k * 2
+		var b := ((k + 1) % RING_SIDES) * 2
+		idx.append_array([a, a + 1, b, a + 1, b + 1, b])   # (facing up, as the plane's)
+	return _flat_mesh(verts, idx)
+
+
+## A mesh of triangles lying flat, facing up (normal up, tangent along x, as a PlaneMesh's).
+static func _flat_mesh(verts: PackedVector3Array, idx: PackedInt32Array) -> ArrayMesh:
+	var normals := PackedVector3Array()
+	normals.resize(verts.size())
+	normals.fill(Vector3.UP)
+	var tangents := PackedFloat32Array()
+	tangents.resize(verts.size() * 4)
+	for i in verts.size():
+		tangents[i * 4] = 1.0
+		tangents[i * 4 + 3] = 1.0
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TANGENT] = tangents
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
 
 
 ## Pale strips on the ground under the clearing, avenues and ring: the flight paths, readable from the air.

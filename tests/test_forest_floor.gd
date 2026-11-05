@@ -106,21 +106,15 @@ func setup() -> void:
 	check(shady_moss > sunny_moss * 2 and shady_moss > pines / 4, "moss on the shady side of the feet, not the sunny (%d v %d)" % [shady_moss, sunny_moss])
 	# Drawn and solid the same.
 	var ground: Node = arena.get_node("Ground")
-	var fine := ground.get_node_or_null("FloorMounds") as MeshInstance3D
+	var fine := ground.get_node_or_null("FloorMounds") as Node3D
 	check(fine != null, "a fine floor mesh under the wood")
 	if fine != null:
-		var fm := fine.material_override as ShaderMaterial
-		var step := (fine.mesh as PlaneMesh).size.x / float((fine.mesh as PlaneMesh).subdivide_width + 1)
-		check(float(fm.get_shader_parameter("displace")) > 0.0 and step <= FloorField.RES, "fine enough to draw the field's mounds, and drawing them (%.2f m)" % step)
-		var tex := fm.get_shader_parameter("field") as ImageTexture
-		check(tex != null and tex.get_width() == ff.n, "drawn from the field itself")
+		_check_fine_floor(fine, ff)
 		var plane: MeshInstance3D = null
 		for c in ground.get_children():
-			if c is MeshInstance3D and c != fine:
+			if c is MeshInstance3D:
 				plane = c
-		var hv = (plane.material_override as ShaderMaterial).get_shader_parameter("hole_r")
-		var hole := float(hv) if hv != null else 0.0   # (unset: the plane draws everywhere)
-		check(hole <= ff.size * 0.5 and hole > ff.fade_r, "the big plane draws only round it, no gap (hole %.1f, mesh %.1f, mounds gone by %.1f)" % [hole, ff.size * 0.5, ff.fade_r])
+		_check_ring(plane, fine, ff)
 	var space := arena.get_world_3d().direct_space_state
 	var worst := 0.0
 	var rng := RandomNumberGenerator.new()
@@ -185,6 +179,98 @@ func setup() -> void:
 		check(off < 0.01, "and on the floor, mounds and all (%.3f m off)" % off)
 	arena.queue_free()
 	finish()
+
+
+## The fine floor mesh as drawn: tiles, each small enough to be culled on its own (one mesh over the whole floor was
+## drawn whole in every pass, 3.5 ms of GPU: docs/design/performance.md); together one grid over the field, fine
+## enough for the mounds, the tiles' edges the same vertices so they meet without a crack; displaced by the field.
+func _check_fine_floor(fine: Node3D, ff: FloorField) -> void:
+	var tiles: Array[MeshInstance3D] = []
+	for c in fine.get_children():
+		if c is MeshInstance3D:
+			tiles.append(c)
+	var widest := 0.0
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var xs := {}
+	var all := {}
+	var total := 0
+	var drawn := true
+	var tall := INF
+	var up := 0
+	var down := 0
+	for t in tiles:
+		var fm := t.material_override as ShaderMaterial
+		var tex := fm.get_shader_parameter("field") as ImageTexture if fm != null else null
+		drawn = drawn and fm != null and float(fm.get_shader_parameter("displace")) > 0.0 and tex != null and tex.get_width() == ff.n
+		var bb := t.get_aabb()   # (what the renderer culls by: the instance's custom box, else the mesh's, else the vertices')
+		if t.custom_aabb.has_volume():
+			bb = t.custom_aabb
+		elif t.mesh is ArrayMesh and (t.mesh as ArrayMesh).custom_aabb.has_volume():
+			bb = (t.mesh as ArrayMesh).custom_aabb
+		widest = maxf(widest, maxf(bb.size.x, bb.size.z))
+		tall = minf(tall, bb.end.y)
+		var arr := t.mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		total += v.size()
+		for p in v:
+			var w := fine.position + p
+			lo = Vector2(minf(lo.x, w.x), minf(lo.y, w.z))
+			hi = Vector2(maxf(hi.x, w.x), maxf(hi.y, w.z))
+			xs[p.x] = true
+			all[p] = true
+		for i in range(0, idx.size(), 3):   # (facing up as the PlaneMesh did: clockwise from above)
+			if (v[idx[i + 1]] - v[idx[i]]).cross(v[idx[i + 2]] - v[idx[i]]).y < 0.0:
+				up += 1
+			else:
+				down += 1
+	var keys := xs.keys()
+	keys.sort()
+	var step := 0.0
+	for i in range(1, keys.size()):
+		step = maxf(step, float(keys[i]) - float(keys[i - 1]))
+	var side := int(round(sqrt(all.size())))
+	print("FLOOR fine mesh: %d tiles, the widest %.1f m; together %.1f x %.1f m (the field %.1f), %d vertices on a %d x %d grid %.3f m apart (%d shared at the tiles' edges); %d triangles facing up, %d down" % [tiles.size(), widest, hi.x - lo.x, hi.y - lo.y, ff.size, all.size(), side, side, step, total - all.size(), up, down])
+	check(tiles.size() >= 16 and widest <= ff.size / 4.0 + 0.01, "the fine floor in tiles, each culled on its own (%d, the widest %.1f m of %.1f)" % [tiles.size(), widest, ff.size])
+	check(drawn, "every tile drawing the field's mounds, from the field itself")
+	check(tall >= FloorField.MOUND_H, "each culled with room for the mounds the shader raises (to %.2f m)" % tall)
+	check(lo.distance_to(ff.origin) < 0.01 and hi.distance_to(ff.origin + Vector2.ONE * ff.size) < 0.01, "together over the whole field (%s to %s)" % [lo, hi])
+	check(step <= FloorField.RES and step > 0.0, "fine enough to draw the field's mounds (%.2f m)" % step)
+	eq(all.size(), side * side, "one grid: the tiles' edges the same vertices, no crack between them")
+	check(down == 0 and up > 0, "facing up (%d down)" % down)
+
+
+## The ground round the fine floor mesh: a ring with a real hole (no discard in the floor's shader: it cost the whole
+## floor its early depth test), from inside the fine mesh (no gap) to beyond where the mounds rise (the plane flat
+## through them was z-fighting with their feet), out to the horizon, facing up; casting no shadow (nothing under it).
+func _check_ring(plane: MeshInstance3D, fine: Node3D, ff: FloorField) -> void:
+	check(plane != null, "the big plane round the fine mesh")
+	if plane == null:
+		return
+	var arr := plane.mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	var c := Vector2(fine.position.x, fine.position.z)
+	var nearest := INF   # (the closest any triangle comes to the middle: the hole's polygon's edges, at their midpoints)
+	var reach := 0.0
+	var down := 0
+	for i in range(0, idx.size(), 3):
+		var tri := [v[idx[i]], v[idx[i + 1]], v[idx[i + 2]]]
+		if (tri[1] - tri[0]).cross(tri[2] - tri[0]).y >= 0.0:
+			down += 1
+		for e in 3:
+			var a := Vector2(tri[e].x, tri[e].z) + Vector2(plane.position.x, plane.position.z) - c
+			var b := Vector2(tri[(e + 1) % 3].x, tri[(e + 1) % 3].z) + Vector2(plane.position.x, plane.position.z) - c
+			nearest = minf(nearest, Geometry2D.get_closest_point_to_segment(Vector2.ZERO, a, b).length())
+			reach = maxf(reach, a.length())
+	var code := (plane.material_override as ShaderMaterial).shader.code
+	print("FLOOR the big plane: a ring from %.2f m round the middle (the fine mesh to %.1f, the mounds gone by %.1f) out to %.0f m; %d triangles facing down; discard in its shader: %s; casts shadow: %s" % [nearest, ff.size * 0.5, ff.fade_r, reach, down, code.contains("discard;"), plane.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF])
+	check(nearest <= ff.size * 0.5 and nearest > ff.fade_r, "the big plane only round the fine mesh, no gap and not over the mounds (%.2f m)" % nearest)
+	check(reach > 900.0, "out to the horizon (%.0f m)" % reach)
+	check(down == 0, "facing up (%d down)" % down)
+	check(not code.contains("discard;"), "the floor's shader has no discard (a hole cut in the mesh instead: the early depth test kept)")
+	eq(plane.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "the ground casts no shadow (nothing under it)")
 
 
 ## Where a round falling straight down onto (x, z) bursts (Projectile.step against the layout, no birds).

@@ -250,6 +250,35 @@ Ways to make it cheaper:
   most, gone in the distance anyway), `FLOOR_STEP` at the field's own 0.5 m (36 % fewer vertices), or no shadow
   from the mounds (about 0.5 ms).
 
+### The floor made cheaper, its look kept (2026-11-05)
+
+Done (master a428d59 against the change, three runs each, 4 birds, quiet machine):
+
+| | GPU | pre-pass / opaque / shadows |
+|---|---|---|
+| before | 13.9 | 4.6 / 4.5 / 4.1 |
+| tiles, ring, no discard, the ring casting no shadow | 13.7 | 4.5 / 4.5 / 3.9 |
+| and the shader working out each layer only where it shows | **12.3** | **3.8 / 3.8 / 3.9** |
+
+- `ArenaBuilder.floor_tiles`: `FloorMounds` is 8 x 8 tiles (`FLOOR_TILES`) of the same grid, each vertex computed from
+  its place in it so neighbours share their edge to the bit. Culling them saves little in the autopilot's view
+  (most of the floor is in sight); it is what any distance LOD would be built on.
+- `ArenaBuilder.floor_ring`: the big plane a ring with a real hole, and `forest_floor.gdshader` without its
+  `discard` (a shader that can discard loses its early depth test). The ring casts no shadow: nothing is under it.
+- `forest_floor.gdshader`: moss, dirt, the openings' sward and the heath each worked out only where their share is
+  over 0 (mixed in at 0 they changed nothing); the moss's own relief, six noise octaves a pixel, only without the
+  moss scan, where it is used. The pre-pass gains as well as the opaque pass: it runs the fragment shader for the
+  normal-roughness buffer.
+
+The look checked with `tests/probe_floor_still.gd` (the floor alone, still, five views: two runs give the same
+pixels to 1 level): the shader change moves a few pixels at moss edges (the scan's gradients taken outside the
+branch); the tiles shift the needle texture by a fraction of a texel (PlaneMesh's vertices were quantized), up to
+150 levels on single pixels, 0.01 on average, under 2 levels anywhere once blurred over 12 px.
+
+Left: the floor's triangles are about 1.4 ms more (`FLOOR_STEP` 4 m against 0.4 m: 12.3 against 13.7 before the
+shader change), most of it far off where the 0.4 m quads are a few pixels; coarser tiles with distance would take
+most of it back, a look change to agree first.
+
 | 20 birds, per frame (ms) | 2026-11-05 (two runs) |
 |---|---|
 | Frame mean / p95 | 26.5-34.7 / 44-57 |
