@@ -79,8 +79,9 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 
 Your rider's pods face forward: **you aim by flying the bird**. Each pod carries one kind:
 
-- **Rockets** (three a pod). Unguided, with a proximity fuse: fly the sight onto the lead mark (where the target
-  will be when the rocket arrives) and fire from 8-22 m behind.
+- **Rockets** (three a pod). Unguided, with a proximity fuse: fly the sight onto the lead mark (where the sight
+  must be for the rocket to meet the target, its drop and your view over the guns allowed for) and fire from 8-22 m
+  behind. The target is whatever is nearest your sight: a bird, or in target practice a balloon.
 - **Seekers** (two a pod). Guided. Hold an enemy within 15 deg of your nose for a second, 6-40 m away, to lock;
   then fire and they steer themselves. **The lock needs a clear line**: a trunk, a branch or a deck between you
   stops it building, and it drains if the line stays blocked. Leaves don't count.

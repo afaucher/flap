@@ -2013,8 +2013,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
-    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
+    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
+    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
    }
   ]
  },
@@ -3412,8 +3412,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
-    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
    }
   ]
  },
@@ -4759,6 +4759,105 @@
     "file": "scripts/race/race_pilot.gd",
     "find": "\t\tguide._last_tree = -1   # (the rail is where it's going now, not the tree it left: no departure clearance round it)\n\t\tguide._left_perch = -1\n\t\tguide._takeoff_pos = Vector3.INF\n",
     "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "lead-mark-on-lead-point",
+  "bug": "The lead mark sat on the lead point itself: the camera rides above the line of fire, so the gunsight over it shot under a near balloon and over a far one (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn from + (lead_point(t) - from).normalized() * SIGHT_RANGE",
+    "replace": "\treturn lead_point(t)"
+   }
+  ]
+ },
+ {
+  "id": "hud-lead-at-lead-point",
+  "bug": "The HUD drew the lead mark at the lead point, not where the sight must be (lead_sight) (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+   }
+  ]
+ },
+ {
+  "id": "lead-no-drop",
+  "bug": "The lead left out the round's drop: a far balloon was shot under (2026-11-05).",
+  "tests": [
+   "test_aim_lead",
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn tp + tv * flight + Vector3.UP * 0.5 * Projectile.G * flight * flight",
+    "replace": "\treturn tp + tv * flight"
+   }
+  ]
+ },
+ {
+  "id": "target-birds-only",
+  "bug": "The HUD's target was birds only: a balloon on the sight got no bracket or lead mark (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tfor o in _birds + (_world.balloons if _world != null else []):",
+    "replace": "\tfor o in _birds:"
+   }
+  ]
+ },
+ {
+  "id": "target-down-balloon",
+  "bug": "A balloon that was down could still be the HUD's target (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\t\treturn not (o as TargetBalloon).is_down()",
+    "replace": "\t\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "target-no-hold",
+  "bug": "The HUD's target flicked between two near the sight: a pick wasn't held against one only a little nearer (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tvar best_a := held * PICK_KEEP if held < INF else PICK_CONE",
+    "replace": "\tvar best_a := held if held < INF else PICK_CONE"
+   }
+  ]
+ },
+ {
+  "id": "ai-targets-balloons",
+  "bug": "The AI's simple fire control took the HUD's target, so it shot at balloons (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\tvar t := l.target_bird()",
+    "replace": "\tvar t := l.target()"
    }
   ]
  }
