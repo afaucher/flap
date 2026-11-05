@@ -27,6 +27,7 @@ extends Node3D
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String, kind: int, surface: String)   ## surface: "bird" | "trunk" | "ground" | "air" (Projectile.step)
 signal launched(p: Projectile)        ## a round left its launcher (GameAudio: the launch and its motor; p.kind GUN: a shot)
+signal balloon_downed(b: TargetBalloon, by: Object)   ## a target balloon is down (deflated or alight): `by` holed or fired it last
 signal struck(bird: Bird, at: Vector3, keys: Array)   ## a burst hurt `bird`, knocking out feathers `keys` (GameAudio: the puff and its call)
 
 static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.fuse)
@@ -65,7 +66,11 @@ static var calm_air := true
 
 var _last_hit := {}         ## Bird -> _clock at its last hit (the recovery window)
 var _chip := {}             ## Bird -> bullets' feather fractions summed inside the window
-var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
+var stats := {"shots": 0, "hits": 0, "kills": 0, "balloons": 0}   ## for the player's launcher (`player`)
+var balloons: Array = []    ## TargetBalloon: target practice's balloons. A bullet through one holes it (and flies on); a
+                            ## rocket's or seeker's fuse takes one as it would a bird, and a burst within BALLOON_IGNITE
+                            ## of one sets it alight
+const BALLOON_IGNITE := 0.8 ## m from the envelope
 var player: Launcher = null
 
 var _next_id := 0
@@ -158,6 +163,8 @@ func _physics_process(dt: float) -> void:
 			l.step(dt, self)
 	for p in projectiles:
 		var ev: Dictionary = p.step(dt, layout, birds)
+		if not balloons.is_empty():
+			ev = _through_balloons(p, ev)
 		var trail: Variant = _trail(p.id)
 		if trail != null and (trail.pts.is_empty() or _clock - float(trail.pts[-1][1]) >= SMOKE_EVERY or not p.alive):
 			trail.pts.append([p.pos, _clock])
@@ -166,7 +173,42 @@ func _physics_process(dt: float) -> void:
 				trail.open = false
 			_burst(ev.burst, p.shooter, String(ev.why), p.kind, String(ev.get("surface", "air")), ev.get("near"))
 	projectiles = projectiles.filter(func(q): return q.alive)
+	for bl: TargetBalloon in balloons:
+		if bl.is_down() and not bl.counted:
+			bl.counted = true
+			if player != null and is_instance_valid(bl.last_hit_by) and bl.last_hit_by == player.bird:
+				stats.balloons += 1
+			balloon_downed.emit(bl, bl.last_hit_by)
 	fx.step(dt, self)
+
+
+## Round `p`'s step (from where it was to where it is, or to the event that ended it) through the balloons: a bullet
+## holes each it passes through and flies on; a rocket or seeker, armed, bursts where its fuse first reaches one, if
+## that's before whatever else ended its step. Returns the step's event (`ev`, or the burst on a balloon).
+func _through_balloons(p: Projectile, ev: Dictionary) -> Dictionary:
+	var a := p.last_pos
+	var b: Vector3 = ev.burst if not ev.is_empty() else p.pos
+	if p.kind == Projectile.Kind.GUN:
+		for bl: TargetBalloon in balloons:
+			if bl.hit_ids.has(p.id):
+				continue
+			var at = bl.hit_point(a, b)
+			if at != null:
+				bl.hit_ids[p.id] = true
+				bl.last_hit_by = p.shooter
+				bl.bullet_hit(at, p.vel)
+				if player != null and p.shooter == player.bird:
+					stats.hits += 1
+		return ev
+	if p.travelled < Projectile.ARM:
+		return ev
+	for bl: TargetBalloon in balloons:
+		var at = bl.fuse_point(a, b, Projectile.fuse * 0.6)
+		if at != null:
+			p.alive = false
+			p.pos = at
+			return {"burst": at, "why": "fuse", "surface": "balloon"}
+	return ev
 
 
 ## `b`'s team's base, or null.
@@ -289,6 +331,12 @@ func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKE
 	burst.emit(at, why, kind, surface)
 	if why == "expired":
 		return
+	for bl: TargetBalloon in balloons:
+		if bl.burn_r < 0.0 and not bl.is_down() and bl.distance_to(at) <= BALLOON_IGNITE:
+			bl.last_hit_by = by if is_instance_valid(by) else null
+			bl.burst_near(at)
+			if player != null and is_instance_valid(by) and by == player.bird:
+				stats.hits += 1
 	for b in birds:
 		if not is_instance_valid(b) or (is_instance_valid(by) and b == by):
 			continue
