@@ -1,6 +1,6 @@
 # The cliff lab: what it found, and what to take into the game
 
-A standalone lab (`tests/probe_cliff_lab.gd`, untracked, edge worktree) built cliff models from the geology up, away from
+A standalone lab (`tests/probe_cliff_lab.gd`; its renders and how each was made: [cliff_lab_walkthrough.md](cliff_lab_walkthrough.md)) built cliff models from the geology up, away from
 the game's constraints, to find out what makes a limestone cliff read as real. This is what it found, judged against
 the user's reviews, and how each finding maps onto `Escarpment` / `EdgeBuilder` (`cliff_from_concept.md` describes
 those; read it first). Nothing here is in the game yet.
