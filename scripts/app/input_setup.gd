@@ -12,7 +12,6 @@ const KEYS := {
 	"flap": [KEY_SPACE],
 	"catch": [KEY_CTRL],
 	"center_stick": [KEY_C],
-	"respawn": [KEY_R],
 	"toggle_autopilot": [KEY_P],
 	"toggle_debug": [KEY_F3],
 	"bird_1": [KEY_1],

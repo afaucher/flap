@@ -27,7 +27,7 @@ extends Node3D
 ## (--team crow,hawk) against three combat-AI birds (--enemy falcon,owl,crow) out from the far base, at --skill
 ## recruit | pilot (default) | ace. Each AI bird carries its species' round (CombatStyle). The score is the match.
 ## Keys: mouse / left stick steer, Space / LT flap, left mouse / F / RT fire, Q / RB switch weapon,
-## T target evasion on/off, R restart, Esc pauses (PauseMenu: Resume, Settings, Leave).
+## T target evasion on/off, Esc pauses (PauseMenu: Resume, Start over, Settings, Leave).
 
 const CIRCUIT_CENTRE := Vector3(0.0, 20.0, 0.0)   ## over the clearing, up among the emergent trees
 const CIRCUIT_LENGTH := 40.0   ## m of straight: time to lock
@@ -433,8 +433,6 @@ func _unhandled_input(e: InputEvent) -> void:
 		print("look: ", ForestLight.next_look(self))
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F5:
 		ForestLight.toggle_far_blur(self)
-	if e.is_action_pressed("respawn"):
-		restart()
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_T:
 		evade = not evade
 		if target_pilot != null:

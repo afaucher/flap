@@ -216,7 +216,7 @@ func _process(_dt: float) -> void:
 	camera.look_input = player.look
 
 
-## R or the pause menu's Start over: your bird back on its perch (the one it's on, else the start).
+## The pause menu's Start over: your bird back on its perch (the one it's on, else the start).
 func start_over() -> void:
 	_spawn_player(profile_id, bird.perch if bird.perch != null else layout.start_perch())
 
@@ -241,8 +241,6 @@ func _unhandled_input(e: InputEvent) -> void:
 		use_autopilot = not use_autopilot
 		bird.controller = autopilot if use_autopilot else player
 		hud.autopilot = use_autopilot
-	if e.is_action_pressed("respawn"):
-		start_over()
 	if e.is_action_pressed("cycle_bird"):
 		var next: String = BirdProfile.IDS[(BirdProfile.IDS.find(profile_id) + 1) % BirdProfile.IDS.size()]
 		_spawn_player(next, bird.perch if bird.perch != null else layout.start_perch())

@@ -56,7 +56,6 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 | Right stick | | Look around (the camera springs back) |
 | | Mouse wheel | Zoom the camera in and out |
 | Start | Esc | Pause: Resume, Start over, Settings, Leave |
-| (pause menu) | R | Start over |
 | | F1 | Show the key hints again |
 | | F3 | Instruments: speed tape, pitch ladder, bank arc, angle of attack, lift / drag |
 | | F6 | The light: golden (default), afternoon, clear, misty morning, overcast |

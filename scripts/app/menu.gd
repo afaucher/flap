@@ -54,7 +54,7 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon.  Esc: pause."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
-R: start over.  Esc: pause."
+Esc: pause (start over, settings, leave)."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
