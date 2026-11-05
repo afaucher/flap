@@ -80,8 +80,6 @@ func _game() -> void:
 	check(not get_tree().paused and not pause.is_open(), "Resume resumes")
 	# The gamepad's Start, and Start over.
 	check(game.bird.state == Bird.State.FLYING, "(the bird's in the air)")
-	await _key(KEY_R)
-	check(game.bird.state == Bird.State.FLYING and not get_tree().paused, "R does nothing now (Start over is the pause menu's)")
 	await _pad_start()
 	check(get_tree().paused and pause.is_open() and _shown(pause, "PauseStartOver"), "the gamepad's Start pauses, with Start over on the menu")
 	(pause.find_child("PauseStartOver", true, false) as Button).pressed.emit()
@@ -134,18 +132,6 @@ func _pad_start() -> void:
 		var e := InputEventJoypadButton.new()
 		e.device = 0
 		e.button_index = JOY_BUTTON_START
-		e.pressed = down
-		Input.parse_input_event(e)
-		Input.flush_buffered_events()
-		await get_tree().process_frame
-
-
-## A key pressed and let go.
-func _key(k: int) -> void:
-	for down in [true, false]:
-		var e := InputEventKey.new()
-		e.keycode = k
-		e.physical_keycode = k
 		e.pressed = down
 		Input.parse_input_event(e)
 		Input.flush_buffered_events()

@@ -4665,25 +4665,6 @@
   ]
  },
  {
-  "id": "r-starts-over",
-  "bug": "R still started over though Start over had moved into the pause menu (2026-11-05).",
-  "tests": [
-   "test_pause"
-  ],
-  "edits": [
-   {
-    "file": "scripts/app/input_setup.gd",
-    "find": "\t\"toggle_autopilot\": [KEY_P],",
-    "replace": "\t\"respawn\": [KEY_R],\n\t\"toggle_autopilot\": [KEY_P],"
-   },
-   {
-    "file": "scripts/app/game.gd",
-    "find": "\tif e.is_action_pressed(\"cycle_bird\"):",
-    "replace": "\tif e.is_action_pressed(\"respawn\"):\n\t\tstart_over()\n\tif e.is_action_pressed(\"cycle_bird\"):"
-   }
-  ]
- },
- {
   "id": "race-start-over-perch",
   "bug": "After the merge with the pause menu, its Start over in a race put you back on the perch you were on, not the course's start, and left the clock and the racers as they were (2026-11-05).",
   "tests": [

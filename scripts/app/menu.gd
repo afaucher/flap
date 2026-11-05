@@ -57,7 +57,7 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon.  Esc: pause."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
-Esc: pause (start over, settings, leave)."
+Esc: pause."
 const COURSES := [7, 11, 3]   ## the Race screen's courses: RaceCourse seeds, on the game's arena (ARENA_SEED)
 const ARENA_SEED := 7          ## the game's arena with no --seed (the best times are kept per arena too)
 const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
@@ -70,10 +70,9 @@ const RACE_RULES := "Ten gates through the wood, from the outpost's rail to the 
 - The clock starts when you leave the rail and stops at the finish gate.
 - Fly each gate through its window the way it faces, in order: the bright one is next, the softer one after it.
 - Pass beside the next gate and it's a miss: go round and take it.
-- Your best time on each course, for each bird and way of flying, is kept, with its splits.
-- Esc, Start over: back on the rail, the clock reset."
+- Your best time on each course, for each bird and way of flying, is kept, with its splits."
 const RACE_CONTROLS := "Mouse: steer.  Space: flap.  P: let an ace fly your bird.
-Esc: pause (start over, settings, leave)."
+Esc: pause."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
