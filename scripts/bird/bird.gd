@@ -144,6 +144,13 @@ var _avoid := {}               ## the wood a novice's bird is rolling away from:
 var _caps: Array = []          ## the wood near this tick's flight (ArenaLayout.wood_near)
 var _strike_cool := [0.0, 0.0]
 var _pass_tree := -1           ## the tree the bird is leaving (passing through it)
+## Downed, fluttering down (start_tumble; CombatWorld.down_flutter) until it comes down on the ground. Its wings flail
+## and hold little of their lift (TUMBLE_LIFT), it rolls this way and that and drops out of the fight, and whatever
+## flat it meets (the ground, a deck) it comes down on and sits there, however fast (no bonk, no bounce).
+var tumble := false
+var _tumble_t := 0.0
+const TUMBLE_LIFT := 0.3
+const TUMBLE_ROLL_HZ := 0.8   ## the roll's swing this way and that
 ## Battle damage: the flight feathers a hit knocked out (BirdRig.feather_key -> true), up to DOWN_FEATHERS; they
 ## cost their wing its area (FlightModel.wing_loss) and the rig leaves them out. mend() grows them back.
 var lost_feathers := {}
@@ -211,6 +218,8 @@ func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
 func perch_at(p: Perch) -> void:
 	perch = p
 	state = State.PERCHED
+	tumble = false   # (a respawn onto the base ends a downed bird's flutter)
+	model.lift_scale = 1.0
 	perch_grip = p.position
 	global_position = Perch.seat_at(perch_grip, profile)
 	model.position = global_position
@@ -225,6 +234,8 @@ func perch_at(p: Perch) -> void:
 func fly_from(pos: Vector3, dir: Vector3, spd: float) -> void:
 	perch = null
 	state = State.FLYING
+	tumble = false
+	model.lift_scale = 1.0
 	global_position = pos
 	model.launch(pos, dir, spd)
 	global_basis = model.body_basis()
@@ -329,6 +340,8 @@ func _fly(dt: float, inp: FlightInput) -> void:
 	Perf.add("bird.reflex", p1)
 	if not _avoid.is_empty():
 		ctl = _avoid_in(ctl)
+	if tumble:
+		ctl = _tumble_input(dt)
 	_apply_assists()
 	model.position = global_position
 	var floor_y := ArenaLayout.GROUND_Y + layout.ground(global_position.x, global_position.z)   # (the floor's mounds)
@@ -346,7 +359,7 @@ func _fly(dt: float, inp: FlightInput) -> void:
 	Perf.add("bird.reflex", p2)
 	model.position = global_position
 	# Belly on the ground and settling: stand (even if the contact came through a seam the collision missed).
-	if _grace <= 0.0 and global_position.y < floor_y + _radius + 0.03 and model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:
+	if _grace <= 0.0 and global_position.y < floor_y + _radius + 0.03 and model.velocity.y <= 0.0 and (model.velocity.length() < profile.grab_speed_max * 1.6 or tumble):
 		_land_on_ground(floor_y)
 		return
 	global_basis = model.body_basis()
@@ -601,7 +614,7 @@ func _on_collision(col: KinematicCollision3D) -> void:
 	# Settling slowly onto anything flat: a perch (a branch, a treetop: falling onto it after a bonk) takes it, as a
 	# catch would, if no faster than a catch; anything else (the ground, a deck, a roof), or a perch come at faster,
 	# it stands on, where it is.
-	if _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:
+	if _grace <= 0.0 and n.y > 0.7 and (v.length() < profile.grab_speed_max * 1.6 or tumble):
 		var at := col.get_position()
 		var under := _perch_under(at) if v.length() <= profile.grab_speed_max else null   # (no faster than a catch)
 		if under != null:
@@ -706,7 +719,7 @@ func _reflexes(dt: float, inp: FlightInput) -> void:
 	for q in pts:
 		bow = maxf(bow, q.distance_to(Geometry3D.get_closest_point_to_segment(q, pts[0], pts[4])))
 	_caps = layout.wood_near(pts[0], pts[4], half + bow + WING_PAD)
-	if _caps.is_empty() or stun > 0.0 or _grace > 0.0 or _pass_body != null or inp.catch_held or _grab_buffer > 0.0:
+	if _caps.is_empty() or stun > 0.0 or tumble or _grace > 0.0 or _pass_body != null or inp.catch_held or _grab_buffer > 0.0:
 		return
 	var right := global_basis.x.normalized()
 	var body := ArenaLayout.first_touch_among(_caps, pts, _radius)
@@ -834,6 +847,8 @@ func _perch_under(at: Vector3) -> Perch:
 
 func _land_on_ground(top: float) -> void:
 	state = State.GROUNDED
+	tumble = false   # (a downed bird's flutter ends on the ground)
+	model.lift_scale = 1.0
 	stand_y = top
 	perch = null
 	model.velocity = Vector3.ZERO
@@ -1076,6 +1091,8 @@ func telemetry() -> Dictionary:
 		"reflex": reflex,
 		"wing_strikes": wing_strikes,
 		"glance": _glance_shown(),
+		"tumbling": tumble,
+		"tumble_t": _tumble_t,
 		"health": health(),
 		"lost_feathers": lost_feathers,
 		"wing_loss": model.wing_loss,
@@ -1098,6 +1115,25 @@ func _glance_shown() -> Dictionary:
 	if g.has("cap"):
 		out.cap = g.cap
 	return out
+
+
+## Start fluttering down to the ground (a downed bird).
+func start_tumble() -> void:
+	tumble = true
+	_tumble_t = 0.0
+
+
+func tumbling() -> bool:
+	return tumble
+
+
+## The tumble's controls (no one's): the roll swinging this way and that, the nose let go, while the wings hold only
+## TUMBLE_LIFT of their lift.
+func _tumble_input(dt: float) -> FlightInput:
+	_tumble_t += dt
+	model.lift_scale = TUMBLE_LIFT
+	var roll := 0.85 * sin(_tumble_t * TUMBLE_ROLL_HZ * TAU) + 0.25 * sin(_tumble_t * 3.1 * TAU)
+	return FlightInput.new(Vector2(roll, -0.15))
 
 
 ## Where the head looks: the perch being landed on or caught, else ahead (sitting: where it faces, tilted

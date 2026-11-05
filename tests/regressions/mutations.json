@@ -3944,6 +3944,81 @@
   ]
  },
  {
+  "id": "down-flutter-never-starts",
+  "bug": "A downed bird glided on through the down stun, losing about a metre, so a down didn't read as one (2026-11-04; the lab's downed scene showed it).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif down_flutter:\n\t\t\tb.start_tumble()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-bonks-the-ground",
+  "bug": "A fluttering bird met the ground faster than a settle, so it bonked and bounced instead of coming down on it.",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif _grace <= 0.0 and n.y > 0.7 and (v.length() < profile.grab_speed_max * 1.6 or tumble):",
+    "replace": "\tif _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:"
+   },
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "model.velocity.y <= 0.0 and (model.velocity.length() < profile.grab_speed_max * 1.6 or tumble):",
+    "replace": "model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:"
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-wings-still",
+  "bug": "The downed bird's wings held still while it tumbled (nothing drawn of the flutter).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif t.get(\"tumbling\", false) and not sitting:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "respawn-keeps-tumbling",
+  "bug": "A downed bird respawned onto its base while still fluttering down kept its flutter (flailing wings, a third of their lift) when it next flew (2026-11-04, with the flutter turned on in the range).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\ttumble = false   # (a respawn onto the base ends a downed bird's flutter)\n\tmodel.lift_scale = 1.0\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "flying-round-oversized",
+  "bug": "A rocket or seeker in flight was drawn as a plain capsule about 5x the length and 20x the thickness of the round its pod carries, half a crow long (2026-11-04: the user saw it in the lab).",
+  "tests": [
+   "test_flying_round"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "const ROUND_GROW := 2.0",
+    "replace": "const ROUND_GROW := 6.0"
+   }
+  ]
+ },
+ {
   "id": "glance-is-bonk",
   "bug": "Every touch of wood at 1 m/s or more was a bonk: a slow, shallow brush cost 40% of the bird's speed and 0.35 s of no control (2026-11-04).",
   "tests": [

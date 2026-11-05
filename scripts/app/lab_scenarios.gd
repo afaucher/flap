@@ -7,6 +7,9 @@ extends RefCounted
 ## Landings start at an offset from the aim point on the branch (60% of the way out along its grip line),
 ## heading `dir` at `speed` x the bird's best-glide speed (the horizontal offset stretched for birds faster than 9 m/s,
 ## which need longer to brake), and aim `aim_up` above the branch.
+##
+## Combat (kind "fight", at the end): LabFight builds the fight round the lab bird -- a gun burst, a rocket's burst
+## knocking out feathers, a seeker's lock and launch, a bird downed, rearming on the base.
 
 const LIST := [
 	{"id": "pose_glide", "label": "Pose: glide", "pose": "glide"},
@@ -24,12 +27,19 @@ const LIST := [
 	{"id": "land_along", "label": "Landing: along the branch", "kind": "land", "from": Vector3(9, 0.6, -0.5), "dir": Vector3(-1, 0, 0.05), "speed": 1.0},
 	{"id": "land_slow", "label": "Landing: slow, short final", "kind": "land", "from": Vector3(0, 0.7, -5), "dir": Vector3(0, 0, 1), "speed": 0.75},
 	{"id": "land_fast", "label": "Landing: too fast (no braking)", "kind": "land", "from": Vector3(0, 0.5, -12), "dir": Vector3(0, 0, 1), "speed": 1.5, "bleed": false},
+	# Wood: glances, bonks and the reflexes.
 	{"id": "glance_left", "label": "Glance: brushing the trunk on its left", "kind": "hit", "deg": 15.0, "side": -1.0, "speed": 1.0},
 	{"id": "glance_right", "label": "Glance: brushing the trunk on its right", "kind": "hit", "deg": 15.0, "side": 1.0, "speed": 1.0},
 	{"id": "bonk_steep", "label": "Bonk: into the trunk at 60 deg", "kind": "hit", "deg": 60.0, "side": -1.0, "speed": 1.0},
 	{"id": "bonk_slow", "label": "Bonk: square on, slow", "kind": "hit", "deg": 90.0, "side": -1.0, "speed": 0.5},
 	{"id": "head_on", "label": "Head-on: the flare reflex brakes", "kind": "hit", "deg": 90.0, "side": -1.0, "speed": 1.0},
 	{"id": "wing_clip", "label": "Wing past the trunk: the tuck reflex", "kind": "hit", "gap": 0.12, "side": -1.0, "speed": 1.0},
+	# Combat (LabFight).
+	{"id": "fight_gun", "label": "Combat: gun burst at a bird ahead", "kind": "fight", "fight": "gun"},
+	{"id": "fight_rocket", "label": "Combat: hit by a rocket", "kind": "fight", "fight": "rocket"},
+	{"id": "fight_seeker", "label": "Combat: seeker lock and launch", "kind": "fight", "fight": "seeker"},
+	{"id": "fight_downed", "label": "Combat: downed (out of control)", "kind": "fight", "fight": "downed"},
+	{"id": "fight_rearm", "label": "Combat: rearming on the base", "kind": "fight", "fight": "rearm"},
 ]
 
 
@@ -88,4 +98,7 @@ static func start(s: Dictionary, bird: Bird, layout: ArenaLayout) -> LabPilot:
 			var b := rr * cos(deg_to_rad(float(s.deg))) * 0.995 if not s.has("gap") else rr + float(s.gap)   # (gap: passing clear)
 			var axis := Vector3(tree.base.x, perch.position.y - 2.0, tree.base.y)
 			bird.fly_from(axis + Vector3(float(s.side) * b, 0.0, -6.0), Vector3(0, 0, 1), p.v_best * float(s.speed))
+		"fight":
+			pilot.kind = LabPilot.Kind.DROP   # (hands off: a drop that never lets go; LabFight places the bird)
+			pilot.wait = INF
 	return pilot

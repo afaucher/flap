@@ -39,7 +39,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
-- `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`), `scripts/test_support/`.
+- `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
+  burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
 - `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
@@ -47,7 +48,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `.\run.ps1 --scene res://scenes/tack_gallery.tscn [--bird crow] [--sheet <png> [--macros | --heads | --mounts]]`.
   Weapons: a pod each side of the rider (`Saddle` loadout, left and right, each `rockets` x3, `seekers` x2 or `gun`,
   a belt-fed machine gun with `Launcher.GUN_POD` (40) rounds; tilted in a trunnion). `Launcher` carries each kind
-  summed over the pods (`set_tack`, `carried` / `left`), fires each round from its own pod's muzzle
+  summed over the pods (`set_tack`, `carried` / `left`), fires each round from its own pod's muzzle (in flight, the very round the pod carries, `Saddle.flying_round`,
+  drawn true size leaving the pod and at most `CombatWorld.ROUND_GROW` (2x) further out; `test_flying_round`)
   (`Tack.muzzle_world`; two gun pods take turns), and Q / RB (`next_weapon`) switches between the two kinds when they
   differ. `--loadout <left>,<right>` (one value: both; `--seekers` = seekers,seekers; `.\range.ps1 -Loadout gun,rockets`)
   arms your bird; the menu's Fight screen picks each pod. The target and circuit wingman carry yours with a gun
@@ -65,7 +67,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   bullet passing within `ZIP_NEAR` of you.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
-  that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
+  that area and drops (`FlightModel.wing_loss`); eight down the bird, which flutters down to the ground (`CombatWorld.down_flutter`, `Bird.start_tumble`: its wings flail
+  and hold 0.3 of their lift, it rolls and drops, and sits where it comes down until it respawns; a respawn ends it); a hit within `CombatWorld.recover` (1 s) of the last
   takes one feather at most (a bullet a third of one), so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
   locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The

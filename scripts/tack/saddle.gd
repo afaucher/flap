@@ -805,7 +805,7 @@ func _rocket_pod(pod: Transform3D) -> Array:
 	var brass := _tm("brass")
 	var blued := _tm("blued")
 	var rounds := []
-	var lt := 70.0 * k
+	var lt := ROCKET_TUBE * k
 	for c in _rocket_tubes():
 		var xf := Transform3D(pod.basis * Basis(Vector3.RIGHT, -PI * 0.5), pod * (Vector3(c.x, c.y, 14.0) * k))   # (lathe +Y -> pod -Z)
 		var ro := 4.2 * k
@@ -970,10 +970,20 @@ func _seeker_pod(pod: Transform3D) -> Array:
 ## and four tail fins (in an X).
 func _seeker(p: Vector3, b: Basis, k: float) -> MeshInstance3D:
 	var xf := Transform3D(b * Basis(Vector3.RIGHT, -PI * 0.5), p)   # (lathe +Y -> forward)
+	var mi := MeshInstance3D.new()
+	mi.name = "Seeker"
+	mi.mesh = _seeker_mesh(k, xf, TackMesh.REAL_H * 100.0 / cm)
+	add_child(mi)
+	return mi
+
+
+## A seeker's mesh, its tail at `xf`'s origin and its axis `xf`'s +Y, `k` model metres per real cm, for a rider
+## `rider_h` m tall (TackMesh).
+static func _seeker_mesh(k: float, xf: Transform3D, rider_h: float) -> ArrayMesh:
 	var r := 2.6 * k
-	var body := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var body := TackMesh.new(rider_h)
 	body.lathe(PackedVector2Array([Vector2(0.0, 0.0), Vector2(r * 0.7, 0.0), Vector2(r * 0.85, 1.2 * k), Vector2(r, 3.0 * k), Vector2(r, 52.0 * k)]), 14, xf)
-	var fins := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var fins := TackMesh.new(rider_h)
 	for f in 4:
 		var a := TAU * f / 4.0 + PI * 0.25
 		var d := Vector3(cos(a), 0.0, sin(a))
@@ -982,15 +992,15 @@ func _seeker(p: Vector3, b: Basis, k: float) -> MeshInstance3D:
 		fins.sweep(PackedVector3Array([xf * (d * r * 0.95 + Vector3(0, 7.0 * k, 0)), xf * (d * (r + 4.2 * k) + Vector3(0, 3.0 * k, 0))]), PackedVector3Array([xf.basis * side]), PackedVector2Array([Vector2(-0.22 * k, -7.0 * k), Vector2(0.22 * k, -7.0 * k), Vector2(0.22 * k, 5.0 * k), Vector2(-0.22 * k, 5.0 * k)]), true)
 		# Canard: small, ahead of the band.
 		fins.sweep(PackedVector3Array([xf * (d * r * 0.95 + Vector3(0, 46.0 * k, 0)), xf * (d * (r + 1.8 * k) + Vector3(0, 45.0 * k, 0))]), PackedVector3Array([xf.basis * side]), PackedVector2Array([Vector2(-0.18 * k, -2.0 * k), Vector2(0.18 * k, -2.0 * k), Vector2(0.18 * k, 1.5 * k), Vector2(-0.18 * k, 1.5 * k)]), true)
-	var band := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var band := TackMesh.new(rider_h)
 	band.lathe(PackedVector2Array([Vector2(r, 38.0 * k), Vector2(r * 1.08, 38.5 * k), Vector2(r * 1.08, 41.0 * k), Vector2(r, 41.5 * k)]), 14, xf)
-	var nose := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var nose := TackMesh.new(rider_h)
 	var np := PackedVector2Array()
 	for j in 8:
 		var u := j / 7.0
 		np.append(Vector2(r * (1.0 - 0.62 * pow(u, 1.4)), (52.0 + 11.0 * u) * k))
 	nose.lathe(np, 14, xf)
-	var eye := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var eye := TackMesh.new(rider_h)
 	var ep := PackedVector2Array()
 	for j in 6:
 		var a := PI * 0.5 * j / 5.0
@@ -1003,40 +1013,56 @@ func _seeker(p: Vector3, b: Basis, k: float) -> MeshInstance3D:
 	m = eye.commit(m)
 	for i in 5:
 		m.surface_set_material(i, TackMaterials.get_mat(["nickel", "blued", "brass", "red", "glass"][i]))
-	var mi := MeshInstance3D.new()
-	mi.name = "Seeker"
-	mi.mesh = m
-	add_child(mi)
-	return mi
+	return m
 
 
 ## One rocket in its tube (its own MeshInstance, hidden when fired): a steel case standing a little out of the
 ## tube's mouth, a red ogive nose, four fins out of the tube's back. `xf`: the tube's frame (axis +Y forward).
 func _round(lt: float, k: float, xf: Transform3D) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = "Round"
+	mi.mesh = _rocket_mesh(lt, k, xf, TackMesh.REAL_H * 100.0 / cm)
+	add_child(mi)
+	return mi
+
+
+## A rocket's mesh in a tube `lt` long whose back is at `xf`'s origin, axis `xf`'s +Y, `k` model metres per real cm,
+## for a rider `rider_h` m tall (TackMesh).
+static func _rocket_mesh(lt: float, k: float, xf: Transform3D, rider_h: float) -> ArrayMesh:
 	var r := 3.0 * k
 	var nose0 := lt + 4.0 * k
 	var prof := PackedVector2Array()
 	for j in 9:
 		var u := float(j) / 8.0
 		prof.append(Vector2(r * sqrt(maxf(1.0 - u * u, 0.0)) * (1.0 - 0.1 * u), nose0 + 9.0 * k * u))
-	var tm := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var tm := TackMesh.new(rider_h)
 	tm.lathe(PackedVector2Array([Vector2(0.0, -2.0 * k), Vector2(r * 0.7, -2.0 * k), Vector2(r, -1.0 * k), Vector2(r, nose0)]), 12, xf)
 	for f in 4:
 		var a := TAU * f / 4.0 + PI * 0.25
 		var d := Vector3(cos(a), 0.0, sin(a))
 		var side := Vector3(-sin(a), 0.0, cos(a))
 		tm.sweep(PackedVector3Array([xf * (d * r * 0.8 + Vector3(0, -2.0 * k, 0)), xf * (d * (r + 3.0 * k) + Vector3(0, -3.5 * k, 0))]), PackedVector3Array([xf.basis * side]), PackedVector2Array([Vector2(-0.25 * k, -3.0 * k), Vector2(0.25 * k, -3.0 * k), Vector2(0.25 * k, 3.0 * k), Vector2(-0.25 * k, 3.0 * k)]), true)
-	var tm2 := TackMesh.new(TackMesh.REAL_H * 100.0 / cm)
+	var tm2 := TackMesh.new(rider_h)
 	tm2.lathe(prof, 12, xf)
 	var m := tm.commit()
 	m = tm2.commit(m)
 	m.surface_set_material(0, TackMaterials.get_mat("nickel"))
 	m.surface_set_material(1, TackMaterials.get_mat("red"))
-	var mi := MeshInstance3D.new()
-	mi.name = "Round"
-	mi.mesh = m
-	add_child(mi)
-	return mi
+	return m
+
+
+## A round as it flies (CombatWorld): the very rocket or seeker a pod carries, for a rider `rider_h` m tall, centred
+## on its middle and pointing +Y.
+static func flying_round(kind: String, rider_h: float) -> ArrayMesh:
+	var k := rider_h / (TackMesh.REAL_H * 100.0)   # (model m per real cm)
+	if kind == "seekers":
+		return _seeker_mesh(k, Transform3D(Basis(), Vector3(0.0, -SEEKER_MID * k, 0.0)), rider_h)
+	return _rocket_mesh(ROCKET_TUBE * k, k, Transform3D(Basis(), Vector3(0.0, -ROCKET_MID * k, 0.0)), rider_h)
+
+
+const ROCKET_TUBE := 70.0   ## real cm, a rocket pod's tubes
+const ROCKET_MID := 38.0    ## real cm from a rocket's tube back to its middle (fins at -6.5, nose tip at 83)
+const SEEKER_MID := 32.5    ## real cm from a seeker's tail to its middle (eye at 65)
 
 
 ## A rounded box: centre, full size, corner radius, orientation.
