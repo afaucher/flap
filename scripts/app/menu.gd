@@ -52,9 +52,8 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 	["ace", "Ace", "Near-instant reactions, sees almost all round, fine aim; drags your seekers through the trunks."],
 ]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
-Left mouse / F: fire.  Q: switch weapon.  Esc: pause."
-const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land).
-Esc: pause."
+Left mouse / F: fire.  Q: switch weapon."
+const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land)."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
