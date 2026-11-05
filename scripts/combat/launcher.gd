@@ -44,6 +44,7 @@ var ammo := UNMOUNTED.duplicate()
 ## Where round i of a weapon leaves from, world space: Callable(weapon: int, i: int) -> Vector3 (the saddle's
 ## pods: Tack.muzzle_world). Unset: muzzle().
 var mount := Callable()
+var mount_drawn := Callable()   ## (weapon, round) -> where that round's muzzle is drawn this frame (set_tack)
 var lock_target: Bird = null
 var lock := 0.0               ## 0..1 lock progress on lock_target
 var cooldown := 0.0
@@ -119,6 +120,7 @@ func set_mounts(rockets: int, seekers: int, at: Callable, gun := 0) -> void:
 	capacity = {Weapon.ROCKETS: rockets, Weapon.SEEKERS: seekers, Weapon.GUN: gun}
 	ammo = capacity.duplicate()
 	mount = at
+	mount_drawn = Callable()
 	if carried(weapon) == 0 and not kinds().is_empty():
 		weapon = kinds()[0]
 
@@ -126,6 +128,7 @@ func set_mounts(rockets: int, seekers: int, at: Callable, gun := 0) -> void:
 ## Arm from a bird's tack: what its pods hold, each round from its own pod's muzzle (Tack.muzzle_world).
 func set_tack(t: Tack) -> void:
 	set_mounts(t.capacity("rockets"), t.capacity("seekers"), func(w: int, i: int) -> Vector3: return t.muzzle_world(KIND_NAMES[w], i), t.capacity("gun"))
+	mount_drawn = func(w: int, i: int) -> Vector3: return t.muzzle_drawn(KIND_NAMES[w], i)
 
 
 func locked() -> bool:
@@ -187,6 +190,10 @@ func fire(world: CombatWorld) -> Projectile:
 		var sd := deg_to_rad(GUN_SPREAD)
 		dir = (dir + side * tan(_rng.randfn(0.0, sd)) + up * tan(_rng.randfn(0.0, sd))).normalized()
 	var p := Projectile.launch(k, from, bird.model.velocity, dir, bird, lock_target if locked() else null)
+	if k == Projectile.Kind.GUN and mount_drawn.is_valid():
+		var w := weapon
+		var i := int(ammo[weapon])
+		p.gun_mouth = func() -> Vector3: return mount_drawn.call(w, i)
 	world.spawn(p)
 	return p
 

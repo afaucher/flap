@@ -31,6 +31,10 @@ var kind := Kind.ROCKET
 var pos := Vector3.ZERO
 var last_pos := Vector3.ZERO   ## where it was a tick ago: it's drawn between the two (CombatWorld, as the birds are)
 var vel := Vector3.ZERO
+var carrier := Vector3.ZERO    ## the shooter's velocity as it left the gun: the gun flies on with it
+var gun_mouth := Callable()    ## a bullet: where its gun's mouth is drawn now (world). Its tracer starts no further back and
+                               ## its muzzle flash sits on it, so they stay on the barrel as the bird flies on, not left
+                               ## behind in the air over its back (Launcher.fire sets it; unset, they ride on `carrier`)
 var age := 0.0
 var travelled := 0.0
 var shooter: Object = null
@@ -45,6 +49,7 @@ static func launch(k: int, from: Vector3, carrier_vel: Vector3, aim: Vector3, by
 	p.pos = from
 	p.last_pos = from
 	p.vel = carrier_vel + aim.normalized() * float(SPEC[k].launch)
+	p.carrier = carrier_vel
 	p.shooter = by
 	p.target = at if k == Kind.SEEKER else null
 	return p

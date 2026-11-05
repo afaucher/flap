@@ -3900,5 +3900,47 @@
     "replace": "\treturn s\n\tvar out := D.silence(LEAD_3D)\n"
    }
   ]
+ },
+ {
+  "id": "gun-flash-left-behind",
+  "bug": "Muzzle flashes left in the air where the shot was fired: the bird flew on past them (20 cm a frame), so they sat over its back, then its tail (2026-11-04).",
+  "tests": [
+   "test_gun_tracer"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "\t\tvar pos: Vector3 = b.pos + (b.get(\"vel\", Vector3.ZERO) as Vector3) * age\n\t\tvar mouth: Callable = b.get(\"mouth\", Callable())\n\t\tif mouth.is_valid() and is_instance_valid(b.get(\"shooter\")):\n\t\t\tpos = (mouth.call() as Vector3) + (b.off as Vector3)\n",
+    "replace": "\t\tvar pos: Vector3 = b.pos\n"
+   }
+  ]
+ },
+ {
+  "id": "gun-tracer-from-back",
+  "bug": "Gun tracers drawn back to where the bullet left the gun, which the bird had flown past: they came out of its back (2026-11-04).",
+  "tests": [
+   "test_gun_tracer"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tvar ahead := (p.vel - p.carrier).length() * maxf(p.age - lag, 0.0)   # (how far it's out of the gun, at the drawn moment)\n\t\tif p.gun_mouth.is_valid() and is_instance_valid(p.shooter):   # (better: from the barrel as it's drawn now)\n\t\t\tahead = maxf((a - (p.gun_mouth.call() as Vector3)).dot(p.vel.normalized()), 0.0)\n",
+    "replace": "\t\tvar ahead := p.travelled\n"
+   }
+  ]
+ },
+ {
+  "id": "gun-flash-physics-ahead",
+  "bug": "Muzzle flashes placed at the gun's mouth as of the latest physics tick, ahead of where the bird is drawn (physics interpolation): in front of its head (2026-11-04).",
+  "tests": [
+   "test_gun_tracer"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/tack.gd",
+    "find": "\treturn saddle.get_global_transform_interpolated() * saddle.round_launch(kind, i)",
+    "replace": "\treturn saddle.global_transform * saddle.round_launch(kind, i)"
+   }
+  ]
  }
 ]

@@ -71,6 +71,7 @@ var fx: CombatFx            ## what a burst and a hit look like
 var _clock := 0.0
 var _smoke_mesh: ImmediateMesh
 var _tracer_mesh: ImmediateMesh
+var tracers_drawn: Array = []   ## [tail, head] of each bullet's streak as last drawn (tests)
 var _bodies: Array = []     ## MeshInstance3D per live projectile (pooled)
 var _rocket_mesh: Mesh
 var _seeker_mesh: Mesh
@@ -151,7 +152,7 @@ func spawn(p: Projectile) -> void:
 	_next_id += 1
 	projectiles.append(p)
 	if p.kind == Projectile.Kind.GUN:
-		fx.muzzle_flash(p.pos, p.vel - (Projectile.velocity_of(p.shooter) if is_instance_valid(p.shooter) else Vector3.ZERO))
+		fx.muzzle_flash(p.pos, p.vel - p.carrier, p.carrier, p.gun_mouth if is_instance_valid(p.shooter) else Callable(), p.shooter)
 	else:
 		_smoke.append({"id": p.id, "pts": [[p.pos, _clock]], "open": true, "kind": p.kind})
 	if player != null and p.shooter == player.bird:
@@ -367,7 +368,7 @@ func _process(_delta: float) -> void:
 	var lag := Bird.drawn_lag()
 	var heads := _draw_bodies(lag)
 	_draw_smoke(eye, _clock - lag, heads)
-	_draw_tracers(eye, heads)
+	_draw_tracers(eye, heads, lag)
 	fx.draw(eye, _clock - lag, lag)
 	# Forget what has faded.
 	_smoke = _smoke.filter(func(s): return s.open or (s.pts.size() > 0 and _clock - float(s.pts[-1][1]) < SMOKE_LIFE))
@@ -408,18 +409,25 @@ func _draw_bodies(lag: float) -> Dictionary:
 
 
 ## Bullets: a hot streak each, from where it's drawn back along its flight (TRACER_LEN s of it, no further back than
-## where it left the gun), facing the camera, a little wider far off so it still reads as a line.
-func _draw_tracers(eye: Vector3, heads: Dictionary) -> void:
+## the gun's mouth: the gun flies on with its bird, so not to where it left the gun -- the bird has flown past that,
+## and the streak would come out of its back), facing the camera, a little wider far off so it still reads as a line.
+## `tracers_drawn`: each streak's [tail, head] this frame (tests).
+func _draw_tracers(eye: Vector3, heads: Dictionary, lag := 0.0) -> void:
 	_tracer_mesh.clear_surfaces()
+	tracers_drawn.clear()
 	var started := false
 	for p: Projectile in projectiles:
 		if p.kind != Projectile.Kind.GUN or not heads.has(p.id):
 			continue
 		var a: Vector3 = heads[p.id]
 		var back := p.vel * TRACER_LEN
-		if back.length() > p.travelled:
-			back = back.normalized() * p.travelled
+		var ahead := (p.vel - p.carrier).length() * maxf(p.age - lag, 0.0)   # (how far it's out of the gun, at the drawn moment)
+		if p.gun_mouth.is_valid() and is_instance_valid(p.shooter):   # (better: from the barrel as it's drawn now)
+			ahead = maxf((a - (p.gun_mouth.call() as Vector3)).dot(p.vel.normalized()), 0.0)
+		if back.length() > ahead:
+			back = back.normalized() * ahead
 		var b := a - back
+		tracers_drawn.append([b, a])
 		var seg := a - b
 		if seg.length() < 1e-3:
 			continue

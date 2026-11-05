@@ -59,7 +59,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   (`lead_point` at bullet speed). A bullet hits only within the bird's own size (`Projectile.hit_radius`: crow
   0.27 m, sparrow 0.09) and hurts only that bird: no stun, a nudge, one feather -- inside the recovery window a third
   of one (`CombatWorld.GUN_CHIP`), so a stream chips about a feather a second. Drawn as tracer streaks with muzzle
-  flashes; sparks on wood and ground (`CombatFx`); `launched` / `burst` carry `kind` GUN (`burst` why `"hit"` on a bird,
+  flashes, both from the gun's mouth as it's drawn this frame (`Projectile.gun_mouth` -> `Tack.muzzle_drawn`: physics
+  interpolation draws the bird behind the latest tick; `test_gun_tracer`, `tests/probe_gun_close.gd` to look); sparks on wood and ground (`CombatFx`); `launched` / `burst` carry `kind` GUN (`burst` why `"hit"` on a bird,
   `"impact"`; none when it runs out). `GameAudio`: its own shot (crack and bolt clatter), strikes on wood and ground, and a zip for someone else's
   bullet passing within `ZIP_NEAR` of you.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
