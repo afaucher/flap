@@ -1,7 +1,9 @@
 class_name PauseMenu
 extends CanvasLayer
 ## Esc in the game or the range: everything stops (the scene tree pauses: birds, AI, sound) and the mouse is freed,
-## and over the dimmed view, Resume, Settings (the start menu's, SettingsPanel) and Leave (to the start menu).
+## and over the dimmed view, Resume, Start over (the scene's own: the game's bird back on its perch, the range's
+## match from the top; resumes first), Settings (the start menu's, SettingsPanel) and Leave (to the start menu).
+## Esc or the gamepad's Start opens it.
 ## Resume, or Esc, carries on: the mouse captured at once (no capturing click, so no stray shot) and the controllers
 ## given the settings as they now stand (PlayerController.take_settings). Esc on Settings goes back to the pause page.
 ## The window losing focus (alt-tab) opens it too, so the game never runs on with the mouse free
@@ -12,6 +14,7 @@ signal left   ## Leave pressed (the start menu opens next, unless `change_scene`
 const MENU := "res://scenes/menu.tscn"
 
 var controllers: Array = []       ## PlayerControllers given the settings on resuming
+var start_over := Callable()      ## the scene's Start over
 var pause_on_focus_out := true
 var change_scene := true          ## Leave opens the start menu (a test turns it off and watches `left`)
 var page := ""                    ## "" closed | "pause" | "settings"
@@ -21,10 +24,12 @@ var _pause: VBoxContainer
 var _settings: VBoxContainer
 
 
-## A pause menu for `scene` (once it's loaded), giving `controllers` the settings when play resumes.
-static func attach(scene: Node, controllers: Array) -> PauseMenu:
+## A pause menu for `scene` (once it's loaded), giving `controllers` the settings when play resumes; `start_over`, the
+## scene's Start over.
+static func attach(scene: Node, controllers: Array, start_over: Callable) -> PauseMenu:
 	var p := PauseMenu.new()
 	p.controllers = controllers
+	p.start_over = start_over
 	var args := Boot.args()
 	p.pause_on_focus_out = not (args.has("--shot") or args.has("--perf"))
 	scene.add_child(p)
@@ -44,7 +49,8 @@ func _init() -> void:
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_ui.add_child(dim)
 	_pause = MenuStyle.page(_ui, "PAUSED", false)
-	for b in [["Resume  (Esc)", "PauseResume", resume], ["Settings", "PauseSettings", _show.bind("settings")],
+	for b in [["Resume  (Esc)", "PauseResume", resume], ["Start over", "PauseStartOver", restart],
+			["Settings", "PauseSettings", _show.bind("settings")],
 			["Leave", "PauseLeave", leave]]:
 		var button := MenuStyle.button(b[0], 22, Vector2(320, 48))
 		button.name = b[1]
@@ -84,6 +90,13 @@ func resume() -> void:
 	for c in controllers:
 		c.take_settings()
 	_mouse(Input.MOUSE_MODE_CAPTURED)
+
+
+## Start over: play resumes and the scene starts over.
+func restart() -> void:
+	resume()
+	if start_over.is_valid():
+		start_over.call()
 
 
 ## Back to the start menu.

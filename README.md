@@ -36,8 +36,8 @@ centre); mouse and keyboard work too.
   way the mouse climbs (toward you, as a flight stick's pull, or away), the Gamepad tab the same for the stick, saved
   for next time. (The bindings can't be changed yet.)
 
-**Esc** in the game pauses it (so does switching away from the window): Resume, Settings (the same screen) or Leave,
-back to this menu.
+**Esc** (or the gamepad's Start) in the game pauses it, as does switching away from the window: Resume, Start over,
+Settings (the same screen) or Leave, back to this menu.
 
 **Novice or Realistic** (both screens; Novice is the menu's default). *Novice*: hold catch near a perch and the
 bird lines itself up and lands for you; every bird gets half as much stamina again, recovers it twice as fast and
@@ -55,7 +55,8 @@ refills its burst faster. *Realistic*: no help, every landing is yours to judge.
 | RB | Q | Switch weapon (when your two pods carry different kinds) |
 | Right stick | | Look around (the camera springs back) |
 | | Mouse wheel | Zoom the camera in and out |
-| Start | R | Start over |
+| Start | Esc | Pause: Resume, Start over, Settings, Leave |
+| (pause menu) | R | Start over |
 | | F1 | Show the key hints again |
 | | F3 | Instruments: speed tape, pitch ladder, bank arc, angle of attack, lift / drag |
 | | F6 | The light: golden (default), afternoon, clear, misty morning, overcast |

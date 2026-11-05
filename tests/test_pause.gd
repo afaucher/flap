@@ -2,7 +2,8 @@ extends TestCase
 ## Esc in the game pauses it: the scene tree stops (a bird in flight holds still), the mouse is freed and the pause
 ## menu shows Resume, Settings and Leave. Settings is the start menu's; a choice there reaches the player's controller
 ## when play resumes, Esc going back to the pause page first. Esc again resumes and the bird flies on. The window losing
-## focus pauses too. Leave unpauses and leaves. The range pauses the same way.
+## focus pauses too, and so does the gamepad's Start; Start over resumes with the bird back on a perch. Leave unpauses
+## and leaves. The range pauses the same way, and its Start over starts the match again.
 
 const SHARDS := 2   ## (the game, the range)
 const PATH := "user://test_pause_settings.cfg"
@@ -77,6 +78,14 @@ func _game() -> void:
 	check(get_tree().paused and pause.is_open(), "the window losing focus pauses")
 	(pause.find_child("PauseResume", true, false) as Button).pressed.emit()
 	check(not get_tree().paused and not pause.is_open(), "Resume resumes")
+	# The gamepad's Start, and Start over.
+	check(game.bird.state == Bird.State.FLYING, "(the bird's in the air)")
+	await _pad_start()
+	check(get_tree().paused and pause.is_open() and _shown(pause, "PauseStartOver"), "the gamepad's Start pauses, with Start over on the menu")
+	(pause.find_child("PauseStartOver", true, false) as Button).pressed.emit()
+	await frames(2)
+	check(not get_tree().paused and not pause.is_open(), "Start over resumes")
+	check(game.bird.state == Bird.State.PERCHED, "with the bird back on a perch (%s)" % Bird.State.keys()[game.bird.state])
 	# Leave.
 	pause.change_scene = false
 	var gone := [false]
@@ -102,6 +111,12 @@ func _range() -> void:
 	check(get_tree().paused and pause.is_open() and _shown(pause, "PauseLeave"), "Esc pauses the range")
 	await _esc()
 	check(not get_tree().paused and not pause.is_open(), "and Esc resumes it")
+	r.world.stats.shots = 5
+	var was: Bird = r.bird
+	await _esc()
+	(pause.find_child("PauseStartOver", true, false) as Button).pressed.emit()
+	await frames(3)
+	check(not get_tree().paused and r.world.stats.shots == 0 and r.bird != was, "Start over starts the range again (shots %d)" % r.world.stats.shots)
 	r.queue_free()
 	await frames(2)
 
@@ -109,6 +124,18 @@ func _range() -> void:
 func _shown(pause: PauseMenu, button: String) -> bool:
 	var n := pause.find_child(button, true, false) as Control
 	return n != null and n.is_visible_in_tree()
+
+
+## The gamepad's Start pressed and let go.
+func _pad_start() -> void:
+	for down in [true, false]:
+		var e := InputEventJoypadButton.new()
+		e.device = 0
+		e.button_index = JOY_BUTTON_START
+		e.pressed = down
+		Input.parse_input_event(e)
+		Input.flush_buffered_events()
+		await get_tree().process_frame
 
 
 ## Esc pressed and let go, as the engine delivers it.

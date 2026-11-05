@@ -141,7 +141,7 @@ func _ready() -> void:
 	combat_hud = CombatHud.new()
 	layer.add_child(combat_hud)
 	await screen.run([["Saddling the birds", restart, 1.0]], 0.97)
-	pause = PauseMenu.attach(self, [player_ctl])
+	pause = PauseMenu.attach(self, [player_ctl], restart)
 	is_loaded = true
 	loaded.emit()
 	screen.finish()

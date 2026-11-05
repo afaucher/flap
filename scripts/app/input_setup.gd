@@ -5,7 +5,7 @@ extends RefCounted
 ## Keyboard + mouse: the mouse (captured) moves a virtual stick; Space flaps (hold to keep flapping),
 ## Ctrl catches a perch / lets go of one.
 ## Gamepad: left stick steers (absolute, springs to centre), right stick tilts the camera, left trigger
-## flaps, A catches / lets go. Back cycles the bird, Start respawns, Y toggles the autopilot.
+## flaps, A catches / lets go. Back cycles the bird, Start pauses (the pause menu has Start over), Y toggles the autopilot.
 ## Combat (scripts/combat): left mouse / F / right trigger fires, Q / RB switches weapon.
 
 const KEYS := {
@@ -31,7 +31,7 @@ const MOUSE := {
 const PAD_BUTTONS := {
 	"catch": JOY_BUTTON_A,
 	"cycle_bird": JOY_BUTTON_BACK,
-	"respawn": JOY_BUTTON_START,
+	"pause": JOY_BUTTON_START,
 	"toggle_autopilot": JOY_BUTTON_Y,
 	"weapon_next": JOY_BUTTON_RIGHT_SHOULDER,
 }

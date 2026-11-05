@@ -26,11 +26,11 @@ const CONTROL_ROWS := [
 	["Fire", "fire"],
 	["Switch weapon", "weapon_next"],
 	["Zoom the camera", {"mouse": "Wheel"}],
-	["Start over", "respawn"],
+	["Start over", {"keys": "respawn", "pad": "Pause menu"}],
 	["Change bird", {"keys": "1 - 5", "pad": "cycle_bird"}],
 	["Autopilot", "toggle_autopilot"],
 	["Instruments", "toggle_debug"],
-	["Pause: resume, settings, leave", "pause"],
+	["Pause: resume, start over, settings, leave", "pause"],
 ]
 const W := 620.0
 

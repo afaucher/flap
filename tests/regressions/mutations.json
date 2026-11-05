@@ -4420,7 +4420,7 @@
   "edits": [
    {
     "file": "scripts/app/combat_range.gd",
-    "find": "\tpause = PauseMenu.attach(self, [player_ctl])\n",
+    "find": "\tpause = PauseMenu.attach(self, [player_ctl], restart)\n",
     "replace": ""
    }
   ]
@@ -4436,6 +4436,35 @@
     "file": "scripts/ui/pause_menu.gd",
     "find": "\t\tc.take_settings()\n\t_mouse(Input.MOUSE_MODE_CAPTURED)\n",
     "replace": "\t\tc.take_settings()\n"
+   }
+  ]
+ },
+ {
+  "id": "start-over-does-nothing",
+  "bug": "The pause menu's Start over only resumed: the bird flew on where it was (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tif start_over.is_valid():\n\t\tstart_over.call()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pad-start-respawns",
+  "bug": "The gamepad's Start still started over instead of pausing: no pause menu on the pad (2026-11-05).",
+  "tests": [
+   "test_pause",
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/input_setup.gd",
+    "find": "\t\"pause\": JOY_BUTTON_START,",
+    "replace": "\t\"respawn\": JOY_BUTTON_START,"
    }
   ]
  }
