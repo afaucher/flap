@@ -6,7 +6,8 @@ extends TestCase
 ## Combat scenarios (LabFight), for a crow and a hawk: the gun burst fires from the lab bird's pods and chips the bird
 ## ahead; the rocket knocks feathers out of the lab bird, a burst beside it; the seeker locks (no sooner than
 ## LOCK_TIME) then launches and hits; the downed bird flutters down (its wings flailing, as drawn) and comes down on the ground, and
-## sits there, no bonk -- with CombatWorld.down_flutter off (the range's), it only glides down, stunned; on the base the empty pods refill
+## sits there, no bonk -- with CombatWorld.down_flutter off, it only glides down, stunned; respawned onto its base mid-fall,
+## the flutter is over (it sits there, its wings' lift whole); on the base the empty pods refill
 ## and the lost feathers grow back, after RESTOCK_TIME and not before. The lab scene opens on one with its fight.
 
 const SHARDS := 3   ## (the species split over two processes, the lab scene with the second; the combat scenes a third)
@@ -194,4 +195,25 @@ func _fights() -> void:
 		check(not g.tumbling() and g_y - g_low < 3.0, "%s, down_flutter off: downed, it only glides on (%.1f m)" % [id, g_y - g_low])
 		gf.free_all()
 		g.queue_free()
+		await frames(2)
+		# Respawned onto its base while still fluttering down: the flutter ends there.
+		var r := Bird.new()
+		add_child(r)
+		r.setup(p, layout, null)
+		r.arena = arena
+		LabScenarios.start(sd, r, layout)
+		var rf := LabFight.start(sd, r, layout, self, arena)
+		rf.world.bases = {1: layout.perches[0]}
+		var mid := false
+		for i in 120:
+			await frames(1)
+			if r.tumbling() and r.global_position.y < LabFight.FLY_Y - 2.0:
+				mid = true
+				break
+		check(mid, "%s: (fluttering down, mid-fall)" % id)
+		rf.world.respawn(r)
+		await frames(3)
+		check(not r.tumbling() and is_equal_approx(r.model.lift_scale, 1.0) and r.state == Bird.State.PERCHED, "%s: respawned onto its base mid-fall, the flutter is over (%s, lift x%.1f)" % [id, Bird.State.keys()[r.state], r.model.lift_scale])
+		rf.free_all()
+		r.queue_free()
 		await frames(2)

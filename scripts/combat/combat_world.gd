@@ -41,9 +41,8 @@ const GUN_SHOVE := 0.6          ## m/s, a bullet's nudge
 const TRACER_LEN := 0.012       ## s of a bullet's flight its streak covers (about 1.3 m)
 const DOWN_STUN := 2.5      ## s
 ## A downed bird flutters down out of the fight to the ground (Bird.start_tumble: its wings flail, it drops and rolls,
-## and comes down on the ground and sits there) rather than gliding on through the down stun. Off in the range for now; the bird lab's
-## combat scenes have it on.
-var down_flutter := false
+## and comes down on the ground and sits there) rather than gliding on through the down stun. Off: it glides on.
+var down_flutter := true
 const SMOKE_EVERY := 0.025  ## s between smoke points
 const SMOKE_LIFE := 2.2     ## s
 

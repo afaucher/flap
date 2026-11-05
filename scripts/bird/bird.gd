@@ -145,6 +145,8 @@ func setup(p: BirdProfile, l: ArenaLayout, ctrl: Object) -> void:
 func perch_at(p: Perch) -> void:
 	perch = p
 	state = State.PERCHED
+	tumble = false   # (a respawn onto the base ends a downed bird's flutter)
+	model.lift_scale = 1.0
 	perch_grip = p.position
 	global_position = Perch.seat_at(perch_grip, profile)
 	model.position = global_position

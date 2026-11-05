@@ -3989,5 +3989,19 @@
     "replace": "\tif false:"
    }
   ]
+ },
+ {
+  "id": "respawn-keeps-tumbling",
+  "bug": "A downed bird respawned onto its base while still fluttering down kept its flutter (flailing wings, a third of their lift) when it next flew (2026-11-04, with the flutter turned on in the range).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\ttumble = false   # (a respawn onto the base ends a downed bird's flutter)\n\tmodel.lift_scale = 1.0\n",
+    "replace": ""
+   }
+  ]
  }
 ]

@@ -10,7 +10,7 @@ extends RefCounted
 ##   seeker  the lab bird, seekers, behind a bird SEEKER_OFF m off its line: it holds it in the cone to lock
 ##           (Launcher.LOCK_TIME) and fires once locked; the seeker steers onto it.
 ##   downed  the lab bird is the target with DOWN_FEATHERS - 1 feathers gone: the rocket's burst downs it, and it
-##           flutters down out of the fight (CombatWorld.down_flutter, on here: Bird.start_tumble) and comes down on the
+##           flutters down out of the fight (CombatWorld.down_flutter: Bird.start_tumble) and comes down on the
 ##           ground.
 ##   rearm   the lab bird on the branch as its base, its pods empty and REARM_LOST feathers gone: after
 ##           Launcher.RESTOCK_TIME on it, rearmed and mended.

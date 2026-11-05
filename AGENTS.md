@@ -40,8 +40,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
-  burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground: `CombatWorld.down_flutter`,
-  on in the lab, off in the range for now; `Bird.start_tumble`), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
+  burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
 - `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
@@ -67,7 +66,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   bullet passing within `ZIP_NEAR` of you.
 - Tactics for players (the tutorial's source): `docs/tutorial/tactics.md` -- keep its numbers in step with the code.
 - Damage: a hit knocks out the flight feathers nearest it (`Bird.lose_feathers`, 2.5 on average); the wing loses
-  that area and drops (`FlightModel.wing_loss`); eight down the bird; a hit within `CombatWorld.recover` (1 s) of the last
+  that area and drops (`FlightModel.wing_loss`); eight down the bird, which flutters down to the ground (`CombatWorld.down_flutter`, `Bird.start_tumble`: its wings flail
+  and hold 0.3 of their lift, it rolls and drops, and sits where it comes down until it respawns; a respawn ends it); a hit within `CombatWorld.recover` (1 s) of the last
   takes one feather at most (a bullet a third of one), so a salvo can't down a bird in one pass (`tests/probe_salvo.gd` measures how birds go down); your base (`Launcher.rearm_perch`) rearms and mends. The HUD shows a health bar.
 - Teams: `CombatWorld.add_bird(b, controller, team)` (unset: a team of its own), `friends()`, `friend_in_line()`;
   locks and the HUD's target take enemies only (`Launcher.is_enemy`), bursts hurt anyone (friendly fire on). The
