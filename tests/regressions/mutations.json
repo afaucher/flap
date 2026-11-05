@@ -4467,24 +4467,5 @@
     "replace": "\t\"respawn\": JOY_BUTTON_START,"
    }
   ]
- },
- {
-  "id": "r-starts-over",
-  "bug": "R still started over though Start over had moved into the pause menu (2026-11-05).",
-  "tests": [
-   "test_pause"
-  ],
-  "edits": [
-   {
-    "file": "scripts/app/input_setup.gd",
-    "find": "\t\"toggle_autopilot\": [KEY_P],",
-    "replace": "\t\"respawn\": [KEY_R],\n\t\"toggle_autopilot\": [KEY_P],"
-   },
-   {
-    "file": "scripts/app/game.gd",
-    "find": "\tif e.is_action_pressed(\"cycle_bird\"):",
-    "replace": "\tif e.is_action_pressed(\"respawn\"):\n\t\tstart_over()\n\tif e.is_action_pressed(\"cycle_bird\"):"
-   }
-  ]
  }
 ]

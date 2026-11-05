@@ -153,8 +153,7 @@ func _screen() -> void:
 	eq([keys.get("Centre the stick"), mouse.get("Centre the stick"), pad.get("Centre the stick")], ["C", "Middle mouse", null], "centre: C, the middle mouse")
 	eq([keys.get("Steer"), mouse.get("Steer"), pad.get("Steer")], [null, "Move the mouse", "Left stick"], "steer: the mouse, the left stick")
 	eq([keys.get("Change bird"), pad.get("Change bird")], ["1 - 5", "Back"], "change bird: 1-5, Back")
-	eq([keys.get("Pause: resume, start over, settings, leave"), pad.get("Pause: resume, start over, settings, leave")], ["Escape", "Start"], "pause: Escape, Start")
-	eq([keys.get("Start over"), pad.get("Start over")], ["Pause menu", "Pause menu"], "start over: the pause menu's, on either")
+	eq([keys.get("Pause"), pad.get("Pause")], ["Escape", "Start"], "pause: Escape, Start")
 	for r: Array in SettingsPanel.CONTROL_ROWS:
 		check(keys.has(r[0]) or mouse.has(r[0]) or pad.has(r[0]), "%s is on a tab" % r[0])
 	var plates := (menu.find_child("ControlsKeyboard", true, false) as GridContainer).find_children("*", "Button", true, false)
