@@ -203,9 +203,52 @@ same, the right tube showed its inside from below, which the readback alone didn
 | AI (`bird.control`, nearly all `ai.avoid`) | | 1.6 |
 
 TAA (on by default since) costs about 0.8 ms of it (13.8 ms with `--no-taa`: its own pass is 0.12 ms, the rest the
-motion vectors); the look doesn't matter (`--look afternoon` the same). The rest of the rise is the wood's geometry
-(the depth pre-pass and the opaque pass doubled): the mixed-age wood, the outposts' timber and the ground cover
-landed in between, not yet told apart. The 4-bird frame is now GPU-bound at about 15 ms of 16.7.
+motion vectors); the look doesn't matter (`--look afternoon` the same). The rest of the rise is the floor's fine mesh
+(below). The 4-bird frame is now GPU-bound at about 15 ms of 16.7.
+
+### Where the GPU went (bisected, 2026-11-05)
+
+Each master commit profiled as above, twice (the second counted: the first compiles shaders), with no other Godot
+running:
+
+| Commit | GPU | pre-pass / opaque / shadows |
+|---|---|---|
+| f048914 GPU rig on by default (5 runs) | 8.7 | 2.5 / 2.4 / 3.2 |
+| 0d5fc0f wood grain from the height map (thermals before it) | 9.0-9.1 | 2.5-2.7 / 2.5 / 3.3-3.5 |
+| f8229cd TAA on | 9.7 | 2.7 / 3.0 / 3.2 |
+| b385da7 treetop perches drawn | 9.9 | 2.6 / 3.0 / 3.6 |
+| **57c299b the ground-cover merge** | **14.0** | **4.3 / 4.7 / 4.2** |
+| 4c802f1 the hangar's hollow | 13.7 | 4.3 / 4.7 / 4.0 |
+| 90a4b66 the heath edge | 14.1 | 4.9 / 4.4 / 4.0 |
+| 4613915 | 14.5 | 5.1 / 4.5 / 4.1 |
+
+The ground-cover merge (needle litter in mounds, the floor field, moss and dirt scans, trunk feet and roots, the
+mixed-age pines, the thermal motes) added 4 ms. Switched off one at a time at 4613915:
+
+| Off | GPU | pre-pass / opaque / shadows |
+|---|---|---|
+| nothing | 14.2-15.0 | 4.9-5.1 / 4.5-4.7 / 4.1-4.5 |
+| the fine floor mesh (`FloorMounds` hidden) | 11.2 | 3.2 / 3.5 / 3.8 |
+| its shadow only | 14.2 | 4.9 / 4.5 / 4.0 |
+| trunk feet and roots (`FloorField.feet`) | 14.7 | 5.1 / 4.6 / 4.2 |
+| mixed ages (`Pinewood.ages`) | 14.3 | 4.8 / 4.7 / 4.0 |
+| thermal motes (`--calm`) | 13.6 | 4.6 / 4.3 / 3.9 |
+| all four | 10.6 | 3.0 / 3.3 / 3.4 |
+
+So it is the fine floor mesh, about 3.5 ms: `ArenaBuilder._ground`'s `FloorMounds`, one `PlaneMesh` over the whole
+floor field (194 m a side) at `FLOOR_STEP` 0.4 m, about 236k vertices and 470k triangles, each vertex displaced by
+the field in the vertex shader. As one mesh it is never culled: the whole of it goes through the depth pre-pass, the
+opaque pass and every shadow cascade whatever the camera sees, and far off its 0.4 m quads are a few pixels each
+(small triangles shade poorly). Hiding it here leaves the big plane's hole open, so the saving is the mesh less a
+flat floor's few tenths of a ms. The rest (feet, ages, motes) is within the runs' spread.
+
+Ways to make it cheaper:
+- **No change to the look**: split `FloorMounds` into tiles (say 8 x 8 of 24 m) so the ones off screen or out of a
+  shadow cascade are culled; cut the big plane's hole in its mesh (a ring) rather than by `discard` in
+  `forest_floor.gdshader`, which turns off early depth rejection over the whole plane.
+- **A look change, to agree first**: coarser steps further off (a clipmap or tile LODs: the mounds are 0.22 m at
+  most, gone in the distance anyway), `FLOOR_STEP` at the field's own 0.5 m (36 % fewer vertices), or no shadow
+  from the mounds (about 0.5 ms).
 
 | 20 birds, per frame (ms) | 2026-11-05 (two runs) |
 |---|---|
