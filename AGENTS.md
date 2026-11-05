@@ -122,7 +122,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `clear_spot` checks a mooring is clear of wood and crowns. In `CombatWorld.balloons`: a bullet through one holes it
   and flies on, a rocket's or seeker's fuse takes one, a burst within `BALLOON_IGNITE` sets it alight; down, the last
   to hit it is credited (`stats.balloons`, `balloon_downed`; the HUD counts yours), and `respawn_after` s on the ground
-  a fresh one is winched up. Birds fly through them (no collision yet), and seekers don't lock on them.
+  a fresh one is winched up. Birds fly through them (no collision yet), and seekers don't lock on them. The HUD's
+  target (`Launcher.target`) is an enemy or a balloon still up, whichever is nearest the sight within `PICK_CONE` (20 deg;
+  held until another is nearer by `PICK_KEEP`), else the nearest enemy in front; the AI's is `target_bird` (birds only).
+  The lead mark is drawn at `Launcher.lead_sight`: where the gunsight must be for the round to meet the target (drop
+  allowed for, and the chase camera riding above the line of fire, so ring on mark hits at any range and zoom; the
+  lead point itself is right only at the sight's 25 m). `test_aim_lead`; `tests/probe_gun_aim.gd` measures the miss.
   `tests/probe_balloon.gd` renders each stage in the clearing; `test_target_balloon`, `test_balloon_range`.
 - `scripts/combat/ai/`: the combat AI (`docs/design/combat_ai.md`, section 11 for what's built): `CombatSense` (what a
   bird can see) -> `CombatBrain` (a Beehave tree, `CombatTree`, built in code; `addons/beehave`) -> an `Intent` that

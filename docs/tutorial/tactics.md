@@ -18,6 +18,9 @@ marker, the point the target will be at when the rocket gets there.
 
 **Gun** (40 rounds a pod; ten a second while fire is held, a tap fires three). Fast bullets, about 40 m at most, aimed
 at the same lead marker as rockets (it sits much closer to the target: a bullet takes a fifth of a second to 20 m).
+The marker shows where the **sight** must be, allowing for the bullet's drop and for your view riding above the
+guns, so up close it sits above the target: put the ring on the marker, not on the target. Balloons get a bracket
+and a marker too when they're nearest your sight (within 20 deg).
 - A bullet has no fuse: it has to **hit the bird itself**, so a hawk is far easier to hit than a sparrow.
 - Each hit takes a feather; more hits within a second take a third of one each. The gun **wears a bird down**
   over a long burst; rockets and seekers finish it.
