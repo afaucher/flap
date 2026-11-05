@@ -1,7 +1,7 @@
 class_name RaceCourse
 extends RefCounted
-## A race course through the wood (docs/design/race.md): gates to fly through in order, from a start perch to the
-## finish gate, generated from the layout so every gate is flyable and the next one can always be seen.
+## A race course through the wood (docs/design/race.md): gates to fly through in order, from a start perch (an
+## outpost's rail) and back to it, generated from the layout so every gate is flyable and the next one can always be seen.
 ##   post    two posts standing on open ground with a banner between their tops; low (a window 0.8-3.8 m up) or
 ##           tall (5.5-8.5 m), facing any way (turned to the course: the bisector of the legs in and out)
 ##   trunk   between two pines 3.6-6 m apart, a banner from trunk to trunk over the window, at any height under
@@ -114,7 +114,6 @@ class Gate:
 	var span: Array[Vector3] = []   ## a span hoop: the rope's ends on the two trunks
 	var trees: Array[int] = []   ## the trees it hangs on, or (post) its posts once applied
 	var post_h := 0.0            ## m: a post gate's posts' height
-	var finish := false
 	var marked := false          ## the turn here is too tight to see the gate after it: needs course markers
 
 	func round_window() -> bool:
@@ -255,8 +254,6 @@ static func from_gates(l: ArenaLayout, st: Perch, gs: Array[Gate]) -> RaceCourse
 	c.layout = l
 	c.start = st
 	c.gates = gs
-	if not gs.is_empty():
-		gs[-1].finish = true
 	return c
 
 
@@ -457,7 +454,6 @@ func _search() -> void:
 	if best == null:
 		return
 	gates = best.gates
-	gates[-1].finish = true
 	_turn_posts()
 
 
@@ -645,7 +641,6 @@ static func _copy(src: Gate) -> Gate:
 	g.span = src.span.duplicate()
 	g.trees = src.trees.duplicate()
 	g.post_h = src.post_h
-	g.finish = src.finish
 	g.marked = src.marked
 	return g
 

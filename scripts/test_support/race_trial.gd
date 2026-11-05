@@ -40,7 +40,8 @@ func add_bird(id: String, ctrl: Object, run: RaceRun = null) -> Dictionary:
 	b.arena = arena
 	b.rig.visible = false
 	b.perch_at(course.start)
-	var e := {"bird": b, "run": run if run != null else RaceRun.new(course), "pilot": ctrl as RacePilot, "skill": "", "prev": b.global_position, "track": []}
+	var e := {"bird": b, "run": run if run != null else RaceRun.new(course), "pilot": ctrl as RacePilot, "skill": "", "prev": b.global_position, "track": [],
+		"course_bonks": -1}
 	entries.append(e)
 	return e
 
@@ -59,14 +60,16 @@ func step() -> void:
 	_tick += 1
 	for e in entries:
 		var b: Bird = e.bird
-		e.run.step(e.prev, b.global_position, 1.0 / 60.0, b.state == Bird.State.PERCHED)
+		e.run.step(e.prev, b.global_position, 1.0 / 60.0, RaceRun.perch_of(b))
 		e.prev = b.global_position
+		if e.course_bonks < 0 and e.run.next >= course.gates.size():   # (the bonks on the course, before the landing home)
+			e.course_bonks = b.bonks
 		if _tick % TRACK_EVERY == 0 and not e.run.finished():
 			e.track.append(b.global_position)
 
 
-## Per bird: {id, skill, time (INF: didn't finish), gates, splits, misses, go_arounds, bonks, glances, wing_strikes,
-## dnf}.
+## Per bird: {id, skill, time (INF: didn't finish), gates, splits, misses, go_arounds, bonks, course_bonks (before the
+## last gate: the landing home's left out), glances, wing_strikes, dnf}.
 func results() -> Array:
 	var out := []
 	for e in entries:
@@ -74,5 +77,5 @@ func results() -> Array:
 		var r: RaceRun = e.run
 		out.append({"id": b.profile.id, "skill": e.skill, "time": r.time, "gates": r.next, "splits": r.splits.duplicate(),
 			"misses": r.misses, "missed_at": r.missed_at.duplicate(), "go_arounds": e.pilot.go_arounds if e.pilot != null else 0,
-			"bonks": b.bonks, "glances": b.glances, "wing_strikes": b.wing_strikes, "dnf": e.pilot.dnf if e.pilot != null else false})
+			"bonks": b.bonks, "course_bonks": e.course_bonks if e.course_bonks >= 0 else b.bonks, "glances": b.glances, "wing_strikes": b.wing_strikes, "dnf": e.pilot.dnf if e.pilot != null else false})
 	return out

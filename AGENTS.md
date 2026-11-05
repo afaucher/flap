@@ -56,11 +56,15 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   (`flown_line`) clear by half a wingspan and turning no tighter than that circle, posts and ropes off the line, the
   next gate seen from the one before (and the one after it, unless the turn is tight: `marked`); `problems()` lists
   any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
-  the way it faces, in order; the clock off the perch to the finish; misses; splits within the tick), `RacePilot` an
+  the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken; misses;
+  splits within the tick), `RacePilot` an
   AI racer (a FlightInput only): it follows the course's planned line by an L1 pursuit, its skill (`CombatSkill`
   presets) degrading look-ahead, bank, reaction, aim and pace; a missed gate it goes round on a planned Dubins path
-  (`RacePilot.dubins`) to the gate's way in; AIPilot.steer only for wood ahead and low-speed recovery, `RaceView` placeholder gates,
-  `RaceHud`, `RaceRecord` best times. `RaceTrial` (test_support) races birds headless; `tests/probe_race.gd` prints a
+  (`RacePilot.dubins`) to the gate's way in; AIPilot.steer only for wood ahead and low-speed recovery; home to the
+  rail, AIPilot.go_to_perch lands it; `RaceView` placeholder gates,
+  `RaceHud` (the clock top centre; best and the average of the last three top right), `RaceRecord` best and recent
+  times. `RaceTrial` (test_support) races birds headless; `tests/probe_race_home.gd` lands each bird on the rail from
+  the last gate (the AI falcon can't yet); `tests/probe_race.gd` prints a
   course leg by leg against each bird's turning circle, races every bird at every skill, writes an SVG map
   (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). Flyability apart from the AI:
   `LinePilot` (test_support) flies the planned line exactly through the bird's own flight model, leg by leg;

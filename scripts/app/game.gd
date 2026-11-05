@@ -30,6 +30,7 @@ extends Node3D
 ##   --course <n>       the course's seed (default: the arena's)
 ##   --race-ai <skill>  AI racers (RacePilot: recruit | pilot | ace) on the course with you, one of each other bird
 ##   --plan-for <birds> the birds the course is planned for (RaceCourse.Envelope; default all five)
+##   --race-record <f>  keep race times in this file instead of user://race_best.cfg (RaceRecord.path: shots, tests)
 ## The mouse wheel zooms the chase camera in and out. Esc (or the window losing focus) pauses: PauseMenu.
 ## The arena grows behind a loading screen (Loading): the layout on a worker thread, the wood built a step a frame,
 ## the birds spawned; `loaded` fires (and `is_loaded` turns true) when it's ready to fly.
@@ -76,6 +77,8 @@ func _ready() -> void:
 	_arena_seed = arena_seed
 	_course_seed = int(Boot.arg_value(args, "--course")) if Boot.arg_value(args, "--course") != "" else arena_seed
 	_race_skill = Boot.arg_value(args, "--race-ai")
+	if Boot.arg_value(args, "--race-record") != "":
+		RaceRecord.path = Boot.arg_value(args, "--race-record")
 	_flying = "novice" if Boot.arg_value(args, "--flying") == "novice" else "realistic"
 	var plan_for: Array = Array(Boot.arg_value(args, "--plan-for").split(",")) if Boot.arg_value(args, "--plan-for") != "" else BirdProfile.IDS
 	use_autopilot = args.has("--autopilot")
@@ -209,6 +212,7 @@ func _restart_race() -> void:
 	race_view.set_next(0)
 	race_hud.new_best = false
 	race_hud.best = RaceRecord.best(race_key)
+	race_hud.average = RaceRecord.average(race_key)
 	for r in racers:
 		var run := RaceRun.new(course)
 		var pilot := RacePilot.new(layout, course, run, CombatSkill.preset(_race_skill), 500 + int(r.k))
@@ -298,16 +302,18 @@ func _physics_process(_dt: float) -> void:
 
 ## Each bird's last tick fed to its run (this runs before the birds move this tick: it sees the move they made last).
 func _race_tick(dt: float) -> void:
-	race_run.step(_race_prev, bird.global_position, dt, bird.state == Bird.State.PERCHED)
+	race_run.step(_race_prev, bird.global_position, dt, RaceRun.perch_of(bird))
 	_race_prev = bird.global_position
-	if race_run.event in ["gate", "finish"]:
+	if race_run.event == "gate":
 		race_view.set_next(race_run.next)
 	if race_run.event == "finish":
 		race_hud.new_best = RaceRecord.offer(race_key, race_run.time, race_run.splits)
+		race_hud.average = RaceRecord.average(race_key)
+		race_hud.best = RaceRecord.best(race_key)
 		print("race: %s %.2f s%s" % [profile_id, race_run.time, " (best)" if race_hud.new_best else ""])
 	for r in racers:
 		var b: Bird = r.bird
-		r.run.step(r.prev, b.global_position, dt, b.state == Bird.State.PERCHED)
+		r.run.step(r.prev, b.global_position, dt, RaceRun.perch_of(b))
 		r.prev = b.global_position
 		if r.run.event == "finish":
 			print("race: %s (%s AI) %.2f s" % [r.id, _race_skill, r.run.time])

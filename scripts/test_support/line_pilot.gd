@@ -10,7 +10,8 @@ extends RefCounted
 ##   energy        flaps when slow or when the line climbs past its glide, every wingbeat it has (weak ones too)
 ## Each leg is flown from where the last one left the bird; a leg it fails (its gate not taken within FAIL_OFF of the
 ## line, or by the time it's past it) is marked, and the bird is put back on the line at that gate, along its way
-## through, at the speed it had: so one bad leg doesn't spoil the next (`legs`).
+## through, at the speed it had: so one bad leg doesn't spoil the next (`legs`). Its run ends at the last gate: the way
+## home to the rail is a landing, flown as any AI bird lands (RacePilot hands it to AIPilot).
 
 const LOOK := 0.55        ## s of flight ahead the pursuit point lies (at least LOOK_MIN m)
 const LOOK_MIN := 3.5
@@ -51,7 +52,7 @@ func start_at() -> Array:
 
 
 func sample(bird: Bird, _dt: float) -> FlightInput:
-	if run.finished() or bird.state != Bird.State.FLYING:
+	if run.next >= course.gates.size() or bird.state != Bird.State.FLYING:
 		return FlightInput.new()
 	var m := bird.model
 	var p := bird.profile
@@ -99,7 +100,7 @@ func sample(bird: Bird, _dt: float) -> FlightInput:
 func check(bird: Bird) -> void:
 	var k := run.next
 	var touches := bird.bonks + bird.glances + bird.wing_strikes
-	if run.event in ["gate", "finish"]:
+	if run.event == "gate":
 		var done: Dictionary = legs[k - 1]
 		done.speed = bird.model.speed
 		done.done = true
@@ -107,7 +108,7 @@ func check(bird: Bird) -> void:
 		done.ok = done.ok and done.touches == 0
 		_touch0 = touches
 		return
-	if k >= legs.size() or run.finished():
+	if k >= legs.size():
 		return
 	var g := course.gates[k]
 	var lg: Dictionary = legs[k]
@@ -123,9 +124,6 @@ func check(bird: Bird) -> void:
 		bird.fly_from(g.centre + g.normal * 0.6, g.normal, v)
 		run.next += 1
 		run.splits.append(run.clock)
-		if run.next >= course.gates.size():
-			run.phase = RaceRun.Phase.FINISHED
-			run.time = run.clock
 		_i = _nearest_from(_i, bird.global_position)
 
 
@@ -159,7 +157,7 @@ static func fly_course(layout: ArenaLayout, course: RaceCourse, birds: Array, pa
 		var all_done := true
 		for pe in pilots:
 			pe[1].check(pe[0].bird)
-			all_done = all_done and pe[0].run.finished()
+			all_done = all_done and pe[0].run.next >= course.gates.size()
 		if all_done:
 			break
 	var out := {}

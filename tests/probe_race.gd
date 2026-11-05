@@ -59,6 +59,11 @@ func setup() -> void:
 					var r: RaceRun = e0.run
 					if r.finished() or pl.dnf:
 						break
+					if r.home():   # (on the way home: how it's getting on with the rail)
+						var d := b.global_position - course.start.position
+						print("HOME t=%5.2f dist=%5.1f dy=%+5.1f v=%4.1f state=%d mode=%d target=%s route=%d wp=%d reason=%s avoid=%.1f" % [r.clock, d.length(), d.y, b.model.speed,
+							b.state, pl.guide.mode, "rail" if pl.guide.target == course.start else str(pl.guide.target), pl.guide.route.size(), pl.guide.wp, pl.guide.debug_reason, pl.guide.avoiding])
+						continue
 					var g := course.gates[r.next]
 					var o := b.global_position - g.centre
 					print("TRACE t=%5.2f next=%d along=%+6.1f lat=%+5.1f dy=%+5.1f v=%4.1f path=%+4.0f bank=%+4.0f around=%s avoid=%.1f aim=(%+.1f %+.1f %+.1f) st=%d" % [r.clock, r.next,
@@ -184,14 +189,14 @@ func _svg(course: RaceCourse, layout: ArenaLayout, trial: RaceTrial) -> void:
 		var r := g.right() * g.half_w
 		var a: Vector2 = at.call(g.centre + r)
 		var b: Vector2 = at.call(g.centre - r)
-		var col: String = "#000000" if g.finish else ks[g.kind]
+		var col: String = "#000000" if k == course.gates.size() - 1 else ks[g.kind]
 		s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="5"/>' % [a.x, a.y, b.x, b.y, col])
 		var tip: Vector2 = at.call(g.centre + g.normal * 4.0)
 		s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2"/>' % [c.x, c.y, tip.x, tip.y, col])
-		s.append('<text x="%.0f" y="%.0f" fill="%s" font-weight="bold">%d%s %.0fm</text>' % [c.x + 8, c.y - 8, col, k + 1, " F" if g.finish else ("*" if g.marked else ""), g.centre.y])
+		s.append('<text x="%.0f" y="%.0f" fill="%s" font-weight="bold">%d%s %.0fm</text>' % [c.x + 8, c.y - 8, col, k + 1, " L" if k == course.gates.size() - 1 else ("*" if g.marked else ""), g.centre.y])
 	var st: Vector2 = at.call(course.start.position)
 	s.append('<rect x="%.0f" y="%.0f" width="12" height="12" fill="#000"/><text x="%.0f" y="%.0f">start %.0fm</text>' % [st.x - 6, st.y - 6, st.x + 10, st.y + 4, course.start.position.y])
-	s.append('<text x="10" y="20">post (red), trunk (green), hoop (blue), finish (black); * needs course markers. Flown: recruit (orange), pilot (blue), ace (purple)</text>')
+	s.append('<text x="10" y="20">post (red), trunk (green), hoop (blue), last (black, then home to the rail); * needs course markers. Flown: recruit (orange), pilot (blue), ace (purple)</text>')
 	# Height profile: distance along the course against height, each gate's window as a bar.
 	var y0 := w + 20.0
 	var total := course.length()
@@ -207,7 +212,7 @@ func _svg(course: RaceCourse, layout: ArenaLayout, trial: RaceTrial) -> void:
 		dist += prev.distance_to(g.centre)
 		var x := 40.0 + dist * sx
 		pts.append("%.0f,%.0f" % [x, base_y - g.centre.y * sy])
-		s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="6"/>' % [x, base_y - (g.centre.y - g.half_h) * sy, x, base_y - (g.centre.y + g.half_h) * sy, "#000" if g.finish else ks[g.kind]])
+		s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="6"/>' % [x, base_y - (g.centre.y - g.half_h) * sy, x, base_y - (g.centre.y + g.half_h) * sy, "#000" if k == course.gates.size() - 1 else ks[g.kind]])
 		s.append('<text x="%.0f" y="%.0f">%d</text>' % [x - 4, base_y - (g.centre.y + g.half_h) * sy - 6, k + 1])
 		prev = g.centre
 	s.append('<polyline points="%s" fill="none" stroke="#202020" stroke-dasharray="6,4"/>' % " ".join(pts))

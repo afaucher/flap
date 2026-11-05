@@ -4336,22 +4336,22 @@
   "edits": [
    {
     "file": "scripts/race/race_run.gd",
-    "find": "\t\tif perched:\n\t\t\treturn\n",
+    "find": "\t\tif perch != null:\n\t\t\treturn\n",
     "replace": "\t\tif false:\n\t\t\treturn\n"
    }
   ]
  },
  {
   "id": "race-split-rounded",
-  "bug": "Splits and the finish rounded to the tick, not the moment the bird crossed (2026-11-05).",
+  "bug": "Splits rounded to the tick, not the moment the bird crossed (2026-11-05).",
   "tests": [
    "test_race"
   ],
   "edits": [
    {
     "file": "scripts/race/race_run.gd",
-    "find": "\t\tvar t := t0 + dt * f",
-    "replace": "\t\tvar t := clock"
+    "find": "\t\tsplits.append(t0 + dt * f)",
+    "replace": "\t\tsplits.append(clock)"
    }
   ]
  },
@@ -4378,8 +4378,8 @@
   "edits": [
    {
     "file": "scripts/race/race_record.gd",
-    "find": "float(b.time) <= time",
-    "replace": "float(b.time) <= -1.0"
+    "find": "b.is_empty() or time < float(b.time)",
+    "replace": "b.is_empty() or time < INF"
    }
   ]
  },
@@ -4689,6 +4689,76 @@
     "file": "scripts/app/menu.gd",
     "find": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird, \"--course\", str(COURSES[race_course]),\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])",
     "replace": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird,\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])"
+   }
+  ]
+ },
+ {
+  "id": "race-finish-at-last-gate",
+  "bug": "The race finished at the last gate, out in the wood: it starts and ends on the outpost's rail, the clock stopping when the bird lands back on it (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tnext += 1\n\t\tevent = \"gate\"",
+    "replace": "\t\tnext += 1\n\t\tevent = \"gate\"\n\t\tif next >= course.gates.size():\n\t\t\tphase = Phase.FINISHED\n\t\t\ttime = clock\n\t\t\tevent = \"finish\""
+   }
+  ]
+ },
+ {
+  "id": "race-finish-any-perch",
+  "bug": "Landing on any perch after the last gate finished the race, not just the start rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tif perch == course.start:",
+    "replace": "\t\tif perch != null:"
+   }
+  ]
+ },
+ {
+  "id": "race-recent-best-only",
+  "bug": "Only best times were kept, so the HUD's average of the last three ignored the slower finishes (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_record.gd",
+    "find": "\tr.append(time)\n",
+    "replace": "\tif b.is_empty() or time < float(b.time):\n\t\tr.append(time)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-never-home",
+  "bug": "AI racers, every gate taken, glided on instead of landing on the rail: none finished (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tif run.home():\n\t\treturn _home(bird, dt)\n",
+    "replace": "\tif run.home():\n\t\treturn guide._hold_glide(bird, dt)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-home-departure-clearance",
+  "bug": "Racers flying home kept AIPilot's departure clearance round the start rail's tree (the one they took off from), which pushed them off the final approach: the pilot sparrow circled the rail and never landed (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\tguide._last_tree = -1   # (the rail is where it's going now, not the tree it left: no departure clearance round it)\n\t\tguide._left_perch = -1\n\t\tguide._takeoff_pos = Vector3.INF\n",
+    "replace": ""
    }
   ]
  }

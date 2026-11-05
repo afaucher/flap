@@ -12,7 +12,8 @@ everyone back on the rail, the clocks reset. Measure it: `.\probe.ps1 -Headless 
 
 ## The course (`scripts/race/race_course.gd`)
 
-Ten gates, the last the finish, from the rail of the outpost nearest the middle of the wood (if no full course leaves
+Ten gates, from the rail of the outpost nearest the middle of the wood and back to it (the race ends landing on the
+rail) (if no full course leaves
 it, the next one out). Each window is 3 m across.
 
 | Kind | Where | Heights |
@@ -83,14 +84,19 @@ and seeing the next gate, not the hawk, are what keep the gates in the open.
 
 ## The rules of a run (`race_run.gd`)
 
-- The clock starts the tick the bird leaves the start rail and stops at the finish gate.
+- The race starts and ends on the outpost's rail: the clock starts the tick the bird leaves it and stops the tick it
+  lands back on it with every gate taken (landing elsewhere, or there with a gate to go, doesn't stop it). The way home
+  from the last gate is free: no line, no rules but the landing.
 - A gate counts only through its window the way it faces, and only the next one: a later gate flown first doesn't
   count. Crossing the next gate's plane beside its window (within 10 m) is a miss; the gate stays next, to go back for.
-- Splits and the finish are timed to the moment the bird crossed, within the tick.
-- Best times (with their splits) are kept per course, bird and way of flying (`RaceRecord`, `user://race_best.cfg`).
+- Splits are timed to the moment the bird crossed, within the tick; the finish to the tick it lands.
+- Best times (with their splits) and the last ten finishes are kept per course, bird and way of flying (`RaceRecord`,
+  `user://race_best.cfg`).
 
-The HUD (`race_hud.gd`): the clock and the gate count top centre, the last split against your best's, your best top
-right, a bracket and distance on the next gate (fainter on the one after), an arrow at the edge when it's off screen.
+The HUD (`race_hud.gd`): the clock and the gate count top centre ("Land on the rail" once every gate is taken), the
+last split against your best's under it for 3 s, top right your best and the average of your last three finishes, a
+bracket and distance on the next gate (fainter on the one after; the rail's mark after the last), an arrow at the edge
+when it's off screen. The rail's mark (`RaceView`) lights up when it's next.
 
 ## What the probe measured (2026-11-05, planned for all five)
 
@@ -126,7 +132,9 @@ avoidance when 0.4 s straight on meets wood, and below 1.25x its stall speed (af
 recovery flies it. Lost (past the gate's plane outside its window, or 5 m off its line), it plans a go-around: the
 shortest turn-straight-turn (Dubins) path clear of wood, from where it is and the way it's flying, on the circle it
 can turn at its speed at no more than 60 deg of bank (x1.15), to a point out in front of the gate facing through it;
-the loop climbs 3 m, the run-in comes down to the gate. It follows that as it follows the course.
+the loop climbs 3 m, the run-in comes down to the gate. It follows that as it follows the course. Every gate taken,
+AIPilot flies it home and lands it on the rail (`go_to_perch`: a planned route, the approach and the catch, as a combat
+bird goes to its base); not landed in 40 s, it gives up.
 
 What it does (2026-11-05, `probe_race`, every bird at every skill on seeds 3, 5, 7, 9 and 11, 25 runs a skill):
 
@@ -136,7 +144,17 @@ What it does (2026-11-05, `probe_race`, every bird at every skill on seeds 3, 5,
 | ace | 23 of 25 | 23.6 s | 3 |
 | recruit | 11 of 25 | 39.9 s | 36 |
 
-(The first AI racer made one finish in 30.) The four pilot and ace runs that didn't finish are all the falcon's (seeds
+(Those times stopped at the last gate, before the race ended back on the rail; the first AI racer made one finish in
+30.)
+
+With the finish on the rail (2026-11-05, seeds 7, 11 and 3, 15 runs a skill): pilots finish 12 of 15 (mean 42.1 s),
+aces 12 of 15 (41.7 s), recruits 6 of 15 (59.1 s). Every pilot and ace takes all ten gates; the three of each that
+don't finish are the falcon, which AIPilot can't land on an outpost's rail at all (`tests/probe_race_home.gd`: each
+bird flown by AIPilot from the last gate to the rail, with the course's posts in or out: the falcon 0 of 15, the others
+14 or 15 of 15; it's the falcon's known weakness, `flight_model.md`: a final approach planned by speed would fix it).
+The landing home adds 10-30 s and most of the spread between racers: a missed catch costs a loop round the outpost.
+Racers going home drop AIPilot's departure clearance round the rail's tree (they took off from it), which had pushed
+the sparrow off every final approach. The four pilot and ace runs that didn't finish are all the falcon's (seeds
 5, 9, 11): a miss, then go-arounds it can't hold its height through. Recruits are slower and miss far more: their
 wider look-ahead, input lag and aim drift take them off the line, and the go-arounds cost them 10-40 s. The ace is no
 faster than the pilot yet: its edge (bank, lag, drift) doesn't buy time on these courses, where every bird flies the

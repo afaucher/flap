@@ -8,8 +8,8 @@ extends Control
 ## machine gun, left and right; two kinds, and Q switches), how it flies, the mode (the 3 v 3 match, or target
 ## practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot | ace), with the
 ## rules of the mode chosen. Race opens one: your bird, how it flies, the course (one of COURSES) and who races you
-## (no one, or AI racers at recruit | pilot | ace, one of each other bird), with your best time on that course and the
-## rules (the game's --race, RaceCourse). Enter starts any of them, Esc goes back. Settings: which way the mouse and the gamepad's stick
+## (no one, or AI racers at recruit | pilot | ace, one of each other bird), with your best time on that course, and
+## the race's rules (the game's --race, RaceCourse). Enter starts any of them, Esc goes back. Settings: which way the mouse and the gamepad's stick
 ## climb and every control (SettingsPanel, the pause menu's too). The pages are built by MenuStyle's helpers.
 ## Behind the pages, MenuBackdrop (birds perched on an outpost's rail, idling); the pages' look is MenuStyle's.
 ## `--shot <png>` saves the screen after `--shot-after` s (default 2) and quits (`--page fight|flight|race|settings`:
@@ -66,13 +66,9 @@ const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
 	["pilot", "Pilots", "One of each other bird. They hold the line well; a miss costs them a loop."],
 	["ace", "Aces", "One of each other bird, flying the line as cleanly as it can be flown."],
 ]
-const RACE_RULES := "Ten gates through the wood, from the outpost's rail to the finish.
-- The clock starts when you leave the rail and stops at the finish gate.
-- Fly each gate through its window the way it faces, in order: the bright one is next, the softer one after it.
-- Pass beside the next gate and it's a miss: go round and take it.
-- Your best time on each course, for each bird and way of flying, is kept, with its splits."
-const RACE_CONTROLS := "Mouse: steer.  Space: flap.  P: let an ace fly your bird.
-Esc: pause."
+const RACE_RULES := "- Start on the outpost's rail. The clock runs from when you leave it until you land back on it.
+- Ten gates. Fly through each in the course's direction, coming from the gate before it; backwards doesn't count.
+- Take them in order: the bright gate is next. Skip one and none after it count until you go back for it."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
 
@@ -248,15 +244,11 @@ func _build_race() -> void:
 			_refresh(), "Rivals"))
 	_rivals_note = MenuStyle.note(COL_W)
 	pick.add_child(_rivals_note)
-	_flying_row(side, "RaceFlying")
+	_flying_row(pick, "RaceFlying")
 	side.add_child(MenuStyle.heading("Rules"))
 	var rules := MenuStyle.note(RULES_W)
 	rules.text = RACE_RULES
 	side.add_child(rules)
-	side.add_child(MenuStyle.heading("Controls"))
-	var controls := MenuStyle.note(RULES_W)
-	controls.text = RACE_CONTROLS
-	side.add_child(controls)
 	_race.add_child(_go(start_race, "RaceStart"))
 
 

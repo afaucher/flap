@@ -225,7 +225,8 @@ func _race() -> void:
 	check(text.contains(BirdProfile.by_id(BirdProfile.IDS[2]).blurb), "picking the owl shows what it's like")
 	check(text.contains(Menu.RIVALS[0][2]), "racing alone by default, and what it means is on screen")
 	check(text.contains("No time set"), "no best time yet")
-	check(text.contains("the way it faces"), "the race's rules are on screen")
+	check(text.contains(Menu.RACE_RULES), "the race's rules are on screen")
+	check(not text.contains("Space: flap"), "no controls on it")
 	eq(Array(Menu.race_options()), ["--race", "--no-rider", "--bird", BirdProfile.IDS[2], "--course", str(Menu.COURSES[1]), "--flying", "novice"],
 		"Start asks for a race on that course with that bird, no tack, no rivals")
 	for k in Menu.RIVALS.size():

@@ -13,7 +13,8 @@ extends RefCounted
 ## again. A wood guard: if the next 0.4 s straight on meets wood, AIPilot.steer (its avoidance) flies that tick. A ground
 ## guard pulls up under GROUND_GUARD. Lost (past the next gate's plane without going through it, or STRAY m off the
 ## line): it goes round, on a path planned from where it is to out in front of the gate (_plan_round, a Dubins path).
-## No gate for STUCK s: it gives up (dnf).
+## No gate for STUCK s: it gives up (dnf). Every gate taken, it flies home and lands on the start rail as any AI bird
+## goes to a perch (AIPilot.go_to_perch: a planned route, the approach and the catch); not home in HOME_STUCK s: dnf.
 
 const SKILL := {   ## name -> [look s, delay share of reaction, drift m, pace]
 	"recruit": [0.8, 0.4, 0.6, 1.0],
@@ -38,6 +39,8 @@ const SLOW := 1.25          ## x stall speed: below it AIPilot.steer (its low-sp
 const TAKEOFF_TIME := 2.0   ## ... except in the first s off the perch (every bird is slow leaving it)
 const BANK_PULL := 0.8
 const STUCK := 30.0
+const HOME_STUCK := 40.0    ## s from the last gate to land on the rail
+const HOME_RETRY := 2.0     ## s between asking AIPilot for the rail again (no route yet, or it landed elsewhere)
 const THROUGH := 6.0        ## m past the gate a go-around's run-in runs
 
 var course: RaceCourse
@@ -66,6 +69,7 @@ var _delay := 0.1
 var _drift_sd := 0.3
 var _pace := 1.05
 var _aim := Vector3.ZERO     ## (this tick's: probes)
+var _home_asked := -INF      ## when it last sent AIPilot to the rail
 
 
 func _init(l: ArenaLayout, c: RaceCourse, r: RaceRun, s: CombatSkill = null, seed := 1) -> void:
@@ -102,6 +106,8 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 	guide.clock = _clock   # (its take-off from the ground times its rest by this)
 	if run.finished() or dnf:
 		return guide._hold_glide(bird, dt) if bird.state == Bird.State.FLYING else FlightInput.new()
+	if run.home():
+		return _home(bird, dt)
 	match bird.state:
 		Bird.State.PERCHED:
 			return _start(bird)
@@ -128,6 +134,24 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 		go_arounds += 1
 		_plan_round(bird, g)
 	return _delayed(_follow(bird, dt))
+
+
+## Every gate taken: AIPilot flies it to the start rail and lands (asked again if it has no route yet, or landed on
+## another perch).
+func _home(bird: Bird, dt: float) -> FlightInput:
+	if run.next != _last_next:
+		_last_next = run.next
+		_last_gate_t = _clock
+		guide._last_tree = -1   # (the rail is where it's going now, not the tree it left: no departure clearance round it)
+		guide._left_perch = -1
+		guide._takeoff_pos = Vector3.INF
+	if _clock - _last_gate_t > HOME_STUCK:
+		dnf = true
+		return FlightInput.new()
+	if guide.target != course.start and _clock - _home_asked > HOME_RETRY:
+		_home_asked = _clock
+		guide.go_to_perch(bird, course.start)
+	return guide.sample(bird, dt)
 
 
 ## Fast enough to fly a path (a slow bird recovers first, then plans).

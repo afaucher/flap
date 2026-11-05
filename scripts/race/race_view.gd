@@ -2,21 +2,22 @@ class_name RaceView
 extends Node3D
 ## The course drawn, placeholder style (the gate designs come later): each window as a thin frame, a banner bar over
 ## the post and trunk gates, red and white bands on their posts and trunks, a ring for each hoop on its ropes (a
-## span hoop's rope strung between its trunks), the start perch marked. Visual only: the posts' wood is the layout's
-## (RaceCourse.apply), the frames and ropes have no collision. set_next() colours them: the next gate bright, the one
-## after it softer, those passed green, the rest pale, the finish black and white.
+## span hoop's rope strung between its trunks), the start perch (where the race ends too) marked. Visual only: the
+## posts' wood is the layout's (RaceCourse.apply), the frames and ropes have no collision. set_next() colours them: the
+## next gate bright, the one after it softer, those passed green, the rest pale; the rail's mark bright once every
+## gate is taken (land on it to finish), softer while the last gate is next.
 
 const NEXT := Color(1.0, 0.45, 0.1)
 const AFTER := Color(1.0, 0.75, 0.45)
 const LATER := Color(0.92, 0.9, 0.85)
 const PASSED := Color(0.35, 0.8, 0.4)
-const FINISH := Color(0.08, 0.08, 0.08)
 const ROPE := Color(0.55, 0.45, 0.3)
 const BAND := Color(0.75, 0.12, 0.08)
 const BAR := 0.05   ## m: the frame's thickness
 
 var course: RaceCourse
 var _mats: Array[StandardMaterial3D] = []   ## each gate's frame
+var _home: StandardMaterial3D               ## the rail's mark
 
 
 func build(c: RaceCourse) -> void:
@@ -66,7 +67,8 @@ func build(c: RaceCourse) -> void:
 	disc.bottom_radius = 0.5
 	disc.height = 0.02
 	st.mesh = disc
-	st.material_override = _mat(NEXT, true)
+	_home = _mat(NEXT, true)
+	st.material_override = _home
 	st.position = c.start.position + Vector3.UP * 0.6
 	add_child(st)
 	set_next(0)
@@ -82,10 +84,12 @@ func set_next(next: int) -> void:
 			c = NEXT
 		elif k == next + 1:
 			c = AFTER
-		if course.gates[k].finish and k >= next:
-			c = FINISH if k > next else NEXT.lerp(FINISH, 0.4)
 		_mats[k].albedo_color = c
 		_mats[k].emission = c * (0.9 if k == next else 0.25)
+	var n := _mats.size()
+	var h := NEXT if next >= n else (AFTER if next == n - 1 else LATER)
+	_home.albedo_color = h
+	_home.emission = h * (0.9 if next >= n else 0.25)
 
 
 func _bar(a: Vector3, b: Vector3, r: float, m: Material) -> MeshInstance3D:

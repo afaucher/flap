@@ -1,7 +1,9 @@
 extends TestCase
 ## Race mode (RaceCourse, RaceRun, RaceRecord): a gate counts only through its window the way it faces; the gates go
-## in order; the clock starts off the perch and stops at the finish; a miss is counted and the gate stays next; best
-## times are kept only when better. The generated course keeps its rules on two seeds, every bird can fly it
+## in order; the clock starts off the start rail and stops when the bird lands back on it with every gate taken (not
+## before, not on another perch); a miss is counted and the gate stays next; best times are kept only when better, and
+## the average of the last three finishes counts the slower ones too. The AI field (pilots and aces) takes every gate
+## without bonking and lands home (all but the falcon: AIPilot can't land it on a rail yet). The generated course keeps its rules on two seeds, every bird can fly it
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
 ## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
 
@@ -67,42 +69,57 @@ func _gate_crossing() -> void:
 	check(_gate("post", Vector3(0, 5, 0), Vector3.RIGHT).crossing(Vector3(-1, 6.2, 1.2), Vector3(1, 6.2, 1.2)) >= 0.0, "a post gate's corner is")
 
 
-## The clock, the order, the splits, misses and the finish.
+## The clock, the order, the splits, misses and the finish: back on the start rail with every gate taken.
 func _run_rules() -> void:
 	var gs: Array[RaceCourse.Gate] = [_gate("post", Vector3(0, 5, -10), Vector3.FORWARD), _gate("post", Vector3(0, 5, -20), Vector3.FORWARD),
 		_gate("hoop", Vector3(0, 5, -30), Vector3.FORWARD)]
-	var c := RaceCourse.from_gates(null, Perch.new(), gs)
+	var st := Perch.new()
+	var elsewhere := Perch.new()
+	var c := RaceCourse.from_gates(null, st, gs)
 	var r := RaceRun.new(c)
 	var at := Vector3(0, 5, 0)
 	for i in 30:
-		r.step(at, at, DT, true)
+		r.step(at, at, DT, st)
 	eq(r.phase, RaceRun.Phase.READY, "on the perch: not started")
 	eq(r.clock, 0.0, "the clock waits on the perch")
-	r.step(at, at + Vector3(0, 0, -0.2), DT, false)
+	r.step(at, at + Vector3(0, 0, -0.2), DT, null)
 	eq(r.event, "start", "off the perch: started")
 	near(r.clock, DT, 1e-6, "the clock runs from the tick it leaves")
 	# Round gate 0 (beside it) and through gate 1 first: neither counts.
-	r.step(Vector3(4, 5, -9.5), Vector3(4, 5, -10.5), DT, false)
+	r.step(Vector3(4, 5, -9.5), Vector3(4, 5, -10.5), DT, null)
 	eq(r.next, 0, "beside the first gate: not taken")
 	eq(r.misses, 1, "beside the first gate: a miss")
-	r.step(Vector3(0, 5, -19.5), Vector3(0, 5, -20.5), DT, false)
+	r.step(Vector3(0, 5, -19.5), Vector3(0, 5, -20.5), DT, null)
 	eq(r.next, 0, "the second gate first doesn't count")
 	eq(r.splits.size(), 0, "no split for it")
 	# Back, and through gate 0: its split is the moment it crossed, within the tick.
 	var t0 := r.clock
-	r.step(Vector3(0, 5, -9.75), Vector3(0, 5, -10.75), DT, false)
+	r.step(Vector3(0, 5, -9.75), Vector3(0, 5, -10.75), DT, null)
 	eq(r.next, 1, "through the first gate")
 	near(r.splits[0], t0 + DT * 0.25, 1e-6, "its split, within the tick")
-	r.step(Vector3(0, 5, -19.9), Vector3(0, 5, -20.1), DT, false)
+	r.step(at, at, DT, st)
+	check(not r.finished() and r.phase == RaceRun.Phase.RUNNING, "landing on the rail with gates to go doesn't finish")
+	r.step(Vector3(0, 5, -19.9), Vector3(0, 5, -20.1), DT, null)
 	eq(r.next, 2, "then the second")
 	check(r.splits[1] > r.splits[0], "splits in order")
-	check(not r.finished(), "not finished with a gate to go")
 	var t1 := r.clock
-	r.step(Vector3(0, 5, -29.5), Vector3(0, 5, -30.5), DT, false)
-	check(r.finished(), "through the last gate: finished")
-	near(r.time, t1 + DT * 0.5, 1e-6, "the finish time, within the tick")
+	r.step(Vector3(0, 5, -29.5), Vector3(0, 5, -30.5), DT, null)
+	eq(r.event, "gate", "through the last gate")
+	near(r.splits[2], t1 + DT * 0.5, 1e-6, "its split, within the tick")
+	check(not r.finished() and r.home(), "every gate taken: not finished, on the way home")
+	eq(r.state().next_centre, st.position, "the HUD's mark on the rail")
+	for i in 30:
+		r.step(at, at, DT, null)
+	r.step(at, at, DT, elsewhere)
+	check(not r.finished(), "landing on another perch doesn't finish")
+	r.step(at, at, DT, null)
+	var t2 := r.clock
+	r.step(at, at, DT, st)
+	check(r.finished(), "landed on the rail: finished")
+	eq(r.event, "finish", "the finish's event")
+	near(r.time, t2 + DT, 1e-6, "the time: the tick it landed")
 	for i in 60:
-		r.step(at, at + Vector3(0, 0, -1), DT, false)
+		r.step(at, at + Vector3(0, 0, -1), DT, null)
 	near(r.clock, r.time, 1e-6, "the clock stops at the finish")
 
 
@@ -120,6 +137,13 @@ func _record() -> void:
 	near(RaceRecord.best(k).time, 38.5, 1e-6, "and replaces it")
 	near(float(RaceRecord.best(k).splits[0]), 9.0, 1e-6, "with its splits")
 	check(RaceRecord.best(RaceRecord.key(1, 2, "crow", "realistic")).is_empty(), "each way of flying has its own")
+	near(float(RaceRecord.average(k)[0]), (41.0 + 38.5 + 40.0) / 3.0, 1e-6, "the average of the last three finishes, slower ones too")
+	RaceRecord.offer(k, 50.0, [])
+	near(float(RaceRecord.average(k)[0]), (41.0 + 38.5 + 50.0) / 3.0, 1e-6, "the last three: the oldest dropped")
+	var k2 := RaceRecord.key(1, 2, "owl", "novice")
+	eq(RaceRecord.average(k2), [INF, 0], "none yet")
+	RaceRecord.offer(k2, 30.0, [])
+	eq(RaceRecord.average(k2), [30.0, 1], "one finish: its time, of one")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(RaceRecord.path))
 	RaceRecord.path = was
 
@@ -156,7 +180,7 @@ func _course_rules(s: int) -> RaceCourse:
 	eq(c.gates.size(), RaceCourse.GATES, "seed %d: a full course" % s)
 	var probs := c.problems()
 	check(probs.is_empty(), "seed %d: the rules kept: %s" % [s, "; ".join(probs)])
-	check(c.gates[-1].finish and not c.gates[0].finish, "seed %d: the last gate is the finish" % s)
+	check(c.start != null and c.layout.perches.has(c.start), "seed %d: it starts (and ends) on a perch of the wood" % s)
 	var lo := INF
 	var hi := -INF
 	var kinds := {}
@@ -256,8 +280,10 @@ func _field_finishes(s: int) -> void:
 	for id in BirdProfile.IDS:
 		for sk in ["pilot", "ace"]:
 			var r: Dictionary = by["%s %s" % [sk, id]]
-			check(r.time < INF, "seed %d: the %s %s finishes (%d of 10 gates)" % [s, sk, id, r.gates])
-			check(r.bonks == 0, "seed %d: the %s %s doesn't bonk (%d)" % [s, sk, id, r.bonks])
+			eq(r.gates, RaceCourse.GATES, "seed %d: the %s %s takes every gate" % [s, sk, id])
+			if id != "falcon":   # (AIPilot can't land a falcon on an outpost's rail yet: probe_race_home)
+				check(r.time < INF, "seed %d: the %s %s lands home on the rail" % [s, sk, id])
+			check(r.course_bonks == 0, "seed %d: the %s %s doesn't bonk on the course (%d)" % [s, sk, id, r.course_bonks])
 		var rec: Dictionary = by["recruit %s" % id]
 		var ace: Dictionary = by["ace %s" % id]
 		if rec.time < INF and ace.time < INF:

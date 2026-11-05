@@ -2,8 +2,9 @@ class_name RaceHud
 extends Control
 ## The race's HUD, drawn from RaceRun.state() only (set_state each frame) and the camera: the clock top centre with
 ## the gate count under it; the last split against your best's at that gate (green ahead, red behind) for a few
-## seconds; your best time top right; a bracket on the next gate with its distance, a fainter one on the gate after,
-## and an arrow at the screen's edge when the next is off screen; at the finish, your time and whether it's a best.
+## seconds; top right your best time and the average of your last three; a bracket on the next gate with its distance
+## (every gate taken: on the start rail, to land on), a fainter one on the gate after, and an arrow at the screen's
+## edge when the next is off screen; at the finish, your time and whether it's a best.
 
 const FG := Color(0.95, 0.95, 0.9, 0.95)
 const DIM := Color(0.95, 0.95, 0.9, 0.5)
@@ -14,6 +15,7 @@ const SPLIT_SHOWN := 3.0   ## s
 
 var s: Dictionary = {}
 var best: Dictionary = {}   ## {time, splits} (empty: none yet)
+var average: Array = [INF, 0]   ## RaceRecord.average: [mean s, of how many finishes]
 var bird_pos := Vector3.ZERO
 var new_best := false
 var _split_t := 0.0
@@ -52,11 +54,18 @@ func _draw() -> void:
 	var phase: int = s.phase
 	var shown: float = s.time if phase == RaceRun.Phase.FINISHED else s.clock
 	_text(top - Vector2(200, 0), clock_text(shown), FG, 40, 400)
-	_text(top + Vector2(-200, 46), ("Gate %d/%d" % [mini(s.next + 1, s.count), s.count]) if phase != RaceRun.Phase.FINISHED else "Finished", DIM, 20, 400)
+	var under := "Gate %d/%d" % [s.next + 1, s.count]
+	if phase == RaceRun.Phase.FINISHED:
+		under = "Finished"
+	elif s.get("home", false):
+		under = "Land on the rail"
+	_text(top + Vector2(-200, 46), under, FG if s.get("home", false) and phase != RaceRun.Phase.FINISHED else DIM, 20, 400)
 	if phase == RaceRun.Phase.READY:
 		_text(top + Vector2(-300, 104), "Drop off the rail to start the clock", FG, 22, 600)
 	if not best.is_empty():
-		_text(Vector2(sz.x - 260, 40), "Best " + clock_text(best.time), DIM, 20, 230, HORIZONTAL_ALIGNMENT_RIGHT)
+		_text(Vector2(sz.x - 330, 30), "Best  " + clock_text(best.time), FG, 22, 300, HORIZONTAL_ALIGNMENT_RIGHT)
+	if int(average[1]) > 0:
+		_text(Vector2(sz.x - 330, 60), "Avg of last %d  %s" % [int(average[1]), clock_text(float(average[0]))], DIM, 20, 300, HORIZONTAL_ALIGNMENT_RIGHT)
 	var splits: Array = s.splits
 	if _split_t > 0.0 and not splits.is_empty():
 		var i := splits.size() - 1
@@ -70,7 +79,6 @@ func _draw() -> void:
 		_text(top + Vector2(-200, 74), line, col, 22, 400)
 	if phase == RaceRun.Phase.FINISHED:
 		_text(Vector2(0, sz.y * 0.4), ("New best!  " if new_best else "") + clock_text(s.time), AHEAD if new_best else FG, 44, sz.x)
-		_text(Vector2(0, sz.y * 0.4 + 44), "R: race again", DIM, 20, sz.x)
 		return
 	if s.has("after_centre") and s.after_centre != null:
 		_bracket(s.after_centre, 12.0, Color(MARK, 0.35), false)
