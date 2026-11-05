@@ -52,6 +52,14 @@ static var cliff := false
 ## Whether the dead stubs on the clear trunks are perches. Off: short broken snags read as wood, long level
 ## perch sticks read as pegs (and switching them off didn't change how often the AI bumps trunks).
 static var STUB_PERCHES := false
+## The wood's area, as a share of the standard one (the game's --wood-area): the arena's width grows with its square
+## root and every count with it (trees, openings, outposts, ground cover), so the stand is as dense as ever.
+## Evaluation only (perf: what a bigger wood costs).
+static var area_scale := 1.0
+
+
+static func n(count: int) -> int:
+	return int(round(count * area_scale))
 const GRIP_TRUNK_GAP := ArenaLayout.GRIP_TRUNK_GAP
 const GRIP_TIP_GAP := ArenaLayout.GRIP_TIP_GAP
 
@@ -61,6 +69,8 @@ static func generate(s: int) -> ArenaLayout:
 	a.seed = s
 	a.style = "pinewood"
 	a.avenues = []
+	a.half_extent *= sqrt(area_scale)
+	a.boundary *= sqrt(area_scale)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = s
 	var e := a.half_extent
@@ -72,7 +82,7 @@ static func generate(s: int) -> ArenaLayout:
 	a.openings.append({"centre": g_at, "r": rng.randf_range(GLADE.r.x, GLADE.r.y), "ph": rng.randf() * TAU, "kind": "glade"})
 	var oak_sites: Array[Vector2] = [Vector2.ZERO]
 	var tries := 0
-	while oak_sites.size() < OAK.count and tries < 400:
+	while oak_sites.size() < n(OAK.count) and tries < n(400):
 		tries += 1
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * (a.boundary - 22.0)
 		if p.length() < 34.0 or p.length() > a.boundary - 18.0 or p.distance_to(g_at) < GLADE.r.y + OAK.glade + 8.0:
@@ -87,7 +97,7 @@ static func generate(s: int) -> ArenaLayout:
 		var t := _tree(a, ArenaLayout.Kind.BROADLEAF, oak_sites[i], rng.randf_range(OAK.h.x, OAK.h.y) + (3.0 if i == 0 else 0.0), rng.randf_range(OAK.r.x, OAK.r.y) * (1.15 if i == 0 else 1.0))
 		_grow_oak(a, t, rng, i == 0)
 	tries = 0
-	while a.openings.size() < 2 + GAPS.count and tries < 600:
+	while a.openings.size() < 2 + n(GAPS.count) and tries < n(600):
 		tries += 1
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * (a.boundary - 12.0)
 		var r := rng.randf_range(GAPS.r.x, GAPS.r.y)
@@ -106,7 +116,7 @@ static func generate(s: int) -> ArenaLayout:
 	field.fractal_octaves = 2
 	tries = 0
 	var placed := 0
-	while placed < PINE.count and tries < PINE.count * 80:
+	while placed < n(PINE.count) and tries < n(PINE.count) * 80:
 		tries += 1
 		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
 		if p.length() > a.boundary - 3.0 or in_opening(a, p):
@@ -121,7 +131,7 @@ static func generate(s: int) -> ArenaLayout:
 	# groups, as they seed in.
 	tries = 0
 	placed = 0
-	while placed < SAPLING.count and tries < SAPLING.count * 60:
+	while placed < n(SAPLING.count) and tries < n(SAPLING.count) * 60:
 		tries += 1
 		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
 		var lit := light(a, p)
@@ -129,7 +139,7 @@ static func generate(s: int) -> ArenaLayout:
 			continue
 		for g in rng.randi_range(1, 5):
 			var q := p + Vector2.from_angle(rng.randf() * TAU) * (0.0 if g == 0 else rng.randf_range(2.5, 5.0))
-			if placed >= SAPLING.count or q.length() > a.boundary - 3.0 or q.length() < a.clearing_radius - 3.0 or not _clear_of(a, q, SAPLING.spacing, OAK.glade):
+			if placed >= n(SAPLING.count) or q.length() > a.boundary - 3.0 or q.length() < a.clearing_radius - 3.0 or not _clear_of(a, q, SAPLING.spacing, OAK.glade):
 				continue
 			var t := _tree(a, ArenaLayout.Kind.SAPLING, q, lerpf(SAPLING.h.x, SAPLING.h.y, rng.randf() * lerpf(0.4, 1.0, light(a, q))), rng.randf_range(SAPLING.r.x, SAPLING.r.y))
 			_grow_sapling(a, t, rng)
@@ -158,7 +168,7 @@ static func _ages(a: ArenaLayout, s: int) -> void:
 	var e := a.half_extent
 	var tries := 0
 	var placed := 0
-	while placed < VETERAN.count and tries < 8000:
+	while placed < n(VETERAN.count) and tries < n(8000):
 		tries += 1
 		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
 		if p.length() > a.boundary - 10.0 or in_opening(a, p, 3.0):
@@ -180,7 +190,7 @@ static func _ages(a: ArenaLayout, s: int) -> void:
 		placed += 1
 	tries = 0
 	placed = 0
-	while placed < POLE.count and tries < POLE.count * 200:
+	while placed < n(POLE.count) and tries < n(POLE.count) * 200:
 		tries += 1
 		var p := Vector2(rng.randf_range(-e + 4.0, e - 4.0), rng.randf_range(-e + 4.0, e - 4.0))
 		var lit := light(a, p)
@@ -188,7 +198,7 @@ static func _ages(a: ArenaLayout, s: int) -> void:
 			continue
 		for g in rng.randi_range(1, 4):
 			var q := p + Vector2.from_angle(rng.randf() * TAU) * (0.0 if g == 0 else rng.randf_range(4.0, 7.0))
-			if placed >= POLE.count or q.length() > a.boundary - 3.0 or in_opening(a, q, 1.5) or not _clear_of(a, q, 4.0, OAK.glade + OAK.limb.y * 0.6) or _young_near(a, q, POLE.crown + 4.0):
+			if placed >= n(POLE.count) or q.length() > a.boundary - 3.0 or in_opening(a, q, 1.5) or not _clear_of(a, q, 4.0, OAK.glade + OAK.limb.y * 0.6) or _young_near(a, q, POLE.crown + 4.0):
 				continue
 			var t := _tree(a, ArenaLayout.Kind.PINE, q, rng.randf_range(POLE.h.x, POLE.h.y), rng.randf_range(POLE.r.x, POLE.r.y))
 			t.form = "pole"
@@ -604,7 +614,7 @@ static func _outposts(a: ArenaLayout, rng: RandomNumberGenerator) -> void:
 		if _outpost(a, t, rng):
 			built.append(t)
 	for t in pines:
-		if built.size() >= OUTPOSTS:
+		if built.size() >= n(OUTPOSTS):
 			break
 		var far := true
 		for h in built:

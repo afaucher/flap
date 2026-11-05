@@ -188,3 +188,62 @@ and its faces wound as MeshBuild winds them (the legs mirrored, the right leg's 
 same, the right tube showed its inside from below, which the readback alone didn't see).
 
 ![The legs drawn by GDScript and by the shader, and their difference](../images/gpu_body_legs_ab.jpg)
+
+## Baseline, 2026-11-05 (master 4613915)
+
+`.\perf.ps1 -Hidden -Engine --gpu-profile` (crow on autopilot, 15 s), on a quiet machine; the GPU-on-by-default merge
+(f048914, 2026-11-03) profiled the same way the same day for comparison.
+
+| 4 birds, per frame (ms) | 2026-11-03 (f048914) | 2026-11-05 |
+|---|---|---|
+| Frame mean / p95 (vsync 60) | 16.8 / 19.8 | 17.0 / 19.0 |
+| GPU | 8.7 | 14.6 |
+| depth pre-pass / opaque / shadows | 2.5 / 2.4 / 3.2 | 5.0 / 4.6 / 4.2 |
+| Rig (`bird.rig`) | 2.0 | 2.5 |
+| AI (`bird.control`, nearly all `ai.avoid`) | | 1.6 |
+
+TAA (on by default since) costs about 0.8 ms of it (13.8 ms with `--no-taa`: its own pass is 0.12 ms, the rest the
+motion vectors); the look doesn't matter (`--look afternoon` the same). The rest of the rise is the wood's geometry
+(the depth pre-pass and the opaque pass doubled): the mixed-age wood, the outposts' timber and the ground cover
+landed in between, not yet told apart. The 4-bird frame is now GPU-bound at about 15 ms of 16.7.
+
+| 20 birds, per frame (ms) | 2026-11-05 (two runs) |
+|---|---|
+| Frame mean / p95 | 26.5-34.7 / 44-57 |
+| GPU | 15.8-23.1 |
+| AI (`bird.control`) | 8.0-11.3 |
+| Rig | 8.1-8.7 (11.6 on 2026-11-02) |
+| `bird.move` (collision, glances, wing strikes) | 5.1-7.1 |
+| `bird.reflex` | 0.7-1.0 |
+
+At 20 birds the AI and the birds' moving, both on the tick, now cost more than the rigs; the worst frames are three
+catch-up ticks with the AI's avoidance at 30-55 ms.
+
+## A bigger wood (evaluation, 2026-11-05)
+
+`Pinewood.area_scale` (the game's `--wood-area <x>`, `probe_load_time --wood-area <x>`) makes the wood x times the
+area at the same density: the boundary grows with the square root, every count (pines, oaks, poles, veterans,
+saplings, openings, outposts, ferns, grass) with x.
+
+| Area | Trees / perches / outposts | Boundary | Generate | Load (probe) | Memory (static) | GPU, 4 birds (pre-pass / opaque / shadows) | Frame mean, 4 birds |
+|---|---|---|---|---|---|---|---|
+| 1x | 391 / 2041 / 9 | 85 m | 2.7 s | 18.0 s | 269 MB | 14.9 (5.0 / 4.7 / 4.4) | 17.1 ms |
+| 1.5x | 550 / 2936 / 14 | 104 m | 3.9 s | 21.9 s | 375 MB | 17.8 (5.7 / 5.7 / 5.7) | 18.6 ms |
+| 2x | 733 / 4024 / 18 | 120 m | 5.6 s | 26.2 s | 506 MB | 20.9 (6.3 / 6.6 / 7.1) | 22.0 ms |
+| 3x | 1131 / 6487 / 27 | 147 m | 7.3 s | 27.7 s | 793 MB | 27.5 (8.1 / 7.7 / 10.8) | 28.8 ms |
+
+(The 1.5x-3x 4-bird runs shared the machine with other sessions' tests, 45-55 % CPU: their GPU numbers agree with a
+quiet 1x run, their CPU sections are noisy.) At 20 birds, 1x to 2x on a quiet machine: frame mean 26.5 -> 39.9 ms,
+GPU 15.8 -> 24.0, AI 8.0 -> 15.0, `bird.move` 5.1 -> 9.1, rig 8.1 -> 8.4.
+
+- **The GPU grows with the area**: nothing has a visibility range and the sun's shadows reach 160 m
+  (`ForestLight`), so every tree in the view frustum is drawn and shadowed however far off (18M primitives in the
+  probe's frame at 1x, 30M at 2x). Shadows grow fastest. A bigger wood needs far trees drawn and shadowed for less
+  -- visibility ranges with impostors or simpler far trees, shadow distance and cascades -- which is a look change
+  (Rules: fidelity first) to agree before it goes in.
+- **The CPU per bird grows too**, though the wood queries are hashed: `ArenaLayout`'s queries (`tree_clear`,
+  `clear_by`, `obstacle_distance`, `wood_near`, `nearest_wood`) go through every outpost each call, and the AI's
+  perch picks (`AIPilot._best_perch`, `CombatTree._pick_perch`) through every perch; both lists grow with the area.
+  Hashing the outposts and picking from `perches_near` would keep them flat at no cost to the look. Longer flights
+  in a bigger wood also mean more flying ticks; the runs don't separate the two.
+- **Loading** grows by about 4 s a 1x of area (generation and the wood's build), memory by about 120-140 MB.

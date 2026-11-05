@@ -13,6 +13,7 @@ extends Node3D
 ##   --rig-tick         pose the rigs on the physics tick, not every rendered frame (Bird.rig_in_process; for comparison)
 ##   --cpu-feathers     place the feathers in GDScript, not the shader (BirdRig.gpu_feathers off; for comparison)
 ##   --cpu-body         build the neck, arm wings and trousers in GDScript, not the shader (BirdRig.gpu_body off)
+##   --wood-area <x>    a wood x times the area, as dense (Pinewood.area_scale; evaluation)
 ##   --shot <png>       save a screenshot after --shot-after seconds (default 3) and quit
 ##   --shot-after <s>
 ##   --perf <s>         profile that many seconds of play (after a warm-up), write --perf-out <path>.csv/.txt, quit
@@ -62,6 +63,8 @@ func _ready() -> void:
 	Antialias.apply(self, args)
 	if FlightHud.STYLES.has(Boot.arg_value(args, "--hud")):
 		FlightHud.style = Boot.arg_value(args, "--hud")
+	if Boot.arg_value(args, "--wood-area") != "":   # (a bigger wood, as dense: Pinewood.area_scale)
+		Pinewood.area_scale = float(Boot.arg_value(args, "--wood-area"))
 	if args.has("--cpu-feathers"):
 		BirdRig.gpu_feathers = false
 	if args.has("--cpu-body"):

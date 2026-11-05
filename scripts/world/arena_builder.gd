@@ -712,7 +712,7 @@ func _floor() -> void:
 	var cols := []
 	var cus := []
 	# (bracken grows where the light gets in: thick in the gaps and glades, thin under the clumps)
-	for i in 6400:
+	for i in Pinewood.n(6400):
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary
 		if p.length() > layout.boundary:
 			continue
@@ -755,7 +755,7 @@ func _grass(rng: RandomNumberGenerator) -> void:
 		var reach := float(o.r) * 1.25 + 4.0
 		for i in int(PI * reach * reach * GRASS_PER_M2):
 			spots.append(o.centre + Vector2.from_angle(rng.randf() * TAU) * reach * sqrt(rng.randf()))
-	for i in 9000:
+	for i in Pinewood.n(9000):
 		spots.append(Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary)
 	for p in spots:
 		if p.length() > layout.boundary:
