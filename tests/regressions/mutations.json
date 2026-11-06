@@ -1586,8 +1586,8 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\t\tif t >= PREDICT_LAG:\n\t\t\tvar room := _bank_room(bird.profile, pos.y, frac)\n\t\t\tbank = move_toward(bank, clampf(err * TURN_GAIN, -room, room), roll * PREDICT_STEP)",
-    "replace": "\t\tif true:\n\t\t\tvar room := _bank_room(bird.profile, pos.y, frac)\n\t\t\tbank = clampf(err * TURN_GAIN, -room, room)"
+    "find": "\t\tif t >= PREDICT_LAG:\n\t\t\tvar room := _bank_room(bird.profile, pos.y, frac, _v_cap)\n\t\t\tbank = move_toward(bank, clampf(err * TURN_GAIN, -room, room), roll * PREDICT_STEP)",
+    "replace": "\t\tif true:\n\t\t\tvar room := _bank_room(bird.profile, pos.y, frac, _v_cap)\n\t\t\tbank = clampf(err * TURN_GAIN, -room, room)"
    }
   ]
  },
@@ -1601,7 +1601,7 @@
   "edits": [
    {
     "file": "scripts/ai/ai_pilot.gd",
-    "find": "\t\t\tvar room := _bank_room(bird.profile, pos.y, frac)\n\t\t\tbank = move_toward(",
+    "find": "\t\t\tvar room := _bank_room(bird.profile, pos.y, frac, _v_cap)\n\t\t\tbank = move_toward(",
     "replace": "\t\t\tvar room := _bank_room(bird.profile, 99.0, frac)\n\t\t\tbank = move_toward("
    },
    {
@@ -1667,8 +1667,8 @@
    },
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\tif not swoop_clear(p, profile):\n\t\treturn none",
-    "replace": "\tif false:\n\t\treturn none"
+    "find": "\t\tif not swoop_clear(p, profile, d):\n\t\t\tcontinue",
+    "replace": "\t\tif false:\n\t\t\tcontinue"
    }
   ]
  },
@@ -2244,7 +2244,8 @@
   "id": "combat-ambush-below-them",
   "bug": "An ambusher took the perch nearest to hand whatever its height, even one below where its enemies fly: it could never drop on them (2026-11-02).",
   "tests": [
-   "test_combat_ai"
+   "test_combat_ai",
+   "test_combat_perches"
   ],
   "edits": [
    {
@@ -2263,7 +2264,8 @@
   "id": "combat-rest-perch-unsafe",
   "bug": "A tired combat-AI bird rested on whatever perch AIPilot liked, wherever the enemies were (2026-11-02).",
   "tests": [
-   "test_combat_ai"
+   "test_combat_ai",
+   "test_combat_perches"
   ],
   "edits": [
    {
@@ -2985,7 +2987,7 @@
   "edits": [
    {
     "file": "scripts/combat/ai_combat.gd",
-    "find": "\tif not i.fire or i.target == null or b.stun > 0.0 or b.state != Bird.State.FLYING or brain.pilot.avoiding > 0.0:",
+    "find": "\tif not i.fire or i.target == null or b.stun > 0.0 or b.state != Bird.State.FLYING:",
     "replace": "\tif true:"
    }
   ]
@@ -4461,7 +4463,7 @@
   ],
   "edits": [
    {
-    "file": "scripts/race/race_pilot.gd",
+    "file": "scripts/ai/dubins.gd",
     "find": "\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n",
     "replace": "\t\t\t\tif dd < 1e-3:\n\t\t\t\t\tcontinue\n\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n"
    }
@@ -5511,20 +5513,6 @@
   ]
  },
  {
-  "id": "ai-line-up-skips-approach",
-  "bug": "On a line-up's turn the guidance aimed most of a turning circle ahead, past the approach point too: the final began 20 m out, high and fast, with no swoop up from below (2026-11-06).",
-  "tests": [
-   "test_flight_exam"
-  ],
-  "edits": [
-   {
-    "file": "scripts/ai/ai_pilot.gd",
-    "find": "\t\tif to_wp.length() < (_aim_ahead if wp < route.size() - 2 else AIM_AHEAD) or",
-    "replace": "\t\tif to_wp.length() < _aim_ahead or"
-   }
-  ]
- },
- {
   "id": "ai-no-spiral",
   "bug": "A bird high over its perch dived the height away on the way and came to the final far too fast; a tired crow hit its rest perch at 7.3 m/s and circled under it (2026-11-06).",
   "tests": [
@@ -5612,48 +5600,6 @@
   ]
  },
  {
-  "id": "ai-way-pre-leg-ignored",
-  "bug": "Ways in whose pre-approach leg was closed ranked with the rest: the route then turned straight onto the approach, sharper than the falcon can, and it circled the clearing's oak after a race (2026-11-06).",
-  "tests": [
-   "test_race"
-  ],
-  "edits": [
-   {
-    "file": "scripts/ai/flight_planner.gd",
-    "find": "\t\tif _leg_ok(q, a, -1, p.tree_id) or (heading != Vector3.ZERO and on_line(p, profile, d, start, heading)):",
-    "replace": "\t\tif true:"
-   }
-  ]
- },
- {
-  "id": "ai-approach-not-slowed",
-  "bug": "A bird came onto its approach leg as fast as its cruise let it, so the final's few metres couldn't bleed it to its catch speed (the hawk at 10.9 m/s onto the big oak's rail) (2026-11-06).",
-  "tests": [
-   "test_flight_exam"
-  ],
-  "edits": [
-   {
-    "file": "scripts/ai/ai_pilot.gd",
-    "find": "\tif opts.has(\"slow_to\") and m.speed > float(opts.slow_to) and not opts.has(\"bleed_to\"):",
-    "replace": "\tif false:"
-   }
-  ]
- },
- {
-  "id": "ai-escape-lift-capped",
-  "bug": "Every steer() capped its bank at what the lift holds, a race's wood-guard escapes too: the crow put beside a gate turned too wide to get round it (15 go-arounds) (2026-11-06).",
-  "tests": [
-   "test_race"
-  ],
-  "edits": [
-   {
-    "file": "scripts/ai/ai_pilot.gd",
-    "find": "\t_v_cap = m.speed if opts.get(\"lift_cap\", false) else INF",
-    "replace": "\t_v_cap = m.speed if opts.get(\"lift_cap\", true) else INF"
-   }
-  ]
- },
- {
   "id": "race-turns-past-lift",
   "bug": "The racer banked to its skill's share of the limit whatever the speed: the falcon's go-arounds sank it into the ground and it never made a U-turn or a gate behind it (2026-11-06).",
   "tests": [
@@ -5668,17 +5614,58 @@
   ]
  },
  {
-  "id": "rail-deck-open-from-behind",
-  "bug": "With the whole deck of a rail's outpost left out of the landing's clearance, the planner brought birds in to the rail from behind and below, under the deck (2026-11-06).",
+  "id": "race-round-climbs-each-plan",
+  "bug": "A go-around's loop climbed ROUND_UP over where the bird was, so each replan from up in the loop climbed again: the hawk beside course 16's gate 3 crossed it 8 m high after three tries (2026-11-06).",
   "tests": [
-   "test_race",
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tvar top := maxf(pos.y, g.centre.y + ROUND_UP)",
+    "replace": "\tvar top := maxf(pos.y, g.centre.y) + ROUND_UP"
+   }
+  ]
+ },
+ {
+  "id": "race-round-descends-in-turn",
+  "bug": "A go-around came down from its loop in the last turn onto the run-in: gaining speed there, its turn widened, it strayed off the path and planned again, round and round (2026-11-06).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\t\tpts.append(Vector3(flat[q].x, lerpf(pos.y, top, smoothstep(0.0, 0.35, f)), flat[q].y))",
+    "replace": "\t\t\tpts.append(Vector3(flat[q].x, lerpf(pos.y, top, smoothstep(0.0, 0.35, f)) if f < 0.6 else lerpf(top, g.centre.y, smoothstep(0.6, 1.0, f)), flat[q].y))"
+   }
+  ]
+ },
+ {
+  "id": "ai-seekers-held-dodging",
+  "bug": "The combat AI held every shot while its avoidance flew, seekers too: in the big-trees wood's crowns it fired once in 40 s at the racetrack target (12 hits to the demo shooter's 13) (2026-11-06).",
+  "tests": [
+   "test_combat_vs_demo"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\tif brain.pilot.avoiding > 0.0 and l.weapon != Launcher.Weapon.SEEKERS:",
+    "replace": "\tif brain.pilot.avoiding > 0.0:"
+   }
+  ]
+ },
+ {
+  "id": "ai-low-route-held-at-4m",
+  "bug": "A perch flight's ground guard held it 4 m up, flapping, until the final: a low limb's approach point is under that, so the hawk came at the big-trees oak's 4.5 m limbs high and fast, overshot and looped 50 m out (21 of 36) (2026-11-06).",
+  "tests": [
    "test_flight_exam"
   ],
   "edits": [
    {
-    "file": "scripts/world/arena_layout.gd",
-    "find": "\t\t\t\tif k == DECK_RAIL_LINE and skip_perch >= 0 and skip_perch == o.rail_perch_id:",
-    "replace": "\t\t\t\tif skip_perch >= 0 and skip_perch == o.rail_perch_id:"
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\tif low < 4.0 + ROUTE_FLOOR:",
+    "replace": "\t\tif false:"
    }
   ]
  }

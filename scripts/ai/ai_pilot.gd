@@ -55,8 +55,7 @@ var _around_until := -INF       ## clock until which it flies a go-around (_go_a
 var _around_dir := Vector3.ZERO
 var go_arounds := 0
 var lined_up := false           ## the route's last legs are a line-up (_line_up), or one was tried for this route
-var _aim_ahead := AIM_AHEAD     ## m along the route it aims ahead (further on a line-up's turn: the bank it needs; to
-                                ## the approach point and on, AIM_AHEAD)
+var _aim_ahead := AIM_AHEAD     ## m along the route it aims ahead (further on a line-up: the bank its turn needs)
 var _spiralling := false        ## circling down to lose height before the approach (_spiral)
 var _spiral_side := 1.0
 var _v_cap := INF               ## this tick's speed for the lift's bank cap (_bank_room; INF: none)
@@ -391,7 +390,7 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 	while wp < route.size() - 1:
 		var to_wp := route[wp] - pos
 		var seg := route[wp] - route[wp - 1]
-		if to_wp.length() < (_aim_ahead if wp < route.size() - 2 else AIM_AHEAD) or (seg.length() > 0.1 and to_wp.dot(seg) < 0.0):
+		if to_wp.length() < _aim_ahead or (seg.length() > 0.1 and to_wp.dot(seg) < 0.0):
 			wp += 1
 		else:
 			break
@@ -409,6 +408,14 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 		opts.slow_to = p.v_best                # (and come down to it by the approach point: the final bleeds the rest)
 	if final and target.position.y < 5.0:
 		opts.floor = 0.8   # (landing low)
+	else:
+		# The ground guard's floor under the route's lowest point still ahead (ROUTE_FLOOR): a low limb's approach point
+		# is under the usual 4 m, and holding 4 m (flapping) there it came in high and fast and overshot.
+		var low := INF
+		for q in range(wp, route.size() - 1):
+			low = minf(low, route[q].y)
+		if low < 4.0 + ROUTE_FLOOR:
+			opts.floor = clampf(low - ROUTE_FLOOR, 0.8, 4.0)
 	if final and dist_perch < maxf(10.0, m.speed * 1.5):
 		opts.bleed_to = FlightPlanner.catch_speed(p)
 		opts.flap_below = target.position.y - 0.3
@@ -606,6 +613,7 @@ const SPIRAL_START := 3.0     ## m of energy over the approach's at which it cir
 const SPIRAL_STOP := 0.5      ## ... and stops circling
 const SPIRAL_GAMMA := deg_to_rad(16.0)   ## the path angle it circles down at
 const AIM_AHEAD := 3.0        ## m: a waypoint this close is passed on to the next (the guidance aims past it)
+const ROUTE_FLOOR := 1.0      ## m under a perch flight's lowest route point ahead its ground guard lets it down to (4 m at most)
 const LINEUP_MARGIN := 1.15   ## a line-up's turns this much wider than the circle the bird holds
 const LINEUP_RUNS := 3.0      ## turning circles (and LINEUP_REACH m) from the approach point it lines up within
 const LINEUP_REACH := 25.0
@@ -673,7 +681,7 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 	var t := 0.0
 	while t < horizon - 1e-6:
 		if is_point and follow_route:
-			while k < route.size() - 1 and pos.distance_to(goal) < (_aim_ahead if k < route.size() - 2 else AIM_AHEAD):
+			while k < route.size() - 1 and pos.distance_to(goal) < _aim_ahead:
 				k += 1
 				goal = route[k]
 		var err := _signed_heading(dir, (goal - pos) if is_point else goal)

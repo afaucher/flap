@@ -41,8 +41,10 @@ func _fight(l: Launcher, dt: float) -> CombatInput:
 	brain.tick(dt)
 	var i := brain.intent
 	var b := l.bird
-	if not i.fire or i.target == null or b.stun > 0.0 or b.state != Bird.State.FLYING or brain.pilot.avoiding > 0.0:
+	if not i.fire or i.target == null or b.stun > 0.0 or b.state != Bird.State.FLYING:
 		return CombatInput.new()
+	if brain.pilot.avoiding > 0.0 and l.weapon != Launcher.Weapon.SEEKERS:
+		return CombatInput.new()   # (dodging wood throws an unguided round off; a seeker homes from its lock)
 	if l.cooldown > 0.0 or brain.ammo_left() == 0 or brain.world.friend_in_line(l) != null:
 		return CombatInput.new()
 	var t := brain.picture.track_of(i.target)

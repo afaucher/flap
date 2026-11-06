@@ -150,22 +150,7 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 	var none: Array[Vector3] = []
 	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
 	var tried := 0
-	# (Of those, the ways it can line up on through their pre-approach point first: with that leg closed the route turns
-	# straight onto the approach, sharper than a wide turner can.)
-	_b_perch = p.id
-	var through: Array[Vector3] = []
-	var not_through: Array[Vector3] = []
 	for d in ways_in(p, from, profile, heading, turn_r, layout, clearance):
-		var a := approach_point(p, profile, d)
-		a.y = maxf(a.y, clearance + 0.5)
-		var q := pre_approach_point(p, profile, d)
-		q.y = maxf(q.y, clearance + 0.5)
-		if _leg_ok(q, a, -1, p.tree_id) or (heading != Vector3.ZERO and on_line(p, profile, d, start, heading)):
-			through.append(d)
-		else:
-			not_through.append(d)
-	through.append_array(not_through)
-	for d in through:
 		if tried >= WAYS_PLANNED:
 			break
 		if not swoop_clear(p, profile, d):

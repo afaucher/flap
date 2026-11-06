@@ -129,6 +129,12 @@ class Attempt:
 	var race: RaceRun = null    ## (gate attempts)
 	var racer: RacePilot = null
 	var prev := Vector3.ZERO
+	var flown := 0              ## ticks flying
+	var over_bank := 0          ## ... of them banked past what the lift holds (AIPilot.held_bank, OVER_BANK more)
+	var turned := 0.0           ## deg its heading turned through in all (a loop: 360)
+	var finals: Array[float] = []   ## its speed over its cruise (v_best) as each final began
+	var _was_final := false
+	var _heading := Vector3.ZERO
 
 	func ok() -> bool:
 		return landed < INF
@@ -147,6 +153,7 @@ var arena: ArenaBuilder
 var attempts: Array[Attempt] = []
 var trace: Attempt = null       ## printed every TRACE_EVERY ticks while it flies (probes)
 const TRACE_EVERY := 6
+const OVER_BANK := deg_to_rad(5.0)   ## rad past the lift's held bank a tick counts as over-banked (the roll overshoots a little)
 
 
 ## The exam in `l`, its birds under `h`. Courses (add_course) go in before build(); birds after.
@@ -258,6 +265,7 @@ func fly(seconds: float) -> void:
 			var st := b.state
 			if at == trace and f % TRACE_EVERY == 0:
 				_trace(at, (f + 1) / 60.0)
+			_measure(at)
 			if at.race != null:
 				at.race.step(at.prev, b.global_position, 1.0 / 60.0, RaceRun.perch_of(b))
 				at.prev = b.global_position
@@ -296,6 +304,30 @@ func fly(seconds: float) -> void:
 		if not at.ok():
 			at.approaches = at.pilot.replans
 			at.bonks = at.bird.bonks
+
+
+## How it flew this tick: over-banked (a turn the lift can't hold sinks into a stall spiral), and how far it turned.
+func _measure(at: Attempt) -> void:
+	var b := at.bird
+	if b.state != Bird.State.FLYING:
+		at._heading = Vector3.ZERO
+		return
+	var m := b.model
+	at.flown += 1
+	var final := at.pilot != null and at.race == null and at.pilot.mode == AIPilot.Mode.FINAL
+	if final and not at._was_final:
+		at.finals.append(m.speed / b.profile.v_best)
+	at._was_final = final
+	if absf(m.bank) > AIPilot.held_bank(b.profile, m.speed) + OVER_BANK:
+		at.over_bank += 1
+	var fd := m.flight_dir()
+	var h := Vector3(fd.x, 0.0, fd.z)
+	if h.length() < 0.2:
+		return
+	h = h.normalized()
+	if at._heading != Vector3.ZERO:
+		at.turned += rad_to_deg(at._heading.angle_to(h))
+	at._heading = h
 
 
 func _trace(at: Attempt, t: float) -> void:

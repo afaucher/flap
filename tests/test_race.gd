@@ -37,7 +37,7 @@ func setup() -> void:
 	if in_shard(5):
 		await _field_finishes(16)
 	if in_shard(6):
-		await _goes_round(16)
+		await _goes_round()
 		await _takes_off_again(16)
 		await _lands_from_run_in(16)
 	for k in RaceCourse.STYLES.size():   # (shards 7-10: the menu's course of each style)
@@ -472,14 +472,21 @@ func _takes_off_again(s: int) -> void:
 	trial.queue_free()
 
 
-## Put beside a gate on a clear line (a miss, left and right), a racer goes round and comes back through it.
-func _goes_round(s: int) -> void:
-	var l := Pinewood.generate(ARENA)
-	var c := RaceCourse.generate(l, s)
+## Put beside a gate on a clear line (a miss, left and right), a racer goes round and comes back through it. In a
+## place of its own (FlightExam), as the generated wood's gate 3 of course 16 was before the trees grew: a post gate
+## 7 m up with three pines 5-7 m off one side, so going round on that side means turning in their crowns and on the
+## other in the open. (In the wood a later bake moves the gate's trees and the test with them.)
+func _goes_round() -> void:
+	var l := FlightExam.place()
+	for t in [[Vector2(7.1, 4.7), 3], [Vector2(6.7, -4.3), 4], [Vector2(5.3, -11.7), 5]]:   # (x: the gate's right, z: along)
+		FlightExam.add_tree(l, "pine", t[0], t[1])
+	var gs: Array[RaceCourse.Gate] = [FlightExam.post_gate(Vector3(0, 7, -30), Vector3(0, 0, 1)),
+		FlightExam.post_gate(Vector3(0, 7, 0), Vector3(0, 0, 1)), FlightExam.post_gate(Vector3(0, 7, 30), Vector3(0, 0, 1))]
+	var c := RaceCourse.from_gates(l, Perch.branch(-1, Vector3(0, 7, -60), Vector3(0, 7, -60), Vector3(0, 0, 1), -1, 0.05), gs)
 	var trial := RaceTrial.new()
 	add_child(trial)
 	trial.setup(l, c)
-	var k := 3
+	var k := 1
 	var g := c.gates[k]
 	var es := []
 	for id in ["crow", "hawk"]:   # (not the falcon: turning back it loses ~6 m even flapping, too much beside a 7 m gate)
@@ -488,11 +495,7 @@ func _goes_round(s: int) -> void:
 			e.run.phase = RaceRun.Phase.RUNNING
 			e.run.next = k
 			var at := g.centre - g.normal * 3.0 + g.right() * side * (g.half_w + 3.0)
-			for out: float in [3.0, 4.5, 6.0, 8.0]:   # (beside it, on a line clear of the wood: going round, not a bonk)
-				at = g.centre - g.normal * 3.0 + g.right() * side * (g.half_w + out)
-				if l.segment_clear(at, at + g.normal * 12.0, 1.0):
-					break
-			check(l.segment_clear(at, at + g.normal * 12.0, 1.0), "a clear line beside gate %d (%+.0f)" % [k, side])
+			check(l.segment_clear(at, at + g.normal * 12.0, 1.0), "a clear line beside the gate (%+.0f)" % side)
 			e.bird.fly_from(at, g.normal, e.bird.profile.v_best)
 			e.prev = at
 			es.append([e, id, side])
@@ -500,8 +503,8 @@ func _goes_round(s: int) -> void:
 		await trial.step()
 	for x in es:
 		var e: Dictionary = x[0]
-		check(e.run.next > k, "the %s put %s of gate %d goes round and through it (go-arounds %d)" % [x[1], "left" if x[2] < 0.0 else "right", k, e.pilot.go_arounds])
-		check(e.pilot.go_arounds >= 1, "the %s put %s of gate %d went round" % [x[1], "left" if x[2] < 0.0 else "right", k])
+		check(e.run.next > k, "the %s put %s of the gate goes round and through it (go-arounds %d)" % [x[1], "left" if x[2] < 0.0 else "right", e.pilot.go_arounds])
+		check(e.pilot.go_arounds >= 1, "the %s put %s of the gate went round" % [x[1], "left" if x[2] < 0.0 else "right"])
 	trial.queue_free()
 
 

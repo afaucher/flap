@@ -21,7 +21,9 @@ trees the game has, but alone, on flat ground, in still air:
 
 | Scene | What's there |
 |---|---|
-| pine, veteran, pole, oak | one tree of that form (the middle of the wood's size range for it) |
+| pine, veteran, pole, oak | one tree of that form (the middle of the wood's size range for it); the oak judged as its crown (limbs from 6 m) and its low tier (the big limbs ~4.5 m up, under the crown: `oak_low`) |
+| close | the pine, each perch from 12 m out in front at its height, heading at it: in on its line already |
+| oak_low_heights | the oak's low tier from 10 m above and 6 m below (the hawk and falcon) |
 | rails | an outpost on a mature pine; an outpost on the clearing's big oak |
 | heights | the pine, from 10 m above and 8 m below its perches |
 | grove | the pine with five more trees round it at a stand's spacing (8-11 m) |
@@ -38,7 +40,10 @@ trees the game has, but alone, on flat ground, in still air:
 | 4 | Thread a stand | every perch of the middle tree of a grove |
 | 5 | Go perch to perch | take off, fly across, land |
 | 6 | Fly a course | every gate, in order, at recruit, pilot and ace |
+| 7 | Already lined up, fly straight in | every pine perch from 12 m out on its line |
 | - | Don't hit things | the flock's touches of wood |
+| - | Turn only as hard as the lift holds | each species' share of its flying time banked past `AIPilot.held_bank` (+5 deg) |
+| - | Begin each final at its speed | nine finals in ten begin under 1.35 x its cruise (`FINAL_FAST`) |
 
 An attempt passes if the bird sits on the perch (or has taken every gate) within 45 s. A bird that sits on another
 perch first is sent on again; one that gives the perch up is asked again. Each species is judged on its share of
@@ -46,7 +51,8 @@ attempts and its median time (`test_flight_exam.RATE`, `TIME`).
 
 ## Baseline and now
 
-Landed / tried, 45 s each (master before -- 25df35b, and 63f2557 for the rows below the gates; this branch after):
+Landed / tried, 45 s each (master before -- 25df35b, and 63f2557 for the rows below the gates; this branch after, before
+big-trees changed the oak -- its new numbers are below the table):
 
 | Scene | crow | owl | hawk | falcon | sparrow |
 |---|---|---|---|---|---|
@@ -63,6 +69,11 @@ Landed / tried, 45 s each (master before -- 25df35b, and 63f2557 for the rows be
 | veteran in a grove | 51 -> **60** / 60 | 55 -> **60** | 45 -> **60** | 13 -> **59** | 33 -> **59** |
 | hop, pine to pine | 20 -> **22** / 22 | 20 -> **22** | 20 -> **22** | 4 -> **22** | 19 -> **22** |
 | hop, veteran to oak | 22 -> **22** / 22 | 22 -> **22** | 19 -> **22** | 10 -> **18** | 17 -> **22** |
+
+Big-trees' oak (a short trunk to the fork, big low limbs, a crown above: 24 perches where there were 11), now: its
+crown 60 / 60 for the crow, owl, hawk and sparrow, 58 / 60 for the falcon; its low tier 36 / 36 for the crow, owl and
+sparrow, the hawk 31 / 36 (about 21 before the route floor, below) and the falcon 12 / 36 (about 5). Close in on the line:
+every species 11 / 11, in 1.3-2.0 s.
 
 Median time to land on a lone pine: crow 6.4 -> 4.1 s, owl 6.5 -> 4.0, hawk 8.4 -> 3.6, falcon 13.4 -> 9.0, sparrow
 10.9 -> 4.2. In the generated woods (`test_ai_flight`, 90 s, the flock picking its own perches): greybox arenas 33 -> 48
@@ -92,15 +103,15 @@ moment. The racer's own turns and go-arounds are capped the same way (`RacePilot
 from either side across it, square on or 35 deg off; a treetop from anywhere. Each perch had one way in (its facing),
 so a bird behind the tree flew all the way round it, and a branch whose swoop was blocked on that side had no way in at
 all. Now the planner tries them in order: for a flying bird, the one it can turn onto soonest (the shortest
-turn-straight-turn path from where it is, heading in), those it can line up on clear of the wood first, and those whose
-pre-approach leg is open before those whose isn't; a bird already in on a way's line flies straight in.
+turn-straight-turn path from where it is, heading in), those it can line up on clear of the wood first; a bird already in on a way's
+line flies straight in (no turn-straight-turn path fits a small offset in a few metres: the falcon looped round the
+tree).
 
 **Line up for the final on your own turning circle** (`AIPilot._line_up`, `Dubins`). The planned route doesn't know
 which way the bird is flying; a wide turner reached its last waypoints still turning and passed the perch to the side.
 Within three turning circles of the approach point, the route's last legs are replaced by a turn-straight-turn path on
 the circle the bird holds (with a margin), arriving at the approach point heading in -- if that path is clear of the
-wood (half a wingspan and a margin). On the turn it aims far enough ahead to bank as the circle needs; from the
-approach point on, close again.
+wood (half a wingspan and a margin). It aims far enough ahead to bank as the circle needs.
 
 **Arrive with the energy the catch needs** (`FlightPlanner.approach_drop`, `catch_speed`; `AIPilot._spiral`). The
 catch wants the bird inside its window between stall and fastest catch, for the falcon 9.2-10.6 m/s. The final swoops
@@ -130,22 +141,38 @@ bird's look-ahead found the deck it was landing on and swerved off the line. The
 doesn't count for a rail landing (the feet reach over its edge); the rest of the deck and the hangar do, so the way in
 is still from in front.
 
-**What's left.** The falcon can't always make the oak's lowest limbs (5 m, under limbs at 10 m): there's no room under
-the crown to turn on its 13 m circle, and the ground limits its bank. It lands on all of them from 30 m out at 3 m above,
-but from far above or below, or hopping from another tree, it misses some (81 of 88, 18 of 22). The hawk misses a few
-of the big oak's rail from high above, coming onto the approach too fast after its spiral.
+**Let the route down low** (`AIPilot.ROUTE_FLOOR`). The ground guard held every perch flight 4 m up (flapping, if it
+had to) until the final. A low limb's approach point is under that: the hawk came at the oak's 4.5 m limbs high and
+fast, overshot and looped 50 m out. The floor now sits a metre under the route's lowest point still ahead (4 m at most,
+0.8 at least).
+
+**What's left.** The oak's low tier: limbs ~4.5 m up under a crown, with the ground limiting the bank (`_bank_room`),
+leave a wide turner circles of ~17 m to line up on at its speed, so it overshoots and loops. The hawk makes 31 of 36,
+the falcon 12 (the rest of its oak, 58 of 60). Turning higher up, where it may bank, and coming down on the straight
+would help; that's the next step for it. The hawk misses one of the big oak's rail from high above.
 
 ## The test, and why its bounds hold
 
-`test_flight_exam` runs one scene a shard (9 shards, 20-60 s each) and checks each species' share and median time, and
-the flock's touches of wood:
+`test_flight_exam` runs a scene a shard (17 shards, 10-70 s each; the runner stops a process at 120 s, so the veteran is
+split by sides, the oak by tier and species, the grove by species, the rails by tree) and checks each species' share, its median time, its
+share of time over-banked, and the shard's touches of wood:
 
 - Shares are judged over 20-90 attempts a species, from every side; one attempt that goes differently moves a share by
   1-5%. The bounds (`RATE`) sit 5-15% under what the AI does now, so a subtle change to a tree's shape, a profile or
   the flight model passes, while losing a way of flying (one side to land from, the lift-held bank, the line-up, the
   energy on the final) costs 10-80% and fails.
-- Every regression entry for these fixes (`tests/regressions/mutations.json`, `ai-*`, `race-turns-past-lift`,
-  `rail-deck-open-from-behind`) is caught by it or by `test_race`.
+- Each regression entry for these fixes (`tests/regressions/mutations.json`: the `ai-*` and `race-*` entries of
+  2026-11-06) is caught by it, `test_race` or `test_combat_vs_demo`. Putting each back one at a time and flying the whole
+  exam showed which ways of flying still earn their place: with the others in, several cost the falcon only 1-3% of its
+  landings, which no bound robust to a subtle change can see. Those are caught by what they change in the flight
+  instead -- the over-banked time (the lift cap: the falcon's 0.5% becomes 8-17%), the median time close in on the line
+  (the straight-in: the falcon's 1.3 s becomes 14 s), the speed finals begin at (the spiral: nine in ten under 1.1-1.28 x
+  cruise, without it 1.4-1.6), the oak's low tier from above and below (the route floor: the falcon's 31 of 36 becomes
+  17). Two that changed nothing measurable were taken out: an aim-ahead special case for the last legs, and ranking ways
+  in by their pre-approach leg. A third, the gentle pull to slow to cruise on the approach leg, changes nothing the exam
+  measures (fresh or tired, stamina 0.2), but without it test_combat_team's 3 v 3 ran a different match in which three
+  birds spent most of 400 s trying to rest: it stays, without a regression entry, until a controlled check shows it
+  either way.
 - The runs are deterministic (fixed steps, seeded): the same code gives the same numbers.
 
 ## Our other AI tests
@@ -156,7 +183,9 @@ How robust each is against a change it isn't about:
 |---|---|---|---|
 | `test_ai_avoidance` | the avoidance and the planner, in hand-built layouts | its own trunks and limbs | yes: controlled scenes, both sides |
 | `test_ai_flight` | the flock chaining perches in two greybox arenas and the pine wood, 90 s | the generated arenas | fair: flock totals with wide bounds; the per-species ">= 4 in both arenas" is one run each |
-| `test_race` (field, run-in, go-round) | pilots and aces take every gate and land home; racers out on the run-in land | course 16 of arena 7: one run each | fragile where it judged one landing each, on one rail in one clearing: it moved with every change here. The field's landing home is now a share (9 of the 10 pilots and aces); the exam's rails objective judges rail landings over many tries |
+| `test_race` (field, run-in, go-round) | pilots and aces take every gate and land home; racers out on the run-in land; a racer put beside a gate goes round | course 16 of arena 7: one run each | fragile where it judged one landing each, on one rail in one clearing: it moved with every change here. The field's landing home is now per species (the pilot or the ace lands, at most one of the ten misses, named); the exam's rails objective judges rail landings over many tries. The go-round now has a place of its own (a 3 m post gate 7 m up with pines off one side, as course 16's gate 3 was before big-trees moved its trees) |
+| `test_combat_team` | a 3 v 3: hits both ways, a bird downed and back, targets spread, little friendly fire | one match in the wood, run on until a downed bird is back | fragile: deterministic but chaotic -- a change anywhere in the flying runs a different match, and one in which nobody is downed runs to 400 s and past the runner's 120 s. Over six matches (`probe_combat_rest --ai-seed 20..120`) birds landed on their bases 21 times (4 on master with the big-trees wood), and spent 10-25% of the match resting on the ground |
+| `test_combat_vs_demo` | the combat AI out-hits the old demo shooter on an evading racetrack target, four woods | the racetrack's place in the wood | fair: after big-trees no loop at 20 m is clear of the crowns. The combat AI held every shot while avoiding wood, so it fired once in 40 s; seekers (gated by lock and line of sight) now fire while it dodges: 18 v 13, and 20 v 13 with the start nudged |
 | `test_combat_ai` | rearming, leaving the base, resting, the boxed-in base | `Pinewood.generate(7)` perches and bases | mixed: the scenes are picked from the wood, so a change to the wood changes which perch is tested (the no-way-in base now builds its own) |
 | `test_combat_team`, `test_combat_boom_zoom`, `test_combat` | 3 v 3 and duels | the wood; many seeds averaged | fair: totals over several woods with bounds about three standard deviations short |
 
@@ -172,9 +201,11 @@ it can be flown at all), with totals and wide bounds.
 .\probe.ps1 -Headless -Engine --fixed-fps -Engine 60 probe_flight_exam --tree pine --grove     # among others
 .\probe.ps1 -Headless -Engine --fixed-fps -Engine 60 probe_flight_exam --tree oak --hop veteran
 .\probe.ps1 -Headless -Engine --fixed-fps -Engine 60 probe_flight_exam --gates --skills recruit,pilot,ace
+.\probe.ps1 -Headless -Engine --fixed-fps -Engine 60 probe_flight_exam --tree pine --bearings 0 --out 12 --ups 0   # close in
 .\probe.ps1 -Headless -Engine --fixed-fps -Engine 60 probe_flight_exam --tree oak --perches 0 --birds falcon --bearings 0 --trace 0
 ```
 
 `--fixed-fps 60` steps the physics as fast as the machine allows and makes the run repeatable (without it, it runs in
 real time). `--trace <n>` prints attempt n's flight every 0.1 s: where it is, its speed against its stall and catch,
-its path angle and bank, the pilot's mode and waypoint, the avoidance, the catch candidate.
+its path angle and bank, the pilot's mode and waypoint, the avoidance, the catch candidate. Each species' `FLOWN` line
+gives its time over-banked and how far the attempts from in front turned.

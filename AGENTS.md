@@ -60,9 +60,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance; turns within what the lift holds, lines up for the final on its own
   turning circle, manages its energy for the catch), `FlightPlanner` (lattice A*, the ways in to a perch), `Dubins`
   (turn-straight-turn paths). What the AI must be able to do is the flight exam (`docs/design/flight_exam.md`):
-  `FlightExam` (scripts/test_support: lone trees, rails, a grove, hops, gate courses), `test_flight_exam` (each species'
-  share and median time, by scene), `tests/probe_flight_exam.gd` (every attempt; `--trace` one). Judge an AI change
-  there, not on one run in the wood.
+  `FlightExam` (scripts/test_support: lone trees, the oak's crown and low tier, rails, a grove, hops, close in on the line,
+  gate courses), `test_flight_exam` (each species' share and median time by scene, its time banked past the lift's hold,
+  the speed its finals begin at), `tests/probe_flight_exam.gd` (every attempt; `--trace` one; `--stamina` tired). Judge an
+  AI change there, not on one run in the wood.
 - `scripts/race/`: race mode, a prototype (`docs/design/race.md`; the menu's Race screen, or `.\run.ps1 --race
   [--race-ai recruit|pilot|ace] [--course <n>] [--plan-for <birds>]`; the pause menu's Start over restarts the race). `RaceCourse` generates 10 gates from the layout (posts on
   open ground, low or tall; between two pines; hoops hung from a limb or a rope between two pines) from an outpost's
@@ -190,7 +191,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/combat/ai/`: the combat AI (`docs/design/combat_ai.md`, section 11 for what's built): `CombatSense` (what a
   bird can see) -> `CombatBrain` (a Beehave tree, `CombatTree`, built in code; `addons/beehave`) -> an `Intent` that
   `CombatPilot` flies through `AIPilot.steer()` and `AICombat` fires by (`FireControl` flies the real `Projectile`).
-  `Duel` (`scripts/test_support/`) runs headless matches; `tests/probe_duels.gd` prints duel traces and cost
+  `Duel` (`scripts/test_support/`) runs headless matches; `test_combat_perches` checks the ambush and rest perch choices
+  in a place of their own; `tests/probe_duels.gd` prints duel traces and cost
   (`DUEL=hawk,crow DUEL_TARGET=circuit DUEL_TRACE=1`). Teams share a `TeamBoard`; `.\range.ps1 -Match` is a 3 v 3.
   `tests/probe_team_cost.gd`: a 3 v 3's cost per tick and section, the worst tick, and a fingerprint of every bird's
   flight (a speedup meant to change nothing must leave it the same).

@@ -3,7 +3,7 @@ extends TestCase
 ## (or its outpost's rail), each species sent to land on each from several bearings round it; prints every attempt
 ## and a table of landed / tried per species.
 ##   .\probe.ps1 -Headless probe_flight_exam [--tree pine|veteran|pole|oak] [--rail] [--birds crow,...]
-##        [--bearings 0,90,180,270] [--ups 3] [--out 30] [--seconds 40] [--seed 1] [--perches 3,5] [--fails]
+##        [--bearings 0,90,180,270] [--ups 3] [--out 30] [--seconds 40] [--seed 1] [--perches 3,5] [--stamina 0.2] [--fails]
 ##        [--grove] (other trees round it) [--hop <form>] (from two perches each of a tree of that form 28 m away)
 ##   ... probe_flight_exam --gates [--courses straight,uturn,...] [--skills recruit,pilot,ace]: the gate courses
 
@@ -69,6 +69,9 @@ func setup() -> void:
 				for u in ups:
 					k += 1
 					ex.add_landing(id, q, float(be), float(u), out, 100 + k)
+	if Boot.arg_value(args, "--stamina") != "":   # (tired: as a combat bird going to rest)
+		for at in ex.attempts:
+			at.bird.model.energy.stamina = float(Boot.arg_value(args, "--stamina"))
 	var tr := Boot.arg_value(args, "--trace")
 	if tr != "":
 		ex.trace = ex.attempts[int(tr)]
@@ -91,6 +94,7 @@ func setup() -> void:
 				times.append(at.landed)
 		times.sort()
 		print("EXAM %-8s landed %3d / %3d   median %.1f s" % [id, r.x, r.y, times[times.size() / 2] if not times.is_empty() else INF])
+		_flown(ex.attempts, id)
 	var by_perch := ""
 	for q in targets:
 		var n := 0
@@ -139,4 +143,32 @@ func _gates(args: PackedStringArray) -> void:
 	for id in birds:
 		var r := FlightExam.rate(ex.attempts, id)
 		print("GATES %-8s through %3d / %3d" % [id, r.x, r.y])
+		_flown(ex.attempts, id)
 	ex.clear()
+
+
+## How species `id` flew: its ticks over-banked, and the turning of the attempts from in front (bearing 0).
+func _flown(list: Array, id: String) -> void:
+	var fl := 0
+	var ob := 0
+	var fronts: Array = []
+	for at in list:
+		if at.id != id:
+			continue
+		fl += at.flown
+		ob += at.over_bank
+		if at.race == null and at.from == null and is_zero_approx(at.bearing):
+			fronts.append(at.turned)
+	fronts.sort()
+	var straight := 0
+	for t in fronts:
+		straight += 1 if t < 90.0 else 0
+	print("FLOWN %-8s over-banked %.1f%% of %d ticks; from in front turned median %.0f deg, under 90 in %d / %d" % [id, 100.0 * ob / maxi(fl, 1), fl,
+		fronts[fronts.size() / 2] if not fronts.is_empty() else -1.0, straight, fronts.size()])
+	var fv: Array = []
+	for at in list:
+		if at.id == id:
+			fv.append_array(at.finals)
+	fv.sort()
+	if not fv.is_empty():
+		print("FINALS %-8s %d finals begun at x cruise: median %.2f, 90%% %.2f, max %.2f" % [id, fv.size(), fv[fv.size() / 2], fv[mini(fv.size() - 1, int(fv.size() * 0.9))], fv[-1]])

@@ -27,7 +27,7 @@ const DRIFT_TAU := 1.5      ## s: how slowly the aim wanders
 const STRAY := 5.0          ## m off the line: lost
 const ROUND_MARGIN := 1.15   ## a go-around's circles: this much wider than the bird turns at its speed ...
 const ROUND_BANK := 60.0
-const ROUND_UP := 3.0       ## m over the gate (or where it is) a go-around's loop climbs to
+const ROUND_UP := 3.0       ## m over the gate a go-around's loop climbs to (one already higher holds its height)
 const ROUND_BLEED := 0.25   ## stick pulled while going round above best glide speed (a tighter turn)    ## ... banked at most this (deg: a turn it can hold its height in)
 const GROUND_GUARD := 1.0   ## m, and GROUND_LEAD s of its sink rate more
 const GROUND_LEAD := 0.5
@@ -42,6 +42,7 @@ const STUCK := 30.0
 const HOME_STUCK := 40.0    ## s from the last gate to land on the rail
 const HOME_RETRY := 2.0     ## s between asking AIPilot for the rail again (no route yet, or it landed elsewhere)
 const THROUGH := 6.0        ## m past the gate a go-around's run-in runs
+const RUNIN_DOWN := 0.7      ## share of a go-around's run-in by which it's down from its loop to the gate's height
 
 var course: RaceCourse
 var run: RaceRun
@@ -241,19 +242,22 @@ func _plan_round(bird: Bird, g: RaceCourse.Gate) -> void:
 	var d0 := Vector2(fd.x, fd.z).normalized() if Vector2(fd.x, fd.z).length() > 0.1 else Vector2(g.normal.x, g.normal.z)
 	# The shortest of the turn-straight-turn paths that's clear of the wood (else the shortest).
 	var ways := dubins_all(Vector2(pos.x, pos.z), d0, Vector2(e.x, e.z), Vector2(g.normal.x, g.normal.z).normalized(), r)
+	# Up for the loop (a hard turn costs height) and down on the straight run-in: coming down in the last turn it gains
+	# speed, the turn widens and it strays off the path. Over the gate, not over where it is: planned again from up
+	# there, it would climb again each time.
+	var top := maxf(pos.y, g.centre.y + ROUND_UP)
+	e.y = top
 	_path = PackedVector3Array()
 	for flat: PackedVector2Array in ways:
 		var pts := PackedVector3Array()
-		var top := maxf(pos.y, g.centre.y) + ROUND_UP   # (up for the loop: a hard turn costs height; down on the run-in)
 		for q in flat.size():
 			var f := float(q) / maxf(flat.size() - 1, 1.0)
-			var y := lerpf(pos.y, top, smoothstep(0.0, 0.35, f)) if f < 0.6 else lerpf(top, g.centre.y, smoothstep(0.6, 1.0, f))
-			pts.append(Vector3(flat[q].x, y, flat[q].y))
+			pts.append(Vector3(flat[q].x, lerpf(pos.y, top, smoothstep(0.0, 0.35, f)), flat[q].y))
 		if _path.is_empty():
 			_path = pts
 		var clear := true
 		for q in range(0, pts.size() - 1, 2):
-			if not layout.segment_clear(pts[q], pts[mini(q + 2, pts.size() - 1)], bird.profile.span * 0.5 + 0.2):
+			if not layout.segment_clear(pts[q], pts[mini(q + 2, pts.size() - 1)], bird.profile.span * 0.5 + 1.2):
 				clear = false
 				break
 		if clear:
@@ -262,9 +266,12 @@ func _plan_round(bird: Bird, g: RaceCourse.Gate) -> void:
 	if _path.is_empty():
 		_path = PackedVector3Array([pos, e])
 	_runin_from = _path.size()
-	var n := ceili(e.distance_to(g.centre) + THROUGH)
+	var to_gate := Vector2(g.centre.x - e.x, g.centre.z - e.z).length()
+	var n := ceili(to_gate + THROUGH)
 	for q in range(1, n + 1):
-		_path.append(e.lerp(g.centre + g.normal * THROUGH, float(q) / n))
+		var pt := e.lerp(g.centre + g.normal * THROUGH, float(q) / n)
+		pt.y = lerpf(top, g.centre.y, smoothstep(0.0, RUNIN_DOWN * to_gate, Vector2(pt.x - e.x, pt.z - e.z).length()))
+		_path.append(pt)
 	_i = 0
 	_around = true
 	_queue.clear()
