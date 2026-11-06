@@ -5313,5 +5313,75 @@
     "replace": "const NECK_THROAT := 0.0"
    }
   ]
+ },
+ {
+  "id": "bill-generic-profile",
+  "bug": "Every species' bill was the same parametric cone with a hook added: none followed its species' real profile (the hawk's culmen arching from the cere into the hook, the sparrow's convex cone, the kestrel's short deep bill) (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "var prof: Dictionary = BillProfiles.DATA[id]",
+    "replace": "var prof: Dictionary = BillProfiles.DATA[\"crow\"]"
+   }
+  ]
+ },
+ {
+  "id": "bill-no-snout",
+  "bug": "The bills started on the head's round front, the eye nearly on top of the bill's base: the hawk's eye 13 mm behind it where the photo's is 35 (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif float(_snout[1]) > 0.0:   # the face drawn out to the bill's base: flat over it, then easing off",
+    "replace": "\tif false:   # the face drawn out to the bill's base: flat over it, then easing off"
+   }
+  ]
+ },
+ {
+  "id": "eye-seat-ignored",
+  "bug": "The eyes sat at their optic axis on the round head, too close to the bill for the photos (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "\treturn _eye_dir(id, s, float(spec(id).eye.get(\"back\", 0.0)))",
+    "replace": "\treturn _eye_dir(id, s, 0.0)"
+   }
+  ]
+ },
+ {
+  "id": "eye-cap-off-seat",
+  "bug": "Seated further back but still facing along the optic axis, the eye's cap turned off the head's surface and sank into it on one side: half-buried eyes, the kestrel's yellow ring a crescent (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\teye.basis = Basis.looking_at(dir, Vector3.UP)",
+    "replace": "\t\teye.basis = Basis.looking_at(Face.eye_dir(id, e), Vector3.UP)"
+   }
+  ]
+ },
+ {
+  "id": "bill-gape-gap",
+  "bug": "The sparrow's mandibles didn't meet: a pale gap showed along the gape (its lower bill's edge came from the photo's open jaw turned shut, not the upper's edge) (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "const LOWER_TUCK := 0.012",
+    "replace": "const LOWER_TUCK := -0.04"
+   }
+  ]
  }
 ]
