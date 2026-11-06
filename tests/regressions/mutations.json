@@ -5044,6 +5044,48 @@
   ]
  },
  {
+  "id": "route-view-current-waypoint-behind",
+  "bug": "Route view: the line to the current waypoint drawn to the one already passed (route[wp - 1]), so the view showed the bird aiming behind itself (2026-11-05).",
+  "tests": [
+   "test_route_view"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/route_view.gd",
+    "find": "\t_lines(_over, \"current\", [bird.global_position, r[wp]], COL_CURRENT)",
+    "replace": "\t_lines(_over, \"current\", [bird.global_position, r[wp - 1]], COL_CURRENT)"
+   }
+  ]
+ },
+ {
+  "id": "route-view-blocked-a-step-late",
+  "bug": "Route view: the predicted path's red and the star a chord past where it meets wood (2026-11-05).",
+  "tests": [
+   "test_route_view"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/route_view.gd",
+    "find": "clampi(roundi(pilot.predicted_clear / AIPilot.PREDICT_STEP), 0, p.size() - 1)\n\t\tvar cols",
+    "replace": "clampi(roundi(pilot.predicted_clear / AIPilot.PREDICT_STEP) + 1, 0, p.size() - 1)\n\t\tvar cols"
+   }
+  ]
+ },
+ {
+  "id": "route-view-predicted-from-escape",
+  "bug": "AIPilot recorded the last escape it tried as the predicted path, not the prediction toward its aim, so the view drew a path the bird wasn't flying (2026-11-05).",
+  "tests": [
+   "test_route_view"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t\t\tbest_pts = r[2]",
+    "replace": "\t\t\t\tbest_pts = r[2]\n\t\t\tpredicted = r[2]"
+   }
+  ]
+ },
+ {
   "id": "neck-ring-low-on-nape",
   "bug": "The neck met the head low on the back of its skull, where the skull already curved in, so the head sat on the neck like a ball and the outline dipped behind it in flight (the head-neck seam, 2026-11-05).",
   "tests": [
