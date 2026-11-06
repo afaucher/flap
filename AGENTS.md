@@ -26,8 +26,15 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   TAA over 2x MSAA by default (`Antialias`; `--no-taa`, F7): it clears the speckle on feather cards' edges and fine
   texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans (`TreeData.form`;
-  `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The floor: `FloorField` (mounds, moss, dirt) drawn by `forest_floor.gdshader`
+  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans, and oaks forking low with their
+  solid trunk ending at the fork (`TreeData.stem`, `trunk_top()`: collision and wood queries use it; `docs/design/flight_model.md`
+  section 5), shaped for clear perches below the crown (`tests/probe_tree_paths.gd` + `tools/tree_side_map.py` draw one from the side) (`TreeData.form`;
+  `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The game's arena is a baked map, not a seed: `maps/pinewood_7.map` (`MapFile`: the whole `ArenaLayout`, trees,
+  limbs, branches, perches, outposts, openings, the floor's field, thermals), which `Pinewood.generate` reads when it's
+  there and the generator's options are as baked (`Pinewood.baked`, `as_baked()`), so changing the generator
+  (`Pinewood.grow`) doesn't move it. Re-bake on purpose with
+  `& $godot --path . --headless --script res://tools/bake_map.gd -- 7`, then check what was tuned on it (race courses,
+  the combat AI's tests). Tests of the generator itself use `Pinewood.grow`; `test_map_file` holds the round trip. The floor: `FloorField` (mounds, moss, dirt) drawn by `forest_floor.gdshader`
   on `ArenaBuilder.floor_tiles` (8 x 8 tiles, culled one by one; flat blocks of 8 x 8 and 4 x 4 cells joined in
   crack-free fans where `FloorField.flat_cells` says the floor is flat, `FLOOR_JOIN`) inside `floor_ring` (the big
   plane, a real hole from where the floor is flat for good, `FloorField.flat_beyond`; no discard); `tests/probe_floor_still.gd` renders the floor alone and still, to check a change leaves its look; `tests/probe_floor_map.gd` + `tools/floor_map.py` map its heights and how the mesh draws them. The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
@@ -85,7 +92,16 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   target`): the planner's lattice round the bird (usable nodes teal, rejected red: `FlightPlanner.node_usable`), `AIPilot.route`
   and the waypoint it's on, the perch and its approach points, the path its avoidance predicts (`AIPilot.predicted`, red from
   where it meets wood) and the escape it flies instead (`AIPilot.escape`); visual only, `test_route_view` reads it back), `scripts/test_support/`.
-- `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
+- Bills (`Face.beak_meshes`): lofted on each species' profile traced from a photo (`tools/beak_profiles.py` REFS ->
+  `tools/bill_profiles_emit.py` -> the generated `scripts/bird/bill_profiles.gd`: re-run it after changing a trace),
+  drawn by `bill.gdshader` (keratin, the cere's edge, the nostril, the crow's bristles, the cutting edge, per pixel from
+  the mesh's bill-frame coordinates); the head's front drawn out to the bill's base (`Face.snout`, `BirdRig._head_point`)
+  and the eyes seated back (`Face.eye_seat`), so each eye sits as far behind the bill as in its photo. `test_bill_profile`
+  holds the drawn profile to the traces; `tests/probe_beak_profile.gd` + `tools/beak_profiles.py` chart them
+  (`docs/images/beak_profiles_after.jpg`).
+- `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`). The neck
+  meets the head and trunk flush, lit and coloured as one (`BirdRig._loft_neck`, `docs/design/wing_rig.md`; `test_neck_seam` measures
+  the crease, the normals, the nape's notch, the perched throat and the colour hand-over; the rig gallery's `--view nape|throat` look at it).
 - `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
   cloth/skin/eye shaders. Look at it with
@@ -199,7 +215,13 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   Godot on a desktop of its own (`test_lib.ps1`, `FlapHidden`): it renders on the GPU as usual (the GPU tests' numbers
   are the same) but is never on screen, never in the taskbar, never focused, and dies with the script that started
   it. Don't launch a windowed Godot directly (`& $godot --path . -- ...`) for a render or check; use these.
-  `FLAP_SHOW_WINDOWS=1` puts them on the user's desktop, to watch one.
+  `FLAP_SHOW_WINDOWS=1` puts them on the user's desktop, to watch one. They are silent too: each starts with
+  `FLAP_MUTE=1` in its own environment (`FlapHidden.ChildEnvironment`; the caller's shell is untouched) and
+  `Boot.mute_if_asked` mutes the Master bus's output. The mix still runs, so an effect on the bus still records it
+  (`gpu_test_audible`, `probe_gun_audio`); `gpu_test_audible` checks the mute and the Master's meter staying silent.
+  `FLAP_SOUND=1` leaves the mute out, to hear one (`FLAP_SHOW_WINDOWS` doesn't change the sound). Headless runs use
+  the dummy audio driver and were silent already. (A shell that already ran these scripts keeps the `FlapHidden` it
+  compiled then: open a new one after changing `test_lib.ps1`.)
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch tree and requires the named tests to fail (KILLED); a
   SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code. Entries run in

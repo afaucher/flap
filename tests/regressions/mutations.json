@@ -3060,8 +3060,8 @@
    },
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\tvar y := (t.height + 0.15) * u - 0.15",
-    "replace": "\t\tvar y := t.height * u - 0.15"
+    "find": "\t\tvar y := (top_y + 0.15) * u - 0.15",
+    "replace": "\t\tvar y := top_y * u - 0.15"
    }
   ]
  },
@@ -5124,6 +5124,305 @@
     "file": "scripts/ai/ai_pilot.gd",
     "find": "\t\t\t\tbest_pts = r[2]",
     "replace": "\t\t\t\tbest_pts = r[2]\n\t\t\tpredicted = r[2]"
+   }
+  ]
+ },
+ {
+  "id": "neck-ring-low-on-nape",
+  "bug": "The neck met the head low on the back of its skull, where the skull already curved in, so the head sat on the neck like a ball and the outline dipped behind it in flight (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_TILT := 0.85",
+    "replace": "const NECK_TILT := 0.29"
+   }
+  ]
+ },
+ {
+  "id": "neck-enters-head-along-axis",
+  "bug": "The neck entered the head along the head's underside axis, not along its surface: a crease all round the head ring (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)",
+    "replace": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1)"
+   }
+  ]
+ },
+ {
+  "id": "neck-leaves-trunk-straight",
+  "bug": "The neck left the trunk straight forward, not along the trunk's surface: a crease round the collar (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)",
+    "replace": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) - (tbj[j] as Vector3) * w2)"
+   }
+  ]
+ },
+ {
+  "id": "neck-head-ring-own-normals",
+  "bug": "The neck's head ring lit by its own triangles, not the head's normals: a line in the light round the head (up to 177 deg apart, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_neck_loft.pin_first = pin\n",
+    "replace": "\t_neck_loft.pin_first = PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "neck-trunk-ring-own-normals",
+  "bug": "The neck's trunk ring lit by its own triangles, not the trunk's normals: a line in the light round the collar (20 deg apart, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_neck_loft.pin_last = _tn20\n",
+    "replace": "\t_neck_loft.pin_last = PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "head-ring-normals-unpinned",
+  "bug": "The head's own normals on its neck ring left as its triangles (with the coarse cap under them) made them, so the neck, lit as the true surface, didn't match the head (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t_pin_normals((_head.get_node(\"HeadSurface\") as MeshInstance3D).mesh as ArrayMesh, _hp60, _hn60)\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "neck-rows-even",
+  "bug": "The neck's rows evenly spaced, so its first and last steps cut across the bend onto the head and trunk: visibly creased there (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_PACK := 0.8 ",
+    "replace": "const NECK_PACK := 0.0 "
+   }
+  ]
+ },
+ {
+  "id": "head-colours-stop-at-ring",
+  "bug": "The head's colours stopped at the neck ring and the trunk's took over within a few rows: the sparrow's chestnut, the falcon's cap cut off in a line round the head (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\treturn smoothstep(0.2, 0.9, u)",
+    "replace": "\treturn smoothstep(0.75, 1.0, u)"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t\tc = _head_color_d((_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized(), smoothstep(0.7, 1.0, u))\n",
+    "replace": "\t\t\t\tc = _head_color_d(_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND))\n"
+   }
+  ]
+ },
+ {
+  "id": "head-texture-faint-at-ring",
+  "bug": "The head's feather texture at 0.75 strength right to the neck ring, the neck's at full: the head looked smooth and painted against a feathered neck (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tstrength = lerpf(strength, 1.0, smoothstep(0.6, 1.0, r))",
+    "replace": "\tstrength = strength"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-enters-head-along-axis",
+  "bug": "The GPU neck entered the head along its axis, not the head's surface (the CPU loft fixed, the shader not).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "(ta - vec3(0.0, 0.0, -1.0)) * w1 - tbj * w2;",
+    "replace": "(ta - vec3(0.0, 0.0, -1.0)) * w1;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-head-ring-own-normals",
+  "bug": "The GPU neck lit its head ring by its own triangles, not the head's normals.",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "\tif (i == 0) {   // the head ring",
+    "replace": "\tif (i == -1) {   // the head ring"
+   }
+  ]
+ },
+ {
+  "id": "gpu-head-colours-stop-at-ring",
+  "bug": "The GPU neck handed the head's colours to the trunk's in its last rows, and only the ring's.",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "(texelFetch(neck_tab, ivec2(m, 20 + i), 0) - c_body) * smoothstep(0.2, 0.9, u);",
+    "replace": "(texelFetch(neck_tab, ivec2(m, 1), 0) - c_body) * smoothstep(0.75, 1.0, u);"
+   }
+  ]
+ },
+ {
+  "id": "neck-throat-curled",
+  "bug": "Perched, the throat curled in under the chin and the head looked thrust forward off the neck: the neck's ring, tipped back to fill the nape, crossed the throat at the very bottom of the head, where its surface runs forward (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_THROAT := 1.25",
+    "replace": "const NECK_THROAT := 0.0"
+   }
+  ]
+ },
+ {
+  "id": "oak-stem-pillar",
+  "bug": "An oak's trunk ran on up through its crown to the treetop: a thin stem spike drawn, and a full-thickness invisible pillar in the collision and every wood query (2026-11-06).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\treturn Vector3(base.x, ArenaLayout.GROUND_Y + (stem if stem > 0.0 else height), base.y)",
+    "replace": "\t\treturn Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)"
+   }
+  ]
+ },
+ {
+  "id": "oak-deck-own-limbs",
+  "bug": "An oak outpost's way in was checked against the other trees only: a deck in the fork had its own low limbs across the swoop onto the rail (2026-11-06).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\treturn false",
+    "replace": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "hidden-runs-audible",
+  "bug": "Off-screen runs (tests, probes, shots, perf -Hidden) played the game's sound through the user's speakers while they worked: nothing muted them (2026-11-06). Boot mutes the Master bus's output when test_lib.ps1 starts a run with FLAP_MUTE=1; gpu_test_audible stops before playing anything if it isn't muted.",
+  "tests": [
+   "gpu_test_audible"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/boot.gd",
+    "find": "\tif OS.get_environment(\"FLAP_MUTE\") == \"1\":\n\t\tAudioServer.set_bus_mute(0, true)\n",
+    "replace": "\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "bill-generic-profile",
+  "bug": "Every species' bill was the same parametric cone with a hook added: none followed its species' real profile (the hawk's culmen arching from the cere into the hook, the sparrow's convex cone, the kestrel's short deep bill) (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "var prof: Dictionary = BillProfiles.DATA[id]",
+    "replace": "var prof: Dictionary = BillProfiles.DATA[\"crow\"]"
+   }
+  ]
+ },
+ {
+  "id": "bill-no-snout",
+  "bug": "The bills started on the head's round front, the eye nearly on top of the bill's base: the hawk's eye 13 mm behind it where the photo's is 35 (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif float(_snout[1]) > 0.0:   # the face drawn out to the bill's base: flat over it, then easing off",
+    "replace": "\tif false:   # the face drawn out to the bill's base: flat over it, then easing off"
+   }
+  ]
+ },
+ {
+  "id": "eye-seat-ignored",
+  "bug": "The eyes sat at their optic axis on the round head, too close to the bill for the photos (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "\treturn _eye_dir(id, s, float(spec(id).eye.get(\"back\", 0.0)))",
+    "replace": "\treturn _eye_dir(id, s, 0.0)"
+   }
+  ]
+ },
+ {
+  "id": "eye-cap-off-seat",
+  "bug": "Seated further back but still facing along the optic axis, the eye's cap turned off the head's surface and sank into it on one side: half-buried eyes, the kestrel's yellow ring a crescent (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\teye.basis = Basis.looking_at(dir, Vector3.UP)",
+    "replace": "\t\teye.basis = Basis.looking_at(Face.eye_dir(id, e), Vector3.UP)"
+   }
+  ]
+ },
+ {
+  "id": "bill-gape-gap",
+  "bug": "The sparrow's mandibles didn't meet: a pale gap showed along the gape (its lower bill's edge came from the photo's open jaw turned shut, not the upper's edge) (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "const LOWER_TUCK := 0.012",
+    "replace": "const LOWER_TUCK := -0.04"
    }
   ]
  }

@@ -311,8 +311,9 @@ static func body(id: String, u: float, v: float, side: float) -> Color:
 
 
 ## The head's colour in direction `d` from its centre (head space: -Z the bill, +Y up). Below level 4 it is
-## just countershaded: crown above, throat below.
-static func head(id: String, d: Vector3, eye: Vector3) -> Color:
+## just countershaded: crown above, throat below. `marks` scales the face's marks (the malar stripe): 0 where the head's
+## colours are carried on down the neck, past the face.
+static func head(id: String, d: Vector3, eye: Vector3, marks := 1.0) -> Color:
 	var h: Dictionary = spec(id).head
 	var crown := hex(h.crown)
 	var throat := hex(h.throat) if level >= 4 else hex(spec(id).body.breast)
@@ -321,12 +322,13 @@ static func head(id: String, d: Vector3, eye: Vector3) -> Color:
 	var front := -d.z
 	var c := hex(h.face)
 	c = c.lerp(hex(h.nape), smoothstep(-0.1, 0.45, -front))                    # the back of the head
-	c = c.lerp(throat, smoothstep(-0.25, -0.55, d.y) * smoothstep(-0.3, 0.1, front))
+	c = c.lerp(throat, smoothstep(-0.1, -0.35, d.y) * smoothstep(-0.3, 0.1, front))   # (from just under the bill: the neck's
+	                                                                              # throat feathers run up to it)
 	# (the owl's facial disc is its own mesh, Face.disc_mesh, with these colours: the head round it is buff)
 	if h.has("malar"):   # a dark stripe from below the eye down the cheek
 		var e := Vector2(absf(d.x) - absf(eye.x) * 0.9, d.z - eye.z).length()
 		var below := smoothstep(eye.y + 0.05, eye.y - 0.1, d.y) * smoothstep(eye.y - 0.8, eye.y - 0.55, d.y)
-		c = c.lerp(hex(h.malar), (1.0 - smoothstep(0.16, 0.26, e)) * below)
+		c = c.lerp(hex(h.malar), (1.0 - smoothstep(0.16, 0.26, e)) * below * marks)
 	return c.lerp(crown, smoothstep(float(h.cap) - 0.1, float(h.cap) + 0.1, d.y))
 
 

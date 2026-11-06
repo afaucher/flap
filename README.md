@@ -150,7 +150,7 @@ Everything runs from PowerShell in the repository root, with Godot 4.7 found via
   `.\mutation_check.ps1 -Only <id>` comes back KILLED.
 - **Probes** (`tests/probe_*.gd`) are diagnostics and renders run by name. They, the test runner and any
   `--shot` run start Godot on a desktop of its own, so no window pops up over your work (`FLAP_SHOW_WINDOWS=1` to
-  watch one). `probe_sizzle` made the pictures on this page.
+  watch one), and muted, so they make no sound (`FLAP_SOUND=1` to hear one). `probe_sizzle` made the pictures on this page.
 - **Builds** are stamped `yyyy-MM-dd.HHmmss`, shown in a corner of the HUD (a source run says `dev`).
 - **Design docs:** `docs/design/` (start with `flight_model.md`; also `combat_ai.md`, `wing_rig.md`,
   `audio_plan.md`, `performance.md`, `color_grading.md`), the research behind the numbers in `docs/research/`.

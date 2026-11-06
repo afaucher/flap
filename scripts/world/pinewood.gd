@@ -5,8 +5,9 @@ extends RefCounted
 ##   PINES      tall (24-32 m), straight, widely spaced; clear trunks up to ~2/3 of their height, a few dead
 ##              stubs below (short perches), the crown at the top: whorls of upswept limbs (perches) with pads of
 ##              needles at their ends (foliage: drawn, not solid).
-##   OAKS       a few old broadleaf "perch trees" standing in glades: a stout trunk, long level limbs at three
-##              heights (long perches), a broad canopy over them. Most perching off the outposts is here.
+##   OAKS       a few old broadleaf "perch trees" standing in glades: a short massive bole forking into big limbs,
+##              long low limbs reaching out (long perches), one broad dome of leaves over them, its underside open.
+##              Most perching off the outposts is here.
 ##   SAPLINGS   young pines on the floor: a slalom under ~6 m.
 ##   AGES       an old pinewood is mixed-age: pole-stage pines (9-17 m, slim, their crowns narrow and lower down) in
 ##              the half-light round the gaps and through the thin stand, and a few veterans ("granny" pines:
@@ -19,7 +20,8 @@ extends RefCounted
 ##              biggest oak; a sunlit glade as big lies off to one side; a few smaller gaps between.
 ## The AI plans through all of it with the same queries as ever.
 
-const PINE := {"count": 260, "h": Vector2(24.0, 32.0), "r": Vector2(0.22, 0.34), "spacing": 9.0, "clear": Vector2(0.6, 0.72)}
+const PINE := {"count": 260, "h": Vector2(24.0, 32.0), "r": Vector2(0.22, 0.34), "spacing": 9.0, "clear": Vector2(0.6, 0.72),
+	"clear_more": Vector2(0.56, 0.66)}   ## clear_more: where a mature pine's crown starts grown with `more` (_grow_pine)
 ## Clumps: a noise field over the wood (features about `scale` m), the pines thick where it's high (`spacing.x`
 ## apart) and thin where it's low (`spacing.y`, and only a `sparse` share of the tries taken).
 const STAND := {"scale": 34.0, "spacing": Vector2(5.5, 13.0), "sparse": 0.1}
@@ -27,6 +29,14 @@ const CLEARING := 20.0   ## m, the clearing round the big oak (to its nearest pi
 const GLADE := {"r": Vector2(16.0, 18.0), "at": Vector2(42.0, 56.0)}
 const GAPS := {"count": 7, "r": Vector2(6.0, 10.0)}
 const OAK := {"count": 4, "h": Vector2(17.0, 22.0), "r": Vector2(0.65, 0.9), "limb": Vector2(6.0, 9.5), "glade": 11.0}
+## The oak's form (_grow_oak): the fork's height (of the tree's), how far (m) the bole goes on over it, how many big
+## limbs and long low limbs, how far a big limb climbs out of the fork, then reaches out, then on, its side fork's
+## length, a low limb's whole reach and its side limb's length, how many limbs climb from the fork to carry the
+## top of the crown, the leaf cloud over each limb's end in the crown (m, across and up), and the dome's middle (of
+## the height) and the rings (elevations) that close its top. (`OAK.limb` and `glade` space the wood round the oaks.)
+const OAK_FORM := {"fork": Vector2(0.24, 0.28), "stem": 1.6, "scaffold": Vector2i(4, 5), "low": Vector2i(2, 3),
+	"lean": Vector2(3.5, 4.5), "reach": Vector2(4.8, 6.0), "reach2": Vector2(3.0, 4.5), "side": Vector2(3.8, 5.0),
+	"low_reach": Vector2(10.0, 13.0), "low_side": Vector2(2.5, 4.0), "crown_limbs": Vector2i(2, 3), "cloud": Vector2(2.9, 1.8), "crown": 0.7, "rings": [0.55, 1.0]}
 ## Pole-stage pines (in little groups, in the half-light) and veterans (alone, at the clumps' edges); `crown` is
 ## how far the crown reaches from the trunk, for the light under it. A mature pine's is 2.5 m.
 const POLE := {"count": 36, "h": Vector2(9.0, 17.0), "r": Vector2(0.08, 0.15), "clear": Vector2(0.42, 0.56), "crown": 1.2}
@@ -42,6 +52,7 @@ const OUTPOSTS := 9
 const APPROACH := 11.0
 const APPROACH_DROP := 1.2
 const APPROACH_BERTH := 2.0
+const OWN_BERTH := 1.0     ## m: and of its own tree's branches
 ## How full the crowns are, 0..1: 1 a dense pine crown (whorls of pads at each limb's end and middle), lower
 ## airier (fewer whorls, pads only at the tips, smaller, some limbs bare) -- the crown layer's sightlines.
 ## 0.5: in the crown band (about 22 m) almost half of level looks reach 40 m, against a fifth at 1 (probe_sightlines).
@@ -64,7 +75,39 @@ const GRIP_TRUNK_GAP := ArenaLayout.GRIP_TRUNK_GAP
 const GRIP_TIP_GAP := ArenaLayout.GRIP_TIP_GAP
 
 
+## Whether generate() reads a seed's baked map (MapFile: maps/pinewood_<seed>.map) when there is one. A shipped map
+## is the file, not the seed: the generator can change without moving it (tools/bake_map.gd bakes one again, on purpose).
+static var baked := true
+
+
+## The pine wood for seed `s`: its baked map if there is one (and the generator's options are as it was baked with),
+## else grown fresh (grow()); then the escarpment if it's on.
 static func generate(s: int) -> ArenaLayout:
+	var a: ArenaLayout = null
+	if baked and as_baked():
+		a = MapFile.read(MapFile.path_for("pinewood_%d" % s))
+	if a == null:
+		a = grow(s)
+	if cliff:
+		add_cliff(a)
+	return a
+
+
+## Are the generator's options as the maps were baked with? (Any A/B or evaluation option grows the wood fresh.)
+static func as_baked() -> bool:
+	return area_scale == 1.0 and ages and crown_density == 0.5 and not STUB_PERCHES and FloorField.feet
+
+
+## The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
+## DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
+static func add_cliff(a: ArenaLayout) -> void:
+	var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+	a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": a.seed}
+	a.add_rock()
+
+
+## The generator: the pine wood grown from seed `s` (no escarpment: generate() adds it).
+static func grow(s: int) -> ArenaLayout:
 	var a := ArenaLayout.new()
 	a.seed = s
 	a.style = "pinewood"
@@ -95,7 +138,10 @@ static func generate(s: int) -> ArenaLayout:
 			oak_sites.append(p)
 	for i in oak_sites.size():
 		var t := _tree(a, ArenaLayout.Kind.BROADLEAF, oak_sites[i], rng.randf_range(OAK.h.x, OAK.h.y) + (3.0 if i == 0 else 0.0), rng.randf_range(OAK.r.x, OAK.r.y) * (1.15 if i == 0 else 1.0))
-		_grow_oak(a, t, rng, i == 0)
+		var orng := RandomNumberGenerator.new()   # (its own numbers: see _grow_oak)
+		orng.seed = hash([s, i, "oak"])
+		_grow_oak(a, t, orng, i == 0)
+		_old_oak_draws(rng)
 	tries = 0
 	while a.openings.size() < 2 + n(GAPS.count) and tries < n(600):
 		tries += 1
@@ -125,7 +171,10 @@ static func generate(s: int) -> ArenaLayout:
 		if rng.randf() > lerpf(STAND.sparse, 1.0, f) or not _clear_of(a, p, lerpf(STAND.spacing.y, STAND.spacing.x, f), OAK.glade + OAK.limb.y * 0.6):
 			continue
 		var t := _tree(a, ArenaLayout.Kind.PINE, p, rng.randf_range(PINE.h.x, PINE.h.y), rng.randf_range(PINE.r.x, PINE.r.y))
-		_grow_pine(a, t, rng)
+		_old_pine_draws(t, rng)
+		var prng := RandomNumberGenerator.new()   # (its own numbers: see _grow_pine's `more`)
+		prng.seed = hash([s, t.id, "pine"])
+		_grow_pine(a, t, prng, true)
 		placed += 1
 	# Young pines in the light -- the gaps, the glade, the clearings' edges, few under the clumps -- in little
 	# groups, as they seed in.
@@ -147,15 +196,10 @@ static func generate(s: int) -> ArenaLayout:
 	if ages:
 		_ages(a, s)
 	_outposts(a, rng)
+	_oak_perches_face_open(a)
 	a.add_posts()
 	a.floor_field = FloorField.build(a, a.boundary + 12.0)
 	_thermals(a)
-	# The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
-	# DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
-	if cliff:
-		var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
-		a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": s}
-		a.add_rock()
 	return a
 
 
@@ -186,7 +230,10 @@ static func _ages(a: ArenaLayout, s: int) -> void:
 			continue
 		var t := _tree(a, ArenaLayout.Kind.PINE, p, rng.randf_range(VETERAN.h.x, VETERAN.h.y), rng.randf_range(VETERAN.r.x, VETERAN.r.y))
 		t.form = "veteran"
-		_grow_pine(a, t, rng)
+		_old_pine_draws(t, rng)
+		var vrng := RandomNumberGenerator.new()   # (its own numbers: see _grow_pine's `more`)
+		vrng.seed = hash([s, t.id, "veteran"])
+		_grow_pine(a, t, vrng, true)
 		placed += 1
 	tries = 0
 	placed = 0
@@ -305,10 +352,13 @@ static func _branch(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, tip:
 ## treetop perch. By its age (`t.form`): a pole's crown is narrow, pointed and lower down, on many thin whorls,
 ## the stubs below it thin; a veteran's is broad and flat on a few whorls of heavy, spreading limbs, the stubs
 ## thick.
-static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
+##   `more` (the wood's mature pines and veterans, each from its own numbers; _old_pine_draws keeps the wood's RNG
+## as it was): more to land on -- a whorl more, three or four limbs in each, a mature pine's a little longer and its
+## crown a little lower, and a tuft along every long limb so none is a bare spoke.
+static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator, more := false) -> void:
 	var pole := t.form == "pole"
 	var vet := t.form == "veteran"
-	var clear: Vector2 = POLE.clear if pole else (VETERAN.clear if vet else PINE.clear)
+	var clear: Vector2 = POLE.clear if pole else (VETERAN.clear if vet else (PINE.clear_more if more else PINE.clear))
 	t.crown_base = t.height * rng.randf_range(clear.x, clear.y)
 	var c := Vector3(t.base.x, 0.0, t.base.y)
 	# Dead stubs on the clear trunk, where old limbs broke off: few or none on some trees, short, drooping,
@@ -342,16 +392,18 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 		whorls = rng.randi_range(5, 7) if dens >= 0.75 else rng.randi_range(4, 5)
 	elif vet:
 		whorls = rng.randi_range(5, 6) if dens >= 0.75 else rng.randi_range(4, 5)
+	if more and not pole:
+		whorls += 1
 	var ang0 := rng.randf() * TAU
 	for w in whorls:
 		var f := (w + rng.randf_range(0.0, 0.5)) / float(whorls)
 		var y := lerpf(t.crown_base, t.height - (0.9 if pole else 1.6), f)
-		var reach := lerpf(1.7, 3.1, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0))) * rng.randf_range(0.75, 1.2)
+		var reach := (lerpf(2.0, 3.6, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0))) if more else lerpf(1.7, 3.1, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0)))) * rng.randf_range(0.75, 1.2)
 		if pole:   # (a narrowing spire)
 			reach = lerpf(1.5, 0.7, f) * rng.randf_range(0.8, 1.15)
 		elif vet:   # (broad from the crown's foot up, a little narrower at the flat top)
-			reach = lerpf(4.6, 3.6, f) * rng.randf_range(0.8, 1.15)
-		var n := rng.randi_range(2, 4) if not vet else rng.randi_range(3, 4)
+			reach = (lerpf(5.4, 4.2, f) if more else lerpf(4.6, 3.6, f)) * rng.randf_range(0.8, 1.15)   # (with `more`, broader still beside the longer mature limbs)
+		var n := rng.randi_range(3, 4) if (vet or (more and not pole)) else rng.randi_range(2, 4)
 		for k in n:
 			if rng.randf() < 0.12:
 				continue   # (a limb lost: whorls are rarely complete on an old pine)
@@ -379,7 +431,7 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 			for q in rng.randi_range(2, 3):
 				var off := side * rng.randf_range(-0.55, 0.55) - d * rng.randf_range(0.1, 0.5) + Vector3.UP * rng.randf_range(-0.05, 0.25)
 				t.foliage.append([tip + off, pad * rng.randf_range(0.6, 0.9)])
-			if reach > 2.3 and rng.randf() < lerpf(0.35, 0.8, dens):
+			if reach > 2.3 and (rng.randf() < lerpf(0.35, 0.8, dens) or more):
 				t.foliage.append([(lim.at as Callable).call((rt + reach) * 0.62) + Vector3.UP * 0.25 + side * rng.randf_range(-0.3, 0.3), pad * 0.7])
 			if vet:   # (and tufts further in along a veteran's long limbs, up off them)
 				for x in [0.3, 0.45]:
@@ -394,6 +446,19 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 	# (on the drawn top: its low dome, half way up it -- the grip disc spans most of it)
 	var r_top := _r_at(t, t.height)
 	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top, maxf(0.05, r_top - 0.02), -c, t.id))
+
+
+## The draws a mature pine's or a veteran's growth took from the wood's RNG (or the ages') before it had its own (the old _grow_pine, run on a
+## copy of `t` in a scratch layout and thrown away), so that every tree placed after it stands where it did.
+static func _old_pine_draws(t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
+	var scratch := ArenaLayout.new()
+	var tt := ArenaLayout.TreeData.new()
+	tt.base = t.base
+	tt.height = t.height
+	tt.radius = t.radius
+	tt.form = t.form
+	scratch.trees.append(tt)
+	_grow_pine(scratch, tt, rng)
 
 
 ## A limb drawn as a smooth curve: out along horizontal `d` for `length` m (from `root`, at the trunk's axis),
@@ -497,43 +562,187 @@ static func _r_at(t: ArenaLayout.TreeData, y: float) -> float:
 	return t.radius * lerpf(1.0, 0.4, clampf(y / t.height, 0.0, 1.0))
 
 
-## An old oak: long, nearly level limbs at three heights (each in two pieces: out level, then a little up at
-## the tip -- two perches), a few short limbs between, and a broad canopy.
+## An old oak, after docs/images/concepts/oak_a.jpg: a short, massive bole that ends just over its fork (`t.stem`);
+## four or five big limbs out of the fork that climb, then wander outward in three pieces, forking as they go; two
+## or three long low limbs below the fork reaching out sideways, nearly level, lifting at the tips, each with a
+## side limb; two or three limbs climbing out of the middle of the fork to carry the top of the crown; and one
+## broad dome of leaves over it all. Not a botanical oak: the wood is laid out to land on, most
+## of its perches under the dome's rim, open from the side and below. Each piece has a straight stretch -- a
+## perch, sloped as the piece runs -- and its end bends into the next piece's line (`_bend`), so a limb wanders
+## without a kink. Its own random numbers (`rng`, from the layout's seed and the oak's place), so a change here
+## leaves the rest of the wood as it was.
 static func _grow_oak(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator, big: bool) -> void:
 	var c := Vector3(t.base.x, 0.0, t.base.y)
-	t.crown_base = t.height * 0.3
-	var levels := [0.27, 0.45, 0.63]
+	var h := t.height
+	var s := 1.15 if big else 1.0
+	var fork := h * rng.randf_range(OAK_FORM.fork.x, OAK_FORM.fork.y)
+	t.crown_base = fork
+	t.stem = fork + OAK_FORM.stem
 	var ang0 := rng.randf() * TAU
 	var longest := 0.0
-	for li in levels.size():
-		var y: float = t.height * float(levels[li]) + rng.randf_range(-0.6, 0.6)
-		var n := 4 if li < 2 else 3
-		for k in n:
-			var ang := ang0 + TAU * k / n + li * 0.8 + rng.randf_range(-0.25, 0.25)
-			var d := Vector3(sin(ang), 0.0, cos(ang))
-			var length := rng.randf_range(OAK.limb.x, OAK.limb.y) * lerpf(1.0, 0.7, li / 2.0) * (1.15 if big else 1.0)
-			longest = maxf(longest, length + t.radius)
-			var root := c + Vector3.UP * y
-			var r0 := lerpf(0.22, 0.14, li / 2.0)
-			var total := t.radius + length
-			# Rising out of the trunk, a long nearly level run (the perch), the end lifting toward the light.
-			var lim := _limb(a, t, root, d, total, Vector3(0.55, rng.randf_range(-0.04, 0.05), rng.randf_range(0.35, 0.6)), Vector2(0.1, 0.86), r0, t.radius, "oak_limb", true, rng.randf_range(-0.6, 0.6), 0.3)
-			var at: Callable = lim.at
-			# Side twigs off its outer half (drawn only, inside the leaves).
+	var crown_tips: Array[Vector3] = []   # (limb ends up in the dome: leaves over them)
+	var open_tips: Array[Vector3] = []    # (limb ends under it: left bare)
+	# The big limbs: out of the fork and up, then out, then on, turned back the other way.
+	var n_big := rng.randi_range(OAK_FORM.scaffold.x, OAK_FORM.scaffold.y)
+	for k in n_big:
+		var ang := ang0 + TAU * k / n_big + rng.randf_range(-0.3, 0.3)
+		var d := Vector3(sin(ang), 0.0, cos(ang))
+		var root := c + Vector3.UP * (fork + rng.randf_range(-0.3, 0.4))
+		var r0 := t.radius * rng.randf_range(0.5, 0.58)
+		var turn1 := rng.randf_range(0.3, 0.6) * (1.0 if rng.randf() < 0.5 else -1.0)
+		var turn2 := -signf(turn1) * rng.randf_range(0.3, 0.6)
+		var l1 := t.radius + rng.randf_range(OAK_FORM.lean.x, OAK_FORM.lean.y) * s
+		var sl1 := Vector3(1.3, rng.randf_range(0.55, 0.75), rng.randf_range(0.4, 0.5))
+		var p1 := _limb(a, t, root, d, l1, sl1, Vector2(0.2, 0.75), r0, t.radius, "oak_limb", false, _bend(turn1, l1, 0.75), 0.6)
+		var d2 := d.rotated(Vector3.UP, turn1)
+		var l2 := rng.randf_range(OAK_FORM.reach.x, OAK_FORM.reach.y) * s
+		var sl2 := Vector3(sl1.z, rng.randf_range(0.1, 0.3), rng.randf_range(0.2, 0.4))
+		var p2 := _limb(a, t, p1.tip, d2, l2, sl2, Vector2(0.15, 0.78), r0 * 0.6, -10.0, "oak_limb", true, _bend(turn2, l2, 0.78), 0.55)
+		var d3 := d2.rotated(Vector3.UP, turn2)
+		var l3 := rng.randf_range(OAK_FORM.reach2.x, OAK_FORM.reach2.y) * s
+		var p3 := _limb(a, t, p2.tip, d3, l3, Vector3(sl2.z, rng.randf_range(0.05, 0.25), rng.randf_range(0.4, 0.7)), Vector2(0.15, 0.75), r0 * 0.33, -10.0, "oak_limb", true, rng.randf_range(-0.4, 0.4), 0.4)
+		crown_tips.append(p3.tip)
+		longest = maxf(longest, _flat_from(c, p3.tip))
+		# Where the climb ends, a fork: a limb nearly level, off to the side the limb didn't turn to (under the dome).
+		var fd := d.rotated(Vector3.UP, -signf(turn1) * rng.randf_range(0.8, 1.2))
+		var f1 := _limb(a, t, p1.tip, fd, rng.randf_range(OAK_FORM.side.x, OAK_FORM.side.y) * s, Vector3(0.3, rng.randf_range(0.0, 0.15), rng.randf_range(0.35, 0.6)), Vector2(0.12, 0.8), r0 * 0.4, -10.0, "oak_limb", true, rng.randf_range(-0.6, 0.6), 0.35)
+		open_tips.append(f1.tip)
+		longest = maxf(longest, _flat_from(c, f1.tip))
+		# And where it reaches out, one climbing on into the crown (too steep to perch on).
+		var ud := d2.rotated(Vector3.UP, signf(turn1) * rng.randf_range(0.7, 1.1))
+		var f2 := _limb(a, t, p2.tip, ud, rng.randf_range(5.0, 7.0) * s, Vector3(1.0, rng.randf_range(0.6, 0.8), rng.randf_range(0.35, 0.5)), Vector2(0.12, 0.7), r0 * 0.42, -10.0, "oak_limb", false, rng.randf_range(-1.2, 1.2), 0.4)
+		crown_tips.append(f2.tip)
+		longest = maxf(longest, _flat_from(c, f2.tip))
+	# The crown's limbs: out of the middle of the fork, climbing steeply (wandering, too steep to perch on) to under
+	# the top of the dome and there branching out under it -- the wood that carries the top of the crown.
+	var n_crown := rng.randi_range(OAK_FORM.crown_limbs.x, OAK_FORM.crown_limbs.y)
+	for k in n_crown:
+		var ang := ang0 + TAU * (k + 0.5) / n_crown + rng.randf_range(-0.4, 0.4)
+		var d := Vector3(sin(ang), 0.0, cos(ang))
+		var root := c + Vector3.UP * (fork + rng.randf_range(0.2, 0.8))
+		var r0 := t.radius * rng.randf_range(0.42, 0.5)
+		var turn := rng.randf_range(0.3, 0.5) * (1.0 if rng.randf() < 0.5 else -1.0)
+		var l1 := t.radius * 0.6 + rng.randf_range(2.5, 3.5) * s
+		var p1 := _limb(a, t, root, d, l1, Vector3(3.0, rng.randf_range(1.6, 2.0), 1.3), Vector2(0.2, 0.7), r0, t.radius * 0.6, "oak_limb", false, _bend(turn, l1, 0.7), 0.6)
+		var d2 := d.rotated(Vector3.UP, turn)
+		var l2 := rng.randf_range(2.5, 3.5) * s
+		var p2 := _limb(a, t, p1.tip, d2, l2, Vector3(1.3, rng.randf_range(0.8, 1.0), 0.6), Vector2(0.15, 0.7), r0 * 0.6, -10.0, "oak_limb", false, rng.randf_range(-0.5, 0.5), 0.6)
+		# A limb off the climb out to the dome's upper flank,
+		var od := d.rotated(Vector3.UP, -signf(turn) * rng.randf_range(0.6, 1.0))
+		var o1 := _limb(a, t, p1.tip, od, rng.randf_range(4.0, 5.5) * s, Vector3(0.7, rng.randf_range(0.35, 0.5), 0.2), Vector2(0.12, 0.75), r0 * 0.35, -10.0, "oak_limb", false, rng.randf_range(-1.0, 1.0), 0.35)
+		crown_tips.append(o1.tip)
+		# and its head: two or three limbs spreading out under the top.
+		var n_head := rng.randi_range(2, 3)
+		var head0 := rng.randf() * TAU
+		for j in n_head:
+			var hd := Vector3(sin(head0 + TAU * j / n_head), 0.0, cos(head0 + TAU * j / n_head))
+			var hb := _limb(a, t, p2.tip, hd, rng.randf_range(3.5, 5.0) * s, Vector3(0.7, rng.randf_range(0.3, 0.45), 0.15), Vector2(0.12, 0.75), r0 * 0.3, -10.0, "oak_limb", false, rng.randf_range(-1.0, 1.0), 0.35)
+			crown_tips.append(hb.tip)
+	# The long low limbs: off the bole below the fork, between the big limbs, out sideways, sagging, tips lifting,
+	# each with a side limb off its first piece.
+	var n_low := rng.randi_range(OAK_FORM.low.x, OAK_FORM.low.y)
+	for k in n_low:
+		var ang := ang0 + TAU * (k + 0.5) / n_low + rng.randf_range(-0.35, 0.35)
+		var d := Vector3(sin(ang), 0.0, cos(ang))
+		var root := c + Vector3.UP * (fork - rng.randf_range(0.6, 1.4))
+		var r0 := t.radius * rng.randf_range(0.34, 0.4)
+		var turn := rng.randf_range(-0.35, 0.35)
+		var l1 := t.radius + rng.randf_range(OAK_FORM.low_reach.x, OAK_FORM.low_reach.y) * 0.6 * s
+		var sl1 := Vector3(0.5, rng.randf_range(-0.06, 0.1), rng.randf_range(-0.02, 0.08))
+		var p1 := _limb(a, t, root, d, l1, sl1, Vector2(0.15, 0.85), r0, t.radius, "oak_limb", true, _bend(turn, l1, 0.85), 0.6)
+		var d2 := d.rotated(Vector3.UP, turn)
+		var l2 := rng.randf_range(OAK_FORM.low_reach.x, OAK_FORM.low_reach.y) * 0.45 * s
+		var p2 := _limb(a, t, p1.tip, d2, l2, Vector3(sl1.z, rng.randf_range(0.0, 0.15), rng.randf_range(0.5, 0.8)), Vector2(0.1, 0.75), r0 * 0.6, -10.0, "oak_limb", true, rng.randf_range(-0.9, 0.9), 0.4)
+		open_tips.append(p2.tip)
+		longest = maxf(longest, _flat_from(c, p2.tip))
+		var at1: Callable = p1.at
+		var sd := d.rotated(Vector3.UP, (1.0 if rng.randf() < 0.5 else -1.0) * rng.randf_range(0.7, 1.1))
+		var side := _limb(a, t, at1.call(l1 * rng.randf_range(0.55, 0.7)), sd, rng.randf_range(OAK_FORM.low_side.x, OAK_FORM.low_side.y) * s, Vector3(0.2, rng.randf_range(0.0, 0.12), rng.randf_range(0.3, 0.5)), Vector2(0.12, 0.8), r0 * 0.5, -10.0, "oak_limb", true, rng.randf_range(-0.6, 0.6), 0.35)
+		open_tips.append(side.tip)
+		longest = maxf(longest, _flat_from(c, side.tip))
+	# Twigs off every limb's end (drawn only), and leaves over the ends up in the dome.
+	for tip in crown_tips + open_tips:
+		var out := Vector3(tip.x - c.x, 0.0, tip.z - c.z).normalized()
+		for q in rng.randi_range(2, 4):
+			var sd := out.rotated(Vector3.UP, rng.randf_range(-1.0, 1.0))
+			_twig(t, tip, sd, rng.randf_range(1.0, 2.2), rng.randf_range(0.1, 0.5), rng.randf_range(0.0, 0.3), 0.05, "oak_limb", rng)
+	# The crown: a cloud of leaves over each limb's end up in it -- clumps, with gaps between them where the
+	# limbs show --
+	for tip in crown_tips:
+		t.foliage.append([tip + Vector3.UP * 1.1, Vector3(OAK_FORM.cloud.x, OAK_FORM.cloud.y, OAK_FORM.cloud.x) * rng.randf_range(0.85, 1.15)])
+	# and over them rings of leaf masses closing the top of the dome.
+	var R := longest + 1.0
+	var mid := h * OAK_FORM.crown
+	var up := h - 0.6 - mid
+	for el in OAK_FORM.rings:
+		var ring_r: float = R * cos(el)
+		var y: float = mid + up * sin(el) if el >= 0.0 else mid + up * 0.5 * sin(el)
+		var count := maxi(3, int(round(TAU * ring_r / 6.5)))
+		var off := rng.randf() * TAU
+		for j in count:
+			var ang := off + TAU * j / count + rng.randf_range(-0.15, 0.15)
+			var at := c + Vector3(sin(ang) * ring_r, y, cos(ang) * ring_r) * Vector3(rng.randf_range(0.9, 1.0), 1.0, rng.randf_range(0.9, 1.0))
+			t.foliage.append([at, Vector3(3.2, 2.0, 3.2) * rng.randf_range(0.85, 1.15)])
+	t.foliage.append([c + Vector3.UP * (h - 0.2), Vector3(4.2, 2.2, 4.2)])
+	a.max_tree_reach = maxf(a.max_tree_reach, longest + t.radius - 4.0)
+
+
+## The sideways curl (_limb's `curl`) that bends a piece's end, past its straight stretch (from `span_y` of its
+## `length`), round by `theta` -- into the line of the next piece, turned that much -- so the two meet without a kink.
+static func _bend(theta: float, length: float, span_y: float) -> float:
+	return -tan(theta) * length * (1.0 - span_y) * 0.5
+
+
+## An oak's limbs radiate from the fork, so a perch's side (across the limb) can look along the crown into the next
+## limb. Each oak perch faces whichever side has a way in -- the swoop up from the approach point clear (the AI's
+## own check, FlightPlanner.swoop_clear, for the crow), the line-up before it too if it can be -- keeping its side
+## when that's open.
+static func _oak_perches_face_open(a: ArenaLayout) -> void:
+	var planner := FlightPlanner.new(a)
+	var crow := BirdProfile.crow()
+	var score := func(p: Perch) -> int:
+		if not planner.swoop_clear(p, crow):
+			return 0
+		var app := FlightPlanner.approach_point(p, crow)
+		var pre := FlightPlanner.pre_approach_point(p, crow)
+		return 2 if a.segment_clear(pre, app, planner.clearance) else 1
+	for p in a.perches:
+		if p.tree_id < 0 or a.trees[p.tree_id].kind != ArenaLayout.Kind.BROADLEAF or p.kind != Perch.Kind.BRANCH:
+			continue
+		if p == null or a.outposts.any(func(o): return o.rail_perch_id == p.id):
+			continue
+		var here: int = score.call(p)
+		if here == 2:
+			continue
+		p.facing = -p.facing
+		if int(score.call(p)) <= here:
+			p.facing = -p.facing
+
+
+static func _flat_from(c: Vector3, p: Vector3) -> float:
+	return Vector2(p.x - c.x, p.z - c.z).length()
+
+
+## The draws the oaks of old took from the wood's RNG, taken still (and thrown away), so that everything grown
+## after them -- the gaps, pines, saplings, outposts -- comes out as it did before the oaks had their own.
+static func _old_oak_draws(rng: RandomNumberGenerator) -> void:
+	rng.randf()
+	for li in 3:
+		rng.randf_range(-0.6, 0.6)
+		for k in (4 if li < 2 else 3):
+			rng.randf_range(-0.25, 0.25)
+			rng.randf_range(OAK.limb.x, OAK.limb.y)
+			rng.randf_range(-0.04, 0.05)
+			rng.randf_range(0.35, 0.6)
+			rng.randf_range(-0.6, 0.6)
 			for q in rng.randi_range(2, 4):
-				var x := total * rng.randf_range(0.45, 0.9)
-				var sd := d.rotated(Vector3.UP, (1.0 if rng.randf() < 0.5 else -1.0) * rng.randf_range(0.6, 1.2))
-				_twig(t, at.call(x), sd, rng.randf_range(0.9, 2.0), rng.randf_range(0.15, 0.45), rng.randf_range(0.0, 0.3), r0 * 0.28, "oak_limb", rng)
-			# Leaves over the limb's outer half and its tip.
-			t.foliage.append([at.call(total * 0.7) + Vector3.UP * 1.0, Vector3(2.4, 1.3, 2.4)])
-			t.foliage.append([(lim.tip as Vector3) + Vector3.UP * 0.9, Vector3(2.0, 1.2, 2.0)])
-	# The crown over the top.
-	var top := c + Vector3.UP * t.height
-	t.foliage.append([top + Vector3.UP * 0.5, Vector3(5.0, 3.0, 5.0)])
-	for k in 5:
-		var ang := ang0 + TAU * k / 5.0
-		t.foliage.append([top + Vector3(sin(ang), -0.25, cos(ang)) * 5.0, Vector3(3.2, 2.2, 3.2)])
-	a.max_tree_reach = maxf(a.max_tree_reach, longest - 4.0)
+				rng.randf_range(0.45, 0.9)
+				rng.randf()
+				rng.randf_range(0.6, 1.2)
+				rng.randf_range(0.9, 2.0)
+				rng.randf_range(0.15, 0.45)
+				rng.randf_range(0.0, 0.3)
+				rng.randf_range(-0.12, 0.12)
 
 
 ## A young Scots pine: a whorl of branches a year (~0.45 m apart) almost to the ground, each a little longer than
@@ -630,7 +839,7 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 	o.id = a.outposts.size()
 	o.tree_id = t.id
 	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
-	var y := t.height * (0.36 if oak else rng.randf_range(0.48, 0.58))
+	var y := t.stem - 0.6 if oak else t.height * rng.randf_range(0.48, 0.58)   # (an oak's deck sits in its fork)
 	# (clear of the stubs: a deck isn't bolted over a branch)
 	for it in 12:
 		var near := false
@@ -645,7 +854,7 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 	# Face the most open direction: the longest run out from the rail clear of wood and leaves, level. (On an
 	# oak, try the gaps between its limb levels too.)
 	var best := -1.0
-	var ys: Array = [y] if not oak else [t.height * 0.36, t.height * 0.54, t.height * 0.72]
+	var ys: Array = [y] if not oak else [t.stem - 0.6, t.stem - 1.1, t.stem - 0.2, t.crown_base - 0.4]
 	for yy in ys:
 		for k in 24:
 			var ang := TAU * k / 24.0
@@ -698,6 +907,11 @@ static func _way_in(a: ArenaLayout, t: ArenaLayout.TreeData, o: ArenaLayout.Outp
 			var from: Vector3 = end + d * out + Vector3.DOWN * APPROACH_DROP
 			if not a.segment_clear(from, end + d * 0.5, APPROACH_BERTH, t.id):
 				return false
+			for br in t.branches:   # (its own limbs too: an oak's deck sits in the fork, its low limbs under it)
+				if br.solid:
+					var cp := Geometry3D.get_closest_points_between_segments(from, end + d * 0.5, br.root, br.tip)
+					if cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:
+						return false
 	return true
 
 

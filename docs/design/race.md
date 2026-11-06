@@ -202,9 +202,10 @@ route planner (`FlightPlanner`, at the course's clearance) finds the way through
 leg may climb or dive. A routed leg isn't held to the smooth curve's turning circle, and the next gate needn't be in
 sight from the one before (the HUD's arrow shows the way); the AI racer and LinePilot follow the route.
 
-The menu's four (arena 7): technical level, course 7 (12 gates, windows 7-8 m); technical high and low, 13 (2.5-11 m);
-long level, 9 (7 gates, 5-8 m, four trunk gates, from the west outpost); long high and low, 12 (2.5-14 m). Raced
-(probe_race): every pilot and ace crow, owl and sparrow finishes all four; the hawk finishes technical level but not
+The menu's four (arena 7, the map baked 2026-11-06 with the new oaks and pines): technical level, course 8 (12 gates,
+windows 7-8.4 m); technical high and low, 19 (2.3-11 m); long level, 13 (7 gates, 7-8 m); long high and low, 12
+(2.3-11 m). On that wood most seeds' courses turn one way only (probe_courses: 7L 0R and the like); test_race's
+`_course_rules` takes seed 28, which turns both ways. Raced on the wood before that bake (probe_race; not yet re-raced): every pilot and ace crow, owl and sparrow finishes all four; the hawk finishes technical level but not
 technical high and low (its turns aren't planned for it), and most of the long; the falcon fails the long ones, on
 their routed legs (it can't hold a route's corners). `tests/probe_courses.gd --style <s>` sums up many seeds.
 

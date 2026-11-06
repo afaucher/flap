@@ -25,7 +25,7 @@ func setup() -> void:
 		_rules_by_hand()
 		_home_by_hand()
 		_dubins()
-		_course_rules(16)
+		_course_rules(28)
 	if in_shard(1):
 		await _course_in_the_wood(23)
 	if in_shard(2):
