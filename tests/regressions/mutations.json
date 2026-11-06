@@ -4687,8 +4687,8 @@
   "edits": [
    {
     "file": "scripts/app/menu.gd",
-    "find": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird, \"--course\", str(COURSES[race_course]),\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])",
-    "replace": "\tvar o := PackedStringArray([\"--race\", \"--no-rider\", \"--bird\", race_bird,\n\t\t\"--flying\", \"novice\" if novice else \"realistic\"])"
+    "find": "\"--course\", str(COURSES[race_style()]), \"--course-style\", race_style(),",
+    "replace": "\"--course-style\", race_style(),"
    }
   ]
  },
@@ -4940,7 +4940,7 @@
   "edits": [
    {
     "file": "scripts/race/race_course.gd",
-    "find": "\tif k == GATES - 1:\n\t\tvar why := home_problem(all)",
+    "find": "\tif k == gate_count - 1:\n\t\tvar why := home_problem(all)",
     "replace": "\tif false:\n\t\tvar why := home_problem(all)"
    }
   ]
