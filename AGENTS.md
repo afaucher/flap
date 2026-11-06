@@ -58,7 +58,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   wings of the birds racing, the hawk's by default): a clear way in and out of each window, each leg's flown line
   (`flown_line`) clear by half a wingspan and turning no tighter than that circle, posts and ropes off the line, the
   next gate seen from the one before (and the one after it, unless the turn is tight: `marked`), the way home straight
-  from the last gate to a run-in in front of the rail (`home_problem`, `home_in`); `problems()` lists
+  from the last gate to a run-in in front of the rail (`home_problem`, `home_in`); styles (`STYLES`, `--course-style`:
+  technical | long, level | high-low): legs, turns, gate count, heights, the birds it's planned for, and long legs
+  routed through the wood by the AI's planner between clear lanes (`route_line`); `problems()` lists
   any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
   the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken (landing there
   sooner resets the run); misses;
@@ -77,8 +79,15 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `tests/probe_flyable.gd` marks each leg for each bird (a leg no bird can fly is the course's, one the AI misses the
   AI's). `test_race` (every bird flies the course, by LinePilot).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
-  burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
-- `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
+  burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack;
+  its route scenarios, `rail_front` / `rail_behind` (AIPilot sent to land on the race's start rail) and `ai_wander`, fly the AI in
+  the pine wood under the route view, `RouteView` (`scripts/ai/`; P or `--no-route`, L or `--route-rejected`, `--lattice-at
+  target`): the planner's lattice round the bird (usable nodes teal, rejected red: `FlightPlanner.node_usable`), `AIPilot.route`
+  and the waypoint it's on, the perch and its approach points, the path its avoidance predicts (`AIPilot.predicted`, red from
+  where it meets wood) and the escape it flies instead (`AIPilot.escape`); visual only, `test_route_view` reads it back), `scripts/test_support/`.
+- `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`). The neck
+  meets the head and trunk flush, lit and coloured as one (`BirdRig._loft_neck`, `docs/design/wing_rig.md`; `test_neck_seam` measures
+  the crease, the normals, the nape's notch, the perched throat and the colour hand-over; the rig gallery's `--view nape|throat` look at it).
 - `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
   cloth/skin/eye shaders. Look at it with

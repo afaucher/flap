@@ -7,7 +7,7 @@ extends Control
 ## FlightAssist; Realistic: none). Fight opens one too: your bird, what each pod carries (rockets, seekers or the
 ## machine gun, left and right; two kinds, and Q switches), how it flies, the mode (the 3 v 3 match, or target
 ## practice on the range's racetrack target) and, for a match, the AI's skill (recruit | pilot | ace), with the
-## rules of the mode chosen. Race opens one: your bird, how it flies, the course (one of COURSES) and who races you
+## rules of the mode chosen. Race opens one: your bird, how it flies, the course (Technical | Long, Level | High and low: COURSES) and who races you
 ## (no one, or AI racers at recruit | pilot | ace, one of each other bird), with your best time on that course, and
 ## the race's rules (the game's --race, RaceCourse). Enter starts any of them, Esc goes back. Settings: which way the mouse and the gamepad's stick
 ## climb and every control (SettingsPanel, the pause menu's too). The pages are built by MenuStyle's helpers.
@@ -57,8 +57,17 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land)."
-const COURSES := [16, 23, 17]   ## the Race screen's courses: RaceCourse seeds on the game's arena (ARENA_SEED) that
-                              ## make a full course with its way home
+const COURSE_SHAPES := [   ## [RaceCourse shape, label, what it means]
+	["technical", "Technical", "Twelve gates close together, tight turns between the trunks. Made for the agile birds: the hawk and falcon will struggle."],
+	["long", "Long", "Seven gates far apart. Between them, find your own way through the wood."],
+]
+const COURSE_HEIGHTS := [   ## [RaceCourse heights, label, what it means]
+	["level", "Level", "The gates at much the same height."],
+	["high-low", "High and low", "Gates low by the ground and high under the crowns: dive and climb."],
+]
+const COURSES := {   ## RaceCourse style -> the seed of its course on the game's arena (ARENA_SEED): a full one, home kept
+	"technical-level": 7, "technical-high-low": 13, "long-level": 9, "long-high-low": 12,
+}
 const ARENA_SEED := 7          ## the game's arena with no --seed (the best times are kept per arena too)
 const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
 	["", "None", "Just you and the clock."],
@@ -68,7 +77,7 @@ const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
 ]
 const RACE_RULES := "- Start on the outpost's rail. The clock runs from when you leave it until you land back on it
   with every gate taken. Land on it sooner and the run starts over.
-- Ten gates. Fly through each in the course's direction, coming from the gate before it; backwards doesn't count.
+- Fly through each gate in the course's direction, coming from the gate before it; backwards doesn't count.
 - Take them in order: the bright gate is next. Skip one and none after it count until you go back for it."
 const COL_W := 540.0     ## px: the choices' column
 const RULES_W := 480.0   ## px: the rules'
@@ -80,7 +89,8 @@ static var fight_match := true
 static var fight_skill := "pilot"
 static var flight_bird := "crow"   ## the Flight screen's
 static var race_bird := "crow"     ## the Race screen's
-static var race_course := 0        ## (into COURSES)
+static var race_shape := "technical"   ## (COURSE_SHAPES' first column)
+static var race_heights := "level"     ## (COURSE_HEIGHTS')
 static var race_rivals := ""       ## (RIVALS' first column)
 static var novice := true          ## both screens' Flying choice (Novice from the menu; the command line's default is realistic)
 
@@ -95,6 +105,7 @@ var _race: VBoxContainer
 var _race_blurb: Label
 var _rivals_note: Label
 var _best: Label
+var _course_note: Label
 var _blurb: Label
 var _flight_blurb: Label
 var _flying_notes: Array[Label] = []   ## (one on each screen)
@@ -232,10 +243,16 @@ func _build_race() -> void:
 	_race_blurb = MenuStyle.note(COL_W)
 	pick.add_child(_race_blurb)
 	pick.add_child(MenuStyle.heading("Course"))
-	pick.add_child(MenuStyle.row(range(COURSES.size()).map(func(i: int) -> String: return "Course %d" % (i + 1)), race_course,
-		func(i: int) -> void:
-			race_course = i
-			_refresh(), "Course"))
+	pick.add_child(MenuStyle.row(COURSE_SHAPES.map(func(c: Array) -> String: return c[1]),
+		COURSE_SHAPES.map(func(c: Array) -> String: return c[0]).find(race_shape), func(i: int) -> void:
+			race_shape = COURSE_SHAPES[i][0]
+			_refresh(), "Shape"))
+	pick.add_child(MenuStyle.row(COURSE_HEIGHTS.map(func(c: Array) -> String: return c[1]),
+		COURSE_HEIGHTS.map(func(c: Array) -> String: return c[0]).find(race_heights), func(i: int) -> void:
+			race_heights = COURSE_HEIGHTS[i][0]
+			_refresh(), "Heights"))
+	_course_note = MenuStyle.note(COL_W)
+	pick.add_child(_course_note)
 	_best = MenuStyle.note(COL_W)
 	pick.add_child(_best)
 	pick.add_child(MenuStyle.heading("Racing against"))
@@ -340,8 +357,13 @@ static func flight_options() -> PackedStringArray:
 
 
 ## The game's options for the Race screen's: race mode on the course picked, no rider or weapons, the AI racers if any.
+## The Race screen's course: its RaceCourse style.
+static func race_style() -> String:
+	return race_shape + "-" + race_heights
+
+
 static func race_options() -> PackedStringArray:
-	var o := PackedStringArray(["--race", "--no-rider", "--bird", race_bird, "--course", str(COURSES[race_course]),
+	var o := PackedStringArray(["--race", "--no-rider", "--bird", race_bird, "--course", str(COURSES[race_style()]), "--course-style", race_style(),
 		"--flying", "novice" if novice else "realistic"])
 	if race_rivals != "":
 		o.append_array(["--race-ai", race_rivals])
@@ -387,7 +409,13 @@ func _refresh() -> void:
 	_blurb.text = BirdProfile.by_id(fight_bird).blurb
 	_flight_blurb.text = BirdProfile.by_id(flight_bird).blurb
 	_race_blurb.text = BirdProfile.by_id(race_bird).blurb
-	var best := RaceRecord.best(RaceRecord.key(COURSES[race_course], ARENA_SEED, race_bird, "novice" if novice else "realistic"))
+	var best := RaceRecord.best(RaceRecord.key(COURSES[race_style()], ARENA_SEED, race_bird, "novice" if novice else "realistic", race_style()))
+	for c in COURSE_SHAPES:
+		if c[0] == race_shape:
+			_course_note.text = c[2]
+	for c in COURSE_HEIGHTS:
+		if c[0] == race_heights:
+			_course_note.text += " " + c[2]
 	_best.text = ("Your best here: " + RaceHud.clock_text(float(best.time))) if not best.is_empty() else "No time set here yet."
 	for r in RIVALS:
 		if r[0] == race_rivals:

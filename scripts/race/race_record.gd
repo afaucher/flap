@@ -9,8 +9,8 @@ const RECENT := 10
 const AVERAGE_OF := 3
 
 
-static func key(course_seed: int, arena_seed: int, bird: String, flying: String) -> String:
-	return "a%d_c%d_%s_%s" % [arena_seed, course_seed, bird, flying]
+static func key(course_seed: int, arena_seed: int, bird: String, flying: String, style := "") -> String:
+	return "a%d_c%d%s_%s_%s" % [arena_seed, course_seed, ("_" + style) if style != "" else "", bird, flying]
 
 
 ## {time, splits}, or {} if none yet.

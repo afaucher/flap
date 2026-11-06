@@ -29,6 +29,7 @@ extends Node3D
 ##                      clock (RaceRun; best times kept, RaceRecord); no AI birds unless asked for; the pause menu's
 ##                      Start over puts everyone back on the start
 ##   --course <n>       the course's seed (default: the arena's)
+##   --course-style <s> its style (RaceCourse.STYLES: technical | long, level | high-low; default the all-round course)
 ##   --race-ai <skill>  AI racers (RacePilot: recruit | pilot | ace) on the course with you, one of each other bird
 ##   --plan-for <birds> the birds the course is planned for (RaceCourse.Envelope; default all five)
 ##   --race-record <f>  keep race times in this file instead of user://race_best.cfg (RaceRecord.path: shots, tests)
@@ -62,6 +63,7 @@ var _race_skill := ""
 var _flying := "realistic"
 var _arena_seed := 7
 var _course_seed := 7
+var _course_style := ""
 signal loaded
 
 
@@ -77,6 +79,7 @@ func _ready() -> void:
 	var ai_count := int(ai_arg) if ai_arg != "" else (0 if race else 3)
 	_arena_seed = arena_seed
 	_course_seed = int(Boot.arg_value(args, "--course")) if Boot.arg_value(args, "--course") != "" else arena_seed
+	_course_style = Boot.arg_value(args, "--course-style") if RaceCourse.STYLES.has(Boot.arg_value(args, "--course-style")) else ""
 	_race_skill = Boot.arg_value(args, "--race-ai")
 	if Boot.arg_value(args, "--race-record") != "":
 		RaceRecord.path = Boot.arg_value(args, "--race-record")
@@ -115,10 +118,11 @@ func _ready() -> void:
 	var hold := {}   # (the course, generated with the wood on the loading screen's worker, its posts put in before the build)
 	var want_race := race
 	var cs := _course_seed
+	var cst := _course_style
 	var make := func() -> ArenaLayout:
 		var l := Pinewood.generate(arena_seed) if pinewood else ArenaLayout.generate(arena_seed)
 		if want_race:
-			var c := RaceCourse.generate(l, cs, plan_for)
+			var c := RaceCourse.generate(l, cs, plan_for, cst)
 			c.apply(l)
 			hold.course = c
 		return l
@@ -279,7 +283,7 @@ func _spawn_player(pid: String, at: Perch) -> void:
 	camera.snap()
 	hud.autopilot = use_autopilot
 	if race:
-		race_key = RaceRecord.key(_course_seed, _arena_seed, pid, _flying)
+		race_key = RaceRecord.key(_course_seed, _arena_seed, pid, _flying, _course_style)
 		_restart_race()
 		if use_autopilot:
 			bird.controller = _autopilot_for()
