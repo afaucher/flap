@@ -213,7 +213,13 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   Godot on a desktop of its own (`test_lib.ps1`, `FlapHidden`): it renders on the GPU as usual (the GPU tests' numbers
   are the same) but is never on screen, never in the taskbar, never focused, and dies with the script that started
   it. Don't launch a windowed Godot directly (`& $godot --path . -- ...`) for a render or check; use these.
-  `FLAP_SHOW_WINDOWS=1` puts them on the user's desktop, to watch one.
+  `FLAP_SHOW_WINDOWS=1` puts them on the user's desktop, to watch one. They are silent too: each starts with
+  `FLAP_MUTE=1` in its own environment (`FlapHidden.ChildEnvironment`; the caller's shell is untouched) and
+  `Boot.mute_if_asked` mutes the Master bus's output. The mix still runs, so an effect on the bus still records it
+  (`gpu_test_audible`, `probe_gun_audio`); `gpu_test_audible` checks the mute and the Master's meter staying silent.
+  `FLAP_SOUND=1` leaves the mute out, to hear one (`FLAP_SHOW_WINDOWS` doesn't change the sound). Headless runs use
+  the dummy audio driver and were silent already. (A shell that already ran these scripts keeps the `FlapHidden` it
+  compiled then: open a new one after changing `test_lib.ps1`.)
 - `tests/regressions/mutations.json` + `.\mutation_check.ps1`: every bug we've fixed, as an edit that puts it
   back. The script applies each in a scratch tree and requires the named tests to fail (KILLED); a
   SURVIVED bug is a test gap, a STALE entry needs its find text updated to today's code. Entries run in

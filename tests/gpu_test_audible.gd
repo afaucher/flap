@@ -5,6 +5,9 @@ extends TestCase
 ## the physics tick after it starts, so a sound whose punch is in its first 20 ms (a gun shot is all crack) went
 ## unheard in 3D (13-15 dB under its flat self) until the bake put SoundRecipes.LEAD_3D of silence ahead of it.
 ## Needs the audio output: runs windowed (.\test_runner.ps1 runs it on its hidden desktop).
+## And silently: the runner starts it with FLAP_MUTE=1 (FLAP_SOUND=1 to hear it), Boot mutes the Master bus's output,
+## and the recording (an effect on that bus) still has every cue while the bus's own meter, what goes to the
+## speakers, stays at silence.
 
 const CUES := ["gun_shot", "rocket_launch", "gun_strike_wood", "perch_catch", "bonk"]
 const HEARD_DB := 8.0   ## past its distance loss: a centred 3D source loses ~3 dB to the pan law, some to the air filter
@@ -12,6 +15,7 @@ const AT := 4.0         ## m in front of the listener
 const GAP := 0.4        ## s between plays
 
 var _t0 := 0
+var _out_db := -200.0   ## the loudest the Master bus put out (its peak meter, after its mute) while recording
 
 
 func _init() -> void:
@@ -19,6 +23,11 @@ func _init() -> void:
 
 
 func setup() -> void:
+	# (checked before anything plays: a run that isn't muted stops here rather than sound off)
+	if not _aloud() and not (check(OS.get_environment("FLAP_MUTE") == "1", "started muted (test_lib.ps1 sets FLAP_MUTE=1 unless FLAP_SOUND=1)")
+			and check(AudioServer.is_bus_mute(0), "the Master bus is muted (Boot.mute_if_asked)")):
+		finish()
+		return
 	var cam := Camera3D.new()
 	add_child(cam)
 	cam.current = true
@@ -73,12 +82,21 @@ func setup() -> void:
 		check(flat > -40.0, "%s plays (flat %.1f dB)" % [c, flat])
 		var loss := maxf(0.0, 20.0 * log(AT / float(Sfx.CUES[c].unit_size)) / log(10.0))
 		check(far > flat - loss - HEARD_DB, "%s 4 m off in 3D is heard: %.1f dB, within %.0f dB (and %.1f for the distance) of flat (%.1f)" % [c, far, HEARD_DB, loss, flat])
+	if _aloud():
+		print("FLAP_SOUND=1: played aloud, out at %.1f dB" % _out_db)
+	else:
+		check(_out_db < -100.0, "nothing reached the speakers: the Master bus put out %.1f dB" % _out_db)
 	finish()
+
+
+func _aloud() -> bool:
+	return OS.get_environment("FLAP_SOUND") == "1"
 
 
 func _until(sec: float) -> void:
 	while Time.get_ticks_msec() - _t0 < int(sec * 1000.0):
 		await get_tree().process_frame
+		_out_db = maxf(_out_db, maxf(AudioServer.get_bus_peak_volume_left_db(0, 0), AudioServer.get_bus_peak_volume_right_db(0, 0)))
 
 
 ## The recording (16-bit stereo) as mono samples -1..1.
