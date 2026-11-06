@@ -1,4 +1,4 @@
-﻿class_name Menu
+class_name Menu
 extends Control
 ## The start menu (run with no arguments): Flight (the game: the arena and its birds, no rider, no weapons),
 ## Fight, Race and the Lab. A choice opens its scene with its options added to the command line's (Boot.extra).

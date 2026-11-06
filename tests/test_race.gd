@@ -1,4 +1,4 @@
-﻿extends TestCase
+extends TestCase
 ## Race mode (RaceCourse, RaceRun, RaceRecord): a gate counts only through its window the way it faces; the gates go
 ## in order; the clock starts off the start rail and stops when the bird lands back on it with every gate taken (not
 ## before, not on another perch); a miss is counted and the gate stays next; best times are kept only when better, and

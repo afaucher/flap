@@ -25,6 +25,7 @@ func setup() -> void:
 	_outposts(a)
 	for other in [3, 11, 21, 5]:   # (outposts face whatever open air a layout leaves: try several)
 		_outposts(Pinewood.grow(other))
+	_outpost_shuns_leaves()
 	_young_pines(a)
 	_perches_on_the_wood(a)
 	_structure(a)
@@ -278,6 +279,42 @@ func _young_pines(a: ArenaLayout) -> void:
 				blocked += 1
 	check(n > 50, "young pines (%d)" % n)
 	check(blocked < n * 0.1, "birds brush through young pines' twigs (%d of %d paths blocked)" % [blocked, n * 2])
+
+
+## An outpost turns away from leaves in front of its rail, even a small mass in front of one end only. (Today's trees
+## carry no leaves at deck height, so the wood alone can't show it: this oak's outpost is built again with a leaf
+## mass put in front of one end of its rail, beside the line out from the rail's middle and missing it.) Both ways:
+## built again without the leaves, it faces the same way.
+func _outpost_shuns_leaves() -> void:
+	var a := Pinewood.grow(7)
+	var o: ArenaLayout.OutpostData = null
+	for oo in a.outposts:
+		if a.trees[oo.tree_id].kind == ArenaLayout.Kind.BROADLEAF:
+			o = oo
+			break
+	check(o != null, "an oak with an outpost")
+	if o == null:
+		return
+	var t: ArenaLayout.TreeData = a.trees[o.tree_id]
+	var d0: Vector3 = o.out
+	var y0: float = o.centre.y
+	var rebuilt := func(leaves: bool) -> ArenaLayout.OutpostData:
+		a.outposts.erase(o)
+		if leaves:
+			var side := d0.cross(Vector3.UP).normalized()
+			var from := Vector3(t.base.x, y0 + 0.3, t.base.y) + d0 * (t.radius + 1.4)
+			t.foliage.append([from + d0 * 3.5 + side * 1.0, Vector3(0.3, 0.4, 0.3)])
+		var rng := RandomNumberGenerator.new()
+		check(Pinewood._outpost(a, t, rng), "the oak's outpost built again (leaves %s)" % leaves)
+		var n: ArenaLayout.OutpostData = a.outposts.pop_back()
+		a.outposts.append(o)
+		if leaves:
+			t.foliage.pop_back()
+		return n
+	var same: ArenaLayout.OutpostData = rebuilt.call(false)
+	check(same.out.dot(d0) > 0.99 and absf(same.centre.y - y0) < 0.01, "built again without leaves, the outpost faces the same way")
+	var moved: ArenaLayout.OutpostData = rebuilt.call(true)
+	check(moved.out.dot(d0) < 0.99 or absf(moved.centre.y - y0) > 0.01, "with leaves in front of one end of its rail, it faces elsewhere")
 
 
 func _outposts(a: ArenaLayout) -> void:

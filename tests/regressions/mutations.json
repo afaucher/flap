@@ -3060,8 +3060,8 @@
    },
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\tvar y := (t.height + 0.15) * u - 0.15",
-    "replace": "\t\tvar y := t.height * u - 0.15"
+    "find": "\t\tvar y := (top_y + 0.15) * u - 0.15",
+    "replace": "\t\tvar y := top_y * u - 0.15"
    }
   ]
  },
