@@ -92,6 +92,13 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   target`): the planner's lattice round the bird (usable nodes teal, rejected red: `FlightPlanner.node_usable`), `AIPilot.route`
   and the waypoint it's on, the perch and its approach points, the path its avoidance predicts (`AIPilot.predicted`, red from
   where it meets wood) and the escape it flies instead (`AIPilot.escape`); visual only, `test_route_view` reads it back), `scripts/test_support/`.
+- Bills (`Face.beak_meshes`): lofted on each species' profile traced from a photo (`tools/beak_profiles.py` REFS ->
+  `tools/bill_profiles_emit.py` -> the generated `scripts/bird/bill_profiles.gd`: re-run it after changing a trace),
+  drawn by `bill.gdshader` (keratin, the cere's edge, the nostril, the crow's bristles, the cutting edge, per pixel from
+  the mesh's bill-frame coordinates); the head's front drawn out to the bill's base (`Face.snout`, `BirdRig._head_point`)
+  and the eyes seated back (`Face.eye_seat`), so each eye sits as far behind the bill as in its photo. `test_bill_profile`
+  holds the drawn profile to the traces; `tests/probe_beak_profile.gd` + `tools/beak_profiles.py` chart them
+  (`docs/images/beak_profiles_after.jpg`).
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`). The neck
   meets the head and trunk flush, lit and coloured as one (`BirdRig._loft_neck`, `docs/design/wing_rig.md`; `test_neck_seam` measures
   the crease, the normals, the nape's notch, the perched throat and the colour hand-over; the rig gallery's `--view nape|throat` look at it).

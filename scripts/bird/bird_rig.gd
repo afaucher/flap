@@ -251,6 +251,7 @@ var _defs_slot := -1.0
 
 
 func build(p: BirdProfile) -> void:
+	_snout = []
 	profile = p
 	shape = WingShape.for_profile(p)
 	_L = p.body_length
@@ -1191,12 +1192,9 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 	var fd := Face.spec(id)
 	var disc: bool = fd.has("disc")
 	# (the owl's facial disc is part of the head's surface: _head_point)
-	var beak_base := Vector3(0.0, -0.05 * hr, -hr * body.skull.z * 0.85) if not disc else Vector3(0.0, -0.14 * hr, Face.disc_z(0.0, -0.14 * hr, 0.1, hr, body.skull) + 0.04 * hr)
+	var beak_base := Face.bill_base(id, hr, body.skull)
 	var bm: Array = Face.beak_meshes(id, hr, beak_base)
-	var bill_mat := _material(Color.WHITE)
-	bill_mat.vertex_color_use_as_albedo = true
-	bill_mat.vertex_color_is_srgb = true
-	bill_mat.roughness = 0.45
+	var bill_mat := Face.bill_material(id)
 	var upper := MeshInstance3D.new()
 	upper.name = "BeakUpper"
 	upper.mesh = bm[0]
@@ -1204,13 +1202,13 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 	_head.add_child(upper)
 	_jaw = Node3D.new()   # the lower mandible hinges at the gape (a joint for calls and bites later)
 	_jaw.name = "Jaw"
-	_jaw.position = beak_base
+	_jaw.position = Face.jaw_pivot(id, hr, beak_base)   # (at the gape's corner)
 	_head.add_child(_jaw)
 	var lower := MeshInstance3D.new()
 	lower.name = "BeakLower"
 	lower.mesh = bm[1]
 	lower.material_override = bill_mat
-	lower.position = -beak_base
+	lower.position = -_jaw.position
 	_jaw.add_child(lower)
 	var eye_mat := _material(Color.WHITE)
 	eye_mat.vertex_color_use_as_albedo = true
@@ -1220,7 +1218,7 @@ func _build_face(skull: Node3D, body_mat: Material, hr: float) -> void:
 	_membranes.clear()
 	_brows.clear()
 	for e: float in [-1.0, 1.0]:
-		var dir := Face.eye_dir(id, e)
+		var dir := Face.eye_seat(id, e)
 		var eye := Node3D.new()
 		eye.name = "Eye" + ("L" if e < 0.0 else "R")
 		if disc:   # the owl's eyes sit in its disc, looking forward
@@ -1326,13 +1324,37 @@ static func _neck_axis() -> Vector3:
 	return Vector3(0.0, -cos(NECK_TILT), sin(NECK_TILT))
 
 
+var _snout: Array = []   ## Face.snout, for this bird (made on first use)
+
+
+## Face.snout, kept off the neck's ring (its throat runs just under the bill: the neck meets the head there unmoved).
+func _make_snout() -> Array:
+	var sn := Face.snout(profile.id, body.head_r, body.skull)
+	if float(sn[1]) <= 0.0:
+		return sn
+	for j in 48:
+		var ph := -TAU * j / 48.0
+		var d := _head_dir(_ring_th(ph), ph)
+		var q := Vector3(d.x * body.skull.x, d.y * body.skull.y, d.z * body.skull.z).normalized()
+		sn[2] = minf(float(sn[2]), acos(clampf(q.dot(sn[0]), -1.0, 1.0)) - deg_to_rad(3.0))
+	return sn
+
+
 ## A point of the head's surface (head space), at polar angle `th` from the neck axis and `ph` round it: on
-## the skull's ellipsoid, with the owl's facial disc raised on the front. The head is lofted in rings round
+## the skull's ellipsoid, its front drawn out to the bill's base (Face.snout), with the owl's facial disc raised on
+## the front. The head is lofted in rings round
 ## the neck axis, so the neck's edge loop (th = _ring_th(ph)) is one of its own rows.
 func _head_point(th: float, ph: float) -> Vector3:
 	var hr := body.head_r
 	var d := _head_dir(th, ph)
 	var p := Vector3(d.x * body.skull.x, d.y * body.skull.y, d.z * body.skull.z) * hr
+	if _snout.is_empty():
+		_snout = _make_snout()
+	if float(_snout[1]) > 0.0:   # the face drawn out to the bill's base: flat over it, then easing off
+		var a := acos(clampf(p.normalized().dot(_snout[0]), -1.0, 1.0))
+		var t := clampf((a - float(_snout[3])) / maxf(float(_snout[2]) - float(_snout[3]), 1e-4), 0.0, 1.0)
+		if t < 1.0:
+			p += (_snout[0] as Vector3) * float(_snout[1]) * pow(1.0 - t * t, 2.0)
 	if Face.spec(profile.id).has("disc") and p.z < 0.0:
 		var s := Face.disc_s(p.x, p.y, hr)
 		if s < 1.12:
@@ -1355,7 +1377,7 @@ func _head_color(th: float, ph: float) -> Color:
 func _head_color_d(d: Vector3, marks := 1.0) -> Color:
 	if Plumage.level == 0:
 		return _body_tint
-	var c := Plumage.head(profile.id, d, Face.eye_dir(profile.id, 1.0), marks)
+	var c := Plumage.head(profile.id, d, Face.eye_seat(profile.id, 1.0), marks)
 	var h: Dictionary = Plumage.spec(profile.id).head
 	if h.has("disc") and Face.spec(profile.id).has("disc") and d.z < 0.0:
 		var hr := body.head_r
