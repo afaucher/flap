@@ -42,8 +42,8 @@ const LEG := Vector2(14.0, 40.0)  ## m in plan from a gate to the next (a style 
 ##   zigzag   score for a turn the other way from the last (S-bends: hard turns that don't wind the course round)
 ##   birds    the birds it's planned for, if not those racing (technical: the agile ones -- the hawk and falcon can't
 ##            make its turns, by design)
-##   eight    planned as a figure-eight that crosses itself (EIGHTS: the search follows a guide, _guide_for); if no
-##            figure-eight fits round the nearest starts, the free search's course
+##   eight    planned as a figure-eight that crosses itself (EIGHT_GATES gates; the search follows a guide, _guide_for);
+##            if no figure-eight fits round the nearest starts, the free search's course
 ##   dy, spread  score per m a leg climbs or dives (capped at 8), and per m of the whole course's height range
 const SHAPES := {
 	"": {"gates": 10, "leg": Vector2(14.0, 40.0), "aim": 25.0, "turn": Vector2(20.0, 70.0), "wood": 0.0},
@@ -96,23 +96,27 @@ const HOME_OUT := 15.0            ## m further out in front of the run-in the la
 const WIND_MAX := 200.0           ## deg the course may wind round one way in all (home from in front: about 180)
 const HOME_LEAVE := 90.0          ## deg at most the way home turns from the last gate's way through
 const HOME_TURN_IN := 120.0       ## deg at most from the way home onto the rail's run-in, at its start
-## A figure-eight course (a style's "eight"): out from the rail to the middle of an 8 lying in front of it, round one
-## lobe (a circle), back through the middle across the way out, round the other lobe the other way, home. The 8 is two
-## circles of EIGHT_R joined by the two lines through the middle that touch both, crossing at EIGHT_CROSS to its long
-## axis (_guide_for); tried wherever it fits round the start (EIGHT_OUT m out, EIGHT_BEARING off the rail's facing,
-## its first line EIGHT_SKEW off the way out, either lobe first), the EIGHT_TRIES with the most candidate gates along
-## them first (_eight_guides). The search keeps each gate within EIGHT_OFF m of the guide, a little further along it
-## than the last, the last within EIGHT_END of its end (where it leaves the second lobe for home).
-const EIGHT_SHAPES := [[26.0, 16.0, 90.0], [30.0, 18.0, 90.0], [30.0, 16.0, 75.0], [34.0, 18.0, 90.0]]   ## [first lobe's radius, second's, crossing deg]
-const EIGHT_OUT := [22.0, 30.0]
-const EIGHT_BEARING := [-40.0, -20.0, 0.0, 20.0, 40.0]
-const EIGHT_SKEW := [-20.0, 0.0, 20.0]
-const EIGHT_TRIES := 6
-const EIGHT_OFF := 20.0
-const EIGHT_COST := 1.5           ## m off the guide that cost a point of a gate's score
-const EIGHT_END := 14.0
-const EIGHT_SHORT := 2            ## gates a figure-eight may have fewer than its style's
-const EIGHT_STARTS := 2           ## the starts a figure-eight is tried from (nearest the middle first)
+## A figure-eight course (a style's "eight"): two lobes (circles) joined by the two lines through the 8's middle that
+## touch both, crossing there. The way out from the rail runs on along the first of them, past where it touches the
+## second lobe (EIGHT_LEAD m out), through the middle, round the first lobe, back through the middle across the way
+## out, and round the second lobe the other way until it heads home from in front of the rail (_guide_for). Its way out
+## leaves EIGHT_BEARING off the rail's facing, to the side away from the second lobe (straighter, the second lobe swings
+## round behind the rail); tried round the EIGHT_STARTS nearest rails, either lobe first, each rail's EIGHT_TRIES with a
+## candidate gate near the most of their way (_eight_guides), the seed's rail first. The search keeps each gate within
+## EIGHT_OFF m of the guide (free within EIGHT_SLACK), a little further along it than the last, the last within
+## EIGHT_END of its end; a course of EIGHT_GATES - EIGHT_SHORT gates or more that has crossed itself and keeps the way
+## home's rules is a figure-eight.
+const EIGHT_SHAPES := [[22.0, 22.0, 90.0], [24.0, 24.0, 90.0], [26.0, 22.0, 90.0], [20.0, 20.0, 90.0], [24.0, 20.0, 100.0]]   ## [first lobe's radius, second's, crossing deg]: wide enough for 12-24 m legs (16 m turns ~40 deg on 22)
+const EIGHT_LEAD := [6.0, 12.0]   ## m from the rail along the way out to where it touches the second lobe
+const EIGHT_BEARING := [30.0, 45.0, 60.0]   ## deg the way out leaves off the rail's facing, away from the second lobe
+const EIGHT_TRIES := 6            ## guides tried from each rail
+const EIGHT_OFF := 20.0           ## m off the guide a gate may be at most ...
+const EIGHT_SLACK := 6.0          ## ... at no cost within this ...
+const EIGHT_COST := 3.0           ## ... and a point of its score for each this many m further
+const EIGHT_END := 14.0           ## m from the guide's end the last gate may be
+const EIGHT_GATES := 18           ## gates a figure-eight has at most (its style's gate count otherwise) ...
+const EIGHT_SHORT := 4            ## ... and this many fewer at least, ending where it has crossed itself and home is clear
+const EIGHT_STARTS := 2           ## the rails a figure-eight is tried from (nearest the middle first)
 const HOME_NEAR := 3.0            ## m from the rail within which its own tree and outpost don't count on the line home
 
 
@@ -254,6 +258,8 @@ var start: Perch
 var gates: Array[Gate] = []
 var build_ms := 0.0
 static var debug := false        ## print the build's progress
+static var eights := true        ## a style's "eight" planned as one (off: the free search's course, for an A/B)
+static var debug_eight := -1     ## (debug) keep the figure-eight try of this number, whatever it makes
 
 var _pool: Array[Gate] = []      ## candidate gates (post ones unturned)
 var _valid := {}                 ## candidate index -> bool (checked when first wanted)
@@ -283,24 +289,30 @@ static func generate(l: ArenaLayout, s: int, birds: Array = BirdProfile.IDS, sty
 	var best: Array[Gate] = []
 	var best_start: Perch = null
 	var starts := starts_for(l)
-	if c._shape.get("eight", false):   # (a figure-eight if one fits, round any of the guides from the nearest starts)
-		for st in starts.slice(0, EIGHT_STARTS):
-			c.start = st
+	if c._shape.get("eight", false) and eights:   # (a figure-eight if one fits, round any of the guides from the nearest starts)
+		c.gate_count = EIGHT_GATES
+		var guides := []   # (each start's best in turn, the seed's start first: courses round both)
+		var near := starts.slice(0, EIGHT_STARTS)
+		for k in near.size():
+			c.start = near[(k + s) % near.size()]
 			for t in c._eight_guides():
-				c._guide_for(t)
-				c._search()
-				if debug:
-					print("RaceCourse: eight from %d %s: %d gates, %d crossings, %s" % [st.id, str(t), c.gates.size(), c.crossings(), str(c.why)])
-					c.why = {}
-				if c.gates.size() >= c.gate_count - EIGHT_SHORT and c.crossings() > 0 and c.problems().is_empty():
-					best = c.gates
-					best_start = st
-					c.eight = true
-					break
-			if c.eight:
+				t.start = c.start
+				guides.append(t)
+		for k in guides.size():
+			var t: Dictionary = guides[k]
+			c.start = t.start
+			c._guide_for(t)
+			c._search()
+			if debug:
+				print("RaceCourse: eight %d from %d (%.2f): %d gates, %d crossings, %s" % [k, c.start.id, t.score, c.gates.size(), c.crossings(), str(c.problems().slice(0, 2))])
+			if k == debug_eight or (c.gates.size() >= c.gate_count - EIGHT_SHORT and c.crossings() > 0 and c.problems().is_empty()):
+				best = c.gates
+				best_start = c.start
+				c.eight = true
 				break
 		if not c.eight:
 			c._guide_for({})
+			c.gate_count = c._shape.gates
 	for st in (starts if not c.eight else []):
 		c.start = st
 		c._search()
@@ -591,40 +603,31 @@ func _grow(b: Plan) -> Array[Plan]:
 	var opts := []
 	var posts_so_far := b.gates.filter(func(g: Gate): return g.kind == "post").size()
 	for i in _near(from, leg_range.y):
-		var ng: bool = not _guide.is_empty() and _on_guide(_pool[i].centre, 0.0 if b.gates.is_empty() else b.along + leg_range.x * 0.5, b.along + leg_range.y * 1.5)[0] < EIGHT_OFF
 		if b.used.has(i):
-			_cnt("c1", ng)
 			continue
 		var last_leg := b.gates.size() == gate_count - 1
 		var cand := _pool[i]
 		var leg := cand.centre - from
 		var plan := Vector2(leg.x, leg.z).length()
 		if plan < leg_range.x or plan > leg_range.y:
-			_cnt("c2", ng)
 			continue
 		if not _grade_ok(leg.y, plan):   # (cheap first; the turn's share is checked once the gate's way is known)
-			_cnt("c3", ng)
 			continue
 		var ld := Vector3(leg.x, 0.0, leg.z) / plan
 		var n: Vector3 = ld if cand.kind == "post" else (cand.normal if cand.normal.dot(ld) >= 0.0 else -cand.normal)
 		if last_leg and cand.kind == "post":   # (the last post gate turned halfway to home)
 			n = (ld + _flat(home_in() - cand.centre).normalized()).normalized()
 		if rad_to_deg(n.angle_to(ld)) > ENTRY_DEG:
-			_cnt("c4", ng)
 			continue
 		var goal_in := home_in() + _flat(start.facing) * HOME_OUT   # (home from out in front: the side the rail faces)
 		var home_d := Vector2(cand.centre.x - goal_in.x, cand.centre.z - goal_in.z).length()
 		if home_d > HOME_MAX + (gate_count - 1 - b.gates.size()) * HOME_REACH * float(_shape.aim) / 25.0:
-			_cnt("c5", ng)
 			continue   # (home out of reach of the legs left)
 		if has_last and rad_to_deg(last_n.angle_to(ld)) > ENTRY_DEG:
-			_cnt("c6", ng)
 			continue
 		if not _grade_ok(leg.y, plan, turn_arc(last_n if has_last else start.facing, ld, n)):
-			_cnt("c7", ng)
 			continue
 		if not has_last and rad_to_deg(_flat(start.facing).angle_to(ld)) > START_DEG:
-			_cnt("c8", ng)
 			continue
 		var spaced := true
 		for g in b.gates:
@@ -632,7 +635,6 @@ func _grow(b: Plan) -> Array[Plan]:
 				spaced = false
 				break
 		if not spaced:
-			_cnt("c9", ng)
 			continue
 		var turn := 0.0
 		if b.gates.size() >= 1:
@@ -646,10 +648,8 @@ func _grow(b: Plan) -> Array[Plan]:
 			var gu := _on_guide(cand.centre, 0.0 if first else b.along, b.along + leg_range.y * 2.0)
 			var left_after := gate_count - 1 - b.gates.size()
 			if gu[0] > EIGHT_OFF or _guide_s[-1] - gu[1] > left_after * leg_range.y + EIGHT_END:
-				_cnt("c10", ng)
 				continue   # (off the guide, or its end out of reach)
 			if last_leg and _guide_s[-1] - gu[1] > EIGHT_END:
-				_cnt("c11", ng)
 				continue
 			off = gu[0]
 			on = gu[1]
@@ -657,7 +657,7 @@ func _grow(b: Plan) -> Array[Plan]:
 		var s := -absf(plan - aim) / (aim * 0.4) + minf(absf(leg.y), 8.0) * float(_heights.dy) + _rng.randf() * 0.8 + float(RARITY.get(cand.describe(), 0.0))
 		if cand.kind != "post":
 			s += float(_shape.wood)
-		s -= off / EIGHT_COST
+		s -= maxf(off - EIGHT_SLACK, 0.0) / EIGHT_COST
 		if _guide.is_empty() and b.gates.size() >= gate_count - HOME_PULL:   # (the last legs: toward home's run-in)
 			var pull := float(b.gates.size() - (gate_count - HOME_PULL) + 1) / HOME_PULL   # (stronger the nearer the end)
 			s += pull * (Vector2(from.x - goal_in.x, from.z - goal_in.z).length() - home_d) / 5.0
@@ -692,7 +692,6 @@ func _grow(b: Plan) -> Array[Plan]:
 			break
 		var i: int = o[1]
 		if not _ok(i):
-			_cnt("not ok", true)
 			continue
 		tried += 1
 		var marked := absf(o[3]) > TIGHT_DEG
@@ -729,11 +728,6 @@ func _grow(b: Plan) -> Array[Plan]:
 		p.along = o[4]
 		out.append(p)
 	return out
-
-
-func _cnt(k: String, on: bool) -> void:
-	if on:
-		why[k] = int(why.get(k, 0)) + 1
 
 
 ## Can a leg rising `dy` over `plan` m be flown: a climb at most CLIMB_MAX over the leg less CLIMB_RUN, a dive at most
@@ -846,46 +840,46 @@ func _fits(b: Plan, g: Gate, marked: bool) -> String:
 
 
 ## The figure-eights to try from the start, best first: [{x: the middle (in plan), u: its long axis toward the first
-## lobe, m: 1 or -1 (which way round), r: the lobes' radius, cross: deg}], the EIGHT_TRIES whose guide stays inside the
-## arena, leaves the second lobe within reach of home, and has a clear candidate gate near it most of its way.
+## lobe, m: 1 or -1 (which way round), r, r2: the first and second lobes' radii, cross: deg, score: the share of its
+## way with a clear candidate gate near}], the EIGHT_TRIES best whose guide stays inside the arena and comes home.
 func _eight_guides() -> Array:
 	var o := Vector2(start.position.x, start.position.z)
 	var f := Vector2(start.facing.x, start.facing.z).normalized()
 	var scored := []
-	for out in EIGHT_OUT:
+	for lead in EIGHT_LEAD:
 		for bearing in EIGHT_BEARING:
-			var x: Vector2 = o + f.rotated(deg_to_rad(bearing)) * out
-			var d0 := (x - o).normalized()
-			for skew in EIGHT_SKEW:
-				var e1 := d0.rotated(deg_to_rad(skew))
-				for m in [1.0, -1.0]:
-					for sh in EIGHT_SHAPES:
-						var cross: float = sh[2]
-						var t := {"x": x, "u": e1.rotated(-m * deg_to_rad(cross) * 0.5), "m": m, "r": sh[0], "r2": sh[1], "cross": cross}
-						_guide_for(t)
-						if _guide.is_empty():
+			for m in [1.0, -1.0]:
+				var e1 := f.rotated(deg_to_rad(-m * bearing))   # (the second lobe in front of the rail: straighter out, it swings round behind)
+				for sh in EIGHT_SHAPES:
+					var cross: float = sh[2]
+					var psi := deg_to_rad(cross) * 0.5
+					var x: Vector2 = o + e1 * (lead + float(sh[1]) / tan(psi))   # (the way out runs on along the 8's first line)
+					var t := {"x": x, "u": e1.rotated(-m * psi), "m": m, "r": sh[0], "r2": sh[1], "cross": cross}
+					_guide_for(t)
+					if _guide.is_empty():
+						continue
+					var near := 0
+					var n := 0
+					var inside := true
+					for i in _guide.size():
+						if _guide[i].length() > layout.boundary - 6.0:
+							inside = false
+							break
+						if i % 3 != 0 or _guide_s[i] < 8.0:
 							continue
-						var near := 0
-						var n := 0
-						var inside := true
-						for i in _guide.size():
-							if _guide[i].length() > layout.boundary - 6.0:
-								inside = false
+						n += 1
+						var q := Vector3(_guide[i].x, 0.0, _guide[i].y)
+						for j in _near(q, EIGHT_OFF):
+							if Vector2(_pool[j].centre.x - q.x, _pool[j].centre.z - q.z).length() < EIGHT_OFF * 0.7 and _ok(j):
+								near += 1
 								break
-							if i % 3 != 0 or _guide_s[i] < 8.0:
-								continue
-							n += 1
-							var q := Vector3(_guide[i].x, 0.0, _guide[i].y)
-							for j in _near(q, EIGHT_OFF):
-								if Vector2(_pool[j].centre.x - q.x, _pool[j].centre.z - q.z).length() < EIGHT_OFF * 0.7 and _ok(j):
-									near += 1
-									break
-						if inside and n > 0:
-							scored.append([float(near) / n + _rng.randf() * 0.05, t])
-	scored.sort_custom(func(p, q): return p[0] > q[0])
+					if inside and n > 0:
+						t.score = float(near) / n + _rng.randf() * 0.05
+						scored.append(t)
+	scored.sort_custom(func(p, q): return p.score > q.score)
 	if debug:
 		print("RaceCourse: eights from %d: %d of them fit" % [start.id, scored.size()])
-	return scored.slice(0, EIGHT_TRIES).map(func(p): return p[1])
+	return scored.slice(0, EIGHT_TRIES)
 
 
 ## Set the figure-eight guide `t` (_eight_guides' terms; {}: none): from the rail straight out to the middle `x`, along
@@ -930,8 +924,9 @@ func _guide_for(t: Dictionary) -> void:
 		var head: Vector2 = (u * -sin(a) + v * cos(a))   # (the way round: +a in the 8's frame)
 		var to := home - p
 		var off := rad_to_deg(head.angle_to(to))
-		if float(i) / steps2 > 0.1 and absf(off) < 50.0 and to.length() < HOME_MAX - 5.0 and to.length() > 10.0:
-			var cost := absf(off) + to.length() * 0.5
+		var turn_in := rad_to_deg(to.angle_to(-Vector2(start.facing.x, start.facing.z)))
+		if float(i) / steps2 > 0.1 and absf(off) < 50.0 and absf(turn_in) < HOME_TURN_IN - 30.0 and to.length() < HOME_MAX - 5.0 and to.length() > 10.0:
+			var cost := absf(off) + absf(turn_in) * 0.5 + to.length() * 0.5
 			if cost < best_cost:
 				best_cost = cost
 				best = pts.size()
@@ -947,9 +942,9 @@ func _guide_for(t: Dictionary) -> void:
 func _on_guide(p: Vector3, s0: float, s1: float) -> Array:
 	var q := Vector2(p.x, p.z)
 	var best := [INF, s0]
-	for i in _guide.size() - 1:
-		if _guide_s[i + 1] < s0 or _guide_s[i] > s1:
-			continue
+	for i in range(maxi(_guide_s.bsearch(s0) - 1, 0), _guide.size() - 1):
+		if _guide_s[i] > s1:
+			break
 		var c := Geometry2D.get_closest_point_to_segment(q, _guide[i], _guide[i + 1])
 		var at := _guide_s[i] + c.distance_to(_guide[i])
 		if at < s0 or at > s1:

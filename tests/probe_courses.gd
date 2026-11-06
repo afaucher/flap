@@ -2,7 +2,7 @@ extends TestCase
 ## Diagnostic: many race courses on one arena at a glance -- for each course seed, whether it's full (every gate, the
 ## way home kept), its kinds of gate, the spread of window heights, turns both ways, the start rail, the way home's
 ## length and what test_race's _course_rules would say. For tuning RaceCourse's search and scoring.
-##   .\probe.ps1 -Headless probe_courses [--seed 7] [--courses 1-12] [--style <RaceCourse.STYLES>]
+##   .\probe.ps1 -Headless probe_courses [--seed 7] [--courses 1-12] [--style <RaceCourse.STYLES>] [--no-eights]
 
 func _init() -> void:
 	timeout_sec = 900.0
@@ -13,6 +13,7 @@ func setup() -> void:
 	var arena := int(Boot.arg_value(args, "--seed")) if Boot.arg_value(args, "--seed") != "" else 7
 	var span := (Boot.arg_value(args, "--courses") if Boot.arg_value(args, "--courses") != "" else "1-12").split("-")
 	var st := Boot.arg_value(args, "--style")
+	RaceCourse.eights = not args.has("--no-eights")   # (the free search's courses, to compare)
 	var l := Pinewood.generate(arena)
 	var good := 0
 	for s in range(int(span[0]), int(span[-1]) + 1):

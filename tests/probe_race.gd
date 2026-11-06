@@ -4,6 +4,7 @@ extends TestCase
 ##                                    [--birds crow,owl,hawk,falcon,sparrow] [--seconds 150] [--no-trials]
 ##                                    [--plan-for <birds>] (the birds the course is planned for: RaceCourse.Envelope)
 ##                                    [--style <RaceCourse.STYLES>] [--guides] (the figure-eights tried) [--pool]
+##                                    [--eight <n>] (keep the figure-eight search's nth try, however far it got)
 ## Prints the course gate by gate (kind, height, leg, climb, the turn at the gate before, the tightest radius a smooth
 ## line needs) against each bird's turning circle (at cruise: AIPilot.cruise_turn_radius; at its tightest: 1.2 x its
 ## stall speed at its bank limit), then races every bird at every skill (RaceTrial, all at once: they don't collide)
@@ -30,18 +31,12 @@ func setup() -> void:
 
 	var layout := Pinewood.generate(arena_seed)
 	RaceCourse.debug = true
+	RaceCourse.debug_eight = int(Boot.arg_value(args, "--eight")) if Boot.arg_value(args, "--eight") != "" else -1   # (keep that figure-eight try)
 	var plan_for := (Boot.arg_value(args, "--plan-for") if Boot.arg_value(args, "--plan-for") != "" else ",".join(BirdProfile.IDS)).split(",")
 	var course := RaceCourse.generate(layout, course_seed, Array(plan_for), Boot.arg_value(args, "--style"))
 	print("RACE planned for %s: turning circle %.1f m, half span %.2f m, way in %.1f m, way out %.1f m, level run-in %.1f m" % [",".join(plan_for), course.envelope.turn_r, course.envelope.half_span, course.envelope.entry(), course.envelope.exit(), course.envelope.dive_run()])
 	print("RACE arena %d course %d: %d gates, %.0f m, built in %.0f ms; start perch %d at (%.1f, %.1f, %.1f)" % [arena_seed, course_seed,
 		course.gates.size(), course.length(), course.build_ms, course.start.id, course.start.position.x, course.start.position.y, course.start.position.z])
-	if Boot.arg_value(args, "--eight-from") != "":   # (one figure-eight try, as far as it gets: --eight-from <perch>,<n>)
-		var ef := Boot.arg_value(args, "--eight-from").split(",")
-		course.start = layout.perches[int(ef[0])]
-		course._guide_for(course._eight_guides()[int(ef[1])])
-		course.why = {}
-		course._search()
-		print("RACE eight try: %d gates, %s" % [course.gates.size(), course.why])
 	var probs := course.problems()
 	print("RACE candidates: %d (%d checked); options turned away: %s" % [course._pool.size(), course._valid.size(), course.why])
 	print("RACE rules: ", "all kept" if probs.is_empty() else "; ".join(probs))

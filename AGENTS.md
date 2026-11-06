@@ -67,7 +67,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   next gate seen from the one before (and the one after it, unless the turn is tight: `marked`), the way home straight
   from the last gate to a run-in in front of the rail (`home_problem`, `home_in`); styles (`STYLES`, `--course-style`:
   technical | long, level | high-low): legs, turns, gate count, heights, the birds it's planned for, and long legs
-  routed through the wood by the AI's planner between clear lanes (`route_line`); `problems()` lists
+  routed through the wood by the AI's planner between clear lanes (`route_line`); technical courses are figure-eights
+  where one fits (`eight`, `crossings()`: the search follows a guide, two lobes joined across the way out, `_guide_for`,
+  tried round the two nearest rails, `_eight_guides`; 14-18 gates; `RaceCourse.eights` off, or `--no-eights` in
+  `probe_courses`, for the free search's; `probe_race --guides` draws the tries); `problems()` lists
   any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
   the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken (landing there
   sooner resets the run); misses;

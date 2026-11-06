@@ -7,6 +7,9 @@ extends TestCase
 ## front of the rail (hand-built: a tree on the line, a last gate facing away, home from behind all break it). The generated course keeps its rules on two seeds, every bird can fly it
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
 ## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
+## Technical courses are figure-eights: a course crossing itself is counted (by hand: a loop doesn't, a bow-tie does,
+## either way round); the figure-eight guide crosses itself and comes home from in front, mirrored for either lobe
+## first; the menu's technical courses follow one and cross themselves, and with eights off they don't.
 
 const SHARDS := 11
 const DT := 1.0 / 60.0
@@ -26,6 +29,8 @@ func setup() -> void:
 		_home_by_hand()
 		_dubins()
 		_course_rules(28)
+		_crossings_by_hand()
+		_eight_guide_by_hand()
 	if in_shard(1):
 		await _course_in_the_wood(23)
 	if in_shard(2):
@@ -43,6 +48,12 @@ func setup() -> void:
 	for k in RaceCourse.STYLES.size():   # (shards 7-10: the menu's course of each style)
 		if in_shard(7 + k):
 			_style_course(RaceCourse.STYLES[k])
+	if in_shard(7):   # (eights off: the free search's twelve gates)
+		RaceCourse.eights = false
+		var c := RaceCourse.generate(Pinewood.generate(ARENA), Menu.COURSES["technical-level"], BirdProfile.IDS, "technical-level")
+		RaceCourse.eights = true
+		check(not c.eight, "eights off: no figure-eight")
+		eq(c.gates.size(), 12, "eights off: the style's twelve gates")
 	finish()
 
 
@@ -221,7 +232,11 @@ func _style_course(style: String) -> void:
 		legs += Vector2(c.gates[k].centre.x - a.x, c.gates[k].centre.z - a.z).length() / c.gates.size()
 		routed += int(c.is_routed(c.gates, k))
 	if style.begins_with("technical"):
-		eq(c.gates.size(), 12, what + ": twelve gates")
+		check(c.eight, what + ": a figure-eight")
+		check(c.crossings() >= 1, what + ": it crosses itself (%d)" % c.crossings())
+		check(c.gates.size() >= RaceCourse.EIGHT_GATES - RaceCourse.EIGHT_SHORT and c.gates.size() <= RaceCourse.EIGHT_GATES,
+			what + ": %d gates (%d-%d)" % [c.gates.size(), RaceCourse.EIGHT_GATES - RaceCourse.EIGHT_SHORT, RaceCourse.EIGHT_GATES])
+		_eight_guides_on(c)
 		check(legs <= 21.0, what + ": short legs (%.1f m on average)" % legs)
 		check(c.envelope.turn_r < AIPilot.cruise_turn_radius(BirdProfile.by_id("hawk")) * 0.7, what + ": turns planned for the agile birds (%.1f m)" % c.envelope.turn_r)
 		eq(routed, 0, what + ": no leg routed")
@@ -230,6 +245,7 @@ func _style_course(style: String) -> void:
 		check(legs >= 30.0, what + ": long legs (%.1f m on average)" % legs)
 		check(routed >= 1, what + ": legs routed through the wood (%d)" % routed)
 		near(c.envelope.turn_r, AIPilot.cruise_turn_radius(BirdProfile.by_id("hawk")), 1e-4, what + ": planned for every bird")
+		check(not c.eight, what + ": not a figure-eight")
 	if style.ends_with("high-low"):
 		check(hi - lo >= 8.0, what + ": windows from %.1f to %.1f m up" % [lo, hi])
 	else:
@@ -258,6 +274,93 @@ func _home_by_hand() -> void:
 	check((problem.call(at, home.normalized(), treed) as String).contains("wood on the line home"), "a tree on the line home breaks them")
 	check((problem.call(at, -home.normalized(), l) as String).contains("out of the last gate"), "the last gate facing away from home breaks them")
 	check((problem.call(Vector3(2, 5, 30), Vector3.FORWARD, l) as String).contains("onto the rail's run-in"), "home from behind the rail breaks them")
+
+
+## A course crossing itself, by hand (the rail facing -z): a loop out and back doesn't (the way out and the way home
+## meet only at the rail); a bow-tie does, once; either way round.
+func _crossings_by_hand() -> void:
+	var st := Perch.new()
+	st.position = Vector3(0, 5, 0)
+	st.facing = Vector3.FORWARD
+	var l := ArenaLayout.new()
+	for side: float in [1.0, -1.0]:
+		var course := func(pts: Array) -> RaceCourse:
+			var gs: Array[RaceCourse.Gate] = []
+			for q: Vector2 in pts:
+				gs.append(_gate("post", Vector3(q.x * side, 5, q.y), Vector3.FORWARD))
+			return RaceCourse.from_gates(l, st, gs)
+		var loop: RaceCourse = course.call([Vector2(0, -20), Vector2(15, -35), Vector2(0, -50), Vector2(-15, -35)])
+		eq(loop.crossings(), 0, "a loop (%+.0f) doesn't cross itself" % side)
+		var bow: RaceCourse = course.call([Vector2(10, -20), Vector2(10, -40), Vector2(-10, -20), Vector2(-10, -40)])
+		eq(bow.crossings(), 1, "a bow-tie (%+.0f) crosses itself once" % side)
+
+
+## The figure-eight guide, by hand in an empty wood (the rail facing -z): out along the 8's first line, round the
+## first lobe, back across the way out, round the second the other way and home from in front of the rail; with the
+## other lobe first, its mirror image, turning the other way.
+func _eight_guide_by_hand() -> void:
+	var st := Perch.new()
+	st.position = Vector3(0, 5, 0)
+	st.facing = Vector3.FORWARD
+	var c := RaceCourse.from_gates(ArenaLayout.new(), st, [] as Array[RaceCourse.Gate])
+	c.envelope = RaceCourse.Envelope.of(["crow", "owl", "sparrow"])
+	var guides := {}
+	var turns := {}
+	for m: float in [1.0, -1.0]:
+		var psi := deg_to_rad(45.0)
+		var e1 := Vector2(0, -1).rotated(deg_to_rad(-m * 45.0))
+		c._guide_for({"x": e1 * (8.0 + 22.0 / tan(psi)), "u": e1.rotated(-m * psi), "m": m, "r": 22.0, "r2": 22.0, "cross": 90.0})
+		guides[m] = c._guide.duplicate()
+		_guide_ok(c, "by hand (m %+.0f)" % m)
+		var first := 0.0   # (the turning on the way round the first lobe: the first half of the guide)
+		for i in range(1, c._guide.size() / 2 - 1):
+			first += (c._guide[i] - c._guide[i - 1]).angle_to(c._guide[i + 1] - c._guide[i])
+		turns[m] = first
+	check(signf(turns[1.0]) == -signf(turns[-1.0]) and absf(turns[1.0]) > PI / 2.0, "either lobe first: the first lobe turns the other way (%.0f, %.0f deg)" % [rad_to_deg(turns[1.0]), rad_to_deg(turns[-1.0])])
+	var a: PackedVector2Array = guides[1.0]
+	var b: PackedVector2Array = guides[-1.0]
+	eq(a.size(), b.size(), "either lobe first: the guides the same length")
+	var worst := 0.0
+	for i in mini(a.size(), b.size()):
+		worst = maxf(worst, a[i].distance_to(Vector2(-b[i].x, b[i].y)))
+	near(worst, 0.0, 0.01, "either lobe first: mirror images")
+
+
+## Every figure-eight guide course `c`'s search tries from its start keeps to the arena, crosses itself and comes
+## home from in front of the rail.
+func _eight_guides_on(c: RaceCourse) -> void:
+	var guides := c._eight_guides()
+	check(not guides.is_empty(), "course %d: figure-eights fit round its start" % c.seed)
+	for t: Dictionary in guides:
+		c._guide_for(t)
+		_guide_ok(c, "course %d (%s)" % [c.seed, str(t.x)])
+		for q in c._guide:
+			if q.length() > c.layout.boundary:
+				check(false, "course %d: its guide keeps inside the arena" % c.seed)
+				break
+	c._guide_for({})
+
+
+## The guide `c` has set: leaves the rail within START_DEG of the way it faces, crosses itself, and ends within reach
+## of home, headed for it, from where home turns onto the rail's run-in within HOME_TURN_IN.
+func _guide_ok(c: RaceCourse, what: String) -> void:
+	var g := c._guide
+	if not check(g.size() > 10, what + ": a guide"):
+		return
+	var f := Vector2(c.start.facing.x, c.start.facing.z)
+	check(rad_to_deg(absf(f.angle_to(g[2] - g[0]))) <= RaceCourse.START_DEG + 0.5, what + ": out the way the rail faces (%.1f deg off)" % rad_to_deg(absf(f.angle_to(g[2] - g[0]))))
+	var crosses := 0
+	for i in range(0, g.size() - 1, 2):
+		for j in range(i + 4, g.size() - 1, 2):
+			if Geometry2D.segment_intersects_segment(g[i], g[mini(i + 2, g.size() - 1)], g[j], g[mini(j + 2, g.size() - 1)]) != null:
+				crosses += 1
+	check(crosses >= 1, what + ": the guide crosses itself (%d)" % crosses)
+	var home := Vector2(c.home_in().x, c.home_in().z)
+	var to := home - g[-1]
+	var rail := Vector2(c.start.position.x, c.start.position.z)
+	check(g[-1].distance_to(rail) <= RaceCourse.HOME_MAX, what + ": ends %.0f m from the rail" % g[-1].distance_to(rail))
+	check(rad_to_deg(absf((g[-1] - g[-2]).angle_to(to))) <= 55.0, what + ": ends headed home")
+	check(rad_to_deg(absf(to.angle_to(-f))) <= RaceCourse.HOME_TURN_IN, what + ": home from in front: %.0f deg onto the run-in" % rad_to_deg(absf(to.angle_to(-f))))
 
 
 ## The generated course: whole, every rule kept, varied.
