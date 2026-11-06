@@ -83,7 +83,7 @@ func setup() -> void:
 		var head_worst := 0.0
 		var step := TAU * hr * maxf(rig.body.skull.x, rig.body.skull.z) / BirdRig.HEAD_AROUND * 1.5
 		for j in BirdRig.TRUNK_AROUND:
-			var target: Vector3 = rig._head.transform * rig._head_point(rig._neck_entry, -TAU * j / BirdRig.TRUNK_AROUND)
+			var target: Vector3 = rig._head.transform * rig._head_point(rig._ring_th(-TAU * j / BirdRig.TRUNK_AROUND), -TAU * j / BirdRig.TRUNK_AROUND)
 			var best_n := INF
 			var near_n := Vector3.ZERO
 			for q in nv.slice(0, BirdRig.TRUNK_AROUND + 1):   # (its last loop, the head end: the loft's first row)

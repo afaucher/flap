@@ -4,6 +4,8 @@ extends TestCase
 ## - flush: the neck's last step into the head lies in the head's surface there (its drawn normal), and its first
 ##   step out of the trunk in the trunk's: no crease at either ring;
 ## - one light: on both rings the neck's drawn normals are the head's and the trunk's own, so the shading runs on;
+## - no curled throat: perched, the front's outline runs down from the chin to the breast without dipping in (else the
+##   head looks thrust forward off the neck);
 ## - no notch: with the neck out (in flight), the back's outline in profile from the crown to where the trunk takes
 ##   over dips under the line over it by little (a bird's nape feathers fill the neck's waist);
 ## - no colour cut: the head's colours (and feather-texture strength) carry on down the neck, handed over to the
@@ -16,6 +18,7 @@ const FLUSH_DEG := 10.0      ## the neck's end steps off their ring's surface by
 const SAME_NORMAL_DEG := 1.0
 const NOTCH := 0.9           ## the back's outline dips at most this many head radii under its hull (a level head over the
                              ## back dips some: the crown stands above the shoulders)
+const THROAT := 0.23         ## perched, the front's outline dips in under the chin at most this many head radii
 const CUT := 0.5             ## a quarter of the way down from the head ring, at most this far over to the trunk's colours
 
 
@@ -45,7 +48,7 @@ func setup() -> void:
 			ring_a = minf(ring_a, hc[_nearest(hv, q)].a)
 		var trunk_a := (ta[Mesh.ARRAY_COLOR] as PackedColorArray)[_nearest(tv, rig._trunk_at(rig.body.collar_z, PI * 0.5))].a
 		check(absf(ring_a - trunk_a) < 0.05, "%s feather texture as strong by the head ring as on the trunk (%.2f, %.2f)" % [p.id, ring_a, trunk_a])
-		var worst := {"head_flush": 0.0, "trunk_flush": 0.0, "head_normal": 0.0, "trunk_normal": 0.0, "notch": 0.0, "cut": 0.0}
+		var worst := {"head_flush": 0.0, "trunk_flush": 0.0, "head_normal": 0.0, "trunk_normal": 0.0, "notch": 0.0, "throat": 0.0, "cut": 0.0}
 		for ext in EXTS:
 			for look in LOOKS:
 				rig.neck_ext = ext
@@ -75,15 +78,18 @@ func setup() -> void:
 					worst.trunk_normal = maxf(worst.trunk_normal, rad_to_deg(nn[last + j].angle_to(n_trunk)))
 				if look == LOOKS[0] and ext >= 0.5:
 					worst.notch = maxf(worst.notch, _notch(rig, ha, na, ta, tsc) / hr)
+				if look == LOOKS[0] and ext == 0.0:
+					worst.throat = _throat(rig, ha, na, ta, tsc) / hr
 		worst.cut = _cut(p)
 		for key in ["head_flush", "trunk_flush"]:
 			check(worst[key] < FLUSH_DEG, "%s neck flush with the %s (%.1f deg off its surface)" % [p.id, key.split("_")[0], worst[key]])
 		for key in ["head_normal", "trunk_normal"]:
 			check(worst[key] < SAME_NORMAL_DEG, "%s neck lit as the %s on their ring (normals %.2f deg apart)" % [p.id, key.split("_")[0], worst[key]])
 		check(worst.notch < NOTCH, "%s no notch at the nape (the back's outline dips %.2f head radii)" % [p.id, worst.notch])
+		check(worst.throat < THROAT, "%s perched, the throat runs down from the chin (the front's outline dips %.2f head radii)" % [p.id, worst.throat])
 		check(worst.cut < CUT, "%s the head's colours carry on down the neck (a quarter of the way down, %.2f of the way over to the trunk's)" % [p.id, worst.cut])
-		print("  %s: flush head %.1f trunk %.1f deg, normals %.2f / %.2f deg, notch %.2f hr, cut %.2f" % [p.id,
-			worst.head_flush, worst.trunk_flush, worst.head_normal, worst.trunk_normal, worst.notch, worst.cut])
+		print("  %s: flush head %.1f trunk %.1f deg, normals %.2f / %.2f deg, notch %.2f hr, throat %.2f hr, cut %.2f" % [p.id,
+			worst.head_flush, worst.trunk_flush, worst.head_normal, worst.trunk_normal, worst.notch, worst.throat, worst.cut])
 		rig.queue_free()
 	finish()
 
@@ -102,10 +108,55 @@ static func _nearest(pts: PackedVector3Array, q: Vector3) -> int:
 ## How deep the back's outline in profile (the rig's side view: z along, y up) dips under its upper hull, from the
 ## head's crown back to the top of the trunk's front ring.
 func _notch(rig: BirdRig, ha: Array, na: Array, ta: Array, tsc: float) -> float:
-	# (the surfaces' triangles sampled finely: their vertices alone are too sparse along the neck)
+	var side := func(v: Vector3) -> Vector2: return Vector2(v.z, v.y)
+	var crown: Vector2 = _extreme(ha[Mesh.ARRAY_VERTEX], rig._head.transform, side)
+	var back: Vector2 = _extreme((na[Mesh.ARRAY_VERTEX] as PackedVector3Array).slice((BirdRig.NECK_ROWS - 1) * (BirdRig.TRUNK_AROUND + 1)), Transform3D.IDENTITY, side)
+	return _dip(_outline(rig, ha, na, ta, tsc, side), crown.x, back.x)
+
+
+## How deep the front's outline in profile (y along, forward out) dips in, from the face's front-most point down to
+## where the neck leaves the trunk: the head's surface above the neck's ring (its cap under the ring is hidden in the
+## neck), the neck, the trunk. A throat curled in under the head reads as the head thrust forward off the neck.
+func _throat(rig: BirdRig, ha: Array, na: Array, ta: Array, tsc: float) -> float:
+	var front := func(v: Vector3) -> Vector2: return Vector2(v.y, -v.z)
+	var shown := _shown_head(rig, ha)
+	var face: Vector2 = _extreme(shown[Mesh.ARRAY_VERTEX], rig._head.transform, front)
+	var nv := na[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var breast: Vector2 = _extreme(nv.slice((BirdRig.NECK_ROWS - 1) * (BirdRig.TRUNK_AROUND + 1)), Transform3D.IDENTITY, front)
+	return _dip(_outline(rig, shown, na, ta, tsc, front), breast.x, face.x)
+
+
+## The head mesh's triangles that lie on or above the neck's ring (round its axis: the rest is the cap inside the neck).
+static func _shown_head(rig: BirdRig, ha: Array) -> Array:
+	var vv := ha[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var ii := ha[Mesh.ARRAY_INDEX] as PackedInt32Array
+	var ax := BirdRig._neck_axis()
+	var x2 := ax.cross(Vector3.RIGHT)
+	var up := PackedByteArray()
+	up.resize(vv.size())
+	for i in vv.size():
+		var d := Vector3(vv[i].x / rig.body.skull.x, vv[i].y / rig.body.skull.y, vv[i].z / rig.body.skull.z).normalized()
+		var th := acos(clampf(d.dot(ax), -1.0, 1.0))
+		up[i] = 1 if th >= rig._ring_th(atan2(d.dot(x2), d.x)) - 1e-3 else 0
+	var keep := PackedInt32Array()
+	for t in range(0, ii.size(), 3):
+		if up[ii[t]] == 1 and up[ii[t + 1]] == 1 and up[ii[t + 2]] == 1:
+			keep.append_array([ii[t], ii[t + 1], ii[t + 2]])
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = vv
+	out[Mesh.ARRAY_INDEX] = keep
+	return out
+
+
+## The head's (unless `ha` is empty), neck's and trunk's surfaces mapped to a profile by `map` (point -> (along, out)): their triangles sampled
+## finely, their vertices alone too sparse along the neck.
+func _outline(rig: BirdRig, ha: Array, na: Array, ta: Array, tsc: float, map: Callable) -> Array[Vector2]:
 	var pts: Array[Vector2] = []
 	for m in [[ha, rig._head.transform], [na, Transform3D.IDENTITY], [ta, Transform3D.IDENTITY.scaled(Vector3.ONE * tsc)]]:
 		var arr: Array = m[0]
+		if arr.is_empty():
+			continue
 		var xf: Transform3D = m[1]
 		var vv := arr[Mesh.ARRAY_VERTEX] as PackedVector3Array
 		var ii := arr[Mesh.ARRAY_INDEX] as PackedInt32Array
@@ -115,26 +166,30 @@ func _notch(rig: BirdRig, ha: Array, na: Array, ta: Array, tsc: float) -> float:
 			var c := xf * vv[ii[t + 2]]
 			for x in 6:
 				for y in 6 - x:
-					pts.append(_yz(a + (b - a) * (x / 5.0) + (c - a) * (y / 5.0)))
-	var hv := ha[Mesh.ARRAY_VERTEX] as PackedVector3Array
-	var nv := na[Mesh.ARRAY_VERTEX] as PackedVector3Array
-	var crown := Vector2(0.0, -INF)
-	for v in hv:
-		var q := _yz(rig._head.transform * v)
-		if q.y > crown.y:
-			crown = q
-	var back := Vector2(0.0, -INF)   # (the trunk's front ring's top: where the neck leaves the back)
-	for v in nv.slice((BirdRig.NECK_ROWS - 1) * (BirdRig.TRUNK_AROUND + 1)):
-		var q := _yz(v)
-		if q.y > back.y:
-			back = q
-	# The outline's top in bins of z between the two, and the hull over it (the highest chord through the bins).
+					pts.append(map.call(a + (b - a) * (x / 5.0) + (c - a) * (y / 5.0)))
+	return pts
+
+
+## The point of `vv` (through `xf`) furthest out in the profile `map` makes (or, `vertex`, that vertex itself).
+static func _extreme(vv: PackedVector3Array, xf: Transform3D, map: Callable, vertex := false) -> Variant:
+	var best := Vector2(0.0, -INF)
+	var at := Vector3.ZERO
+	for v in vv:
+		var q: Vector2 = map.call(xf * v)
+		if q.y > best.y:
+			best = q
+			at = v
+	return at if vertex else best
+
+
+## How deep an outline (`pts`: (along, out)) dips under its outer hull between `x0` and `x1` along.
+static func _dip(pts: Array[Vector2], x0: float, x1: float) -> float:
 	const BINS := 40
 	var top := PackedFloat32Array()
 	top.resize(BINS + 1)
 	top.fill(-INF)
-	var z0 := minf(crown.x, back.x)
-	var z1 := maxf(crown.x, back.x)
+	var z0 := minf(x0, x1)
+	var z1 := maxf(x0, x1)
 	for q in pts:
 		if q.x < z0 or q.x > z1:
 			continue
@@ -157,10 +212,6 @@ func _notch(rig: BirdRig, ha: Array, na: Array, ta: Array, tsc: float) -> float:
 				continue
 			deep = maxf(deep, lerpf(a.y, c.y, (b - a.x) / (c.x - a.x)) - top[b])
 	return deep
-
-
-static func _yz(v: Vector3) -> Vector2:
-	return Vector2(v.z, v.y)
 
 
 ## How far the colour has gone over to the trunk's a quarter of the way down the neck from the head ring (along each
@@ -195,7 +246,7 @@ func _cut(p: BirdProfile) -> float:
 
 
 class TwoTone extends BirdRig:
-	func _head_color_d(_d: Vector3) -> Color:
+	func _head_color_d(_d: Vector3, _marks := 1.0) -> Color:
 		return Color(0.9, 0.2, 0.1)
 
 	func _body_color_at(_u: float, _v: float, _side: float) -> Color:

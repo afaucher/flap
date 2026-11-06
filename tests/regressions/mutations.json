@@ -5239,8 +5239,8 @@
    },
    {
     "file": "scripts/bird/bird_rig.gd",
-    "find": "\t\t\t\tc = _head_color_d((_head_dir(_neck_entry, -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized())",
-    "replace": "\t\t\t\tc = _head_color_d(_head_dir(_neck_entry, -TAU * q / HEAD_AROUND))"
+    "find": "\t\t\t\tc = _head_color_d((_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized(), smoothstep(0.7, 1.0, u))\n",
+    "replace": "\t\t\t\tc = _head_color_d(_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND))\n"
    }
   ]
  },
@@ -5297,6 +5297,20 @@
     "file": "scripts/bird/neck_place.gdshaderinc",
     "find": "(texelFetch(neck_tab, ivec2(m, 20 + i), 0) - c_body) * smoothstep(0.2, 0.9, u);",
     "replace": "(texelFetch(neck_tab, ivec2(m, 1), 0) - c_body) * smoothstep(0.75, 1.0, u);"
+   }
+  ]
+ },
+ {
+  "id": "neck-throat-curled",
+  "bug": "Perched, the throat curled in under the chin and the head looked thrust forward off the neck: the neck's ring, tipped back to fill the nape, crossed the throat at the very bottom of the head, where its surface runs forward (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_THROAT := 1.25",
+    "replace": "const NECK_THROAT := 0.0"
    }
   ]
  }

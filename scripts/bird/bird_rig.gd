@@ -1308,17 +1308,27 @@ var _neck_entry := 1.1       ## rad: the neck meets the head this far round from
                              ## as the collar it comes from (an owl's broad chest meets its big head near the head's widest)
 
 
+## How far round from the neck axis the neck's ring meets the head at `ph` (90 deg the nape, -90 the throat): at
+## _neck_entry on the nape; under the chin, NECK_THROAT up from straight down toward the bill (where the axis, tipped
+## back, puts it lower). Tipped back alone, the ring would cross the throat at the very bottom of the head, where its
+## surface runs forward: the throat curled in under it and the head looked thrust forward off the neck.
+func _ring_th(ph: float) -> float:
+	var throat := maxf(NECK_TILT + NECK_THROAT, _neck_entry)
+	return lerpf(_neck_entry, throat, 0.5 * (1.0 - sin(ph)))
+
+
 ## The head's underside axis (head space), where the neck comes in: below and behind the centre, tipped back by
 ## NECK_TILT so the neck's ring rides high on the nape (at the back of the head's widest, where the skull runs on along
 ## the neck: no notch behind the head) and low under the chin.
 const NECK_TILT := 0.85
+const NECK_THROAT := 1.25   ## rad
 static func _neck_axis() -> Vector3:
 	return Vector3(0.0, -cos(NECK_TILT), sin(NECK_TILT))
 
 
 ## A point of the head's surface (head space), at polar angle `th` from the neck axis and `ph` round it: on
 ## the skull's ellipsoid, with the owl's facial disc raised on the front. The head is lofted in rings round
-## the neck axis, so the neck's edge loop (th = _neck_entry) is one of its own rows.
+## the neck axis, so the neck's edge loop (th = _ring_th(ph)) is one of its own rows.
 func _head_point(th: float, ph: float) -> Vector3:
 	var hr := body.head_r
 	var d := _head_dir(th, ph)
@@ -1341,11 +1351,11 @@ func _head_color(th: float, ph: float) -> Color:
 	return _head_color_d(_head_dir(th, ph))
 
 
-## ... and in direction `d` from the head's centre (unit, before the skull's scale).
-func _head_color_d(d: Vector3) -> Color:
+## ... and in direction `d` from the head's centre (unit, before the skull's scale), the face's marks scaled by `marks`.
+func _head_color_d(d: Vector3, marks := 1.0) -> Color:
 	if Plumage.level == 0:
 		return _body_tint
-	var c := Plumage.head(profile.id, d, Face.eye_dir(profile.id, 1.0))
+	var c := Plumage.head(profile.id, d, Face.eye_dir(profile.id, 1.0), marks)
 	var h: Dictionary = Plumage.spec(profile.id).head
 	if h.has("disc") and Face.spec(profile.id).has("disc") and d.z < 0.0:
 		var hr := body.head_r
@@ -1360,22 +1370,25 @@ func _head_color_d(d: Vector3) -> Color:
 	return c
 
 
-## The head's mesh (head space): rings round the neck axis from the underside pole to the crown.
+## The head's mesh (head space): rings round the neck axis from the underside pole to the crown, one of them the neck's
+## ring (_ring_th), those below it and above it graded to it.
 func _build_head_mesh() -> ArrayMesh:
-	var ths: Array = [0.0, _neck_entry * 0.35, _neck_entry * 0.7, _neck_entry]
+	var ths: Array = [0.0, 0.35, 0.7, 1.0]   # (shares of the ring's angle up to it, then of the way on to the crown)
 	for k in range(1, 29):
-		ths.append(lerpf(_neck_entry, PI, k / 28.0))
+		ths.append(1.0 + k / 28.0)
 	var rows: Array = []
 	var cols: Array = []
 	var uvs: Array = []
 	var uv2s: Array = []
-	for th in ths:
+	for k in ths:
 		var row: Array = []
 		var crow: Array = []
 		var urow: Array = []
 		var u2row: Array = []
 		for j in HEAD_AROUND:
 			var ph := -TAU * j / HEAD_AROUND   # (wound outward)
+			var rt := _ring_th(ph)
+			var th: float = rt * k if k <= 1.0 else lerpf(rt, PI, k - 1.0)
 			row.append(_head_point(th, ph))
 			var c := _head_color(th, ph)
 			var fc := _head_uv(th, ph)
@@ -1445,12 +1458,18 @@ static func _cdiv(a: Vector2, b: Vector2) -> Vector2:
 
 ## The head chart's pole in the projected disk (the neck's ring the unit circle round 0).
 func _head_pole() -> Vector2:
-	return _stereo(BILL_AXIS.normalized()) / _stereo(_head_dir(_neck_entry, 0.0)).length() * HEAD_POLE
+	return _ring_disk(_stereo(BILL_AXIS.normalized())) * HEAD_POLE
+
+
+## A projected point scaled so the neck's ring is the unit circle: the projection puts the direction at `th` from the
+## neck's pole at radius cot(th / 2), at angle `ph` round it, so each angle is scaled by the ring's own radius there.
+func _ring_disk(z: Vector2) -> Vector2:
+	return z * tan(_ring_th(z.angle()) * 0.5)
 
 
 ## Direction `d` in the head chart's disk: the neck's ring is the unit circle, the chart's pole the centre.
 func _head_disk(d: Vector3) -> Vector2:
-	var z := _stereo(d) / _stereo(_head_dir(_neck_entry, 0.0)).length()
+	var z := _ring_disk(_stereo(d))
 	var p := _head_pole()
 	return _cdiv(z - p, Vector2(1.0, 0.0) - _cmul(Vector2(p.x, -p.y), z))
 
@@ -1474,20 +1493,20 @@ func _head_uv(th: float, ph: float) -> Array:
 func _init_feather_coords() -> void:
 	_tile = float(Plumage.body_texture(profile.id).tile) * _L
 	var hr := body.head_r * (body.skull.x + body.skull.y + body.skull.z) / 3.0
-	_head_ku = sin(_neck_entry) * hr / (HEAD_FEATHER * 1.2 * _tile)   # (the ring's girth; a little larger feathers there)
-	_head_kv = (PI - _neck_entry) * 0.8 * hr / (HEAD_FEATHER * _tile)
-	_head_ref = _stereo(_head_dir(_neck_entry, PI * 0.5)).angle()   # (the nape: ph = 90 deg is up the back)
+	_head_ku = sin(_ring_th(0.0)) * hr / (HEAD_FEATHER * 1.2 * _tile)   # (the ring's girth; a little larger feathers there)
+	_head_kv = (PI - _ring_th(0.0)) * 0.8 * hr / (HEAD_FEATHER * _tile)
+	_head_ref = _stereo(_head_dir(_ring_th(PI * 0.5), PI * 0.5)).angle()   # (the nape: ph = 90 deg is up the back)
 	_head_sense = 1.0
-	_head_sense = -signf((_head_uv(_neck_entry, 0.0)[0] as Vector2).x)   # (u < 0 on the +x side, as the trunk's)
+	_head_sense = -signf((_head_uv(_ring_th(0.0), 0.0)[0] as Vector2).x)   # (u < 0 on the +x side, as the trunk's)
 	_hb_uv.clear()
 	_hb_uv2.clear()
 	_hb_col.clear()
 	for q in HEAD_AROUND:
 		var ph := -TAU * q / HEAD_AROUND
-		var fc := _head_uv(_neck_entry, ph)
+		var fc := _head_uv(_ring_th(ph), ph)
 		_hb_uv.append(fc[0])
 		_hb_uv2.append(fc[1])
-		var c := _head_color(_neck_entry, ph)
+		var c := _head_color(_ring_th(ph), ph)
 		c.a = fc[2]
 		_hb_col.append(c)
 	# The trunk's front ring: each point's v is its head partner's (all 0, on the ring) plus the neck between, in
@@ -1500,7 +1519,7 @@ func _init_feather_coords() -> void:
 	for j in TRUNK_AROUND:
 		var q := BodyShape.section(TAU * j / TRUNK_AROUND, ring[1], ring[2], ring[3])
 		la.append(ca + Vector3(q.x, q.y, 0.0))
-		var p := _head_pos + _head_point(_neck_entry, -TAU * j / TRUNK_AROUND)
+		var p := _head_pos + _head_point(_ring_th(-TAU * j / TRUNK_AROUND), -TAU * j / TRUNK_AROUND)
 		lb.append(p)
 		cb += p / TRUNK_AROUND
 	var m := _align_loops(la, ca, lb, cb)
@@ -1537,10 +1556,11 @@ func _neck_ends() -> void:
 	const E := 1e-3
 	for q in HEAD_AROUND:
 		var ph := -TAU * q / HEAD_AROUND
-		var p := _head_point(_neck_entry, ph)
+		var th := _ring_th(ph)
+		var p := _head_point(th, ph)
 		_hp60.append(p)
-		var dth := _head_point(_neck_entry + E, ph) - _head_point(_neck_entry - E, ph)
-		var dph := _head_point(_neck_entry, ph + E) - _head_point(_neck_entry, ph - E)
+		var dth := _head_point(th + E, ph) - _head_point(th - E, ph)
+		var dph := _head_point(th, ph + E) - _head_point(th, ph - E)
 		var n := dth.cross(dph).normalized()
 		_hn60.append(n if n.dot(p) > 0.0 else -n)
 		_tb60.append(dth.normalized())
@@ -1567,7 +1587,8 @@ func _neck_ends() -> void:
 			var c: Color = _hb_col[q]
 			if i > 0:
 				var a := c.a
-				c = _head_color_d((_head_dir(_neck_entry, -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized())
+				# (the face's marks -- the falcon's malar stripe -- end on the cheek: faded out over the neck's first stretch)
+				c = _head_color_d((_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized(), smoothstep(0.7, 1.0, u))
 				c.a = a
 			row.append(c)
 		_hcol_ext.append(row)
@@ -2592,7 +2613,7 @@ func _neck_curve(cb := Vector3.INF) -> Array:
 	if cb == Vector3.INF:
 		cb = Vector3.ZERO
 		for q in TRUNK_AROUND:
-			cb += _head.transform * _head_point(_neck_entry, -TAU * q / TRUNK_AROUND) / TRUNK_AROUND
+			cb += _head.transform * _head_point(_ring_th(-TAU * q / TRUNK_AROUND), -TAU * q / TRUNK_AROUND) / TRUNK_AROUND
 	var d := ca.distance_to(cb)
 	var tb := (_head.transform.basis * -_neck_axis()).normalized()
 	return [ca, ca + Vector3.FORWARD * d * NECK_OUT, cb - tb * d * NECK_IN, cb]
