@@ -22,6 +22,7 @@ func setup() -> void:
 	for o in a.outposts:
 		outposts.append(o.tree_id)
 	print("trees (not oaks) %d  %d" % [rest.size(), hash(str(rest))])
+	print("their places (kind, age, place, height, radius) %d" % hash(str(rest.map(func(r): return r.slice(0, 6)))))
 	print("openings %d" % hash(str(a.openings)))
 	print("perches (not on oaks) %d  %d" % [perches.size(), hash(str(perches))])
 	print("outposts on trees %s" % [outposts])
