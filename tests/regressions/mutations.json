@@ -5668,5 +5668,19 @@
     "replace": "\t\tif false:"
    }
   ]
+ },
+ {
+  "id": "ai-lineup-low-down",
+  "bug": "A low perch's line-up was turned down by the approach point, where the ground limits the bank: the falcon's circle there was ~17 m, it overshot and looped round under the big-trees oak's crown (14 of its 36 low limbs) (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif app.y < high - 1.0:",
+    "replace": "\tif false:"
+   }
+  ]
  }
 ]

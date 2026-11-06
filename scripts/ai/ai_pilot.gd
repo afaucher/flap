@@ -270,28 +270,60 @@ func _line_up(bird: Bird) -> bool:
 		wp = 1
 		return true
 	var p0 := Perf.t()
-	for flat: PackedVector2Array in Dubins.all(Vector2(pos.x, pos.z), d0.normalized(), Vector2(app.x, app.z), Vector2(-way.x, -way.z).normalized(), r):
+	var inward := -Vector3(way.x, 0.0, way.z).normalized()
+	# Low down the ground limits the bank (_bank_room), and a wide turner's circle there is wide: a low perch's approach
+	# point is lined up for from TURN_HIGH up when it has the height -- its turns where it may bank, then a straight run
+	# in down to the approach point (LINEUP_DESCENT) -- else on the circle it has down there.
+	var high := minf(pos.y, TURN_HIGH)
+	if app.y < high - 1.0:
+		var run := (high - app.y) / tan(LINEUP_DESCENT)
+		var q := app - inward * run
+		q.y = high
+		if bird.layout.segment_clear(q, app, lineup_clearance(p)):
+			var rh := _held_radius(p, maxf(m.speed, p.v_best), high) * LINEUP_MARGIN
+			var pts := _lineup_path(bird, pos, d0.normalized(), q, inward, rh)
+			if not pts.is_empty():
+				pts.append(app)
+				_lined(pts, rh)
+				Perf.add("ai.plan", p0)
+				return true
+	var low := _lineup_path(bird, pos, d0.normalized(), app, inward, r)
+	Perf.add("ai.plan", p0)
+	if low.is_empty():
+		return false
+	_lined(low, r)
+	return true
+
+
+## The route ends with `pts` (a line-up's path, `r` its turning circle), then onto the perch.
+func _lined(pts: Array[Vector3], r: float) -> void:
+	pts.append(target.approach_anchor())
+	route = pts
+	wp = 1
+	_aim_ahead = maxf(AIM_AHEAD, r * 0.8)   # (the bank the turn needs, by the guidance's own law)
+
+
+## The shortest turn-straight-turn path (Dubins, circles of `r`) from `pos` heading `d0` to `goal` heading `inward`
+## that's clear of the wood (lineup_clearance) and not long (a turning circle round and LINEUP_PAD m), its height eased
+## from the bird's to the goal's; [] if none.
+func _lineup_path(bird: Bird, pos: Vector3, d0: Vector2, goal: Vector3, inward: Vector3, r: float) -> Array[Vector3]:
+	var none: Array[Vector3] = []
+	for flat: PackedVector2Array in Dubins.all(Vector2(pos.x, pos.z), d0, Vector2(goal.x, goal.z), Vector2(inward.x, inward.z), r):
 		var n := flat.size()
 		if n < 2 or n > TAU * r + LINEUP_PAD:
 			continue
 		var pts: Array[Vector3] = []
 		for q in n:
-			pts.append(Vector3(flat[q].x, lerpf(pos.y, app.y, smoothstep(0.0, 1.0, float(q) / (n - 1))), flat[q].y))
+			pts.append(Vector3(flat[q].x, lerpf(pos.y, goal.y, smoothstep(0.0, 1.0, float(q) / (n - 1))), flat[q].y))
 		var clear := true
 		for q in range(0, n - 1, 2):
-			if not bird.layout.segment_clear(pts[q], pts[mini(q + 2, n - 1)], lineup_clearance(p)):
+			if not bird.layout.segment_clear(pts[q], pts[mini(q + 2, n - 1)], lineup_clearance(bird.profile)):
 				clear = false
 				break
 		if clear:
 			pts[0] = pos
-			pts.append(target.approach_anchor())
-			route = pts
-			wp = 1
-			_aim_ahead = maxf(AIM_AHEAD, r * 0.8)   # (the bank the turn needs, by the guidance's own law)
-			Perf.add("ai.plan", p0)
-			return true
-	Perf.add("ai.plan", p0)
-	return false
+			return pts
+	return none
 
 
 ## Energy for the final: the height over the approach point and the speed over cruise (as height), less what a glide
@@ -618,6 +650,8 @@ const LINEUP_MARGIN := 1.15   ## a line-up's turns this much wider than the circ
 const LINEUP_RUNS := 3.0      ## turning circles (and LINEUP_REACH m) from the approach point it lines up within
 const LINEUP_REACH := 25.0
 const LINEUP_PAD := 40.0      ## m more than a turning circle round a line-up may be
+const TURN_HIGH := 7.5         ## m up from which guidance may bank fully (_bank_room): a low perch is lined up for from here
+const LINEUP_DESCENT := deg_to_rad(8.0)   ## the run in down from TURN_HIGH to a low approach point
 const AROUND_TIME := Vector2(0.6, 2.5)   ## s a go-around flies out for, at least and at most
 const SLOW_GAIN := 0.08      ## stick pulled per m/s over a leg's slow_to
 const CRUISE_OVER := 1.1     ## share of its cruise speed above which a perch flight doesn't beat its wings

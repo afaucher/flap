@@ -72,7 +72,8 @@ big-trees changed the oak -- its new numbers are below the table):
 
 Big-trees' oak (a short trunk to the fork, big low limbs, a crown above: 24 perches where there were 11), now: its
 crown 60 / 60 for the crow, owl, hawk and sparrow, 58 / 60 for the falcon; its low tier 36 / 36 for the crow, owl and
-sparrow, the hawk 31 / 36 (about 21 before the route floor, below) and the falcon 12 / 36 (about 5). Close in on the line:
+sparrow, the hawk 28 / 36 (about 21 before the route floor, below) and the falcon 27 / 36 (about 5 before it, 14 before
+the high line-up, below). Close in on the line:
 every species 11 / 11, in 1.3-2.0 s.
 
 Median time to land on a lone pine: crow 6.4 -> 4.1 s, owl 6.5 -> 4.0, hawk 8.4 -> 3.6, falcon 13.4 -> 9.0, sparrow
@@ -146,10 +147,18 @@ had to) until the final. A low limb's approach point is under that: the hawk cam
 fast, overshot and looped 50 m out. The floor now sits a metre under the route's lowest point still ahead (4 m at most,
 0.8 at least).
 
-**What's left.** The oak's low tier: limbs ~4.5 m up under a crown, with the ground limiting the bank (`_bank_room`),
-leave a wide turner circles of ~17 m to line up on at its speed, so it overshoots and loops. The hawk makes 31 of 36,
-the falcon 12 (the rest of its oak, 58 of 60). Turning higher up, where it may bank, and coming down on the straight
-would help; that's the next step for it. The hawk misses one of the big oak's rail from high above.
+**Line up for a low perch from where you may bank** (`AIPilot.TURN_HIGH`, `LINEUP_DESCENT`). Near the ground the
+guidance banks less (`_bank_room`: 25 deg at 1.5 m, its full share from 7.5 m), so a line-up turned down by a low
+perch's approach point was a ~17 m circle for the falcon: it overshot and looped round under the crown. With the height
+in hand, it now turns at up to 7.5 m onto a point out along the way in and runs in down to the approach point on an
+8 deg slope; where that run isn't clear, or it's already low, it lines up down there as before. The falcon's share of
+the oak's low limbs went from 14 to 27 of 36.
+
+**What's left.** The oak's low tier is still the hardest place: the hawk makes 28 of 36 and the falcon 27 (the rest of
+the oak, 58-60 of 60). Of the 17 misses, 9 are from one side (90 deg) and 5 from in front, where the way in
+runs under the crown's other limbs. The crow, owl and sparrow take the high line-up too and land on all of them, a few
+seconds slower (median 8.5-9.3 s, was 5): a low circle would serve them, but one rule for every bird is simpler and they
+lose nothing else. The hawk misses one of the big oak's rail from high above.
 
 ## The test, and why its bounds hold
 
@@ -184,7 +193,7 @@ How robust each is against a change it isn't about:
 | `test_ai_avoidance` | the avoidance and the planner, in hand-built layouts | its own trunks and limbs | yes: controlled scenes, both sides |
 | `test_ai_flight` | the flock chaining perches in two greybox arenas and the pine wood, 90 s | the generated arenas | fair: flock totals with wide bounds; the per-species ">= 4 in both arenas" is one run each |
 | `test_race` (field, run-in, go-round) | pilots and aces take every gate and land home; racers out on the run-in land; a racer put beside a gate goes round | course 16 of arena 7: one run each | fragile where it judged one landing each, on one rail in one clearing: it moved with every change here. The field's landing home is now per species (the pilot or the ace lands, at most one of the ten misses, named); the exam's rails objective judges rail landings over many tries. The go-round now has a place of its own (a 3 m post gate 7 m up with pines off one side, as course 16's gate 3 was before big-trees moved its trees) |
-| `test_combat_team` | a 3 v 3: hits both ways, a bird downed and back, targets spread, little friendly fire | one match in the wood, run on until a downed bird is back | fragile: deterministic but chaotic -- a change anywhere in the flying runs a different match, and one in which nobody is downed runs to 400 s and past the runner's 120 s. Over six matches (`probe_combat_rest --ai-seed 20..120`) birds landed on their bases 21 times (4 on master with the big-trees wood), and spent 10-25% of the match resting on the ground |
+| `test_combat_team` | 3 v 3s: hits both ways, targets spread, little friendly fire; a downed bird comes back and flies | two 90 s matches in the wood; a bird shot down on purpose | was fragile: one match, run on until a downed bird was back -- deterministic but chaotic, so a change anywhere in the flying ran a different match, and one with nobody downed ran to 400 s, past the runner's 120 s. Now two fixed matches judged on what every match shows, and the downing done by real hits in a third shard, so it always happens. Over six matches (`probe_combat_rest --ai-seed 20..120`) birds landed on their bases 21 times (4 on master with the big-trees wood), and spent 10-25% of the match resting on the ground |
 | `test_combat_vs_demo` | the combat AI out-hits the old demo shooter on an evading racetrack target, four woods | the racetrack's place in the wood | fair: after big-trees no loop at 20 m is clear of the crowns. The combat AI held every shot while avoiding wood, so it fired once in 40 s; seekers (gated by lock and line of sight) now fire while it dodges: 18 v 13, and 20 v 13 with the start nudged |
 | `test_combat_ai` | rearming, leaving the base, resting, the boxed-in base | `Pinewood.generate(7)` perches and bases | mixed: the scenes are picked from the wood, so a change to the wood changes which perch is tested (the no-way-in base now builds its own) |
 | `test_combat_team`, `test_combat_boom_zoom`, `test_combat` | 3 v 3 and duels | the wood; many seeds averaged | fair: totals over several woods with bounds about three standard deviations short |
