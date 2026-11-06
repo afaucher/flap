@@ -435,6 +435,17 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 		aim = target.approach_anchor() + Vector3.UP * AIM_HIGH
 
 	var opts := {"route": true, "cruise": p.v_best, "lift_cap": true}
+	if not final and wp >= 1:
+		# Down a leg that descends, don't ride above its line: aiming at the leg's end it lags above it, where the planned
+		# clearance under the wood above doesn't hold (the avoidance then climbs it over a limb and it comes in high).
+		var a0 := route[wp - 1]
+		var leg := route[wp] - a0
+		var flat := Vector2(leg.x, leg.z).length()
+		if flat > 1.0 and leg.y < -0.5:
+			var t := clampf(Vector2(pos.x - a0.x, pos.z - a0.z).dot(Vector2(leg.x, leg.z) / flat) / flat, 0.0, 1.0)
+			var over := pos.y - (a0.y + leg.y * t)
+			if over > LINE_OVER:
+				opts.gamma = clampf(atan2(leg.y, flat) - over * LINE_HOLD, deg_to_rad(-35.0), deg_to_rad(25.0))
 	if wp >= route.size() - 2:
 		opts.cruise = p.v_best / CRUISE_OVER   # (on the approach: no wingbeats above its cruise -- no speed it must lose to catch)
 		opts.slow_to = p.v_best                # (and come down to it by the approach point: the final bleeds the rest)
@@ -645,6 +656,8 @@ const SPIRAL_START := 3.0     ## m of energy over the approach's at which it cir
 const SPIRAL_STOP := 0.5      ## ... and stops circling
 const SPIRAL_GAMMA := deg_to_rad(16.0)   ## the path angle it circles down at
 const AIM_AHEAD := 3.0        ## m: a waypoint this close is passed on to the next (the guidance aims past it)
+const LINE_OVER := 0.3         ## m above a descending leg's line at which it's brought down to it (LINE_HOLD)
+const LINE_HOLD := 0.15        ## rad of path angle per m above a descending leg's line
 const ROUTE_FLOOR := 1.0      ## m under a perch flight's lowest route point ahead its ground guard lets it down to (4 m at most)
 const LINEUP_MARGIN := 1.15   ## a line-up's turns this much wider than the circle the bird holds
 const LINEUP_RUNS := 3.0      ## turning circles (and LINEUP_REACH m) from the approach point it lines up within

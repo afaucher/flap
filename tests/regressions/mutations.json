@@ -5682,5 +5682,19 @@
     "replace": "\tif false:"
    }
   ]
+ },
+ {
+  "id": "ai-rides-above-descent",
+  "bug": "Down a descending leg the AI aimed at its end and lagged above the line, where the planned clearance under the wood above didn't hold: under the big-trees oak's crown the avoidance climbed the hawk over a low limb and it reached the approach point 2.7 m high and fast (28 of the 36 low limbs) (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t\tif over > LINE_OVER:",
+    "replace": "\t\t\tif false:"
+   }
+  ]
  }
 ]

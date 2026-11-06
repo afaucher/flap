@@ -32,7 +32,8 @@ const OAK_BIRDS := [["crow", "owl", "sparrow"], ["hawk", "falcon"]]   ## the oak
 ## oak's crown (its low limbs ~4.5 m up: their stall speeds and turning circles leave them little room there).
 const RATE := {
 	"*": {"crow": 0.95, "owl": 0.95, "hawk": 0.9, "falcon": 0.85, "sparrow": 0.95},
-	"oak_low": {"hawk": 0.7, "falcon": 0.5},
+	"oak_low": {"hawk": 0.85, "falcon": 0.65},
+	"pole": {"falcon": 0.9},
 	"oak_low_heights": {"hawk": 0.8, "falcon": 0.6},
 	"gates": {"falcon": 0.9},
 }

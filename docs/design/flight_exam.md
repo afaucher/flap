@@ -72,7 +72,7 @@ big-trees changed the oak -- its new numbers are below the table):
 
 Big-trees' oak (a short trunk to the fork, big low limbs, a crown above: 24 perches where there were 11), now: its
 crown 60 / 60 for the crow, owl, hawk and sparrow, 58 / 60 for the falcon; its low tier 36 / 36 for the crow, owl and
-sparrow, the hawk 28 / 36 (about 21 before the route floor, below) and the falcon 27 / 36 (about 5 before it, 14 before
+sparrow, the hawk 33 / 36 (about 21 before the route floor, 28 before the line hold, below) and the falcon 26 / 36 (about 5 before it, 14 before
 the high line-up, below). Close in on the line:
 every species 11 / 11, in 1.3-2.0 s.
 
@@ -154,11 +154,15 @@ in hand, it now turns at up to 7.5 m onto a point out along the way in and runs 
 8 deg slope; where that run isn't clear, or it's already low, it lines up down there as before. The falcon's share of
 the oak's low limbs went from 14 to 27 of 36.
 
-**What's left.** The oak's low tier is still the hardest place: the hawk makes 28 of 36 and the falcon 27 (the rest of
-the oak, 58-60 of 60). Of the 17 misses, 9 are from one side (90 deg) and 5 from in front, where the way in
-runs under the crown's other limbs. The crow, owl and sparrow take the high line-up too and land on all of them, a few
-seconds slower (median 8.5-9.3 s, was 5): a low circle would serve them, but one rule for every bird is simpler and they
-lose nothing else. The hawk misses one of the big oak's rail from high above.
+**Don't ride above a descending leg** (`AIPilot.LINE_OVER`, `LINE_HOLD`). Aiming at a leg's end, a bird coming down
+lags above the leg's line; under a crown that's where the wood is (the planned clearance is the line's), so the
+avoidance climbed the hawk over a neighbouring low limb and it reached the approach point 2.7 m high and fast. More than
+0.3 m above the line, it now flies the leg's slope steepened by 0.15 rad a metre over. The hawk's share of the oak's low
+limbs went from 28 to 33 of 36. (Holding the line both ways got the hawk to 35, but the falcon, gaining speed down
+it, fell from 27 to 19.)
+
+**What's left.** The oak's low tier is still the hardest place: the hawk makes 33 of 36 and the falcon 26 (the rest of
+the oak, 59-60 of 60). The hawk misses one of the big oak's rail from high above.
 
 **Cost.** Planning is cheap on average (84 us a tick in a 3 v 3, `probe_team_cost`) but spikes: a route search that
 can't reach its goal runs the lattice A* to its 8000 expansions, ~210 ms in one tick (half of it the edges' clearance
