@@ -13,6 +13,8 @@ const LATTICE := 6.0
 const LEVELS: Array[float] = [3.0, 6.0, 10.0, 15.0, 21.0, 28.0, 36.0]
 const CLIMB_COST := 4.0
 const MAX_EXPANSIONS := 8000
+const REQUEST_EXPANSIONS := 600   ## a bird's route request (plan_to_perch, every way in it tries) ends after this many search
+                                  ## steps, route or not: ~20 ms with the lattice's table (prepare). The longest a 3 v 3 needs is ~490.
 ## The tree a route leaves or lands on isn't ignored, just passed closer: this far, without the perch's own branch
 ## and the first PUSH_OFF metres (the bird passes through its own tree as it lets go) or the last ones (the catch).
 const OWN_TREE_CLEARANCE := 0.4
@@ -20,8 +22,15 @@ const PUSH_OFF := 1.0
 const START_CLEARANCE := 0.6   ## m: the closest a first leg out of a tight spot may pass the wood (the whiskers')
 
 var layout: ArenaLayout
-var clearance := 0.9
+var clearance := DEFAULT_CLEARANCE
+const DEFAULT_CLEARANCE := 0.9
 var _node_ok := {}      ## Vector3i -> bool
+var _table := {}        ## the layout's table (prepare), and whether it holds this clearance: for this search
+var _table_on := false
+var _order := 0
+var _steps_left := -1   ## search steps left in this route request (REQUEST_EXPANSIONS; -1: no limit, as for a race course)
+var _seen := {}         ## Vector3i -> {Vector3i -> bool}: edges checked, where the layout's table hasn't them (_edge_clear)
+var _seen_c := -1.0     ## the clearance _seen holds for
 var _a_perch := -1      ## the perch the route leaves (its branch is skipped), for the plan in progress
 var _b_perch := -1      ## the perch it lands on
 var _a_through := false ## leaving through its own tree (no way out past it)
@@ -30,7 +39,7 @@ var heading := Vector3.ZERO   ## the way the bird is flying (horizontal; zero: p
 var turn_r := 0.0             ## ... and its turning circle there
 
 
-func _init(l: ArenaLayout, c := 0.9) -> void:
+func _init(l: ArenaLayout, c := DEFAULT_CLEARANCE) -> void:
 	layout = l
 	clearance = c
 
@@ -150,6 +159,7 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 	var none: Array[Vector3] = []
 	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
 	var tried := 0
+	_steps_left = REQUEST_EXPANSIONS
 	for d in ways_in(p, from, profile, heading, turn_r, layout, clearance):
 		if tried >= WAYS_PLANNED:
 			break
@@ -172,7 +182,9 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 			route.append(app)
 		route.append(p.approach_anchor())
 		way = d
+		_steps_left = -1
 		return route
+	_steps_left = -1
 	return none
 
 
@@ -218,25 +230,29 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 	for g in goals:
 		goal_set[g] = true
 	# A* over lattice keys.
+	# (The open set's cheapest node comes off a binary heap -- the first opened of equals, as a scan of it in order
+	# took them, so the routes are the same.)
+	_table = layout.get_meta(EDGE_TABLE, {})
+	_table_on = float((_table.get("c_set", {}) as Dictionary).get(clearance, -1.0)) >= 0.0
 	var open := {}          # key -> f
+	var opened := {}        # key -> the order it was opened in (kept while it's open)
+	var heap := []          # [f, order, key]
 	var g_cost := {}
 	var came := {}
 	for s in starts:
 		var c := _cost(a, _pos(s))
 		g_cost[s] = c
-		open[s] = c + _pos(s).distance_to(b)
+		_open(open, opened, heap, s, c + _pos(s).distance_to(b))
 		came[s] = null
 	var found = null
 	var expansions := 0
-	while not open.is_empty() and expansions < MAX_EXPANSIONS:
+	while not open.is_empty() and expansions < MAX_EXPANSIONS and _steps_left != 0:
 		expansions += 1
-		var cur = null
-		var best := INF
-		for k in open:
-			if open[k] < best:
-				best = open[k]
-				cur = k
+		if _steps_left > 0:
+			_steps_left -= 1
+		var cur = _pop(open, opened, heap)
 		open.erase(cur)
+		opened.erase(cur)
 		if goal_set.has(cur):
 			found = cur
 			break
@@ -248,11 +264,11 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 			var ng: float = g_cost[cur] + _cost(cp, np)
 			if g_cost.has(nk) and ng >= g_cost[nk]:
 				continue
-			if not layout.segment_clear(cp, np, clearance):
+			if not _edge_clear(cur, nk, cp, np):
 				continue
 			g_cost[nk] = ng
 			came[nk] = cur
-			open[nk] = ng + np.distance_to(b)
+			_open(open, opened, heap, nk, ng + np.distance_to(b))
 	if found == null:
 		return []
 	var keys := []
@@ -265,6 +281,54 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 		pts.append(_pos(key))
 	pts.append(b)
 	return smooth(pts, a_tree, b_tree)
+
+
+## Put `key` in the open set at `f` (or lower it there), and on the heap.
+func _open(open: Dictionary, opened: Dictionary, heap: Array, key: Variant, f: float) -> void:
+	if not opened.has(key):
+		opened[key] = _order
+		_order += 1
+	open[key] = f
+	heap.append([f, opened[key], key])
+	var i := heap.size() - 1
+	while i > 0:
+		var up := (i - 1) >> 1
+		if not _before(heap[i], heap[up]):
+			break
+		var t = heap[i]
+		heap[i] = heap[up]
+		heap[up] = t
+		i = up
+
+
+## The open node with the lowest f (the first opened of equals); entries a lowered f left behind are skipped.
+func _pop(open: Dictionary, opened: Dictionary, heap: Array) -> Variant:
+	while not heap.is_empty():
+		var top: Array = heap[0]
+		var last = heap.pop_back()
+		if not heap.is_empty():
+			heap[0] = last
+			var i := 0
+			var n := heap.size()
+			while true:
+				var l := 2 * i + 1
+				if l >= n:
+					break
+				var c := l + 1 if l + 1 < n and _before(heap[l + 1], heap[l]) else l
+				if not _before(heap[c], heap[i]):
+					break
+				var t = heap[i]
+				heap[i] = heap[c]
+				heap[c] = t
+				i = c
+		var k = top[2]
+		if open.has(k) and float(open[k]) == float(top[0]) and int(opened[k]) == int(top[1]):
+			return k
+	return null
+
+
+static func _before(x: Array, y: Array) -> bool:
+	return x[0] < y[0] or (x[0] == y[0] and x[1] < y[1])
 
 
 ## String-pull: drop every waypoint the previous kept point can see past.
@@ -317,6 +381,135 @@ func _pos(k: Vector3i) -> Vector3:
 
 
 ## Where lattice node `k` is (x and z in LATTICE steps, y the index into LEVELS).
+## Is the lattice edge a -> b (at `pa`, `pb`) clear of the wood by `clearance`? From the layout's table (prepare)
+## when it has one for this clearance, else checked and kept (one way: the check isn't quite symmetric) -- the same
+## answer either way. In a big wood a check is ~60 us and a search asks thousands.
+func _edge_clear(a: Vector3i, b: Vector3i, pa: Vector3, pb: Vector3) -> bool:
+	if _table_on:
+		var row: Dictionary = (_table.e as Dictionary).get(a, {})
+		if row.has(b):
+			return float(row[b]) >= clearance
+	if _seen_c != clearance:
+		_seen_c = clearance
+		_seen.clear()
+	var r2: Dictionary = _seen.get(a, {})
+	if r2.has(b):
+		return r2[b]
+	var ok := layout.segment_clear(pa, pb, clearance)
+	r2[b] = ok
+	_seen[a] = r2
+	return ok
+
+
+const EDGE_TABLE := "plan_edge_table"
+static var prepare_jobs := 0   ## threads prepare uses (0: the cores less one, at most PREPARE_JOBS)
+const PREPARE_JOBS := 6        ## (more contend: on 32 cores 6 threads took 2.8 s, 16 took 32 s)
+
+
+## The clearances planners use (each species' AIPilot.plan_clearance, and the default), widest first.
+static func species_clearances() -> Array[float]:
+	var cs: Array[float] = [DEFAULT_CLEARANCE]   # (a planner not yet fitted to its bird plans with this)
+	for id in BirdProfile.IDS:
+		var c := AIPilot.plan_clearance(BirdProfile.by_id(id))
+		if not cs.has(c):
+			cs.append(c)
+	cs.sort()
+	cs.reverse()
+	return cs
+
+
+## Work out every lattice edge's clearance in `l` ahead, for every species' clearance, over the machine's cores (the
+## loading screen does it with the layout): each directed edge between nodes free at the narrowest gets the widest
+## clearance it clears (or -1) -- the check only gets harder as the clearance grows, so that answers it for each.
+## The planners then look edges up instead of checking them: the same routes, without the ~150 ms first searches.
+static func prepare(l: ArenaLayout) -> void:
+	if l.has_meta(EDGE_TABLE):
+		return
+	_prepare(l)
+
+
+## prepare for a scene's layout: in a game with a screen. (Headless -- the tests -- it's left out: the routes are the
+## same without it, and many tests loading scenes at once would each spend seconds on it, contending for the cores.)
+static func prepare_for_play(l: ArenaLayout) -> void:
+	if DisplayServer.get_name() != "headless":
+		prepare(l)
+
+
+static func _prepare(l: ArenaLayout) -> void:
+	var t0 := Time.get_ticks_msec()
+	for t in l.trees:   # (what the checks build on first use, built now: the threads below only read)
+		t.reach()
+		t.bands()
+	for o in l.outposts:
+		l.deck_lines(o)
+	var cs := species_clearances()
+	var probe := FlightPlanner.new(l, cs[-1])
+	var n := int(l.half_extent / LATTICE) + 1
+	var free := {}
+	var nodes := {}   # (each node: the widest clearance it's free at, or -1 -- node_usable only gets harder as it grows)
+	for x in range(-n, n + 1):
+		for z in range(-n, n + 1):
+			for y in LEVELS.size():
+				var k := Vector3i(x, y, z)
+				var w := -1.0
+				for c in cs:   # (widest first)
+					probe.clearance = c
+					if probe.node_usable(k):
+						w = c
+						break
+				nodes[k] = w
+				if w >= 0.0:
+					free[k] = true
+	var edges: Array[Vector3i] = []   # (pairs: from, to)
+	for k: Vector3i in free:
+		for dy in [-1, 0, 1]:
+			for dx in [-1, 0, 1]:
+				for dz in [-1, 0, 1]:
+					var k2 := Vector3i(k.x + dx, k.y + dy, k.z + dz)
+					if k2 != k and free.has(k2):
+						edges.append(k)
+						edges.append(k2)
+	var m := edges.size() / 2
+	var jobs := clampi(OS.get_processor_count() - 1, 1, PREPARE_JOBS) if prepare_jobs <= 0 else prepare_jobs
+	var threads: Array[Thread] = []
+	for j in jobs:
+		var th := Thread.new()
+		th.start(_prepare_part.bind(l, edges, cs, m * j / jobs, m * (j + 1) / jobs))
+		threads.append(th)
+	var out := PackedFloat64Array()
+	for th in threads:
+		out.append_array(th.wait_to_finish())   # (in order: each thread's part, edge by edge)
+	var e := {}
+	for i in m:
+		var a := edges[2 * i]
+		if not e.has(a):
+			e[a] = {}
+		e[a][edges[2 * i + 1]] = out[i]
+	var c_set := {}
+	for c in cs:
+		c_set[c] = 0.0
+	l.set_meta(EDGE_TABLE, {"e": e, "n": nodes, "c_set": c_set})
+	print_verbose("FlightPlanner.prepare: %d edges, %d clearances, %d threads, %d ms" % [m, cs.size(), jobs, Time.get_ticks_msec() - t0])
+
+
+## (prepare's work for edges i0..i1, on a thread of its own: each edge's widest clearance it clears, by halving.)
+static func _prepare_part(l: ArenaLayout, edges: Array[Vector3i], cs: Array[float], i0: int, i1: int) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	for i in range(i0, i1):
+		var pa := node_pos(edges[2 * i])
+		var pb := node_pos(edges[2 * i + 1])
+		var lo := 0                 # (cs is widest first: find the first index it clears; all after clear too)
+		var hi := cs.size()
+		while lo < hi:
+			var mid := (lo + hi) / 2
+			if l.segment_clear(pa, pb, cs[mid]):
+				hi = mid
+			else:
+				lo = mid + 1
+		out.append(cs[lo] if lo < cs.size() else -1.0)
+	return out
+
+
 static func node_pos(k: Vector3i) -> Vector3:
 	return Vector3(k.x * LATTICE, LEVELS[k.y], k.z * LATTICE)
 
@@ -324,7 +517,12 @@ static func node_pos(k: Vector3i) -> Vector3:
 func _usable(k: Vector3i) -> bool:
 	if _node_ok.has(k):
 		return _node_ok[k]
-	var ok := node_usable(k)
+	var ok: bool
+	var nt: Dictionary = (layout.get_meta(EDGE_TABLE, {}) as Dictionary)
+	if nt.has("n") and float((nt.c_set as Dictionary).get(clearance, -1.0)) >= 0.0:
+		ok = float((nt.n as Dictionary).get(k, -1.0)) >= clearance   # (prepare's table: the same answer)
+	else:
+		ok = node_usable(k)
 	_node_ok[k] = ok
 	return ok
 

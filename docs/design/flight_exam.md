@@ -164,12 +164,26 @@ it, fell from 27 to 19.)
 **What's left.** The oak's low tier is still the hardest place: the hawk makes 33 of 36 and the falcon 26 (the rest of
 the oak, 59-60 of 60). The hawk misses one of the big oak's rail from high above.
 
-**Cost.** Planning is cheap on average (84 us a tick in a 3 v 3, `probe_team_cost`) but spikes: a route search that
-can't reach its goal runs the lattice A* to its 8000 expansions, ~210 ms in one tick (half of it the edges' clearance
-checks), and in the game (`perf.ps1`, a crow and 3 AI) such ticks make most of its 0.7% hitched frames. Moving the
-A*'s open set onto a heap (same routes: the flight fingerprints match) didn't change it. Bounding the search or spreading
-it over ticks would, but either changes what the birds do (which searches give up, when a route arrives): not done
-without a decision.
+**Cost.** In the big-trees wood one clearance check is ~60 us (three-quarters of it walking a big tree's branches), and
+a route search asks thousands: a bird's first search somewhere took 100-200 ms in a tick, most of the game's hitched
+frames. Now:
+- The lattice's clearance is worked out ahead (`FlightPlanner.prepare`: every node's and edge's widest clearance it
+  clears, for each species' clearance and the default; the check only gets harder as the clearance grows, so one number
+  answers it for each). The game and the range do it on the loading screen, over up to 6 threads (more contend: on 32
+  cores 16 took 32 s): ~3 s for the arena's 69,000 edges. It gives the same answers as the checks (`test_plan_table`:
+  every node and a spread of edges, every clearance; the routes; a 3 v 3's flight fingerprint unchanged), so headless
+  runs -- the tests -- leave it out and fly the same. A 3 v 3's slowest search went from ~136 ms to ~16 ms.
+- A bird's route request (`plan_to_perch`, every way in it tries) ends after `REQUEST_EXPANSIONS` (600) search steps,
+  route or not (~20 ms with the table; the longest a 3 v 3 needs is ~490). Steps, not time, so a run is the same on any
+  machine.
+- The A*'s open set is a binary heap (the same node first, so the same routes).
+
+In the game (`perf.ps1`, a crow and 3 AI, 30 s): hitched frames 13 -> 9 (0.5%), planning's worst tick 30 -> 19 ms; what's
+left of them is planning and the avoidance together in a tick, ~25 ms frames.
+
+Found on the way: the combat AI's birds plan with the planner's default clearance (0.9 m), never their species' (their
+`AIPilot` isn't fitted: `_fit` runs in its own `sample()`, which `CombatPilot` doesn't call). Fitting them changes their
+routes, so it's left for its own change.
 
 ## The test, and why its bounds hold
 

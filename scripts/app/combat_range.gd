@@ -114,7 +114,7 @@ func _ready() -> void:
 	else:
 		Game.add_environment(self)
 	Pinewood.cliff = args.has("--cliff")   # (the escarpment at the edge: on hold, off unless asked for)
-	var make: Callable = (func() -> ArenaLayout: return Pinewood.generate(7)) if pinewood else (func() -> ArenaLayout: return ArenaLayout.generate(7))
+	var make: Callable = (func() -> ArenaLayout: return _prepared(Pinewood.generate(7))) if pinewood else (func() -> ArenaLayout: return _prepared(ArenaLayout.generate(7)))
 	layout = await screen.generate(make, 0.25, 1.5 if pinewood else 0.2)
 	if CombatWorld.calm_air:
 		layout.air = AirField.new()
@@ -437,3 +437,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		evade = not evade
 		if target_pilot != null:
 			target_pilot.evade = evade
+
+
+## `l` with the AI's route lattice worked out (FlightPlanner.prepare: on the loading screen, not a bird's first search).
+static func _prepared(l: ArenaLayout) -> ArenaLayout:
+	FlightPlanner.prepare_for_play(l)
+	return l

@@ -9,6 +9,7 @@ func _init() -> void:
 func setup() -> void:
 	var secs := float(OS.get_environment("TEAM_SECONDS")) if OS.get_environment("TEAM_SECONDS") != "" else 180.0
 	var layout := Pinewood.generate(7)
+	FlightPlanner.prepare(layout)   # (as the game's loading screen does)
 	var a := CombatWorld.far_base(layout, Vector3(60, 0, 0))
 	var b := CombatWorld.far_base(layout, a.position)
 	var d := Duel.new()

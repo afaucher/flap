@@ -5696,5 +5696,47 @@
     "replace": "\t\t\tif false:"
    }
   ]
+ },
+ {
+  "id": "plan-table-widest-clear",
+  "bug": "The lattice table's halving search could mark an edge clear at the widest clearance when it clears only a narrower one: wide-turning birds' routes would graze the wood the check keeps them off (2026-11-06).",
+  "tests": [
+   "test_plan_table"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\tout.append(cs[lo] if lo < cs.size() else -1.0)",
+    "replace": "\t\tout.append(cs[0] if lo < cs.size() else -1.0)"
+   }
+  ]
+ },
+ {
+  "id": "plan-table-nodes-unset",
+  "bug": "The lattice table's nodes left unworked (every node closed): with the table, the planner found no free air and no routes (2026-11-06).",
+  "tests": [
+   "test_plan_table"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\t\t\tfor c in cs:   # (widest first)",
+    "replace": "\t\t\t\tfor c in []:   # (widest first)"
+   }
+  ]
+ },
+ {
+  "id": "plan-request-unbounded",
+  "bug": "A bird's route request searched the lattice to its 8000 steps: in the big-trees wood one could take 150-200 ms in a tick, most of the game's hitched frames (2026-11-06).",
+  "tests": [
+   "test_plan_table"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\tif _steps_left > 0:\n\t\t\t_steps_left -= 1",
+    "replace": "\t\tif false:\n\t\t\t_steps_left -= 1"
+   }
+  ]
  }
 ]

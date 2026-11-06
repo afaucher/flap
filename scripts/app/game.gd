@@ -125,6 +125,7 @@ func _ready() -> void:
 			var c := RaceCourse.generate(l, cs, plan_for, cst)
 			c.apply(l)
 			hold.course = c
+		FlightPlanner.prepare_for_play(l)   # (the AI's route lattice, worked out here rather than on a bird's first search)
 		return l
 	layout = await screen.generate(make, 0.25, (1.5 if pinewood else 0.2) + (4.0 if race else 0.0))
 	if race:
