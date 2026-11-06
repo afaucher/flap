@@ -31,7 +31,25 @@ const GATES := 10
 const BEAM := 32
 const TAKE := 8                   ## options a beam keeps at each step
 const TRIES := 300                 ## options a beam checks at each step (best first) before giving up on more
-const LEG := Vector2(14.0, 40.0)  ## m in plan from a gate to the next
+const LEG := Vector2(14.0, 40.0)  ## m in plan from a gate to the next (a style may change it: STYLES)
+## Course styles: a shape (how long the legs, how hard the turns, how much it keeps to the wood) and heights (level, or
+## high and low), "<shape>-<heights>"; "" is the old all-round course. Each sets the search's scoring, and legs:
+##   gates    how many
+##   leg      m in plan from a gate to the next, and the length it aims for
+##   turn     deg the turns at the gates are scored for falling between
+##   wood     score for a gate in the wood (between trunks, a hoop) over posts in the open
+##   dy, spread  score per m a leg climbs or dives (capped at 8), and per m of the whole course's height range
+const SHAPES := {
+	"": {"gates": 10, "leg": Vector2(14.0, 40.0), "aim": 25.0, "turn": Vector2(20.0, 70.0), "wood": 0.0},
+	"technical": {"gates": 12, "leg": Vector2(12.0, 24.0), "aim": 16.0, "turn": Vector2(40.0, 90.0), "wood": 1.0},
+	"long": {"gates": 7, "leg": Vector2(26.0, 55.0), "aim": 40.0, "turn": Vector2(5.0, 40.0), "wood": 1.5},
+}
+const HEIGHTS := {
+	"": {"dy": 0.25, "spread": 0.5},
+	"level": {"dy": -0.6, "spread": -1.0},
+	"high-low": {"dy": 0.6, "spread": 1.2},
+}
+const STYLES := ["technical-level", "technical-high-low", "long-level", "long-high-low"]
 const ENTRY_DEG := 45.0
 const TIGHT_DEG := 60.0
 const START_DEG := 60.0           ## the first leg leaves the start perch within this of the way it faces
@@ -198,6 +216,11 @@ class Gate:
 var layout: ArenaLayout
 var seed := 0
 var envelope := Envelope.of(BirdProfile.IDS)
+var style := ""                  ## STYLES' (or "": the all-round course)
+var gate_count := GATES          ## gates (the style's)
+var leg_range := LEG             ## m in plan from a gate to the next (the style's)
+var _shape: Dictionary = SHAPES[""]
+var _heights: Dictionary = HEIGHTS[""]
 var start: Perch
 var gates: Array[Gate] = []
 var build_ms := 0.0
@@ -213,11 +236,12 @@ var why := {}                    ## (debug) how many options each rule turned aw
 
 
 ## The course for `l` (seed `s`): gates and start; apply() then puts its posts into the layout.
-static func generate(l: ArenaLayout, s: int, birds: Array = BirdProfile.IDS) -> RaceCourse:
+static func generate(l: ArenaLayout, s: int, birds: Array = BirdProfile.IDS, style_name := "") -> RaceCourse:
 	var c := RaceCourse.new()
 	c.layout = l
 	c.seed = s
 	c.envelope = Envelope.of(birds)
+	c.set_style(style_name)
 	c._rng.seed = s * 7919 + 17
 	var t0 := Time.get_ticks_usec()
 	c._index_pads()
@@ -235,12 +259,24 @@ static func generate(l: ArenaLayout, s: int, birds: Array = BirdProfile.IDS) -> 
 		if c.gates.size() > best.size():
 			best = c.gates
 			best_start = st
-		if best.size() >= GATES:
+		if best.size() >= c.gate_count:
 			break
 	c.start = best_start if best_start != null else l.start_perch()
 	c.gates = best
 	c.build_ms = (Time.get_ticks_usec() - t0) / 1000.0
 	return c
+
+
+## Take style `name` ("<shape>-<heights>", or "").
+func set_style(name: String) -> void:
+	style = name
+	var shape := name.get_slice("-", 0) if name != "" else ""
+	var heights := name.substr(shape.length() + 1) if name != "" else ""
+	assert(SHAPES.has(shape) and HEIGHTS.has(heights), "a course style: %s" % name)
+	_shape = SHAPES[shape]
+	_heights = HEIGHTS[heights]
+	leg_range = _shape.leg
+	gate_count = _shape.gates
 
 
 ## Where a course may start, best first: the outposts' rails, nearest the middle of the wood first (a deck faces open
@@ -442,7 +478,7 @@ func _search() -> void:
 func _beam() -> Array:
 	var beams: Array[Plan] = [Plan.new()]
 	var best: Plan = null
-	for k in GATES:
+	for k in gate_count:
 		var grown: Array[Plan] = []
 		for b in beams:
 			grown.append_array(_grow(b))
@@ -479,14 +515,14 @@ func _finish_score(p: Plan) -> float:
 		lo = minf(lo, g.centre.y)
 		hi = maxf(hi, g.centre.y)
 		kinds[g.kind] = int(kinds.get(g.kind, 0)) + 1
-	var s := (hi - lo) / 2.0 + kinds.size() * 1.5
+	var s := (hi - lo) * float(_heights.spread) + kinds.size() * 1.5
 	var left := p.turns.filter(func(t: float): return t > 15.0).size()
 	var right := p.turns.filter(func(t: float): return t < -15.0).size()
 	var wound := 0.0
 	for t in p.turns:
 		wound += t
 	var posts: int = kinds.get("post", 0)
-	return s + 3.0 * mini(left, right) - absf(wound) / 45.0 - maxf(posts - GATES / 2, 0) * 1.5
+	return s + 3.0 * mini(left, right) - absf(wound) / 45.0 - maxf(posts - gate_count / 2.0, 0) * 1.5
 
 
 ## The plans one gate longer than `b`.
@@ -496,14 +532,14 @@ func _grow(b: Plan) -> Array[Plan]:
 	var last_n: Vector3 = b.gates[-1].normal if has_last else Vector3.ZERO
 	var opts := []
 	var posts_so_far := b.gates.filter(func(g: Gate): return g.kind == "post").size()
-	for i in _near(from, LEG.y):
+	for i in _near(from, leg_range.y):
 		if b.used.has(i):
 			continue
-		var last_leg := b.gates.size() == GATES - 1
+		var last_leg := b.gates.size() == gate_count - 1
 		var cand := _pool[i]
 		var leg := cand.centre - from
 		var plan := Vector2(leg.x, leg.z).length()
-		if plan < LEG.x or plan > LEG.y:
+		if plan < leg_range.x or plan > leg_range.y:
 			continue
 		if not _grade_ok(leg.y, plan):   # (cheap first; the turn's share is checked once the gate's way is known)
 			continue
@@ -515,7 +551,7 @@ func _grow(b: Plan) -> Array[Plan]:
 			continue
 		var goal_in := home_in() + _flat(start.facing) * HOME_OUT   # (home from out in front: the side the rail faces)
 		var home_d := Vector2(cand.centre.x - goal_in.x, cand.centre.z - goal_in.z).length()
-		if home_d > HOME_MAX + (GATES - 1 - b.gates.size()) * HOME_REACH:
+		if home_d > HOME_MAX + (gate_count - 1 - b.gates.size()) * HOME_REACH * float(_shape.aim) / 25.0:
 			continue   # (home out of reach of the legs left)
 		if has_last and rad_to_deg(last_n.angle_to(ld)) > ENTRY_DEG:
 			continue
@@ -535,18 +571,21 @@ func _grow(b: Plan) -> Array[Plan]:
 			var prev_from := _from_at(b, b.gates.size() - 1)
 			var in_leg := b.gates[-1].centre - prev_from
 			turn = rad_to_deg(AIPilot._signed_heading(Vector3(in_leg.x, 0.0, in_leg.z), ld)) * -1.0
-		var s := -absf(plan - 25.0) / 10.0 + minf(absf(leg.y), 8.0) / 4.0 + _rng.randf() * 0.8 + float(RARITY.get(cand.describe(), 0.0))
-		if b.gates.size() >= GATES - HOME_PULL:   # (the last legs: toward home's run-in)
-			var pull := float(b.gates.size() - (GATES - HOME_PULL) + 1) / HOME_PULL   # (stronger the nearer the end)
+		var aim: float = _shape.aim
+		var s := -absf(plan - aim) / (aim * 0.4) + minf(absf(leg.y), 8.0) * float(_heights.dy) + _rng.randf() * 0.8 + float(RARITY.get(cand.describe(), 0.0))
+		if cand.kind != "post":
+			s += float(_shape.wood)
+		if b.gates.size() >= gate_count - HOME_PULL:   # (the last legs: toward home's run-in)
+			var pull := float(b.gates.size() - (gate_count - HOME_PULL) + 1) / HOME_PULL   # (stronger the nearer the end)
 			s += pull * (Vector2(from.x - goal_in.x, from.z - goal_in.z).length() - home_d) / 5.0
-		if cand.kind == "post" and posts_so_far >= GATES / 2 - 1:
+		if cand.kind == "post" and posts_so_far >= gate_count / 2.0 - 1.0:
 			s -= 2.0   # (posts fit anywhere: past half the course, the other kinds first)
 		if not b.gates.is_empty():
 			if cand.kind != b.gates[-1].kind:
 				s += 1.0
 			elif b.gates.size() >= 2 and b.gates[-2].kind == cand.kind:
 				s -= 1.5
-			if absf(turn) >= 20.0 and absf(turn) <= 70.0:
+			if absf(turn) >= float(_shape.turn.x) and absf(turn) <= float(_shape.turn.y):
 				s += 1.0
 			if not b.turns.is_empty() and signf(turn) != signf(b.turns[-1]) and absf(turn) > 15.0:
 				s += 0.5
@@ -701,7 +740,7 @@ func _fits(b: Plan, g: Gate, marked: bool) -> String:
 		var far: Vector3 = all[k - 2].centre if k >= 2 else start.position + Vector3.UP * 0.3
 		if far.distance_to(g.centre) > NEXT_TWO_MAX or not _sees(far, g):
 			return "sight two back"
-	if k == GATES - 1:
+	if k == gate_count - 1:
 		var why := home_problem(all)
 		if why != "":
 			var r := RegEx.create_from_string("[0-9.]+")
@@ -944,7 +983,7 @@ func problems() -> PackedStringArray:
 			out.append("gate %d: wood in the window" % k)
 		if g.kind == "post" and not window_clear(g):
 			out.append("gate %d: wood by the posts" % k)
-		if plan < LEG.x - 0.01 or plan > LEG.y + 0.01:
+		if plan < leg_range.x - 0.01 or plan > leg_range.y + 0.01:
 			out.append("gate %d: leg %.1f m" % [k, plan])
 		if not leg_grade_ok(gates, k):
 			out.append("gate %d: climbs %.1f m in %.1f m, turning" % [k, leg.y, plan])

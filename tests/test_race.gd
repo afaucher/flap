@@ -223,7 +223,7 @@ func _home_by_hand() -> void:
 func _course_rules(s: int) -> RaceCourse:
 	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
-	eq(c.gates.size(), RaceCourse.GATES, "seed %d: a full course" % s)
+	eq(c.gates.size(), c.gate_count, "seed %d: a full course" % s)
 	var probs := c.problems()
 	check(probs.is_empty(), "seed %d: the rules kept: %s" % [s, "; ".join(probs)])
 	check(c.start != null and c.layout.perches.has(c.start), "seed %d: it starts (and ends) on a perch of the wood" % s)
@@ -326,7 +326,7 @@ func _field_finishes(s: int) -> void:
 	for id in BirdProfile.IDS:
 		for sk in ["pilot", "ace"]:
 			var r: Dictionary = by["%s %s" % [sk, id]]
-			eq(r.gates, RaceCourse.GATES, "seed %d: the %s %s takes every gate" % [s, sk, id])
+			eq(r.gates, c.gate_count, "seed %d: the %s %s takes every gate" % [s, sk, id])
 			check(r.time < INF, "seed %d: the %s %s lands home on the rail" % [s, sk, id])
 			check(r.course_bonks == 0, "seed %d: the %s %s doesn't bonk on the course (%d)" % [s, sk, id, r.course_bonks])
 		var rec: Dictionary = by["recruit %s" % id]

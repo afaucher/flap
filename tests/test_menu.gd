@@ -265,7 +265,7 @@ func _race() -> void:
 			await game.loaded
 		await frames(3)
 		var what := "race (%s)" % (rivals if rivals != "" else "alone")
-		check(game.race and game.course != null and game.course.gates.size() == RaceCourse.GATES, what + ": the game opens in race mode on a full course")
+		check(game.race and game.course != null and game.course.gates.size() == game.course.gate_count, what + ": the game opens in race mode on a full course")
 		if game.course != null:
 			eq(game.course.seed, Menu.COURSES[1], what + ": the course picked")
 			var over := AABB(game.course.start.position + Vector3(-0.4, 0.1, -0.4), Vector3(0.8, 1.2, 0.8))   # (where a bird sits on the rail, and over its head)
