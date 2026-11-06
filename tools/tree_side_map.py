@@ -1,9 +1,9 @@
-"""Side view of each oak's wood (the limbs as drawn, the trunk, perches, leaf masses) beside reference images, all at
+"""Side view of each tree's wood (the limbs as drawn, the trunk, perches, leaf masses) beside reference images, all at
 the same scale: every panel's tree is drawn the same height, with guides at fractions of that height and width.
 
-Usage: python tools/oak_side_map.py <oak_paths.json> <out.png> [--ref <img> <ground_y> <top_y> <trunk_x> <label>]...
-  oak_paths.json comes from .\\probe.ps1 -Headless probe_oak_paths. A reference's ground_y, top_y and trunk_x are pixel
-  positions in that image (the trunk's foot, the crown's top), so it can be scaled and lined up with the oaks.
+Usage: python tools/tree_side_map.py <tree_paths.json> <out.png> [--ref <img> <ground_y> <top_y> <trunk_x> <label>]...
+  tree_paths.json comes from .\\probe.ps1 -Headless probe_tree_paths [--kind pine]. A reference's ground_y, top_y and
+  trunk_x are pixel positions in that image (the trunk's foot, the crown's top), so it can be scaled and lined up.
 """
 import json
 import math
@@ -109,7 +109,7 @@ def draw_oak(oak, w_px):
     for p in oak["perches"]:
         a0, a1 = proj(p["a"]), proj(p["b"])
         d.line([a0[0], a0[1], a1[0], a1[1]], fill=(230, 120, 20) if p["outpost"] else (20, 170, 60), width=3)
-    d.text((10, 8), "oak %d   h %.1f m   fork %.1f m   %d perches" % (oak["id"], h, oak["crown_base"], len(oak["perches"])),
+    d.text((10, 8), "%s %d   h %.1f m   crown from %.1f m   %d perches" % (oak.get("name", "oak"), oak["id"], h, oak["crown_base"], len(oak["perches"])),
            fill=(30, 30, 30), font=font(17))
     d.text((10, 30), "wood shaded by depth (near dark), perches green, outpost rail orange, leaf masses faint",
            fill=(90, 90, 90), font=font(13))
