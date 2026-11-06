@@ -30,7 +30,7 @@ func setup() -> void:
 	var layout := Pinewood.generate(arena_seed)
 	RaceCourse.debug = true
 	var plan_for := (Boot.arg_value(args, "--plan-for") if Boot.arg_value(args, "--plan-for") != "" else ",".join(BirdProfile.IDS)).split(",")
-	var course := RaceCourse.generate(layout, course_seed, Array(plan_for))
+	var course := RaceCourse.generate(layout, course_seed, Array(plan_for), Boot.arg_value(args, "--style"))
 	print("RACE planned for %s: turning circle %.1f m, half span %.2f m, way in %.1f m, way out %.1f m, level run-in %.1f m" % [",".join(plan_for), course.envelope.turn_r, course.envelope.half_span, course.envelope.entry(), course.envelope.exit(), course.envelope.dive_run()])
 	print("RACE arena %d course %d: %d gates, %.0f m, built in %.0f ms; start perch %d at (%.1f, %.1f, %.1f)" % [arena_seed, course_seed,
 		course.gates.size(), course.length(), course.build_ms, course.start.id, course.start.position.x, course.start.position.y, course.start.position.z])
@@ -176,12 +176,12 @@ func _svg(course: RaceCourse, layout: ArenaLayout, trial: RaceTrial) -> void:
 	for g in course.gates:
 		lo = minf(lo, g.centre.y)
 		hi = maxf(hi, g.centre.y)
-	var prev := course.start.position
-	for g in course.gates:
-		var a: Vector2 = at.call(prev)
-		var b: Vector2 = at.call(g.centre)
-		s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="#202020" stroke-width="1" stroke-dasharray="6,4"/>' % [a.x, a.y, b.x, b.y])
-		prev = g.centre
+	for k in course.gates.size():   # (each leg's planned line: the smooth curve, or its route through the wood)
+		var pts := []
+		for p in course.flown_line(course.gates, k):
+			var v: Vector2 = at.call(p)
+			pts.append("%.0f,%.0f" % [v.x, v.y])
+		s.append('<polyline points="%s" fill="none" stroke="#202020" stroke-width="1.2" stroke-dasharray="6,4"/>' % " ".join(pts))
 	if not course.gates.is_empty():   # (home: the last gate to the rail's run-in, then in to the rail)
 		var hp := [course.gates[-1].centre, course.home_in(), course.start.position]
 		for j in 2:
@@ -211,7 +211,7 @@ func _svg(course: RaceCourse, layout: ArenaLayout, trial: RaceTrial) -> void:
 	var base_y := y0 + prof_h - 10.0
 	s.append('<line x1="40" y1="%.0f" x2="%.0f" y2="%.0f" stroke="#7a6a50" stroke-width="2"/>' % [base_y, w - 20.0, base_y])
 	var dist := 0.0
-	prev = course.start.position
+	var prev := course.start.position
 	var pts := PackedStringArray(["%.0f,%.0f" % [40.0, base_y - prev.y * sy]])
 	for k in course.gates.size():
 		var g := course.gates[k]

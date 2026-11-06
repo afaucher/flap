@@ -9,8 +9,10 @@ extends RefCounted
 ##             then glide.
 ##   DROP      sit for `wait` s, press CATCH (let go), then glide.
 ##   GLIDE     hands off: wings level, best glide (into the trunk: the glances and bonks).
+##   AI        the AI flies it (AIPilot `ai`, as in the game): sent to land on `goal` (sent again every second it's
+##             flying without that target, as a race sends its racers home), or, with no goal, picking its own perches.
 
-enum Kind { APPROACH, TAKEOFF, DROP, GLIDE }
+enum Kind { APPROACH, TAKEOFF, DROP, GLIDE, AI }
 
 var kind := Kind.APPROACH
 var target := Vector3.ZERO
@@ -24,6 +26,9 @@ var _pressed := false
 var _stick := Vector2.ZERO
 var _closest := INF
 var missed := false   ## flew past the perch: going around
+var ai: AIPilot = null
+var goal: Perch = null
+var _resend := 0.0
 
 
 func sample(bird: Bird, dt: float) -> FlightInput:
@@ -46,6 +51,11 @@ func sample(bird: Bird, dt: float) -> FlightInput:
 			return FlightInput.new(Vector2.ZERO, false, false, press)
 		Kind.GLIDE:
 			return FlightInput.new()
+		Kind.AI:
+			if goal != null and bird.state == Bird.State.FLYING and ai.target != goal and clock >= _resend:
+				_resend = clock + 1.0
+				ai.go_to_perch(bird, goal)
+			return ai.sample(bird, dt)
 	return _approach(bird, dt)
 
 

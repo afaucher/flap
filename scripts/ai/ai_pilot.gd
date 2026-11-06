@@ -31,6 +31,13 @@ var perches_reached := 0
 var replans := 0
 var debug_reason := ""
 var turn_radius := -1.0         ## m, at cruise (set on the first tick)
+## What the last avoidance check saw, for a view to draw (RouteView; nothing in the flying reads them): the path
+## predicted toward the aim, how many seconds of it are clear (`predict_horizon`: all of it), and, while `avoiding`,
+## the escape it chose instead (empty when it kept to the route).
+var predicted := PackedVector3Array()
+var predicted_clear := 0.0
+var predict_horizon := 0.0
+var escape := PackedVector3Array()
 var min_perch_height := 0.0
 
 var _min_dist := INF
@@ -392,16 +399,19 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 		if Vector2(t.base.x - pos.x, t.base.y - pos.z).length() < v * horizon + t.reach() + 1.0:
 			near.append(t)
 	var want := (aim - pos) if aim != Vector3.INF else ahead
-	if aim != Vector3.INF and _predict(bird, near, aim, true, gamma, horizon, frac, follow_route)[0] >= horizon:
+	var first: Array = _predict(bird, near, aim, true, gamma, horizon, frac, follow_route) if aim != Vector3.INF else _predict(bird, near, ahead, false, gamma, horizon, frac)
+	predicted = first[2]
+	predicted_clear = first[0]
+	predict_horizon = horizon
+	escape = PackedVector3Array()
+	if first[0] >= horizon:
 		avoiding = maxf(0.0, avoiding - dt)
 		return [want, gamma]
-	if aim == Vector3.INF and _predict(bird, near, ahead, false, gamma, horizon, frac)[0] >= horizon:
-		avoiding = maxf(0.0, avoiding - dt)
-		return [ahead, gamma]
 	avoiding = 0.5
 	var want_h := Vector3(want.x, 0.0, want.z).normalized()
 	var best: Array = [ahead, deg_to_rad(25.0)]
 	var best_score := -INF
+	var best_pts := PackedVector3Array()
 	for climb in [gamma, deg_to_rad(18.0), deg_to_rad(-12.0), deg_to_rad(30.0)]:
 		for yaw_deg in [0.0, 25.0, -25.0, 50.0, -50.0, 80.0, -80.0, 115.0, -115.0, 150.0, -150.0]:
 			var d := ahead.rotated(Vector3.UP, deg_to_rad(yaw_deg))
@@ -414,10 +424,12 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 			if score > best_score:
 				best_score = score
 				best = [d, climb]
+				best_pts = r[2]
 		if best_score >= horizon:
 			break   # (something clear without climbing more)
 	if best_score <= 0.0:
 		return [want, gamma]   # (hemmed in on every side right now: keep to the route, which was planned clear)
+	escape = best_pts
 	return best
 
 
@@ -440,7 +452,7 @@ static func _bank_room(p: BirdProfile, y: float, frac := 0.85) -> float:
 ## Fly `horizon` seconds ahead in prediction: steer by the guidance law toward `toward` (a point, following
 ## the route's later waypoints the way `_fly` advances them, or a fixed heading), the bank slewing at the roll
 ## rate up to the room it has at that height, the path angle easing toward `gamma` less what the bank sheds.
-## Returns [seconds clear (`horizon` if all of it), final heading]. Coming in to land, the perch's own tree counts
+## Returns [seconds clear (`horizon` if all of it), final heading, the predicted points]. Coming in to land, the perch's own tree counts
 ## too, closer (OWN_TREE_CLEARANCE) and without the perch's branch, and the path ends where it passes closest to
 ## the perch if that's in the feet's reach (the catch). Just after take-off, so does the tree it left (past the
 ## first PUSH_OFF metres, which it passes through as it lets go). With `to_beat` (the fan's best score so far, a clear
@@ -489,7 +501,7 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 		pos = nxt
 		t += PREDICT_STEP
 	if to_beat < INF and horizon + (2.0 + dir.dot(want_h)) <= to_beat:
-		return [-1.0, dir]
+		return [-1.0, dir, pts]
 	var close := []
 	for tr in near:
 		var rr: float = tr.reach() + WHISKER_CLEARANCE
@@ -507,12 +519,12 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 		var a := pts[i]
 		var b := pts[i + 1]
 		if left >= 0 and a.distance_to(_takeoff_pos) > FlightPlanner.PUSH_OFF and not layout.tree_clear(left, a, b, OWN_TREE_CLEARANCE, _left_perch):
-			return [i * PREDICT_STEP, dir]
+			return [i * PREDICT_STEP, dir, pts]
 		if own >= 0 and not layout.tree_clear(own, a, b, OWN_TREE_CLEARANCE, target.id):
-			return [i * PREDICT_STEP, dir]
+			return [i * PREDICT_STEP, dir, pts]
 	if blocked >= 0:
-		return [blocked * PREDICT_STEP, dir]
-	return [horizon, dir]
+		return [blocked * PREDICT_STEP, dir, pts]
+	return [horizon, dir, pts]
 
 
 static func _signed_heading(from: Vector3, to: Vector3) -> float:

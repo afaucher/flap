@@ -44,16 +44,33 @@ func setup() -> void:
 			var hc := ha[Mesh.ARRAY_COLOR] as PackedColorArray
 			var top := -INF
 			var chin := INF
+			var ax := BirdRig._neck_axis()
+			var x2 := ax.cross(Vector3.RIGHT)
 			for k in hp.size():
 				var v := hp[k]
 				if v.z > -0.25 * hr:
 					continue
 				if hc[k].get_luminance() > 0.8:
 					top = maxf(top, v.y)
-				if v.y < -0.45 * hr and absf(v.x) < 0.25 * hr:
+				# (the chin as drawn: the head above the neck's ring -- its cap under the ring is hidden in the neck --)
+				var d := Vector3(v.x / rig.body.skull.x, v.y / rig.body.skull.y, v.z / rig.body.skull.z).normalized()
+				var shown := acos(clampf(d.dot(ax), -1.0, 1.0)) >= rig._ring_th(atan2(d.dot(x2), d.x)) - 1e-3
+				if shown and v.y < -0.25 * hr and absf(v.x) < 0.25 * hr:   # (the lowest of the face the neck leaves showing)
 					chin = minf(chin, hc[k].get_luminance())
+			# (... and the front of the neck's upper half, which carries the head's colours on down from its ring under the
+			# chin -- a ruff run full round the chin shows there as two dark streaks under the disc; the ruff's own sides,
+			# further out, and the body's breast colour below are left out), the head level
+			rig.look_dir = Vector3.FORWARD
+			rig.apply_pose()
+			var na := rig.drawn_arrays(rig._neck_mi)
+			var nv := na[Mesh.ARRAY_VERTEX] as PackedVector3Array
+			var nc := rig._neck_loft.colors_built
+			for k in (BirdRig.NECK_ROWS / 2) * (BirdRig.TRUNK_AROUND + 1):
+				var v := rig._head.transform.affine_inverse() * nv[k]
+				if v.z < 0.0 and absf(v.x) < 0.7 * hr:
+					chin = minf(chin, nc[k].get_luminance())
 			check(top > 0.45 * hr, "%s disc reaches the forehead (pale to %.2f head radii above the centre)" % [p.id, top / hr])
-			check(chin > 0.6, "%s disc: no dark band under the chin (darkest %.2f)" % [p.id, chin])
+			check(chin > 0.65, "%s disc: no dark band under the chin (darkest %.2f)" % [p.id, chin])
 		# The neck's first ring is the trunk's front ring.
 		rig.look_dir = Vector3.FORWARD
 		rig.apply_pose()
@@ -83,10 +100,10 @@ func setup() -> void:
 		var head_worst := 0.0
 		var step := TAU * hr * maxf(rig.body.skull.x, rig.body.skull.z) / BirdRig.HEAD_AROUND * 1.5
 		for j in BirdRig.TRUNK_AROUND:
-			var target: Vector3 = rig._head.transform * rig._head_point(rig._neck_entry, -TAU * j / BirdRig.TRUNK_AROUND)
+			var target: Vector3 = rig._head.transform * rig._head_point(rig._ring_th(-TAU * j / BirdRig.TRUNK_AROUND), -TAU * j / BirdRig.TRUNK_AROUND)
 			var best_n := INF
 			var near_n := Vector3.ZERO
-			for q in nv:
+			for q in nv.slice(0, BirdRig.TRUNK_AROUND + 1):   # (its last loop, the head end: the loft's first row)
 				if q.distance_to(target) < best_n:
 					best_n = q.distance_to(target)
 					near_n = q

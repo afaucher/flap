@@ -2,10 +2,11 @@ class_name RaceView
 extends Node3D
 ## The course drawn, placeholder style (the gate designs come later): each window as a thin frame, a banner bar over
 ## the post and trunk gates, red and white bands on their posts and trunks, a ring for each hoop on its ropes (a
-## span hoop's rope strung between its trunks), the start perch (where the race ends too) marked. Visual only: the
-## posts' wood is the layout's (RaceCourse.apply), the frames and ropes have no collision. set_next() colours them: the
-## next gate bright, the one after it softer, those passed green, the rest pale; the rail's mark bright once every
-## gate is taken (land on it to finish), softer while the last gate is next.
+## span hoop's rope strung between its trunks), and a ring round the start rail (where the race ends) once the last
+## gate is next. Visual only: the posts' wood is the layout's (RaceCourse.apply), the frames and ropes have no
+## collision. set_next() colours them: the next gate bright, the one after it softer, those passed green, the rest
+## pale; the rail's ring soft while the last gate is next, bright once every gate is taken (land on it to finish),
+## hidden before (it was a disc over the rail: over a bird's head on it, in the way the whole race).
 
 const NEXT := Color(1.0, 0.45, 0.1)
 const AFTER := Color(1.0, 0.75, 0.45)
@@ -14,10 +15,13 @@ const PASSED := Color(0.35, 0.8, 0.4)
 const ROPE := Color(0.55, 0.45, 0.3)
 const BAND := Color(0.75, 0.12, 0.08)
 const BAR := 0.05   ## m: the frame's thickness
+const HOME_R := 1.0      ## m: the ring round the rail, shown once the last gate is next
+const HOME_UP := 0.35    ## m above the rail (round a bird sitting on it, not over its head)
 
 var course: RaceCourse
 var _mats: Array[StandardMaterial3D] = []   ## each gate's frame
 var _home: StandardMaterial3D               ## the rail's mark
+var _home_ring: MeshInstance3D
 
 
 func build(c: RaceCourse) -> void:
@@ -61,16 +65,16 @@ func build(c: RaceCourse) -> void:
 					root.add_child(bm)
 		for r in g.ropes():
 			root.add_child(_bar(r[0], r[1], 0.015 if g.kind == "hoop" else 0.04, rope if g.kind == "hoop" else m))
-	var st := MeshInstance3D.new()   # (the start: a disc over the rail)
-	var disc := CylinderMesh.new()
-	disc.top_radius = 0.5
-	disc.bottom_radius = 0.5
-	disc.height = 0.02
-	st.mesh = disc
+	_home_ring = MeshInstance3D.new()   # (home: a thin ring round the rail, clear of a bird sitting on it)
+	var ring := TorusMesh.new()
+	ring.inner_radius = HOME_R - BAR
+	ring.outer_radius = HOME_R + BAR
+	ring.rings = 48
+	_home_ring.mesh = ring
 	_home = _mat(NEXT, true)
-	st.material_override = _home
-	st.position = c.start.position + Vector3.UP * 0.6
-	add_child(st)
+	_home_ring.material_override = _home
+	_home_ring.position = c.start.position + Vector3.UP * HOME_UP
+	add_child(_home_ring)
 	set_next(0)
 
 
@@ -87,7 +91,8 @@ func set_next(next: int) -> void:
 		_mats[k].albedo_color = c
 		_mats[k].emission = c * (0.9 if k == next else 0.25)
 	var n := _mats.size()
-	var h := NEXT if next >= n else (AFTER if next == n - 1 else LATER)
+	_home_ring.visible = next >= n - 1
+	var h := NEXT if next >= n else AFTER
 	_home.albedo_color = h
 	_home.emission = h * (0.9 if next >= n else 0.25)
 
