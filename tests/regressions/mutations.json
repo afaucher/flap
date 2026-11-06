@@ -5042,5 +5042,47 @@
     "replace": "\t_home_ring.visible = true\n\t_home_ring.scale = Vector3(0.5, 1.0, 0.5)\n"
    }
   ]
+ },
+ {
+  "id": "race-style-ignored",
+  "bug": "A course style's legs and gate count not taken: every style built the all-round course (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tleg_range = _shape.leg\n\tgate_count = _shape.gates\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "race-long-unrouted",
+  "bug": "Long legs only ever as one smooth curve: in the wood a 30-55 m curve nearly always clips a tree, and long courses died at 3-6 gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif not bool(_shape.get(\"route\", false)) or all[k].kind == \"home\":",
+    "replace": "\tif true:"
+   }
+  ]
+ },
+ {
+  "id": "race-technical-hawk-turns",
+  "bug": "Technical courses planned for the hawk's turning circle: its tight turns and S-bends couldn't be made, and they wound round to come home from behind the rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tc.envelope = Envelope.of(c._shape.get(\"birds\", birds))",
+    "replace": "\tc.envelope = Envelope.of(birds)"
+   }
+  ]
  }
 ]

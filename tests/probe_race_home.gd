@@ -17,7 +17,7 @@ func setup() -> void:
 	var seconds := float(Boot.arg_value(args, "--seconds")) if Boot.arg_value(args, "--seconds") != "" else 45.0
 	var tries := int(Boot.arg_value(args, "--tries")) if Boot.arg_value(args, "--tries") != "" else 3
 	var layout := Pinewood.generate(arena_seed)
-	var course := RaceCourse.generate(layout, course_seed)
+	var course := RaceCourse.generate(layout, course_seed, BirdProfile.IDS, Boot.arg_value(args, "--style"))
 	var posts := not args.has("--no-posts")
 	var arena := ArenaBuilder.new()
 	arena.looks = false

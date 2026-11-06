@@ -217,17 +217,24 @@ func _race() -> void:
 	var choice0 := menu.find_child("Choice0", true, false) as Button
 	check(start.is_visible_in_tree() and not choice0.is_visible_in_tree(), "Race opens its own screen")
 	check(not (menu.find_child("Start", true, false) as Button).is_visible_in_tree() and not (menu.find_child("FlightStart", true, false) as Button).is_visible_in_tree(), "and only its own")
-	eq(menu.find_children("Course*", "Button", true, false).size(), Menu.COURSES.size(), "a button per course")
+	eq(menu.find_children("Shape*", "Button", true, false).size(), Menu.COURSE_SHAPES.size(), "a button per kind of course")
+	eq(menu.find_children("Heights*", "Button", true, false).size(), Menu.COURSE_HEIGHTS.size(), "and per heights")
+	for st in RaceCourse.STYLES:
+		check(Menu.COURSES.has(st), "a course for every style (%s)" % st)
 	(menu.find_child("RaceBird2", true, false) as Button).pressed.emit()   # owl
-	(menu.find_child("Course1", true, false) as Button).pressed.emit()     # the second course
+	(menu.find_child("Shape1", true, false) as Button).pressed.emit()      # long
+	(menu.find_child("Heights1", true, false) as Button).pressed.emit()    # high and low
 	await frames(1)
+	var style := "long-high-low"
+	eq(Menu.race_style(), style, "long, high and low")
 	var text := _text(menu)
+	check(text.contains(Menu.COURSE_SHAPES[1][2]) and text.contains(Menu.COURSE_HEIGHTS[1][2]), "and what they mean is on screen")
 	check(text.contains(BirdProfile.by_id(BirdProfile.IDS[2]).blurb), "picking the owl shows what it's like")
 	check(text.contains(Menu.RIVALS[0][2]), "racing alone by default, and what it means is on screen")
 	check(text.contains("No time set"), "no best time yet")
 	check(text.contains(Menu.RACE_RULES), "the race's rules are on screen")
 	check(not text.contains("Space: flap"), "no controls on it")
-	eq(Array(Menu.race_options()), ["--race", "--no-rider", "--bird", BirdProfile.IDS[2], "--course", str(Menu.COURSES[1]), "--flying", "novice"],
+	eq(Array(Menu.race_options()), ["--race", "--no-rider", "--bird", BirdProfile.IDS[2], "--course", str(Menu.COURSES[style]), "--course-style", style, "--flying", "novice"],
 		"Start asks for a race on that course with that bird, no tack, no rivals")
 	for k in Menu.RIVALS.size():
 		(menu.find_child("Rivals%d" % k, true, false) as Button).pressed.emit()
@@ -236,11 +243,11 @@ func _race() -> void:
 		var o := Array(Menu.race_options())
 		check(o.has("--race-ai") == (k > 0) and (k == 0 or o[o.find("--race-ai") + 1] == Menu.RIVALS[k][0]), "%s: and Start asks for them (%s)" % [Menu.RIVALS[k][1], str(o)])
 	(menu.find_child("Rivals2", true, false) as Button).pressed.emit()     # pilots
-	RaceRecord.offer(RaceRecord.key(Menu.COURSES[1], Menu.ARENA_SEED, BirdProfile.IDS[2], "novice"), 31.25, [])
-	(menu.find_child("Course0", true, false) as Button).pressed.emit()     # (a time on another course isn't shown)
+	RaceRecord.offer(RaceRecord.key(Menu.COURSES[style], Menu.ARENA_SEED, BirdProfile.IDS[2], "novice", style), 31.25, [])
+	(menu.find_child("Heights0", true, false) as Button).pressed.emit()    # (a time on another course isn't shown)
 	await frames(1)
 	check(_text(menu).contains("No time set"), "a best on another course isn't this one's")
-	(menu.find_child("Course1", true, false) as Button).pressed.emit()
+	(menu.find_child("Heights1", true, false) as Button).pressed.emit()
 	await frames(1)
 	check(_text(menu).contains("0:31.2") or _text(menu).contains("0:31.3"), "the best kept on this course is shown")
 	(menu.find_child("RaceFlying1", true, false) as Button).pressed.emit() # realistic: a best of its own
@@ -267,7 +274,8 @@ func _race() -> void:
 		var what := "race (%s)" % (rivals if rivals != "" else "alone")
 		check(game.race and game.course != null and game.course.gates.size() == game.course.gate_count, what + ": the game opens in race mode on a full course")
 		if game.course != null:
-			eq(game.course.seed, Menu.COURSES[1], what + ": the course picked")
+			eq(game.course.seed, Menu.COURSES[style], what + ": the course picked")
+			eq(game.course.style, style, what + ": in its style")
 			var over := AABB(game.course.start.position + Vector3(-0.4, 0.1, -0.4), Vector3(0.8, 1.2, 0.8))   # (where a bird sits on the rail, and over its head)
 			var in_way := 0
 			for mi in game.race_view.find_children("*", "MeshInstance3D", true, false):
@@ -301,6 +309,8 @@ func _race() -> void:
 		game.queue_free()
 		await frames(2)
 	Menu.race_rivals = ""
+	Menu.race_shape = Menu.COURSE_SHAPES[0][0]
+	Menu.race_heights = Menu.COURSE_HEIGHTS[0][0]
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(RaceRecord.path))
 	RaceRecord.path = "user://race_best.cfg"
 

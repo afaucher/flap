@@ -16,7 +16,7 @@ func setup() -> void:
 	var birds := (Boot.arg_value(args, "--birds") if Boot.arg_value(args, "--birds") != "" else ",".join(BirdProfile.IDS)).split(",")
 	var plan_for: Array = Array(Boot.arg_value(args, "--plan-for").split(",")) if Boot.arg_value(args, "--plan-for") != "" else BirdProfile.IDS
 	var layout := Pinewood.generate(arena_seed)
-	var course := RaceCourse.generate(layout, course_seed, plan_for)
+	var course := RaceCourse.generate(layout, course_seed, plan_for, Boot.arg_value(args, "--style"))
 	var res := await LinePilot.fly_course(layout, course, Array(birds), self)
 	print("FLY seed %d: %d gates, planned for %s" % [arena_seed, course.gates.size(), ",".join(plan_for)])
 	var head := "FLY  #  kind        height  turn  climb  radius |"

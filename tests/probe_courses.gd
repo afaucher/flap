@@ -30,11 +30,19 @@ func setup() -> void:
 			kinds[lg.kind] = int(kinds.get(lg.kind, 0)) + 1
 			left += 1 if lg.turn > 15.0 else 0
 			right += 1 if lg.turn < -15.0 else 0
+		var crosses := 0
+		var pts: Array[Vector2] = [Vector2(c.start.position.x, c.start.position.z)]
+		for g in c.gates:
+			pts.append(Vector2(g.centre.x, g.centre.z))
+		for i in pts.size() - 1:
+			for j in range(i + 2, pts.size() - 1):
+				if Geometry2D.segment_intersects_segment(pts[i], pts[i + 1], pts[j], pts[j + 1]) != null:
+					crosses += 1
 		var probs := c.problems()
 		var ok := c.gates.size() == c.gate_count and probs.is_empty() and hi - lo >= 6.0 and kinds.size() >= 3 and left >= 1 and right >= 1
 		good += int(ok)
 		var home := c.gates[-1].centre.distance_to(c.start.position) if not c.gates.is_empty() else INF
-		print("COURSES %2d: %2d gates %s, legs %.0f m, heights %4.1f-%4.1f, kinds %s, turns %dL %dR, start %d, home %.0f m, %.1f s%s" % [s, c.gates.size(),
-			"ok" if probs.is_empty() else "(%s)" % probs[0], legs, lo, hi, str(kinds), left, right, c.start.id, home, c.build_ms / 1000.0, "  <- passes" if ok else ""])
+		print("COURSES %2d: %2d gates %s, legs %.0f m, heights %4.1f-%4.1f, kinds %s, turns %dL %dR, crosses %d, start %d, home %.0f m, %.1f s%s" % [s, c.gates.size(),
+			"ok" if probs.is_empty() else "(%s)" % probs[0], legs, lo, hi, str(kinds), left, right, crosses, c.start.id, home, c.build_ms / 1000.0, "  <- passes" if ok else ""])
 	print("COURSES %d of %d pass _course_rules" % [good, int(span[-1]) - int(span[0]) + 1])
 	finish()
