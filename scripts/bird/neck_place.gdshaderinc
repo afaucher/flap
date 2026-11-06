@@ -9,6 +9,9 @@
 //   from its centre)       y4: its feather coordinates (uv, uv2; 21, the seam again)
 //   y5: the head ring's u run on round the ring (x), and what one lap adds (y, in x = 0)
 //   y6 + row: the body's colour carried up the neck, per row (mesh order) and column
+//   y16: the trunk ring's way on forward (20, unit)    y17: its normals
+//   y18: the head ring's way up into the head (60, head space, unit)    y19: its normals
+//   y20 + row: the head's colours carried down the neck, per row (mesh order) and head ring point
 uniform sampler2D neck_tab : filter_nearest, repeat_disable;
 uniform vec3 neck_ca;      // the trunk's ring centre (scaled)
 uniform vec3 neck_p1;      // the centreline's two control points
@@ -20,6 +23,7 @@ uniform int neck_r;        // the pairing: column j meets head point (r +- 3 j) 
 uniform int neck_rev;
 uniform float neck_ub_off; // the head's u, unwrapped to run on from the trunk's
 uniform float neck_flip;   // the normals' sign (LoftMesh._flip)
+uniform vec4 neck_k;       // BirdRig.NECK_OUT, NECK_IN, NECK_FULL, NECK_PACK
 
 const int NK_ROWS = 10;
 const int NK_AROUND = 20;
@@ -34,20 +38,40 @@ int nk_lin(int j) {   // the head point column j meets, not wrapped
 	return neck_r + (neck_rev != 0 ? -3 * j : 3 * j);
 }
 
+float nk_u(int i) {   // BirdRig._neck_u: row i (mesh order) along the neck, 0 the trunk .. 1 the head
+	float t = float(NK_ROWS - 1 - i) / float(NK_ROWS - 1);
+	return t - neck_k.w * sin(6.28318530718 * t) / 6.28318530718;
+}
+
+// Each lengthwise line its own cubic, leaving the trunk along its surface and entering the head along its (BirdRig._loft_neck).
 vec3 nk_pos(int i, int j) {
 	int jj = nk_mod(j, NK_AROUND);
-	float u = float(NK_ROWS - 1 - i) / float(NK_ROWS - 1);
+	int m = nk_mod(nk_lin(jj), NK_HEAD);
+	float u = nk_u(i);
 	float v = 1.0 - u;
 	vec3 c = neck_ca * v * v * v + neck_p1 * 3.0 * v * v * u + neck_p2 * 3.0 * v * u * u + neck_cb * u * u * u;
 	float s = smoothstep(0.0, 1.0, u);
+	float dl = distance(neck_ca, neck_cb);
+	vec3 tb = normalize(neck_cb - neck_p2);
+	float w1 = 3.0 * v * v * u * neck_k.x * dl;
+	float w2 = 3.0 * v * u * u * neck_k.y * dl;
+	float bump = 64.0 * pow(u * v, 3.0);
 	vec3 oa = texelFetch(neck_tab, ivec2(jj, 3), 0).xyz * neck_st;
-	vec3 ob = neck_hb * texelFetch(neck_tab, ivec2(nk_mod(nk_lin(jj), NK_HEAD), 0), 0).xyz;
-	return c + oa + (ob - oa) * s;
+	vec3 ob = neck_hb * texelFetch(neck_tab, ivec2(m, 0), 0).xyz;
+	vec3 ta = texelFetch(neck_tab, ivec2(jj, 16), 0).xyz;
+	vec3 tbj = normalize(neck_hb * texelFetch(neck_tab, ivec2(m, 18), 0).xyz) - tb;
+	return c + (oa + (ob - oa) * s) * (1.0 + neck_k.z * bump) + (ta - vec3(0.0, 0.0, -1.0)) * w1 - tbj * w2;
 }
 
 // LoftMesh.normals: every triangle's unit normal summed at its corners (quads a b / c d: triangles a c b, b c d), over
 // the four quads round the vertex -- its 3 x 3 neighbours, each placed once.
 vec3 nk_normal(int i, int j) {
+	if (i == 0) {   // the head ring: the head's own normals (LoftMesh.pin_first)
+		return normalize(neck_hb * texelFetch(neck_tab, ivec2(nk_mod(nk_lin(nk_mod(j, NK_AROUND)), NK_HEAD), 19), 0).xyz);
+	}
+	if (i == NK_ROWS - 1) {   // the trunk ring: the trunk's (pin_last)
+		return texelFetch(neck_tab, ivec2(nk_mod(j, NK_AROUND), 17), 0).xyz;
+	}
 	vec3 g[9];
 	for (int di = -1; di <= 1; di++) {
 		for (int dj = -1; dj <= 1; dj++) {
@@ -90,11 +114,11 @@ void neck_vertex(int i, int j, out vec3 pos, out vec3 nrm, out vec4 col, out vec
 	int jj = nk_mod(j, NK_AROUND);
 	pos = nk_pos(i, jj);
 	nrm = nk_normal(i, jj);
-	float u = float(NK_ROWS - 1 - i) / float(NK_ROWS - 1);
+	float u = nk_u(i);
 	float s = smoothstep(0.0, 1.0, u);
 	int m = nk_mod(nk_lin(jj), NK_HEAD);
 	vec4 c_body = texelFetch(neck_tab, ivec2(jj, 6 + i), 0);
-	col = c_body + (texelFetch(neck_tab, ivec2(m, 1), 0) - c_body) * smoothstep(0.75, 1.0, u);
+	col = c_body + (texelFetch(neck_tab, ivec2(m, 20 + i), 0) - c_body) * smoothstep(0.2, 0.9, u);   // (BirdRig._head_share)
 	vec4 ta = texelFetch(neck_tab, ivec2(j, 4), 0);
 	vec4 hb = texelFetch(neck_tab, ivec2(m, 2), 0);
 	int q = nk_lin(j);

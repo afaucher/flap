@@ -86,7 +86,7 @@ func setup() -> void:
 			var target: Vector3 = rig._head.transform * rig._head_point(rig._neck_entry, -TAU * j / BirdRig.TRUNK_AROUND)
 			var best_n := INF
 			var near_n := Vector3.ZERO
-			for q in nv:
+			for q in nv.slice(0, BirdRig.TRUNK_AROUND + 1):   # (its last loop, the head end: the loft's first row)
 				if q.distance_to(target) < best_n:
 					best_n = q.distance_to(target)
 					near_n = q

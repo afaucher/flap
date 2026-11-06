@@ -78,7 +78,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   AI's). `test_race` (every bird flies the course, by LinePilot).
 - `scripts/ui/flight_hud.gd`, `scripts/app/` (boot, game, input setup; the rig gallery and the bird lab: `bird_lab.gd` with `LabScenarios`, `LabPilot`, `RigPoses`; its combat scenes, `LabFight`: a gun
   burst, a rocket hit, a seeker lock and launch, a bird downed (fluttering down to the ground), rearming on the base -- the real CombatWorld and tack), `scripts/test_support/`.
-- `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`).
+- `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`). The neck
+  meets the head and trunk flush, lit and coloured as one (`BirdRig._loft_neck`, `docs/design/wing_rig.md`; `test_neck_seam` measures
+  the crease, the normals, the nape's notch and the colour hand-over; the rig gallery's `--view nape|throat` look at it).
 - `scripts/tack/`: the war tack, visual only (`Tack.fit(rig, bird)`): `Saddle` (harness, seat, launcher, laid out on
   `BackSurface`), `Rider` (head, helmet and goggles fitted to `HeadShape`), `TackMesh` + the leather/metal/
   cloth/skin/eye shaders. Look at it with

@@ -197,6 +197,14 @@ var _cpu_neck := false            ## (GPU neck) loft it here as well this pose (
 var _neck_tab: ImageTexture
 var _hp60 := PackedVector3Array()  ## the head's neck ring (head space): it never changes, so worked out once
 var _ca_cols: Array = []           ## the trunk's front ring's colours (the same)
+## Where the neck joins (fixed for the bird, _neck_ends): on the trunk's front ring, the surface's way on forward and its
+## normal at each point; on the head's neck ring (head space), the surface's way up into the head and its normal. The
+## neck leaves and enters along them, and its end rings take those normals, so neither join creases or shows in the light.
+var _ta20 := PackedVector3Array()
+var _tn20 := PackedVector3Array()
+var _tb60 := PackedVector3Array()
+var _hn60 := PackedVector3Array()
+var _hcol_ext: Array = []          ## the head's colours carried down the neck: per loft row (head end first), per head ring point
 ## The arm wings lofted in the body shader too (arm_place.gdshaderinc): their loop on the trunk takes the trunk's colour
 ## and feather coordinates there every frame, from the body's own tables (_body_tab).
 var gpu_arm := false
@@ -395,6 +403,7 @@ func _build_body(tint: Color) -> void:
 	head.mesh = _build_head_mesh()
 	head.material_override = body_mat
 	_head.add_child(head)
+	_neck_ends()
 	_build_face(skull, body_mat, hr)
 	if LegRig.enabled:
 		legs = LegRig.new(self)
@@ -1299,9 +1308,12 @@ var _neck_entry := 1.1       ## rad: the neck meets the head this far round from
                              ## as the collar it comes from (an owl's broad chest meets its big head near the head's widest)
 
 
-## The head's underside axis (head space), where the neck comes in: below and a little behind the centre.
+## The head's underside axis (head space), where the neck comes in: below and behind the centre, tipped back by
+## NECK_TILT so the neck's ring rides high on the nape (at the back of the head's widest, where the skull runs on along
+## the neck: no notch behind the head) and low under the chin.
+const NECK_TILT := 0.85
 static func _neck_axis() -> Vector3:
-	return Vector3(0.0, -1.0, 0.3).normalized()
+	return Vector3(0.0, -cos(NECK_TILT), sin(NECK_TILT))
 
 
 ## A point of the head's surface (head space), at polar angle `th` from the neck axis and `ph` round it: on
@@ -1326,9 +1338,13 @@ static func _head_dir(th: float, ph: float) -> Vector3:
 
 ## The head's colour at (th, ph): the plumage's head zones, the owl's disc pale with its dark ruff.
 func _head_color(th: float, ph: float) -> Color:
+	return _head_color_d(_head_dir(th, ph))
+
+
+## ... and in direction `d` from the head's centre (unit, before the skull's scale).
+func _head_color_d(d: Vector3) -> Color:
 	if Plumage.level == 0:
 		return _body_tint
-	var d := _head_dir(th, ph)
 	var c := Plumage.head(profile.id, d, Face.eye_dir(profile.id, 1.0))
 	var h: Dictionary = Plumage.spec(profile.id).head
 	if h.has("disc") and Face.spec(profile.id).has("disc") and d.z < 0.0:
@@ -1451,6 +1467,7 @@ func _head_uv(th: float, ph: float) -> Array:
 	var ring := _cdiv(e + p, Vector2(1.0, 0.0) + _cmul(Vector2(p.x, -p.y), e))   # (back to the ring, un-moved)
 	var a := wrapf(ring.angle() - _head_ref, -PI, PI) * _head_sense
 	var strength := HEAD_TEXTURE * lerpf(0.4, 1.0, smoothstep(0.05, 0.3, r))   # (the rows crowd at the pole)
+	strength = lerpf(strength, 1.0, smoothstep(0.6, 1.0, r))   # (as strong as the neck's where the neck joins: no edge)
 	return [Vector2(a * r * _head_ku, -(1.0 - r) * _head_kv), Vector2(TAU * r * _head_ku, d.y), strength]
 
 
@@ -1498,6 +1515,89 @@ func _init_feather_coords() -> void:
 		mean += v / _neck_v0.size()
 	for j in _neck_v0.size():
 		_neck_v0[j] = lerpf(_neck_v0[j], mean, 0.6)
+
+
+## How much of the head's colouring a neck row at `u` (0 trunk .. 1 head) wears: handed over along the neck's middle,
+## so no one row takes the step from the trunk's zones to the head's.
+static func _head_share(u: float) -> float:
+	return smoothstep(0.2, 0.9, u)
+
+
+const NECK_EXT_RUN := 0.8   ## how far the head's colours run on down the neck (head radii, straight down, by the trunk end)
+
+
+## The joins' fixed numbers (_ta20, _tn20, _tb60, _hn60, the colours the neck carries from each end), and the head's
+## and trunk's own ring normals set to the true surface's there, so the neck, pinned to the same, lights as they do.
+func _neck_ends() -> void:
+	var u_neck := body.u_at(body.collar_z)
+	_hp60.clear()
+	_ca_cols.clear()
+	_tb60.clear()
+	_hn60.clear()
+	const E := 1e-3
+	for q in HEAD_AROUND:
+		var ph := -TAU * q / HEAD_AROUND
+		var p := _head_point(_neck_entry, ph)
+		_hp60.append(p)
+		var dth := _head_point(_neck_entry + E, ph) - _head_point(_neck_entry - E, ph)
+		var dph := _head_point(_neck_entry, ph + E) - _head_point(_neck_entry, ph - E)
+		var n := dth.cross(dph).normalized()
+		_hn60.append(n if n.dot(p) > 0.0 else -n)
+		_tb60.append(dth.normalized())
+	_ta20.clear()
+	_tn20.clear()
+	var tring := PackedVector3Array()
+	for j in TRUNK_AROUND:
+		var a := TAU * j / TRUNK_AROUND
+		_ca_cols.append(_body_color_at(u_neck, sin(a), absf(cos(a))))
+		var z := body.collar_z
+		var p := _trunk_at(z, a)
+		tring.append(p)
+		var dz := _trunk_at(z - _L * 1e-3, a) - _trunk_at(z + _L * 1e-3, a)   # (forward)
+		var da := _trunk_at(z, a + E) - _trunk_at(z, a - E)
+		var n := dz.cross(da).normalized()
+		var r := body.ring_at(z)
+		_tn20.append(n if n.dot(p - Vector3(0.0, r[0], z)) > 0.0 else -n)
+		_ta20.append(dz.normalized())
+	_hcol_ext.clear()   # (each ring point's direction run on downward: the throat's colour down the front, the nape's down the back)
+	for i in NECK_ROWS:   # (loft order: the head end first)
+		var u := _neck_u(NECK_ROWS - 1 - i)
+		var row := []
+		for q in HEAD_AROUND:
+			var c: Color = _hb_col[q]
+			if i > 0:
+				var a := c.a
+				c = _head_color_d((_head_dir(_neck_entry, -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized())
+				c.a = a
+			row.append(c)
+		_hcol_ext.append(row)
+	if _head != null and _head.has_node("HeadSurface"):
+		_pin_normals((_head.get_node("HeadSurface") as MeshInstance3D).mesh as ArrayMesh, _hp60, _hn60)
+	if _trunk != null and _trunk.mesh != null:
+		_pin_normals(_trunk.mesh as ArrayMesh, tring, _tn20)
+
+
+## A point of the trunk's surface (trunk space) at `z`, angle `a` round its ring (as BodyShape.trunk_mesh lays it).
+func _trunk_at(z: float, a: float) -> Vector3:
+	var r := body.ring_at(z)
+	var h := r[2] if sin(a) >= 0.0 else r[3]
+	return Vector3(r[1] * BodyShape._se(cos(a), sin(a)), r[0] + h * BodyShape._se(sin(a), sin(a)), z)
+
+
+## Set the normals of `mesh`'s vertices lying on `pts` to `nrm` (the same index).
+func _pin_normals(mesh: ArrayMesh, pts: PackedVector3Array, nrm: PackedVector3Array) -> void:
+	var arr := mesh.surface_get_arrays(0)
+	var v := arr[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var n := arr[Mesh.ARRAY_NORMAL] as PackedVector3Array
+	var tol := _L * 1e-6
+	for i in v.size():
+		for k in pts.size():
+			if v[i].distance_squared_to(pts[k]) < tol * tol:
+				n[i] = nrm[k]
+				break
+	arr[Mesh.ARRAY_NORMAL] = n
+	mesh.clear_surfaces()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 ## Lay one feather (top copy, and its underside copy when two-sided); its colours only when they change (at
 ## build), since they don't move.
 ## `lead`: the side of the card (+1: +UV.x) the feather's leading, outer-vane edge is on (plumage level 6).
@@ -2454,6 +2554,16 @@ func _neck_target(offset: Vector3) -> Vector3:
 
 const TRUNK_AROUND := 20
 const NECK_ROWS := 10
+const NECK_OUT := 0.45   ## how far (share of the trunk ring -> head ring distance) the neck holds the way it leaves the trunk
+const NECK_IN := 0.35    ## ... and the way it enters the head
+const NECK_FULL := 0.15  ## the neck's feathers fuller mid-way than a straight blend of its ends (nape and throat filled out)
+const NECK_PACK := 0.8   ## the loft's rows closer together by the ends (where it bends onto the trunk and the head) .. 0 even
+
+
+## Where along the neck (0 the trunk .. 1 the head) loft row `k` (counted from the trunk) lies.
+static func _neck_u(k: int) -> float:
+	var t := float(k) / (NECK_ROWS - 1)
+	return t - NECK_PACK * sin(TAU * t) / TAU
 
 
 ## A lofted surface's arrays as drawn this pose (tests): the neck and the arm wings move their vertices in place
@@ -2485,7 +2595,7 @@ func _neck_curve(cb := Vector3.INF) -> Array:
 			cb += _head.transform * _head_point(_neck_entry, -TAU * q / TRUNK_AROUND) / TRUNK_AROUND
 	var d := ca.distance_to(cb)
 	var tb := (_head.transform.basis * -_neck_axis()).normalized()
-	return [ca, ca + Vector3.FORWARD * d * 0.45, cb - tb * d * 0.35, cb]
+	return [ca, ca + Vector3.FORWARD * d * NECK_OUT, cb - tb * d * NECK_IN, cb]
 
 
 ## The neck's feathered surface, lofted each pose between two fixed edge loops: the trunk's open front ring
@@ -2498,12 +2608,8 @@ func _loft_neck() -> void:
 	var st := fluff * (1.0 + 0.012 * breath)      # (the trunk's scale, so the first loop lands on it)
 	var ca := Vector3(0.0, ring[0], body.collar_z) * st
 	var u_neck := body.u_at(body.collar_z)
-	if _hp60.is_empty():   # (fixed for the bird: the head's ring in head space, the trunk ring's colours)
-		for q in HEAD_AROUND:
-			_hp60.append(_head_point(_neck_entry, -TAU * q / HEAD_AROUND))
-		for j in TRUNK_AROUND:
-			var a := TAU * j / TRUNK_AROUND
-			_ca_cols.append(_body_color_at(u_neck, sin(a), absf(cos(a))))
+	if _hp60.is_empty():
+		_neck_ends()
 	var la: Array = []
 	var ca_cols := _ca_cols
 	for j in TRUNK_AROUND:
@@ -2573,23 +2679,37 @@ func _loft_neck() -> void:
 	# the head turns): built in full when that pairing changes, otherwise only its positions move (LoftMesh.update).
 	var key := str(m)
 	var full := key != _neck_key or not _neck_loft.fits(NECK_ROWS, TRUNK_AROUND)
+	# Each lengthwise line is its own cubic: from its trunk point along the trunk's surface (_ta20) to its head point
+	# along the head's (_tb60), so the neck meets both flush. Written as the centreline's cubic plus each line's
+	# offset (blended by smoothstep, which is that cubic for offsets held at both ends) plus its end directions'
+	# differences from the centreline's, weighted as a cubic's inner control points.
+	var hb := _head.transform.basis
+	var dl := ca.distance_to(cb)
+	var tb := (hb * -_neck_axis()).normalized()
+	var tbj: Array = []
+	for j in TRUNK_AROUND:
+		tbj.append((hb * _tb60[m[j]]).normalized() - tb)
 	for k in range(NECK_ROWS - 1, -1, -1):   # (head end first, so the faces wind outward like the trunk's)
-		var u := float(k) / (NECK_ROWS - 1)
+		var u := _neck_u(k)
 		var c := _bezier(ca, p1, p2, cb, u)
 		var s := smoothstep(0.0, 1.0, u)
+		var bump := 64.0 * pow(u * (1.0 - u), 3.0)   # (flat at both ends, past the rows packed there: still flush)
+		var w1 := 3.0 * (1.0 - u) * (1.0 - u) * u * NECK_OUT * dl
+		var w2 := 3.0 * (1.0 - u) * u * u * NECK_IN * dl
 		var row: Array = []
 		var crow: Array = []
 		for j in TRUNK_AROUND:
 			var oa: Vector3 = la[j] - ca
 			var ob: Vector3 = lb60[m[j]] - cb
-			row.append(c + oa.lerp(ob, s))
+			row.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)
 			if not full:
 				continue
 			# The body's own zones carry on up the neck (the sparrow's bib, the breast) -- as if the trunk ran on to its
-			# front -- then blend into the head's colours by the head end. Both ends still equal their loops exactly.
+			# front -- and the head's run on down it (the nape's, the throat's: _hcol_ext), handed over along it. Both
+			# ends still equal their loops exactly.
 			var a := TAU * j / TRUNK_AROUND
 			var c_body: Color = ca_cols[j] if u <= 0.0 else _body_color_at(u_neck * (1.0 - u), sin(a), absf(cos(a)))
-			crow.append(c_body.lerp(_hb_col[m[j]], smoothstep(0.75, 1.0, u)))   # (a short hand-over: zones stay crisp)
+			crow.append(c_body.lerp(_hcol_ext[NECK_ROWS - 1 - k][m[j]], _head_share(u)))
 		rows.append(row)
 		cols.append(crow)
 		if have_uv and full:   # (the coordinates blend from end to end as the position does: the feathers ride on the neck)
@@ -2600,6 +2720,12 @@ func _loft_neck() -> void:
 				u2row.append(ua2[j].lerp(_hb_uv2[m[j % TRUNK_AROUND]], s))
 			uvs.append(urow)
 			uv2s.append(u2row)
+	# Both end rings lit as the surfaces they join: the head's normals (turned with it) and the trunk's.
+	var pin := PackedVector3Array()
+	for j in TRUNK_AROUND:
+		pin.append((hb * _hn60[m[j]]).normalized())
+	_neck_loft.pin_first = pin
+	_neck_loft.pin_last = _tn20
 	if full:
 		_neck_loft.build(rows, cols, uvs, uv2s)
 		_neck_key = key
@@ -2742,7 +2868,7 @@ func _setup_gpu_arm() -> void:
 var _neck_ucont := PackedFloat32Array()   ## the head ring's u, run on round it (no jump where it comes round)
 func _setup_gpu_neck() -> void:
 	var w := HEAD_AROUND
-	var h := 6 + NECK_ROWS
+	var h := 10 + 2 * NECK_ROWS
 	var buf := PackedFloat32Array()
 	buf.resize(w * h * 4)
 	var put := func(x: int, y: int, v: Vector4) -> void:
@@ -2783,13 +2909,26 @@ func _setup_gpu_neck() -> void:
 		var sq := BodyShape.section(a, ring[1], ring[2], ring[3])
 		put.call(j, 3, Vector4(sq.x, sq.y, 0.0, 0.0))
 		for i in NECK_ROWS:   # (mesh order: the head end first)
-			var u := float(NECK_ROWS - 1 - i) / (NECK_ROWS - 1)
+			var u := _neck_u(NECK_ROWS - 1 - i)
 			var c: Color = _ca_cols[j] if u <= 0.0 else _body_color_at(u_neck * (1.0 - u), sin(a), absf(cos(a)))
 			put.call(j, 6 + i, Vector4(c.r, c.g, c.b, c.a))
+		var ta: Vector3 = _ta20[j]
+		var tn: Vector3 = _tn20[j]
+		put.call(j, 6 + NECK_ROWS, Vector4(ta.x, ta.y, ta.z, 0.0))
+		put.call(j, 7 + NECK_ROWS, Vector4(tn.x, tn.y, tn.z, 0.0))
+	for q in HEAD_AROUND:
+		var tb: Vector3 = _tb60[q]
+		var hn: Vector3 = _hn60[q]
+		put.call(q, 8 + NECK_ROWS, Vector4(tb.x, tb.y, tb.z, 0.0))
+		put.call(q, 9 + NECK_ROWS, Vector4(hn.x, hn.y, hn.z, 0.0))
+		for i in NECK_ROWS:
+			var c: Color = _hcol_ext[i][q]
+			put.call(q, 10 + NECK_ROWS + i, Vector4(c.r, c.g, c.b, c.a))
 	_neck_tab = ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGBAF, buf.to_byte_array()))
 	var mat := body_texture_material
 	mat.set_shader_parameter("neck_tab", _neck_tab)
 	mat.set_shader_parameter("neck_flip", -1.0 if _neck_loft._flip else 1.0)
+	mat.set_shader_parameter("neck_k", Vector4(NECK_OUT, NECK_IN, NECK_FULL, NECK_PACK))
 	# The mesh: the loft's vertices in its order, each carrying its row and column; the shader places them.
 	var cols := TRUNK_AROUND + 1
 	var pos := PackedVector3Array()

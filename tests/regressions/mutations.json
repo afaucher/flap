@@ -5042,5 +5042,178 @@
     "replace": "\t_home_ring.visible = true\n\t_home_ring.scale = Vector3(0.5, 1.0, 0.5)\n"
    }
   ]
+ },
+ {
+  "id": "neck-ring-low-on-nape",
+  "bug": "The neck met the head low on the back of its skull, where the skull already curved in, so the head sat on the neck like a ball and the outline dipped behind it in flight (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_TILT := 0.85",
+    "replace": "const NECK_TILT := 0.29"
+   }
+  ]
+ },
+ {
+  "id": "neck-enters-head-along-axis",
+  "bug": "The neck entered the head along the head's underside axis, not along its surface: a crease all round the head ring (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)",
+    "replace": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1)"
+   }
+  ]
+ },
+ {
+  "id": "neck-leaves-trunk-straight",
+  "bug": "The neck left the trunk straight forward, not along the trunk's surface: a crease round the collar (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)",
+    "replace": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) - (tbj[j] as Vector3) * w2)"
+   }
+  ]
+ },
+ {
+  "id": "neck-head-ring-own-normals",
+  "bug": "The neck's head ring lit by its own triangles, not the head's normals: a line in the light round the head (up to 177 deg apart, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_neck_loft.pin_first = pin\n",
+    "replace": "\t_neck_loft.pin_first = PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "neck-trunk-ring-own-normals",
+  "bug": "The neck's trunk ring lit by its own triangles, not the trunk's normals: a line in the light round the collar (20 deg apart, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_neck_loft.pin_last = _tn20\n",
+    "replace": "\t_neck_loft.pin_last = PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "head-ring-normals-unpinned",
+  "bug": "The head's own normals on its neck ring left as its triangles (with the coarse cap under them) made them, so the neck, lit as the true surface, didn't match the head (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t_pin_normals((_head.get_node(\"HeadSurface\") as MeshInstance3D).mesh as ArrayMesh, _hp60, _hn60)\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "neck-rows-even",
+  "bug": "The neck's rows evenly spaced, so its first and last steps cut across the bend onto the head and trunk: visibly creased there (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_PACK := 0.8 ",
+    "replace": "const NECK_PACK := 0.0 "
+   }
+  ]
+ },
+ {
+  "id": "head-colours-stop-at-ring",
+  "bug": "The head's colours stopped at the neck ring and the trunk's took over within a few rows: the sparrow's chestnut, the falcon's cap cut off in a line round the head (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\treturn smoothstep(0.2, 0.9, u)",
+    "replace": "\treturn smoothstep(0.75, 1.0, u)"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t\tc = _head_color_d((_head_dir(_neck_entry, -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized())",
+    "replace": "\t\t\t\tc = _head_color_d(_head_dir(_neck_entry, -TAU * q / HEAD_AROUND))"
+   }
+  ]
+ },
+ {
+  "id": "head-texture-faint-at-ring",
+  "bug": "The head's feather texture at 0.75 strength right to the neck ring, the neck's at full: the head looked smooth and painted against a feathered neck (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tstrength = lerpf(strength, 1.0, smoothstep(0.6, 1.0, r))",
+    "replace": "\tstrength = strength"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-enters-head-along-axis",
+  "bug": "The GPU neck entered the head along its axis, not the head's surface (the CPU loft fixed, the shader not).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "(ta - vec3(0.0, 0.0, -1.0)) * w1 - tbj * w2;",
+    "replace": "(ta - vec3(0.0, 0.0, -1.0)) * w1;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-head-ring-own-normals",
+  "bug": "The GPU neck lit its head ring by its own triangles, not the head's normals.",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "\tif (i == 0) {   // the head ring",
+    "replace": "\tif (i == -1) {   // the head ring"
+   }
+  ]
+ },
+ {
+  "id": "gpu-head-colours-stop-at-ring",
+  "bug": "The GPU neck handed the head's colours to the trunk's in its last rows, and only the ring's.",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "(texelFetch(neck_tab, ivec2(m, 20 + i), 0) - c_body) * smoothstep(0.2, 0.9, u);",
+    "replace": "(texelFetch(neck_tab, ivec2(m, 1), 0) - c_body) * smoothstep(0.75, 1.0, u);"
+   }
+  ]
  }
 ]

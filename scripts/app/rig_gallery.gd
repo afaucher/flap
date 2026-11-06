@@ -1,6 +1,6 @@
 extends Node3D
 ## Dev scene: every species' rig side by side, for looking at the model.
-##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile|feet|toes]
+##   .\run.ps1 --scene res://scenes/rig_gallery.tscn [--pose glide|flap|folded|flare|upstroke] [--view top|front|three|under|side|wing|lead|head|profile|nape|throat|feet|toes]
 ##       [--only <bird id>] [--sun front|back] [--time <s>] [--feather-shader] [--plumage 0..6] [--chart] [--relief <x>] [--variety <x>]
 ##       [--zoom <x>] [--ortho] [--light studio|flat] [--no-cards] [--no-down] [--legs detail|capsules] [--branch]
 ##       [--shot <png> --shot-after <s>] [--measure <frames>] [--cpu-feathers] [--cpu-body]
@@ -130,10 +130,15 @@ func _ready() -> void:
 		cam.look_at_from_position(at + from.normalized() * dist, at, Vector3.UP)
 		if view == "toes":
 			cam.near = dist - profiles[0].body_length * 0.02
-	if view == "head" or view == "profile":   # close on the face: three-quarter front, or side on
-		var h := rigs[0].to_global(rigs[0]._head_pos)
-		var off := Vector3(0.45, 0.15, -1.0) if view == "head" else Vector3(1.0, 0.05, -0.05)
-		cam.look_at_from_position(h + off.normalized() * profiles[0].body_length * 0.75, h, Vector3.UP)
+	if view in ["head", "profile", "nape", "throat"]:   # close on the face: three-quarter front, or side on; or on where the
+		var h := rigs[0].to_global(rigs[0]._head_pos)   # neck meets the head, from behind and above (nape) or below (throat)
+		var off := {"head": Vector3(0.45, 0.15, -1.0), "profile": Vector3(1.0, 0.05, -0.05), "nape": Vector3(0.8, 0.45, 0.7),
+			"throat": Vector3(0.8, -0.5, -0.6)}[view] as Vector3
+		if view == "nape" or view == "throat":
+			h = h.lerp(rigs[0].to_global(rigs[0].neck_joints[2]), 0.5)
+		var zoom := float(Boot.arg_value(args, "--zoom")) if Boot.arg_value(args, "--zoom") != "" else 1.0
+		cam.look_at_from_position(h + off.normalized() * profiles[0].body_length * 0.75 / zoom, h, Vector3.UP)
+		focus = h
 	if args.has("--ortho"):   # (no perspective: the true silhouette, for checking outlines; same framing, so A/B sheets line up)
 		var dist := cam.global_position.distance_to(focus)
 		cam.projection = Camera3D.PROJECTION_ORTHOGONAL
