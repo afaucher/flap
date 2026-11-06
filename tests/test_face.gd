@@ -12,14 +12,12 @@ func setup() -> void:
 		rig.build(p)
 		var fd := Face.spec(p.id)
 		var hr := rig.body.head_r
-		# Beak: its furthest point lies about `len` head radii ahead of the head's front.
+		# Beak (its shape against the photos: test_bill_profile): it stands out ahead of the head's front.
 		var upper := rig._head.get_node("BeakUpper") as MeshInstance3D
 		var tip_z := 0.0
 		for v in (upper.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
 			tip_z = minf(tip_z, (v as Vector3).z)
-		var base_z := -hr * rig.body.skull.z * 0.85 if not fd.has("disc") else Face.disc_z(0.0, -0.14 * hr, 0.1, hr, rig.body.skull) + 0.04 * hr
-		var expect := base_z - float(fd.beak.len) * hr * cos(deg_to_rad(float(fd.beak.pitch)))
-		near(tip_z, expect, absf(expect) * 0.25, p.id + " beak reaches its length ahead of the head")
+		check(tip_z < -hr * rig.body.skull.z - 0.1 * hr, "%s beak stands out ahead of the head (tip %.2f r)" % [p.id, tip_z / hr])
 		check(rig._head.has_node("Jaw/BeakLower"), p.id + " lower mandible on its jaw pivot")
 		# Eyes: on the head (or the owl's disc), and lens caps with a pupil darker than the ring round it.
 		for e in ["EyeL", "EyeR"]:

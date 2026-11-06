@@ -56,6 +56,15 @@ class TreeData:
 	func top() -> Vector3:
 		return Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)
 
+	## m above the ground where the solid trunk ends (0: at the top). An oak's bole ends just over its fork: the big
+	## limbs carry the wood on up.
+	var stem := 0.0
+
+	## The top of the solid trunk (the capsule every wood query and the collision take, at `radius`); `top()` stays
+	## the tree's full height, the axis its branches are measured from.
+	func trunk_top() -> Vector3:
+		return Vector3(base.x, ArenaLayout.GROUND_Y + (stem if stem > 0.0 else height), base.y)
+
 	## How far any solid wood reaches from the trunk's axis (the farthest end of a solid branch, plus its radius;
 	## a limb in two pieces starts its outer piece off the axis).
 	var _reach := -1.0
@@ -532,10 +541,14 @@ func _tree_clear(t: TreeData, a: Vector3, b: Vector3, clearance: float, skip_per
 	var base := Vector3(t.base.x, GROUND_Y - 1.0, t.base.y)
 	var pts := Geometry3D.get_closest_points_between_segments(a, b, base, t.top())
 	var d := pts[0].distance_to(pts[1])
-	if d < t.radius + clearance:
-		return false
 	if d >= t.reach() + clearance:
 		return true   # (every branch leaves the trunk's axis, so none comes nearer than this)
+	if d < t.radius + clearance:
+		if t.stem <= 0.0:
+			return false
+		var ts := Geometry3D.get_closest_points_between_segments(a, b, base, t.trunk_top())
+		if ts[0].distance_to(ts[1]) < t.radius + clearance:
+			return false
 	var y0 := minf(a.y, b.y) - clearance
 	var y1 := maxf(a.y, b.y) + clearance
 	# (Across, a branch whose box is farther than this from the segment's can't come within the clearance; the
@@ -598,7 +611,7 @@ func clear_by(pos: Vector3, d: float, search := 12.0) -> bool:
 	for t in trees_near_segment(pos, pos, search):
 		if Vector2(pos.x, pos.z).distance_to(t.base) - t.reach() - BOX_MARGIN > d:
 			continue
-		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.top())
+		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.trunk_top())
 		if pos.distance_to(axis) - t.radius <= d:
 			return false
 		for br in t.branches:
@@ -631,7 +644,7 @@ func obstacle_distance(pos: Vector3, search := 12.0) -> float:
 		if float(e[0]) - BOX_MARGIN >= best:
 			break
 		var t: TreeData = e[1]
-		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.top())
+		var axis := Geometry3D.get_closest_point_to_segment(pos, Vector3(t.base.x, GROUND_Y, t.base.y), t.trunk_top())
 		best = minf(best, pos.distance_to(axis) - t.radius)
 		for br in t.branches:
 			if not br.solid:
@@ -671,7 +684,7 @@ func wood_near(a: Vector3, b: Vector3, m: float) -> Array:
 				if d >= t.reach() + m + BOX_MARGIN:
 					continue
 				if d < t.radius + m + BOX_MARGIN:
-					caps.append([base, t.top(), t.radius, t.id])
+					caps.append([base, t.trunk_top(), t.radius, t.id])
 				var bands := t.bands()   # (the solid branches at the segment's height; one reaching across bands may come twice)
 				var seen := {}
 				for kb in range(floori(lo.y / BAND), floori(hi.y / BAND) + 1):
@@ -780,7 +793,7 @@ func nearest_wood(pos: Vector3, within: float) -> Dictionary:
 		var axis_d := Vector2(pos.x, pos.z).distance_to(t.base)
 		if axis_d - t.reach() >= best_d:
 			continue
-		consider.call(base, t.top(), t.radius)
+		consider.call(base, t.trunk_top(), t.radius)
 		for br in t.branches:
 			if br.solid:
 				consider.call(br.root, br.tip, br.radius)

@@ -147,7 +147,7 @@ static func _brute_clear(a: ArenaLayout, p: Vector3, q: Vector3, c: float, ignor
 	for t in a.trees:
 		if t.id == ignore:
 			continue
-		var s := Geometry3D.get_closest_points_between_segments(p, q, Vector3(t.base.x, ArenaLayout.GROUND_Y - 1.0, t.base.y), t.top())
+		var s := Geometry3D.get_closest_points_between_segments(p, q, Vector3(t.base.x, ArenaLayout.GROUND_Y - 1.0, t.base.y), t.trunk_top())
 		if s[0].distance_to(s[1]) < t.radius + c:
 			return false
 		for br in t.branches:

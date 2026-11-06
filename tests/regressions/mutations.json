@@ -3060,8 +3060,8 @@
    },
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\tvar y := (t.height + 0.15) * u - 0.15",
-    "replace": "\t\tvar y := t.height * u - 0.15"
+    "find": "\t\tvar y := (top_y + 0.15) * u - 0.15",
+    "replace": "\t\tvar y := top_y * u - 0.15"
    }
   ]
  },
@@ -5315,6 +5315,34 @@
   ]
  },
  {
+  "id": "oak-stem-pillar",
+  "bug": "An oak's trunk ran on up through its crown to the treetop: a thin stem spike drawn, and a full-thickness invisible pillar in the collision and every wood query (2026-11-06).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\treturn Vector3(base.x, ArenaLayout.GROUND_Y + (stem if stem > 0.0 else height), base.y)",
+    "replace": "\t\treturn Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)"
+   }
+  ]
+ },
+ {
+  "id": "oak-deck-own-limbs",
+  "bug": "An oak outpost's way in was checked against the other trees only: a deck in the fork had its own low limbs across the swoop onto the rail (2026-11-06).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\treturn false",
+    "replace": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\tpass"
+   }
+  ]
+ },
+ {
   "id": "hidden-runs-audible",
   "bug": "Off-screen runs (tests, probes, shots, perf -Hidden) played the game's sound through the user's speakers while they worked: nothing muted them (2026-11-06). Boot mutes the Master bus's output when test_lib.ps1 starts a run with FLAP_MUTE=1; gpu_test_audible stops before playing anything if it isn't muted.",
   "tests": [
@@ -5325,6 +5353,76 @@
     "file": "scripts/app/boot.gd",
     "find": "\tif OS.get_environment(\"FLAP_MUTE\") == \"1\":\n\t\tAudioServer.set_bus_mute(0, true)\n",
     "replace": "\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "bill-generic-profile",
+  "bug": "Every species' bill was the same parametric cone with a hook added: none followed its species' real profile (the hawk's culmen arching from the cere into the hook, the sparrow's convex cone, the kestrel's short deep bill) (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "var prof: Dictionary = BillProfiles.DATA[id]",
+    "replace": "var prof: Dictionary = BillProfiles.DATA[\"crow\"]"
+   }
+  ]
+ },
+ {
+  "id": "bill-no-snout",
+  "bug": "The bills started on the head's round front, the eye nearly on top of the bill's base: the hawk's eye 13 mm behind it where the photo's is 35 (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif float(_snout[1]) > 0.0:   # the face drawn out to the bill's base: flat over it, then easing off",
+    "replace": "\tif false:   # the face drawn out to the bill's base: flat over it, then easing off"
+   }
+  ]
+ },
+ {
+  "id": "eye-seat-ignored",
+  "bug": "The eyes sat at their optic axis on the round head, too close to the bill for the photos (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "\treturn _eye_dir(id, s, float(spec(id).eye.get(\"back\", 0.0)))",
+    "replace": "\treturn _eye_dir(id, s, 0.0)"
+   }
+  ]
+ },
+ {
+  "id": "eye-cap-off-seat",
+  "bug": "Seated further back but still facing along the optic axis, the eye's cap turned off the head's surface and sank into it on one side: half-buried eyes, the kestrel's yellow ring a crescent (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\teye.basis = Basis.looking_at(dir, Vector3.UP)",
+    "replace": "\t\teye.basis = Basis.looking_at(Face.eye_dir(id, e), Vector3.UP)"
+   }
+  ]
+ },
+ {
+  "id": "bill-gape-gap",
+  "bug": "The sparrow's mandibles didn't meet: a pale gap showed along the gape (its lower bill's edge came from the photo's open jaw turned shut, not the upper's edge) (2026-11-06).",
+  "tests": [
+   "test_bill_profile"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/face.gd",
+    "find": "const LOWER_TUCK := 0.012",
+    "replace": "const LOWER_TUCK := -0.04"
    }
   ]
  },

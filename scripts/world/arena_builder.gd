@@ -538,9 +538,9 @@ func _pinewood_trees(i0: int, i1: int) -> void:
 		var cs := CollisionShape3D.new()
 		var shape := CylinderShape3D.new()
 		shape.radius = t.radius
-		shape.height = t.height
+		shape.height = t.trunk_top().y - ArenaLayout.GROUND_Y
 		cs.shape = shape
-		cs.position.y = t.height * 0.5
+		cs.position.y = shape.height * 0.5
 		body.add_child(cs)
 		var oak: bool = t.kind == ArenaLayout.Kind.BROADLEAF
 		var seed := fmod(t.id * 0.6180339, 1.0)
@@ -717,7 +717,7 @@ func _roots(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var c := Vector3(t.base.x, ArenaLayout.GROUND_Y, t.base.y)
 	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
-	var top_share := 0.65 if oak else (0.4 if t.kind == ArenaLayout.Kind.PINE else 0.25)
+	var top_share := 0.4 if oak else (0.4 if t.kind == ArenaLayout.Kind.PINE else 0.25)   # (an oak's stem thins up through the crown: the big limbs carry the wood)
 	var flare := 0.55 if oak else (0.3 if t.kind == ArenaLayout.Kind.PINE else 0.1)
 	if t.form == "veteran":
 		flare = 0.45   # (an old pine's foot spreads)
@@ -728,9 +728,13 @@ func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var rings := []
 	for i in n:
 		var u := pow(float(i) / (n - 1), 1.6)   # (rings closer near the foot, where the flare turns)
-		var y := (t.height + 0.15) * u - 0.15   # (from just under the floor to its full height: the treetop perch's)
+		var top_y := t.trunk_top().y - ArenaLayout.GROUND_Y   # (its full height, the treetop perch's; an oak's bole ends over its fork)
+		var y := (top_y + 0.15) * u - 0.15   # (from just under the floor)
 		pts.append(c + Vector3.UP * y)
-		radii.append(t.radius * lerpf(1.0, top_share, clampf(y / t.height, 0.0, 1.0)) * (1.0 + flare * exp(-maxf(y, 0.0) / (0.9 if oak else 0.6))))
+		var r := t.radius * lerpf(1.0, top_share, clampf(y / t.height, 0.0, 1.0))
+		if oak and t.crown_base > 0.0 and y > t.crown_base:   # (over the fork the big limbs have taken the wood: the bole narrows to its top)
+			r = t.radius * lerpf(0.9, 0.6, clampf((y - t.crown_base) / maxf(top_y - t.crown_base, 0.1), 0.0, 1.0))
+		radii.append(r * (1.0 + flare * exp(-maxf(y, 0.0) / (0.9 if oak else 0.6))))
 		var ring := []
 		for j in segs:
 			var a := TAU * j / segs
@@ -803,7 +807,7 @@ func _batch(key: String, mesh: Mesh, color: Color, xfs: Array, colors := [], cus
 const _CARDS := {
 	"needles": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.35, 0.6), "per_m3": 70.0, "n": Vector2i(40, 120), "tint": Color(0.86, 0.98, 0.98), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.3, "boost_from": 3.0},
 	"sapling": {"tex": "needles", "aspect": FoliageTex.NEEDLE_ASPECT, "size": Vector2(0.2, 0.34), "per_m3": 110.0, "n": Vector2i(10, 30), "tint": Color(0.9, 1.0, 0.95), "tex_size": 1024.0, "scissor": 0.4, "boost": 0.3, "boost_from": 3.0},
-	"leaves": {"tex": "oak", "size": Vector2(0.6, 0.95), "per_m3": 6.0, "n": Vector2i(16, 80), "tint": Color(1.0, 1.0, 1.0)},
+	"leaves": {"tex": "oak", "size": Vector2(0.8, 1.3), "per_m3": 6.0, "n": Vector2i(16, 140), "tint": Color(1.0, 1.0, 1.0)},
 }
 const FOLIAGE_SHADER := preload("res://scripts/world/foliage.gdshader")
 

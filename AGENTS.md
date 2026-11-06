@@ -26,7 +26,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   TAA over 2x MSAA by default (`Antialias`; `--no-taa`, F7): it clears the speckle on feather cards' edges and fine
   texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans (`TreeData.form`;
+  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans, and oaks forking low with their
+  solid trunk ending at the fork (`TreeData.stem`, `trunk_top()`: collision and wood queries use it; `docs/design/flight_model.md`
+  section 5), shaped for clear perches below the crown (`tests/probe_tree_paths.gd` + `tools/tree_side_map.py` draw one from the side) (`TreeData.form`;
   `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The game's arena is a baked map, not a seed: `maps/pinewood_7.map` (`MapFile`: the whole `ArenaLayout`, trees,
   limbs, branches, perches, outposts, openings, the floor's field, thermals), which `Pinewood.generate` reads when it's
   there and the generator's options are as baked (`Pinewood.baked`, `as_baked()`), so changing the generator
@@ -95,6 +97,13 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   target`): the planner's lattice round the bird (usable nodes teal, rejected red: `FlightPlanner.node_usable`), `AIPilot.route`
   and the waypoint it's on, the perch and its approach points, the path its avoidance predicts (`AIPilot.predicted`, red from
   where it meets wood) and the escape it flies instead (`AIPilot.escape`); visual only, `test_route_view` reads it back), `scripts/test_support/`.
+- Bills (`Face.beak_meshes`): lofted on each species' profile traced from a photo (`tools/beak_profiles.py` REFS ->
+  `tools/bill_profiles_emit.py` -> the generated `scripts/bird/bill_profiles.gd`: re-run it after changing a trace),
+  drawn by `bill.gdshader` (keratin, the cere's edge, the nostril, the crow's bristles, the cutting edge, per pixel from
+  the mesh's bill-frame coordinates); the head's front drawn out to the bill's base (`Face.snout`, `BirdRig._head_point`)
+  and the eyes seated back (`Face.eye_seat`), so each eye sits as far behind the bill as in its photo. `test_bill_profile`
+  holds the drawn profile to the traces; `tests/probe_beak_profile.gd` + `tools/beak_profiles.py` chart them
+  (`docs/images/beak_profiles_after.jpg`).
 - `scripts/bird/body_shape.gd`: `BodyShape`, the body's landmarks and lofted shell (`docs/design/body_rig_plan.html`). The neck
   meets the head and trunk flush, lit and coloured as one (`BirdRig._loft_neck`, `docs/design/wing_rig.md`; `test_neck_seam` measures
   the crease, the normals, the nape's notch, the perched throat and the colour hand-over; the rig gallery's `--view nape|throat` look at it).
