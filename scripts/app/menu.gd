@@ -1,4 +1,4 @@
-class_name Menu
+﻿class_name Menu
 extends Control
 ## The start menu (run with no arguments): Flight (the game: the arena and its birds, no rider, no weapons),
 ## Fight, Race and the Lab. A choice opens its scene with its options added to the command line's (Boot.extra).
@@ -66,7 +66,7 @@ const COURSE_HEIGHTS := [   ## [RaceCourse heights, label, what it means]
 	["high-low", "High and low", "Gates low by the ground and high under the crowns: dive and climb."],
 ]
 const COURSES := {   ## RaceCourse style -> the seed of its course on the game's arena (ARENA_SEED): a full one, home kept
-	"technical-level": 7, "technical-high-low": 13, "long-level": 9, "long-high-low": 12,
+	"technical-level": 8, "technical-high-low": 19, "long-level": 13, "long-high-low": 12,
 }
 const ARENA_SEED := 7          ## the game's arena with no --seed (the best times are kept per arena too)
 const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)

@@ -317,6 +317,24 @@ Young pines seed in groups where the light gets in, and bracken grows thicker th
 this: no pine stands in an opening, the counts in 16 m squares vary more than a random scatter's, and fewer than a
 fifth of the young pines are in shade. `tests/probe_layout_map.gd` draws the plan.
 
+The trees are shaped for perching, with clear branches below the crown that a bird can reach:
+- **Oaks** (`Pinewood._grow_oak`, `OAK_FORM`, 2026-11-06): a short trunk that forks low (a quarter of the height).
+  The solid trunk stops just above the fork (`TreeData.stem`, `trunk_top()`), so collision and every wood query see
+  no pillar up through the crown. From the fork:
+  - big scaffold limbs, each in three curved pieces (`_bend`);
+  - long low limbs with side limbs, the open perches under the crown;
+  - crown limbs that climb from the fork and hold up the top.
+
+  Leaf clouds sit over the crown tips, with rings that close the top. An outpost deck sits in the fork, its way in
+  kept clear of the oak's own limbs (`_way_in`, `OWN_BERTH`). The leaves are English oak's (`FoliageTex` `oak_leaf`):
+  obovate, lobed, eared at the stalk.
+- **Pines:** whorled crowns, with one more whorl and three or four limbs to a whorl on the mature pines and the
+  veterans (`_grow_pine`'s `more`), each long limb tufted at its tip.
+
+Oaks, mature pines and veterans each draw from their own random numbers, so a change to one tree's shape moves no
+other tree (`probe_wood_print` fingerprints the trees' places alone). `tests/probe_tree_paths.gd` +
+`tools/tree_side_map.py` draw a tree's limbs from the side, against a reference photo.
+
 ## 6. The AI pilot (`scripts/ai/ai_pilot.gd`, `scripts/ai/flight_planner.gd`)
 
 > **Trunk bumps (closed 2026-11-02).** The AI used to clip trees about once per perch: 25 bumps for 25

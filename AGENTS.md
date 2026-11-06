@@ -26,7 +26,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   TAA over 2x MSAA by default (`Antialias`; `--no-taa`, F7): it clears the speckle on feather cards' edges and fine
   texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans (`TreeData.form`;
+  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans, and oaks forking low with their
+  solid trunk ending at the fork (`TreeData.stem`, `trunk_top()`: collision and wood queries use it; `docs/design/flight_model.md`
+  section 5), shaped for clear perches below the crown (`tests/probe_tree_paths.gd` + `tools/tree_side_map.py` draw one from the side) (`TreeData.form`;
   `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The game's arena is a baked map, not a seed: `maps/pinewood_7.map` (`MapFile`: the whole `ArenaLayout`, trees,
   limbs, branches, perches, outposts, openings, the floor's field, thermals), which `Pinewood.generate` reads when it's
   there and the generator's options are as baked (`Pinewood.baked`, `as_baked()`), so changing the generator
