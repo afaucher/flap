@@ -68,6 +68,7 @@ const HOME_MAX := 45.0            ## m in plan from the last gate to the rail (t
 const HOME_REACH := 25.0          ## m toward home a leg can be counted on to make: every gate stays within reach of it
 const HOME_PULL := 5              ## the last this many legs are scored for heading home
 const HOME_OUT := 15.0            ## m further out in front of the run-in the last legs head for
+const WIND_MAX := 200.0           ## deg the course may wind round one way in all (home from in front: about 180)
 const HOME_LEAVE := 90.0          ## deg at most the way home turns from the last gate's way through
 const HOME_TURN_IN := 120.0       ## deg at most from the way home onto the rail's run-in, at its start
 const HOME_NEAR := 3.0            ## m from the rail within which its own tree and outpost don't count on the line home
@@ -552,11 +553,12 @@ func _grow(b: Plan) -> Array[Plan]:
 			var wound := 0.0   # (the course's turning so far: turning back against it keeps it from spiralling)
 			for t0 in b.turns:
 				wound += t0
-			var closing := b.gates.size() >= GATES - HOME_PULL   # (the last legs close the loop home: no unwinding)
-			if not closing and absf(turn) > 15.0 and signf(turn) != signf(wound) and absf(wound) > 60.0:
-				s += minf(absf(wound) / 60.0, 3.0)
-			if not closing and absf(wound + turn) > 120.0 and absf(wound + turn) > absf(wound):
-				s -= 1.5   # (winding on round one way)
+			# (Home is the way the rail faces from, so the course turns about half round in all, out and back: winding on
+			# past WIND_MAX would bring it home from behind the rail.)
+			if absf(turn) > 15.0 and signf(turn) != signf(wound) and absf(wound) > WIND_MAX - 60.0:
+				s += minf((absf(wound) - WIND_MAX + 120.0) / 60.0, 3.0)
+			if absf(wound + turn) > WIND_MAX and absf(wound + turn) > absf(wound):
+				s -= 1.5 + (absf(wound + turn) - WIND_MAX) / 30.0   # (winding on round one way)
 		opts.append([s, i, n, turn])
 	opts.sort_custom(func(x, y): return x[0] > y[0])
 	var out: Array[Plan] = []
@@ -974,7 +976,7 @@ func problems() -> PackedStringArray:
 	if not gates.is_empty():
 		var why := home_problem(gates)
 		if why != "":
-			out.append(why)
+			out.append("home: " + why)
 	return out
 
 

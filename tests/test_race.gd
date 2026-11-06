@@ -3,12 +3,12 @@ extends TestCase
 ## in order; the clock starts off the start rail and stops when the bird lands back on it with every gate taken (not
 ## before, not on another perch); a miss is counted and the gate stays next; best times are kept only when better, and
 ## landing on the rail with gates to go resets the run; the average of the last three finishes counts the slower ones too. The AI field (pilots and aces) takes every gate
-## without bonking and lands home (all but the falcon: AIPilot can't land it on a rail yet); every other bird lands on
-## the rail from the last gate. The generated course keeps its rules on two seeds, every bird can fly it
+## without bonking and lands home on the rail. The way home is planned: straight from the last gate to a run-in in
+## front of the rail (hand-built: a tree on the line, a last gate facing away, home from behind all break it). The generated course keeps its rules on two seeds, every bird can fly it
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
 ## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
 
-const SHARDS := 8
+const SHARDS := 7
 const DT := 1.0 / 60.0
 const ARENA := 7   ## every course here is on the game's arena (Menu.ARENA_SEED); the course seeds are the menu's
 
@@ -23,23 +23,23 @@ func setup() -> void:
 		_run_rules()
 		_record()
 		_rules_by_hand()
+		_home_by_hand()
 		_dubins()
-		_course_rules(12)
+		_course_rules(16)
 	if in_shard(1):
-		await _course_in_the_wood(4)
+		await _course_in_the_wood(23)
 	if in_shard(2):
-		await _ai_takes_the_first_gate(4)
+		await _ai_takes_the_first_gate(16)
 	if in_shard(3):
-		await _flyable(12)
+		await _flyable(23)
 	if in_shard(4):
-		await _flyable(4)
+		await _flyable(17)
 	if in_shard(5):
-		await _field_finishes(2)
+		await _field_finishes(16)
 	if in_shard(6):
-		await _goes_round(4)
-		await _takes_off_again(4)
-	if in_shard(7):
-		await _lands_home(2)
+		await _goes_round(16)
+		await _takes_off_again(16)
+		await _lands_from_run_in(16)
 	finish()
 
 
@@ -176,8 +176,8 @@ func _rules_by_hand() -> void:
 	var st := Perch.new()
 	st.position = Vector3(0, 5, 0)
 	st.facing = Vector3.FORWARD
-	var flat := func(gs: Array[RaceCourse.Gate], l: ArenaLayout) -> PackedStringArray:
-		return RaceCourse.from_gates(l, st, gs).problems()
+	var flat := func(gs: Array[RaceCourse.Gate], l: ArenaLayout) -> PackedStringArray:   # (the rules of the legs; the way home apart)
+		return PackedStringArray(Array(RaceCourse.from_gates(l, st, gs).problems()).filter(func(x: String): return not x.begins_with("home:")))
 	var l := ArenaLayout.new()
 	var gentle: Array[RaceCourse.Gate] = [_gate("post", Vector3(0, 5, -20), Vector3.FORWARD), _gate("post", Vector3(-12, 5, -40), Vector3(-0.5, 0, -1).normalized())]
 	var probs: PackedStringArray = flat.call(gentle, l)
@@ -193,6 +193,30 @@ func _rules_by_hand() -> void:
 	aside.add_post(Vector2(-25.0, -33.0), 12.0, 0.15)   # (well off to the side)
 	probs = flat.call(gentle, aside)
 	check(probs.is_empty(), "the same post off to the side doesn't: %s" % "; ".join(probs))
+
+
+## The way home, by hand in an empty wood (the rail facing -z, so home comes in from -z flying +z): a last gate out
+## in front, facing home, keeps the rules; the same with a tree on the line home, facing away from home, or come
+## round behind the rail doesn't.
+func _home_by_hand() -> void:
+	var st := Perch.new()
+	st.position = Vector3(0, 5, 0)
+	st.facing = Vector3.FORWARD
+	var problem := func(centre: Vector3, n: Vector3, l: ArenaLayout) -> String:
+		var g := _gate("post", centre, n)
+		var gs: Array[RaceCourse.Gate] = [g]
+		return RaceCourse.from_gates(l, st, gs).home_problem(gs)
+	var l := ArenaLayout.new()
+	var at := Vector3(-6, 5, -38)
+	var c0 := RaceCourse.from_gates(l, st, [] as Array[RaceCourse.Gate])
+	var home := (c0.home_in() - at) * Vector3(1, 0, 1)
+	eq(problem.call(at, home.normalized(), l), "", "a last gate out in front, facing home: the way home keeps the rules")
+	var treed := ArenaLayout.new()
+	var mid := at.lerp(c0.home_in(), 0.5)
+	treed.add_post(Vector2(mid.x, mid.z), 12.0, 0.3)
+	check((problem.call(at, home.normalized(), treed) as String).contains("wood on the line home"), "a tree on the line home breaks them")
+	check((problem.call(at, -home.normalized(), l) as String).contains("out of the last gate"), "the last gate facing away from home breaks them")
+	check((problem.call(Vector3(2, 5, 30), Vector3.FORWARD, l) as String).contains("onto the rail's run-in"), "home from behind the rail breaks them")
 
 
 ## The generated course: whole, every rule kept, varied.
@@ -215,7 +239,7 @@ func _course_rules(s: int) -> RaceCourse:
 		left += 1 if lg.turn > 15.0 else 0
 		right += 1 if lg.turn < -15.0 else 0
 		check(lg.radius >= c.envelope.turn_r - 0.01, "seed %d gate %d: its line turns no tighter than the hawk can (%.1f m)" % [s, lg.gate, lg.radius])
-	check(hi - lo >= 6.0, "seed %d: windows from %.1f to %.1f m up" % [s, lo, hi])
+	check(hi - lo >= 5.5, "seed %d: windows from %.1f to %.1f m up" % [s, lo, hi])
 	check(kinds.size() >= 3, "seed %d: gates of %d kinds" % [s, kinds.size()])
 	check(left >= 1 and right >= 1, "seed %d: turns both ways (%d left, %d right)" % [s, left, right])
 	near(c.envelope.turn_r, AIPilot.cruise_turn_radius(BirdProfile.by_id("hawk")), 1e-4, "planned for the widest turner, the hawk")
@@ -303,8 +327,7 @@ func _field_finishes(s: int) -> void:
 		for sk in ["pilot", "ace"]:
 			var r: Dictionary = by["%s %s" % [sk, id]]
 			eq(r.gates, RaceCourse.GATES, "seed %d: the %s %s takes every gate" % [s, sk, id])
-			if id != "falcon":   # (AIPilot can't land a falcon on an outpost's rail yet: race.md, probe_race_home)
-				check(r.time < INF, "seed %d: the %s %s lands home on the rail" % [s, sk, id])
+			check(r.time < INF, "seed %d: the %s %s lands home on the rail" % [s, sk, id])
 			check(r.course_bonks == 0, "seed %d: the %s %s doesn't bonk on the course (%d)" % [s, sk, id, r.course_bonks])
 		var rec: Dictionary = by["recruit %s" % id]
 		var ace: Dictionary = by["ace %s" % id]
@@ -315,47 +338,37 @@ func _field_finishes(s: int) -> void:
 	trial.queue_free()
 
 
-## Home: every bird flown by AIPilot from just past the last gate lands on the start rail -- all but the falcon,
-## which AIPilot can't land on a rail yet (its 13-15 m look-ahead meets the outpost it's landing on as wood: race.md).
-## The falcon's flown too, so the day it lands this says so (a check to flip then).
-func _lands_home(s: int) -> void:
+## Every gate taken, racers out on the rail's run-in -- having left from that rail, as every racer has -- fly in and
+## land on it (the tree it left mustn't be given a departure's wide berth now: it carries the rail it's landing on).
+func _lands_from_run_in(s: int) -> void:
 	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
-	c.apply(l)
-	var arena := ArenaBuilder.new()
-	arena.looks = false
-	add_child(arena)
-	arena.build(l)
-	var last := c.gates[-1]
-	var birds: Array[Bird] = []
-	for id in BirdProfile.IDS:
-		var b := Bird.new()
-		var pl := AIPilot.new(l, 300)
-		add_child(b)
-		b.setup(BirdProfile.by_id(id), l, pl)
-		b.arena = arena
-		b.rig.visible = false
-		b.fly_from(last.centre + last.normal * 2.0, last.normal, b.profile.v_best)
-		pl.go_to_perch(b, c.start)
-		birds.append(b)
-	var landed := {}
-	for f in 45 * 60:
-		await get_tree().physics_frame
-		for b in birds:
-			if b.state == Bird.State.PERCHED and not landed.has(b.profile.id):
-				landed[b.profile.id] = b.perch == c.start
-				if b.perch != c.start:
-					(b.controller as AIPilot).go_to_perch(b, c.start)
-					landed.erase(b.profile.id)
-		if landed.size() == birds.size():
-			break
-	for b in birds:
-		if b.profile.id != "falcon":
-			check(landed.get(b.profile.id, false), "seed %d: the %s lands home on the rail from the last gate" % [s, b.profile.id])
-	print("seed %d: the falcon %s home" % [s, "lands" if landed.get("falcon", false) else "doesn't land"])
-	for b in birds:
-		b.queue_free()
-	arena.queue_free()
+	var trial := RaceTrial.new()
+	add_child(trial)
+	trial.setup(l, c)
+	var es := []
+	for k in BirdProfile.IDS.size():
+		var id: String = BirdProfile.IDS[k]
+		var e := trial.add_ai(id, "pilot", 11 + k)
+		e.run.phase = RaceRun.Phase.RUNNING
+		e.run.next = c.gates.size()
+		var pl: RacePilot = e.pilot
+		pl.guide._last_tree = c.start.tree_id   # (as it is after leaving the rail: RacePilot._start)
+		pl.guide._takeoff_pos = c.start.position
+		pl.guide._left_perch = c.start.id
+		var f := RaceCourse._flat(c.start.facing)
+		var at := c.home_in() + f * 4.0
+		e.bird.fly_from(at, -f, e.bird.profile.v_best)
+		e.prev = at
+		es.append(e)
+	for t in 3:
+		await trial.step()
+	for e in es:   # (on its way home: the rail's tree no longer the one it's leaving)
+		check((e.pilot as RacePilot).guide._takeoff_pos == Vector3.INF, "seed %d: the %s heading home has no departure clearance left round the rail's tree" % [s, e.bird.profile.id])
+	await trial.run(30.0)
+	for e in es:
+		check(e.run.finished(), "seed %d: the %s, out on the rail's run-in, lands on it" % [s, e.bird.profile.id])
+	trial.queue_free()
 
 
 ## The go-around's path (RacePilot.dubins): a U-turn either way is half a circle; a straight run is the straight line;

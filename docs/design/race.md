@@ -4,7 +4,7 @@ A course of gates through the pine wood, flown against the clock. This first ver
 how a course is laid out in the wood, what turns and climbs it asks of each bird, and how the AI racers fly it. The
 gates are placeholders (frames, bars and rings); their designs come later.
 
-Play it from the menu's Race screen (your bird, Course 1-3: seeds 7, 11 and 3, the ones probed most; rivals: none,
+Play it from the menu's Race screen (your bird, Course 1-3: course seeds 16, 23 and 17 on the game's arena, seed 7, ones that come home cleanly from the centre outpost; rivals: none,
 recruits, pilots or aces, one of each other bird; Novice | Realistic; your best on that course shown), or
 `.\run.ps1 --race [--bird hawk] [--flying novice] [--race-ai recruit|pilot|ace] [--course <n>]` (`--autopilot` or P: an
 ace racer flies your bird). The menu's race has no rider or tack (`--no-rider`); the pause menu's Start over puts
@@ -56,6 +56,16 @@ agile birds (3.4 m, 1.1 m): tighter courses.
   and needles) from the gate you're passing and from 10 m before it. So is the gate after it, within 60 m, unless the
   turn at the next gate is over 60 deg: that gate is `marked`, for course markers round the turn (to come).
 - The course never comes back within 10 m of a gate.
+- **The way home** (`home_problem`): the race ends landing on the rail it started from, so the last gate is within 45 m
+  of it with it in sight, and home is straight: from the last gate (turning at most 90 deg out of it) to a run-in out in
+  front of the rail (`home_in`: 1.5 turning circles out, a little below), clear of the wood and of every gate's posts
+  and ropes, turning at most 120 deg onto the run-in, which is clear too. No loop round the outpost's tree to land
+  facing the rail. The rail faces out, so a course comes home from the side it left by: it turns about half round in
+  all (out and back), and the search keeps every gate within reach of home (25 m a leg left) and pulls the last five
+  legs toward a point out in front of the run-in; winding on past 200 deg one way is scored down (a full circuit comes
+  home from behind). The price: on arena 7, 10 of 24 course seeds make a full course (`tests/probe_courses.gd`), the
+  others nine gates; and they lean to post gates in the open. Courses 16, 23 and 17 leave the centre outpost with two or
+  three kinds and windows up to 8-14 m.
 
 `problems()` lists any rule a course breaks; `test_race` checks generated courses keep them all, and hand-built
 courses that break the turn and the way-in rules are caught.
@@ -171,6 +181,10 @@ and wants planning by speed and turn, checked against free flight, combat and ra
 wider look-ahead, input lag and aim drift take them off the line, and the go-arounds cost them 10-40 s. The ace is no
 faster than the pilot yet: its edge (bank, lag, drift) doesn't buy time on these courses, where every bird flies the
 same line; a racing line of its own (cutting corners, carrying speed) would.
+
+With the way home planned (2026-11-05, arena 7, courses 16, 23 and 17): on course 16 every pilot and every ace
+finishes, the falcon too (24-62 s; the hawk's landing loops cost it most); on 23 and 17 every pilot and ace but the
+falcon, which fails out on the course, not landing. Recruits finish about half the time.
 
 ## Open questions
 

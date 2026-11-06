@@ -4930,5 +4930,47 @@
     "replace": "\tif perch == course.start and false:\n\t\t_reset()\n"
    }
   ]
+ },
+ {
+  "id": "race-home-unplanned",
+  "bug": "Courses ended wherever the tenth gate fell: the way home to the rail could run behind the outpost or round a tree (course 1, 2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif k == GATES - 1:\n\t\tvar why := home_problem(all)",
+    "replace": "\tif false:\n\t\tvar why := home_problem(all)"
+   }
+  ]
+ },
+ {
+  "id": "race-home-through-wood",
+  "bug": "The way home not checked against the wood: a tree on the line from the last gate to the rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif not layout.segment_clear(last.centre + last.normal * 1.0, a, c):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "race-home-from-behind",
+  "bug": "Home allowed from behind the rail: the bird had to fly round the outpost to land facing it (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif plan > 1.0 and rad_to_deg(ld.angle_to(in_dir)) > HOME_TURN_IN:",
+    "replace": "\tif false:"
+   }
+  ]
  }
 ]

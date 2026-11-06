@@ -56,7 +56,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   rail, by a beam search under planning rules from the birds' performance (`Envelope`: the widest turning circle and
   wings of the birds racing, the hawk's by default): a clear way in and out of each window, each leg's flown line
   (`flown_line`) clear by half a wingspan and turning no tighter than that circle, posts and ropes off the line, the
-  next gate seen from the one before (and the one after it, unless the turn is tight: `marked`); `problems()` lists
+  next gate seen from the one before (and the one after it, unless the turn is tight: `marked`), the way home straight
+  from the last gate to a run-in in front of the rail (`home_problem`, `home_in`); `problems()` lists
   any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
   the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken (landing there
   sooner resets the run); misses;
@@ -66,7 +67,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   (`RacePilot.dubins`) to the gate's way in; AIPilot.steer only for wood ahead and low-speed recovery; home to the
   rail, AIPilot.go_to_perch lands it; `RaceView` placeholder gates,
   `RaceHud` (the clock top centre; best and the average of the last three top right), `RaceRecord` best and recent
-  times. `RaceTrial` (test_support) races birds headless; `tests/probe_race_home.gd` lands each bird on the rail from
+  times. `RaceTrial` (test_support) races birds headless; `tests/probe_courses.gd` sums up many course seeds (full, kinds, heights,
+  the way home); `tests/probe_combat_rest.gd` watches a 3 v 3's base landings (`--ai-seed`); `tests/probe_race_home.gd` lands each bird on the rail from
   the last gate (the AI falcon can't yet; `--trace <bird>`: its final approaches); `tests/probe_race.gd` prints a
   course leg by leg against each bird's turning circle, races every bird at every skill, writes an SVG map
   (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). Flyability apart from the AI:
