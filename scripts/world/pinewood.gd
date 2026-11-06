@@ -20,13 +20,11 @@ extends RefCounted
 ##              biggest oak; a sunlit glade as big lies off to one side; a few smaller gaps between.
 ## The AI plans through all of it with the same queries as ever.
 
-const PINE := {"count": 260, "h": Vector2(24.0, 32.0), "r": Vector2(0.22, 0.34), "spacing": 9.0, "clear": Vector2(0.6, 0.72)}
+const PINE := {"count": 260, "h": Vector2(24.0, 32.0), "r": Vector2(0.22, 0.34), "spacing": 9.0, "clear": Vector2(0.6, 0.72),
+	"clear_more": Vector2(0.56, 0.66)}   ## clear_more: where a mature pine's crown starts grown with `more` (_grow_pine)
 ## Clumps: a noise field over the wood (features about `scale` m), the pines thick where it's high (`spacing.x`
 ## apart) and thin where it's low (`spacing.y`, and only a `sparse` share of the tries taken).
 const STAND := {"scale": 34.0, "spacing": Vector2(5.5, 13.0), "sparse": 0.1}
-## A mature pine grown in the stand (_grow_stand_pine): where its crown starts (of its height), how far its limbs
-## reach (m; the room its neighbours leave it sets it, within these), and how many limbs.
-const STAND_PINE := {"crown_from": Vector2(0.46, 0.56), "reach": Vector2(4.2, 5.6), "limbs": Vector2i(6, 9)}
 const CLEARING := 20.0   ## m, the clearing round the big oak (to its nearest pines)
 const GLADE := {"r": Vector2(16.0, 18.0), "at": Vector2(42.0, 56.0)}
 const GAPS := {"count": 7, "r": Vector2(6.0, 10.0)}
@@ -42,8 +40,7 @@ const OAK_FORM := {"fork": Vector2(0.24, 0.28), "stem": 1.6, "scaffold": Vector2
 ## Pole-stage pines (in little groups, in the half-light) and veterans (alone, at the clumps' edges); `crown` is
 ## how far the crown reaches from the trunk, for the light under it. A mature pine's is 2.5 m.
 const POLE := {"count": 36, "h": Vector2(9.0, 17.0), "r": Vector2(0.08, 0.15), "clear": Vector2(0.42, 0.56), "crown": 1.2}
-const VETERAN := {"count": 6, "h": Vector2(18.0, 24.0), "r": Vector2(0.42, 0.52), "clear": Vector2(0.4, 0.5), "spacing": 9.0, "crown": 4.5,
-	"fork": Vector2(0.38, 0.46), "limbs": Vector2i(3, 4)}   ## fork: where the bole divides (of the height), _grow_veteran
+const VETERAN := {"count": 6, "h": Vector2(18.0, 24.0), "r": Vector2(0.42, 0.52), "clear": Vector2(0.4, 0.5), "spacing": 9.0, "crown": 4.5}
 ## Whether the wood has the other ages (off: the mature stand and the saplings only, as it was; for an A/B).
 static var ages := true
 const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08), "spacing": 3.2}
@@ -143,9 +140,9 @@ static func generate(s: int) -> ArenaLayout:
 			continue
 		var t := _tree(a, ArenaLayout.Kind.PINE, p, rng.randf_range(PINE.h.x, PINE.h.y), rng.randf_range(PINE.r.x, PINE.r.y))
 		_old_pine_draws(t, rng)
-		var prng := RandomNumberGenerator.new()   # (its own numbers: see _grow_stand_pine)
+		var prng := RandomNumberGenerator.new()   # (its own numbers: see _grow_pine's `more`)
 		prng.seed = hash([s, t.id, "pine"])
-		_grow_stand_pine(a, t, prng, lerpf(STAND.spacing.y, STAND.spacing.x, f))
+		_grow_pine(a, t, prng, true)
 		placed += 1
 	# Young pines in the light -- the gaps, the glade, the clearings' edges, few under the clumps -- in little
 	# groups, as they seed in.
@@ -208,9 +205,9 @@ static func _ages(a: ArenaLayout, s: int) -> void:
 		var t := _tree(a, ArenaLayout.Kind.PINE, p, rng.randf_range(VETERAN.h.x, VETERAN.h.y), rng.randf_range(VETERAN.r.x, VETERAN.r.y))
 		t.form = "veteran"
 		_old_pine_draws(t, rng)
-		var vrng := RandomNumberGenerator.new()   # (its own numbers: see _grow_veteran)
+		var vrng := RandomNumberGenerator.new()   # (its own numbers: see _grow_pine's `more`)
 		vrng.seed = hash([s, t.id, "veteran"])
-		_grow_veteran(a, t, vrng)
+		_grow_pine(a, t, vrng, true)
 		placed += 1
 	tries = 0
 	placed = 0
@@ -326,14 +323,16 @@ static func _branch(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, tip:
 
 
 ## A Scots pine: clear below, a few dead stubs, whorls of upswept limbs in the crown with needle pads, a
-## treetop perch. (The wood's mature pines grow by _grow_stand_pine and its veterans by _grow_veteran now; this
-## one's mature and veteran forms are only run for the draws they took, _old_pine_draws.) By its age (`t.form`): a pole's crown is narrow, pointed and lower down, on many thin whorls,
+## treetop perch. By its age (`t.form`): a pole's crown is narrow, pointed and lower down, on many thin whorls,
 ## the stubs below it thin; a veteran's is broad and flat on a few whorls of heavy, spreading limbs, the stubs
 ## thick.
-static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
+##   `more` (the wood's mature pines and veterans, each from its own numbers; _old_pine_draws keeps the wood's RNG
+## as it was): more to land on -- a whorl more, three or four limbs in each, a mature pine's a little longer and its
+## crown a little lower, and a tuft along every long limb so none is a bare spoke.
+static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator, more := false) -> void:
 	var pole := t.form == "pole"
 	var vet := t.form == "veteran"
-	var clear: Vector2 = POLE.clear if pole else (VETERAN.clear if vet else PINE.clear)
+	var clear: Vector2 = POLE.clear if pole else (VETERAN.clear if vet else (PINE.clear_more if more else PINE.clear))
 	t.crown_base = t.height * rng.randf_range(clear.x, clear.y)
 	var c := Vector3(t.base.x, 0.0, t.base.y)
 	# Dead stubs on the clear trunk, where old limbs broke off: few or none on some trees, short, drooping,
@@ -367,16 +366,18 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 		whorls = rng.randi_range(5, 7) if dens >= 0.75 else rng.randi_range(4, 5)
 	elif vet:
 		whorls = rng.randi_range(5, 6) if dens >= 0.75 else rng.randi_range(4, 5)
+	if more and not pole:
+		whorls += 1
 	var ang0 := rng.randf() * TAU
 	for w in whorls:
 		var f := (w + rng.randf_range(0.0, 0.5)) / float(whorls)
 		var y := lerpf(t.crown_base, t.height - (0.9 if pole else 1.6), f)
-		var reach := lerpf(1.7, 3.1, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0))) * rng.randf_range(0.75, 1.2)
+		var reach := (lerpf(2.0, 3.6, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0))) if more else lerpf(1.7, 3.1, sin(PI * clampf(f * 0.85 + 0.15, 0.0, 1.0)))) * rng.randf_range(0.75, 1.2)
 		if pole:   # (a narrowing spire)
 			reach = lerpf(1.5, 0.7, f) * rng.randf_range(0.8, 1.15)
 		elif vet:   # (broad from the crown's foot up, a little narrower at the flat top)
-			reach = lerpf(4.6, 3.6, f) * rng.randf_range(0.8, 1.15)
-		var n := rng.randi_range(2, 4) if not vet else rng.randi_range(3, 4)
+			reach = (lerpf(5.4, 4.2, f) if more else lerpf(4.6, 3.6, f)) * rng.randf_range(0.8, 1.15)   # (with `more`, broader still beside the longer mature limbs)
+		var n := rng.randi_range(3, 4) if (vet or (more and not pole)) else rng.randi_range(2, 4)
 		for k in n:
 			if rng.randf() < 0.12:
 				continue   # (a limb lost: whorls are rarely complete on an old pine)
@@ -404,7 +405,7 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 			for q in rng.randi_range(2, 3):
 				var off := side * rng.randf_range(-0.55, 0.55) - d * rng.randf_range(0.1, 0.5) + Vector3.UP * rng.randf_range(-0.05, 0.25)
 				t.foliage.append([tip + off, pad * rng.randf_range(0.6, 0.9)])
-			if reach > 2.3 and rng.randf() < lerpf(0.35, 0.8, dens):
+			if reach > 2.3 and (rng.randf() < lerpf(0.35, 0.8, dens) or more):
 				t.foliage.append([(lim.at as Callable).call((rt + reach) * 0.62) + Vector3.UP * 0.25 + side * rng.randf_range(-0.3, 0.3), pad * 0.7])
 			if vet:   # (and tufts further in along a veteran's long limbs, up off them)
 				for x in [0.3, 0.45]:
@@ -419,165 +420,6 @@ static func _grow_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumbe
 	# (on the drawn top: its low dome, half way up it -- the grip disc spans most of it)
 	var r_top := _r_at(t, t.height)
 	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top, maxf(0.05, r_top - 0.02), -c, t.id))
-
-
-## A mature Scots pine grown in the stand (as Scots pines photographed at a stand's edge): a
-## long clear bole with a few dead stubs, then a crown from about half its height, as wide as the room its
-## neighbours leave it (`room`, m between trunks), rounded and flat-topped -- not a cone. Six to nine long limbs
-## up the crown, each in two pieces: out from the trunk (the lower ones level or drooping a little, the upper ones
-## climbing), then bent off its line (_bend) and on, its tip turning up into a tuft of needles; a twiggy side shoot
-## with a tuft off the first piece; one or two tops leaning out beside the leader to flatten the crown. Each piece's
-## straight stretch is a perch. Its own random numbers (`rng`), so the wood round it grows as it did.
-static func _grow_stand_pine(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator, room: float) -> void:
-	var h := t.height
-	var c := Vector3(t.base.x, 0.0, t.base.y)
-	t.crown_base = h * rng.randf_range(STAND_PINE.crown_from.x, STAND_PINE.crown_from.y)
-	var dens := clampf(crown_density, 0.0, 1.0)
-	# Dead stubs on the bole, where the lower limbs died in the stand's shade.
-	for i in rng.randi_range(1, 5):
-		var y := h * rng.randf_range(0.15, t.crown_base / h - 0.04)
-		var ang := rng.randf() * TAU
-		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var r := _r_at(t, y)
-		var root := c + Vector3.UP * y
-		var reach := r + rng.randf_range(0.12, 0.55) * (2.0 if rng.randf() < 0.15 else 1.0)
-		var sr := rng.randf_range(0.025, 0.045)
-		var droop := rng.randf_range(-0.35, 0.05)
-		_branch(a, t, root, root + d * reach + Vector3.UP * droop * (reach - r), sr, STUB_PERCHES, true)
-		var spts := PackedVector3Array()
-		var srad := PackedFloat32Array()
-		for si in 6:
-			var u := si / 5.0
-			var x := reach * u
-			spts.append(root + d * x + Vector3.UP * droop * maxf(x - r, 0.0) * (0.6 + 0.4 * u))
-			srad.append(sr * lerpf(1.0, 0.25, pow(u, 1.5)) * (1.0 + 0.9 * exp(-maxf(x - r, 0.0) / (2.0 * sr))))
-		t.limbs.append([spts, srad, "stub"])
-	# The limbs, spiralling up the crown, longest a third of the way up it (a rounded crown).
-	var width := clampf(room * 0.7 + 1.2, STAND_PINE.reach.x, STAND_PINE.reach.y)   # (crowns interleave a little)
-	var n := rng.randi_range(STAND_PINE.limbs.x, STAND_PINE.limbs.y)
-	var ang0 := rng.randf() * TAU
-	var top := h - 1.4
-	for k in n:
-		var f := clampf((k + rng.randf_range(0.0, 0.7)) / float(n), 0.0, 1.0)
-		var y := lerpf(t.crown_base, top - 1.0, f)
-		var ang := ang0 + k * 2.4 + rng.randf_range(-0.4, 0.4)
-		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var rt := _r_at(t, y)
-		var reach := width * lerpf(0.8, 1.0, sin(PI * clampf(0.2 + 0.8 * f, 0.0, 1.0))) * (0.7 if f > 0.85 else 1.0) * rng.randf_range(0.8, 1.15)
-		var r0 := lerpf(0.085, 0.05, f)
-		var turn := rng.randf_range(0.25, 0.5) * (1.0 if rng.randf() < 0.5 else -1.0)
-		var mid := lerpf(-0.08, 0.35, f) + rng.randf_range(-0.06, 0.06)
-		var l1 := rt + reach * rng.randf_range(0.5, 0.6)
-		var root := c + Vector3.UP * y
-		var p1 := _limb(a, t, root, d, l1, Vector3(0.9 + 0.6 * f, mid, mid + 0.1), Vector2(0.2, 0.8), r0, rt, "limb", true, _bend(turn, l1, 0.8), 0.6)
-		var d2 := d.rotated(Vector3.UP, turn)
-		var l2 := maxf(reach - (l1 - rt), 0.8)
-		var p2 := _limb(a, t, p1.tip, d2, l2, Vector3(mid + 0.1, lerpf(0.12, 0.35, f), lerpf(0.7, 1.0, f)), Vector2(0.15, 0.75), r0 * 0.6, -10.0, "limb", true, rng.randf_range(-0.3, 0.3), 0.4)
-		var side := d.cross(Vector3.UP)
-		var s := lerpf(0.75, 1.0, dens) * rng.randf_range(0.85, 1.25)
-		var pad := Vector3(1.15, 0.6, 1.15) * s
-		var tip: Vector3 = p2.tip
-		t.foliage.append([tip + Vector3.UP * 0.2, pad])
-		for q in rng.randi_range(2, 3):
-			t.foliage.append([tip + side * rng.randf_range(-0.6, 0.6) - d2 * rng.randf_range(0.1, 0.6) + Vector3.UP * rng.randf_range(-0.05, 0.25), pad * rng.randf_range(0.6, 0.9)])
-		# Tufts along the limb too, up off it (a pine's needles sit on the outer two thirds of its shoots), so the
-		# crown reads as a mass rather than spokes ending in tufts.
-		t.foliage.append([(p2.at as Callable).call(l2 * 0.45) + Vector3.UP * 0.3 + side * rng.randf_range(-0.3, 0.3), pad * 0.8])
-		t.foliage.append([(p1.at as Callable).call(lerpf(rt, l1, 0.8)) + Vector3.UP * 0.3 + side * rng.randf_range(-0.4, 0.4), pad * rng.randf_range(0.65, 0.85)])
-		if rng.randf() < lerpf(0.3, 0.7, dens):
-			t.foliage.append([(p1.at as Callable).call(lerpf(rt, l1, 0.5)) + Vector3.UP * 0.3 + side * rng.randf_range(-0.4, 0.4), pad * rng.randf_range(0.5, 0.7)])
-		# A twiggy side shoot off the first piece, out to one side, with its own tuft (brushed through).
-		if rng.randf() < 0.7:
-			var sd := d.rotated(Vector3.UP, -signf(turn) * rng.randf_range(0.7, 1.1))
-			var x := l1 * rng.randf_range(0.55, 0.75)
-			var sh := _limb(a, t, (p1.at as Callable).call(x), sd, reach * rng.randf_range(0.3, 0.45), Vector3(0.3, 0.2, 0.6), Vector2(0.12, 0.8), r0 * 0.4, -10.0, "limb", false, 0.0, 0.4, false)
-			t.foliage.append([sh.tip + Vector3.UP * 0.2, pad * rng.randf_range(0.6, 0.85)])
-	# The top: one or two leaning out of the leader beside it, so the crown ends flat, not in a spire.
-	for q in rng.randi_range(1, 2):
-		var ang := ang0 + q * PI + rng.randf_range(-0.6, 0.6)
-		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var y := h * rng.randf_range(0.84, 0.88)
-		var rt := _r_at(t, y)
-		var tp := _limb(a, t, c + Vector3.UP * y, d, rt + rng.randf_range(1.2, 1.8), Vector3(2.4, 1.5, 0.9), Vector2(0.2, 0.7), lerpf(0.06, 0.08, rng.randf()), rt, "limb", false, rng.randf_range(-0.3, 0.3), 0.5)
-		t.foliage.append([tp.tip + Vector3.UP * 0.25, Vector3(1.4, 0.7, 1.4) * lerpf(0.75, 1.0, dens) * rng.randf_range(0.9, 1.15)])
-	t.foliage.append([c + Vector3.UP * (h - 0.35), Vector3(1.3, 0.8, 1.3)])
-	var r_top := _r_at(t, h)
-	a._add_perch(Perch.treetop(a.perches.size(), t.top() + Vector3.UP * ArenaLayout.TOP_DOME * 0.5 * r_top, maxf(0.05, r_top - 0.02), -c, t.id))
-	a.max_tree_reach = maxf(a.max_tree_reach, width * 1.15 + t.radius - 4.0)
-
-
-## A veteran Scots pine, as old pines spread at a stand's edge (the Torridon reference): a short heavy bole with
-## thick dead stubs that ends a little over where it divides (`t.stem`), two fifths of the way up, into three or
-## four heavy limbs. Each leans out and up out of the fork, then wanders on outward in two more pieces (bent into
-## each other, _bend), forking as it goes -- a level limb off to the side where the climb ends, one climbing on to
-## the top where it reaches out -- under a broad, flat crown of needle tufts on the limbs' upturned ends. The
-## wood is open under the crown and every piece's straight stretch is a perch, as an oak's. Its own random numbers.
-static func _grow_veteran(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator) -> void:
-	var h := t.height
-	var c := Vector3(t.base.x, 0.0, t.base.y)
-	var fork := h * rng.randf_range(VETERAN.fork.x, VETERAN.fork.y)
-	t.crown_base = fork
-	t.stem = fork + 1.2
-	var dens := clampf(crown_density, 0.0, 1.0)
-	for i in rng.randi_range(2, 5):   # (thick dead stubs on the bole)
-		var y := h * rng.randf_range(0.15, fork / h - 0.04)
-		var ang := rng.randf() * TAU
-		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var r := _r_at(t, y)
-		var root := c + Vector3.UP * y
-		var reach := r + rng.randf_range(0.12, 0.55) * (2.0 if rng.randf() < 0.15 else 1.0)
-		var sr := rng.randf_range(0.05, 0.08)
-		var droop := rng.randf_range(-0.35, 0.05)
-		_branch(a, t, root, root + d * reach + Vector3.UP * droop * (reach - r), sr, STUB_PERCHES, true)
-		var spts := PackedVector3Array()
-		var srad := PackedFloat32Array()
-		for si in 6:
-			var u := si / 5.0
-			var x := reach * u
-			spts.append(root + d * x + Vector3.UP * droop * maxf(x - r, 0.0) * (0.6 + 0.4 * u))
-			srad.append(sr * lerpf(1.0, 0.25, pow(u, 1.5)) * (1.0 + 0.9 * exp(-maxf(x - r, 0.0) / (2.0 * sr))))
-		t.limbs.append([spts, srad, "stub"])
-	var longest := 0.0
-	var tufts: Array = []   # [tip, size]
-	var ang0 := rng.randf() * TAU
-	var n_big := rng.randi_range(VETERAN.limbs.x, VETERAN.limbs.y)
-	for k in n_big:
-		var ang := ang0 + TAU * k / n_big + rng.randf_range(-0.35, 0.35)
-		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var root := c + Vector3.UP * (fork + rng.randf_range(0.0, 0.5))
-		var r0 := t.radius * rng.randf_range(0.5, 0.6)
-		var turn1 := rng.randf_range(0.3, 0.55) * (1.0 if rng.randf() < 0.5 else -1.0)
-		var turn2 := -signf(turn1) * rng.randf_range(0.3, 0.55)
-		var l1 := t.radius + rng.randf_range(2.5, 3.5)
-		var sl1 := Vector3(1.6, rng.randf_range(0.9, 1.1), 0.55)
-		var p1 := _limb(a, t, root, d, l1, sl1, Vector2(0.2, 0.75), r0, t.radius, "limb", false, _bend(turn1, l1, 0.75), 0.6)
-		var d2 := d.rotated(Vector3.UP, turn1)
-		var l2 := rng.randf_range(2.5, 3.5)
-		var sl2 := Vector3(sl1.z, rng.randf_range(0.2, 0.35), 0.3)
-		var p2 := _limb(a, t, p1.tip, d2, l2, sl2, Vector2(0.15, 0.78), r0 * 0.6, -10.0, "limb", true, _bend(turn2, l2, 0.78), 0.55)
-		var d3 := d2.rotated(Vector3.UP, turn2)
-		var p3 := _limb(a, t, p2.tip, d3, rng.randf_range(2.0, 3.0), Vector3(sl2.z, rng.randf_range(0.05, 0.2), rng.randf_range(0.7, 0.9)), Vector2(0.15, 0.72), r0 * 0.33, -10.0, "limb", true, rng.randf_range(-0.3, 0.3), 0.4)
-		tufts.append([p3.tip, 1.0])
-		tufts.append([(p3.at as Callable).call(1.0), 0.75])
-		longest = maxf(longest, _flat_from(c, p3.tip))
-		var fd := d.rotated(Vector3.UP, -signf(turn1) * rng.randf_range(0.8, 1.2))
-		var f1 := _limb(a, t, p1.tip, fd, rng.randf_range(2.5, 4.0), Vector3(0.3, rng.randf_range(0.0, 0.15), 0.7), Vector2(0.12, 0.78), r0 * 0.4, -10.0, "limb", true, rng.randf_range(-0.5, 0.5), 0.35)
-		tufts.append([f1.tip, 0.9])
-		longest = maxf(longest, _flat_from(c, f1.tip))
-		var ud := d2.rotated(Vector3.UP, signf(turn1) * rng.randf_range(0.6, 1.0))
-		var f2 := _limb(a, t, p2.tip, ud, rng.randf_range(3.0, 4.5), Vector3(1.6, rng.randf_range(1.1, 1.3), 0.5), Vector2(0.12, 0.7), r0 * 0.35, -10.0, "limb", false, rng.randf_range(-0.6, 0.6), 0.4)
-		tufts.append([f2.tip, 1.3])
-	# The needles: a tuft on each limb's end (a clump of pads, up off it), and along the outer pieces.
-	for tf in tufts:
-		var tip: Vector3 = tf[0]
-		var s := float(tf[1]) * lerpf(0.75, 1.0, dens) * rng.randf_range(0.85, 1.2)
-		var pad := Vector3(1.4, 0.65, 1.4) * s
-		t.foliage.append([tip + Vector3.UP * 0.25, pad])
-		for q in rng.randi_range(2, 3):
-			var off := Vector3(rng.randf_range(-0.8, 0.8), rng.randf_range(-0.05, 0.3), rng.randf_range(-0.8, 0.8))
-			t.foliage.append([tip + off, pad * rng.randf_range(0.6, 0.9)])
-	t.foliage.append([c + Vector3.UP * (t.stem + 0.6), Vector3(1.6, 0.8, 1.6)])   # (over the fork)
-	a.max_tree_reach = maxf(a.max_tree_reach, longest + t.radius - 4.0)
 
 
 ## The draws a mature pine's or a veteran's growth took from the wood's RNG (or the ages') before it had its own (the old _grow_pine, run on a

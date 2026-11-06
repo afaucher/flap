@@ -193,7 +193,7 @@ func _pines(a: ArenaLayout) -> void:
 				low_live += 1
 			else:
 				limbs_up += 1
-		var cb: Vector2 = {"": Vector2(0.44, 0.6), "pole": Vector2(0.4, 0.6), "veteran": Vector2(0.38, 0.52)}[t.form]   # (a mature pine's from half way up, as in a stand)
+		var cb: Vector2 = {"": Vector2(0.55, 0.75), "pole": Vector2(0.4, 0.6), "veteran": Vector2(0.38, 0.52)}[t.form]
 		if t.crown_base > t.height * cb.x and t.crown_base < t.height * cb.y and limbs_up >= (4 if t.form == "veteran" else 6):
 			crown_ok += 1
 		for f in t.foliage:
