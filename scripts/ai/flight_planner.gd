@@ -204,13 +204,24 @@ func _pos(k: Vector3i) -> Vector3:
 	return Vector3(k.x * LATTICE, LEVELS[k.y], k.z * LATTICE)
 
 
+## Where lattice node `k` is (x and z in LATTICE steps, y the index into LEVELS).
+static func node_pos(k: Vector3i) -> Vector3:
+	return Vector3(k.x * LATTICE, LEVELS[k.y], k.z * LATTICE)
+
+
 func _usable(k: Vector3i) -> bool:
 	if _node_ok.has(k):
 		return _node_ok[k]
-	var p := _pos(k)
-	var ok := Vector2(p.x, p.z).length() < layout.reach(Vector2(p.x, p.z)) - 2.0 and p.y < layout.ceiling and layout.clear_by(p, clearance + 0.3)
+	var ok := node_usable(k)
 	_node_ok[k] = ok
 	return ok
+
+
+## Is lattice node `k` free air the planner may use: inside the arena, under the ceiling, `clearance` + 0.3 from
+## the wood? (Not cached: what the planner's own lookups are made of, for a view to ask without touching them.)
+func node_usable(k: Vector3i) -> bool:
+	var p := node_pos(k)
+	return Vector2(p.x, p.z).length() < layout.reach(Vector2(p.x, p.z)) - 2.0 and p.y < layout.ceiling and layout.clear_by(p, clearance + 0.3)
 
 
 func _neighbours(k: Vector3i) -> Array[Vector3i]:
