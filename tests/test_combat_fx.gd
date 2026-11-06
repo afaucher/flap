@@ -121,7 +121,7 @@ func setup() -> void:
 	# Shedding: damaged, it sheds now and then; whole, it doesn't.
 	a.fly_from(Vector3(0, 40, 0), Vector3(0, 0, 1), 9.0)
 	var n1 := fx.loose.size()
-	await frames(60 * 6)
+	await frames(60 * 15)   # (long enough that a whole bird shedding as a damaged one does, 0.35 a second, would: 99.5%)
 	eq(fx.loose.size(), n1, "a whole bird sheds nothing")
 	for q in 5:
 		a.lose_feathers(a.global_position, 1)

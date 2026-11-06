@@ -6,12 +6,19 @@ extends Node3D
 ## rig, flown by a LabPilot through the player's controls.
 ##   .\run.ps1 --scene res://scenes/bird_lab.tscn [--bird <id>] [--scenario <id>] [--speed <0.05..1>] [--onion]
 ##       [--view side|front|three|top|chase] [--dist <m>] [--pause-at <sim s>] [--bones | --bones-only]
-##       [--shot <png> --shot-after <real s>] [--no-rider]
+##       [--shot <png> --shot-after <real s>] [--no-rider] [--no-route] [--route-rejected] [--lattice-at bird|target]
+##       [--lattice-radius <m>]
 ## Keys: 1-5 bird, Up/Down scenario, Space pause, . step, R restart, -/= speed, O onion skin, F follow,
-##       V next view, T trail, B bones (off / over the bird / bones only), K rider; drag to orbit, wheel to zoom.
+##       V next view, T trail, B bones (off / over the bird / bones only), K rider, P route view, L lattice (off /
+##       usable nodes / and the rejected ones); drag to orbit, wheel to zoom.
 ## Crows, falcons and hawks carry their war tack and rider (Tack), as in the game.
+## Combat scenarios (LabFight) set up the real fight round the bird: a CombatWorld, the other bird, real rounds.
 ## Bones (BoneView): every bone and joint of the rig as it was solved, drawn on top -- the shoulder, elbow,
 ## wrist, hip, knee, ankle, the neck's joints, head and tail, coloured by chain.
+## Route scenarios (kind "ai") fly the AI in the pine wood (built the first time one is picked, kept for the next): the
+## route view (RouteView, on unless --no-route) draws its planner's lattice round the bird (or its perch's approach
+## point, --lattice-at target), the route it flies and the waypoint it's on, the perch and its approach points, and
+## the path its avoidance predicts (red where it would meet wood; the escape it flies instead orange).
 
 const VIEWS := {
 	"side": Vector3(1.0, 0.15, -0.35),
@@ -33,6 +40,7 @@ var cam: Camera3D
 var bird: Bird
 var pose_rig: BirdRig
 var pilot: LabPilot
+var fight: LabFight = null   ## a combat scenario's fight (LabFight)
 var bird_id := "crow"
 var scenario: Dictionary = LabScenarios.LIST[0]
 var speed := 0.5
@@ -51,6 +59,12 @@ var pause_at := -1.0
 var _dist_arg := -1.0
 var bones := 0                ## 0 off, 1 the skeleton over the bird, 2 the skeleton only
 var _bone_view: BoneView
+var show_route := true        ## the route view (AI scenarios)
+var route_view: RouteView
+var _lab_layout: ArenaLayout  ## the one-tree arena, and the pine wood (route scenarios; built when first wanted)
+var _lab_arena: ArenaBuilder
+var _forest_layout: ArenaLayout
+var _forest_arena: ArenaBuilder
 
 var _yaw := 0.0
 var _pitch := 0.0
@@ -95,6 +109,13 @@ func _ready() -> void:
 	if Boot.arg_value(args, "--dist") != "":
 		_dist_arg = float(Boot.arg_value(args, "--dist"))
 	bones = 2 if args.has("--bones-only") else (1 if args.has("--bones") else 0)
+	show_route = not args.has("--no-route")
+	route_view = RouteView.new()
+	route_view.rejected = args.has("--route-rejected")
+	if Boot.arg_value(args, "--lattice-at") == "target":
+		route_view.centre_on = "target"
+	if Boot.arg_value(args, "--lattice-radius") != "":
+		route_view.lattice_radius = float(Boot.arg_value(args, "--lattice-radius"))
 
 	Game.add_environment(self)
 	world = Node3D.new()
@@ -105,6 +126,9 @@ func _ready() -> void:
 	arena = ArenaBuilder.new()
 	world.add_child(arena)
 	arena.build(layout)
+	_lab_layout = layout
+	_lab_arena = arena
+	add_child(route_view)
 	var trail := MeshInstance3D.new()
 	_trail_mesh = ImmediateMesh.new()
 	trail.mesh = _trail_mesh
@@ -137,6 +161,26 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+	for a in [_lab_arena, _forest_arena]:   # (the arena not in use is out of the tree: free it too)
+		if a != null and is_instance_valid(a) and not a.is_inside_tree():
+			a.free()
+
+
+## The arena scenario `s` flies in: the lab's one tree, or the pine wood (built the first time). The other one is
+## taken out of the tree (its collision with it).
+func _use_arena(forest: bool) -> void:
+	if forest and _forest_layout == null:
+		_forest_layout = Pinewood.generate(LabScenarios.FOREST_SEED)
+		_forest_arena = ArenaBuilder.new()
+		world.add_child(_forest_arena)
+		_forest_arena.build(_forest_layout)
+		world.remove_child(_forest_arena)
+	var want: ArenaBuilder = _forest_arena if forest else _lab_arena
+	if arena != want:
+		world.remove_child(arena)
+		world.add_child(want)
+		arena = want
+	layout = _forest_layout if forest else _lab_layout
 
 
 # --- Scenario ---------------------------------------------------------------------------------------
@@ -149,6 +193,9 @@ func restart() -> void:
 	_trail.clear()
 	_clear_ghosts()
 	_tack = null
+	if fight != null:
+		fight.free_all()
+		fight = null
 	if bird != null:
 		bird.queue_free()
 		bird = null
@@ -156,6 +203,7 @@ func restart() -> void:
 		pose_rig.queue_free()
 		pose_rig = null
 	var p := BirdProfile.by_id(bird_id)
+	_use_arena(LabScenarios.in_forest(scenario))
 	if LabScenarios.is_pose(scenario):
 		pose_rig = BirdRig.new()
 		world.add_child(pose_rig)
@@ -173,11 +221,14 @@ func restart() -> void:
 		bird.setup(p, layout, null)
 		bird.arena = arena
 		pilot = LabScenarios.start(scenario, bird, layout)
-		if Tack.RIDDEN.has(p.id):
+		if scenario.get("kind", "") == "fight":
+			fight = LabFight.start(scenario, bird, layout, world, arena)
+			_tack = fight.tack_of(bird)
+		elif Tack.RIDDEN.has(p.id):
 			_tack = Tack.fit(bird.rig, bird)
 	if _tack != null and is_instance_valid(_tack):
 		_tack.visible = rider
-	_dist = _dist_arg if _dist_arg > 0.0 else maxf(1.2, p.span * 2.6)
+	_dist = _dist_arg if _dist_arg > 0.0 else (16.0 if scenario.get("kind", "") == "ai" else maxf(1.2, p.span * 2.6))
 	_focus = _target_point()
 	_sync_ui()
 
@@ -187,6 +238,8 @@ func _target_point() -> Vector3:
 		return pose_rig.global_position
 	if bird != null and follow:
 		return bird.global_position
+	if LabScenarios.in_forest(scenario):
+		return _focus   # (the camera stays where it is)
 	return LabScenarios.aim_point(layout.perches[0])
 
 
@@ -215,7 +268,8 @@ func _physics_process(dt: float) -> void:
 		_snapshot()
 	# Loop: start over a moment after the bird has settled or flown off.
 	var kind: String = scenario.get("kind", "")
-	var done := (kind == "land" and bird.state == Bird.State.PERCHED) or (kind != "land" and sim_t > 4.0) or sim_t > 14.0
+	var lands := kind == "land" or (kind == "ai" and pilot.goal != null)
+	var done := (lands and bird.state == Bird.State.PERCHED) or (not lands and kind != "ai" and sim_t > 4.0) or sim_t > float(scenario.get("time", 14.0))
 	if done and _ended_at < 0.0:
 		_ended_at = sim_t
 	if loop and _ended_at >= 0.0 and sim_t - _ended_at > 1.5 and pause_at < 0.0:
@@ -265,6 +319,7 @@ func _process(delta: float) -> void:
 	cam.look_at_from_position(_focus + dir * _dist, _focus, Vector3.UP if absf(dir.y) < 0.99 else Vector3.FORWARD)
 	_draw_trail()
 	_show_bones()
+	_show_route()
 	_readout.text = _status()
 
 
@@ -276,6 +331,16 @@ func _show_bones() -> void:
 	_bone_view.visible = bones > 0
 	if rig != null:
 		rig.visible = bones < 2
+
+
+## The route view on the AI-flown bird (none flown by a scripted pilot: nothing to show).
+func _show_route() -> void:
+	var ai: AIPilot = pilot.ai if bird != null and pilot != null and pilot.kind == LabPilot.Kind.AI else null
+	route_view.visible = show_route and ai != null
+	route_view.pilot = ai
+	route_view.bird = bird
+	if route_view.visible:
+		route_view.refresh()
 
 
 func _draw_trail() -> void:
@@ -295,11 +360,32 @@ func _status() -> String:
 		var t := bird.telemetry()
 		lines.append("%s   %.1f m/s   catch %s at %.0f m/s" % [STATE_NAMES[bird.state], t.speed, CATCH_NAMES[int(t.candidate_status)] if bird.candidate != null else "-", t.grab_speed])
 		lines.append("flare %.2f   landing %.0f%%   neck %.2f   fold %.2f" % [t.flare, 100.0 * float(t.landing_t), bird.rig.neck_ext, bird.rig.fold])
+		if fight != null:
+			lines.append(fight.status())
+		if pilot != null and pilot.kind == LabPilot.Kind.AI:
+			lines.append_array(_ai_status())
 	elif pose_rig != null:
 		lines.append("neck %.2f   fluff %.2f   fold %.2f" % [pose_rig.neck_ext, pose_rig.fluff, pose_rig.fold])
 	if bones > 0:
 		lines.append("bones (B): spine white  neck yellow  L wing orange  R wing cyan  legs green")
 	return "\n".join(lines)
+
+
+func _ai_status() -> Array:
+	var ai := pilot.ai
+	var to := "no target"
+	if ai.target != null:
+		to = "perch %d%s, %.1f m" % [ai.target.id, " (the rail)" if ai.target == pilot.goal else "", ai.target.distance_to(bird.global_position)]
+	elif ai.debug_reason != "":
+		to += " (%s)" % ai.debug_reason
+	var out := ["AI %s  %s   waypoint %d of %d   replans %d%s" % [AIPilot.Mode.keys()[ai.mode], to, ai.wp, ai.route.size() - 1, ai.replans, "   AVOIDING" if ai.avoiding > 0.0 else ""]]
+	if bird.state == Bird.State.PERCHED and bird.perch != null:
+		out.append("perched on %s" % ("the rail" if bird.perch == pilot.goal else "perch %d" % bird.perch.id))
+	out.append("predicted %.1f of %.1f s clear%s" % [minf(ai.predicted_clear, ai.predict_horizon), ai.predict_horizon, ", flying an escape" if not ai.escape.is_empty() else ""])
+	if show_route:
+		out.append("route (P): lattice teal (L: rejected red)   bird blue, route white, waypoint yellow   perch magenta, approach rings")
+		out.append("  predicted path green, red where it meets wood   escape orange   clearance %.2f m" % ai.planner.clearance)
+	return out
 
 
 func _set_view(v: String) -> void:
@@ -332,6 +418,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_F: follow = not follow
 			KEY_T: trail_on = not trail_on
 			KEY_B: bones = (bones + 1) % 3
+			KEY_P: show_route = not show_route
+			KEY_L: _cycle_lattice()
 			KEY_V: _set_view(VIEWS.keys()[(VIEWS.keys().find(view) + 1) % VIEWS.size()])
 			KEY_MINUS: _set_speed(speed * 0.5)
 			KEY_EQUAL: _set_speed(speed * 2.0)
@@ -352,6 +440,17 @@ func _set_speed(v: float) -> void:
 	speed = clampf(v, 0.05, 1.0)
 	Engine.time_scale = speed
 	_sync_ui()
+
+
+## Lattice: off, the usable nodes, and the rejected ones too.
+func _cycle_lattice() -> void:
+	if not route_view.lattice:
+		route_view.lattice = true
+		route_view.rejected = false
+	elif not route_view.rejected:
+		route_view.rejected = true
+	else:
+		route_view.lattice = false
 
 
 func _set_rider(on: bool) -> void:
@@ -431,6 +530,7 @@ func _build_ui() -> void:
 	_rider_box = _check(box, "Rider and tack (crow, falcon, hawk)", rider, _set_rider)
 	_check(box, "Camera follows the bird", follow, func(on: bool) -> void: follow = on)
 	_check(box, "Flight path trail", trail_on, func(on: bool) -> void: trail_on = on)
+	_check(box, "Route view (AI scenarios)", show_route, func(on: bool) -> void: show_route = on)
 	_check(box, "Loop", loop, func(on: bool) -> void: loop = on)
 	_check(box, "Poses: set neck and fluff", override_body, func(on: bool) -> void: override_body = on)
 	_neck_slider = _slider(box, "Neck: retracted .. reaching", 0.0, 1.0, neck, func(v: float) -> void: neck = v)
@@ -445,7 +545,7 @@ func _build_ui() -> void:
 	var info := PanelContainer.new()
 	info.anchor_left = 1.0
 	info.anchor_right = 1.0
-	info.offset_left = -430
+	info.offset_left = -560
 	info.offset_right = -12
 	info.offset_top = 12
 	layer.add_child(info)
@@ -453,7 +553,7 @@ func _build_ui() -> void:
 	_readout.add_theme_font_size_override("font_size", 14)
 	info.add_child(_readout)
 	var help := Label.new()
-	help.text = "1-5 bird  Up/Down scenario  Space pause  . step\nR restart  -/= speed  O ghosts  F follow  V view\nB bones  Drag to orbit, wheel to zoom"
+	help.text = "1-5 bird  Up/Down scenario  Space pause  . step\nR restart  -/= speed  O ghosts  F follow  V view\nB bones  P route  L lattice  Drag to orbit, wheel to zoom"
 	help.add_theme_font_size_override("font_size", 11)
 	help.modulate = Color(1, 1, 1, 0.7)
 	box.add_child(help)

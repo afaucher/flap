@@ -18,7 +18,7 @@ func _initialize() -> void:
 			continue
 		var files := SoundRecipes.files_of(name)
 		for i in files.size():
-			var s := SoundRecipes.render(name, i)
+			var s := SoundRecipes.baked(name, i)   # (a 3D one-shot with its lead-in: SoundRecipes.LEAD_3D)
 			var err := SoundDsp.to_wav(s).save_to_wav(OUT + files[i] + ".wav")
 			print("%-22s %5.2f s  peak %5.1f dB%s" % [files[i], s.size() / float(SoundDsp.RATE),
 					linear_to_db(SoundDsp.peak(s)), "" if err == OK else "  ERROR %d" % err])

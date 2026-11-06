@@ -3,9 +3,12 @@ extends Control
 ## The weapons layer of the HUD (docs/design/concept_briefs.html, "The HUD vocabulary"):
 ##   gunsight   a ring where the launcher points, 25 m out
 ##   lead       ROCKETS, GUN: a small diamond where to put the gunsight so a rocket (a bullet) meets the target
+##              (Launcher.lead_sight: allowing for the round's drop and for the camera riding above the line of fire,
+##              so ring on diamond hits at any range and zoom)
 ##   lock       SEEKERS: the lock cone around the gunsight, and a diamond on the target closing in as the lock
 ##              builds; solid when locked
-##   bracket    on the target: range and closing speed
+##   bracket    on the target (Launcher.target: a bird or a balloon, whichever is nearest the sight): range and
+##              closing speed
 ##   arrow      at the screen edge when the target is off-screen or behind
 ##   rack       the selected weapon's name and rounds left (a pip a round; the gun's belt a bar and a count), and the
 ##              other kind carried, dim, with the key that switches to it (dev: bottom right, a row each)
@@ -31,6 +34,8 @@ const FRIEND := Color(0.35, 0.92, 0.85)  ## cool: your side
 var launcher: Launcher
 var world: CombatWorld
 var drew_lead := false     ## (tests) whether the last frame drew a lead mark
+var lead_world := Vector3.INF   ## (tests) where (world) the last lead mark was drawn
+var bracketed: Object = null    ## (tests) what the last frame bracketed
 var note := ""             ## a line under the tally (the range shows target evasion on/off)
 var home: Variant = null   ## your base's perch (world), for the way home
 var _font: Font
@@ -48,6 +53,7 @@ func _process(_delta: float) -> void:
 
 func _draw() -> void:
 	drew_lead = false
+	bracketed = null
 	if FlightHud.style != "dev":
 		_draw_styled()
 		return
@@ -55,7 +61,7 @@ func _draw() -> void:
 	if cam == null or launcher == null or not is_instance_valid(launcher.bird):
 		return
 	var l := launcher
-	var sight := l.muzzle() + l.aim() * 25.0
+	var sight := l.muzzle() + l.aim() * Launcher.SIGHT_RANGE
 	var sight_ok := l.can_aim() and not cam.is_position_behind(sight)   # (perched: no aiming, so no sight, lead or lock)
 	var sp := cam.unproject_position(sight)
 	if sight_ok:
@@ -68,7 +74,7 @@ func _draw() -> void:
 		var cone := _cone_px(cam, Launcher.LOCK_CONE)
 		draw_arc(sp, cone, 0, TAU, 64, DIM, 1.5)
 	if t != null:
-		var tpos: Vector3 = t.global_position
+		var tpos := Launcher.aim_at(t)
 		var br := l.bearing(t)
 		var closing := -(Projectile.velocity_of(t) - l.bird.model.velocity).dot((tpos - l.muzzle()).normalized())
 		if cam.is_position_behind(tpos) or not get_viewport_rect().has_point(cam.unproject_position(tpos)):
@@ -77,14 +83,16 @@ func _draw() -> void:
 			var tp := cam.unproject_position(tpos)
 			var r := 18.0
 			_bracket(tp, r, LOCKED if l.locked() else ENEMY)
-			_bar(Rect2(tp.x - r, tp.y + r + 5, r * 2.0, 4), float(t.telemetry().health), 0)
+			bracketed = t
+			_bar(Rect2(tp.x - r, tp.y + r + 5, r * 2.0, 4), Launcher.health_of(t), 0)
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
 			_text(tp + Vector2(r + 6, -r + 30), "%+.0f" % closing, DIM, 13)
 			if not l.can_aim():
 				pass
 			elif l.weapon != Launcher.Weapon.SEEKERS:
 				drew_lead = true
-				var lead := l.lead_point(t)
+				var lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)
+				lead_world = lead
 				if not cam.is_position_behind(lead):
 					var lp := cam.unproject_position(lead)
 					draw_dashed_line(tp, lp, DIM, 1.0, 4.0)
@@ -102,7 +110,10 @@ func _draw() -> void:
 		_score(Vector2(size.x - 24, 78))
 		var s := world.stats
 		var acc := 100.0 * float(s.hits) / maxf(float(s.shots), 1.0)
-		_text(Vector2(size.x - 24, 34), "shots %d   hits %d   downed %d   %d%%" % [s.shots, s.hits, s.kills, roundi(acc)], INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
+		var line := "shots %d   hits %d   downed %d" % [s.shots, s.hits, s.kills]
+		if not world.balloons.is_empty():
+			line += "   balloons %d" % int(s.get("balloons", 0))
+		_text(Vector2(size.x - 24, 34), line + "   %d%%" % roundi(acc), INK, 15, HORIZONTAL_ALIGNMENT_RIGHT)
 		if note != "":
 			_text(Vector2(size.x - 24, 54), note, DIM, 13, HORIZONTAL_ALIGNMENT_RIGHT)
 
@@ -186,7 +197,7 @@ func _warnings(cam: Camera3D, l: Launcher) -> void:
 ## Friend and foe on the other birds (`t`, the bracketed target, has its own mark): a FRIEND caret over each
 ## teammate, a small ENEMY mark on each other enemy, an arrow at the edge for those off screen; and the FRIEND
 ## cross over the gunsight `sp` while a teammate is in the line of fire.
-func _teams(cam: Camera3D, l: Launcher, t: Bird, sp: Vector2) -> void:
+func _teams(cam: Camera3D, l: Launcher, t: Object, sp: Vector2) -> void:
 	if world == null:
 		return
 	for b in world.birds:
@@ -267,7 +278,7 @@ func _draw_styled() -> void:
 	if cam == null or launcher == null or not is_instance_valid(launcher.bird):
 		return
 	var l := launcher
-	var sight := l.muzzle() + l.aim() * 25.0
+	var sight := l.muzzle() + l.aim() * Launcher.SIGHT_RANGE
 	var sight_ok := l.can_aim() and not cam.is_position_behind(sight)   # (perched: no aiming, so no sight, lead or lock)
 	var sp := cam.unproject_position(sight)
 	if sight_ok:
@@ -282,7 +293,7 @@ func _draw_styled() -> void:
 		var rc := FlightHud.ring_centre if FlightHud.style == "ring" else sp   # (one circle: the ring is the lock cone)
 		draw_arc(rc, _cone_px(cam, Launcher.LOCK_CONE), 0, TAU, 64, Color(DIM, 0.3), 1.5)
 	if t != null:
-		var tpos: Vector3 = t.global_position
+		var tpos := Launcher.aim_at(t)
 		var br := l.bearing(t)
 		if cam.is_position_behind(tpos) or not get_viewport_rect().has_point(cam.unproject_position(tpos)):
 			_edge_arrow(cam, tpos, ENEMY)
@@ -291,13 +302,15 @@ func _draw_styled() -> void:
 			var r := 20.0
 			_bracket(tp, r + 1.0, Color(0, 0, 0, 0.6), 5.0)
 			_bracket(tp, r, LOCKED if l.locked() else ENEMY, 2.5)
+			bracketed = t
 			_text(tp + Vector2(r + 6, -r + 12), "%d m" % roundi(br.y), INK, 15)
-			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)
+			_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)
 			if not l.can_aim():
 				pass
 			elif l.weapon != Launcher.Weapon.SEEKERS:
 				drew_lead = true
-				var lead := l.lead_point(t)
+				var lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)
+				lead_world = lead
 				if not cam.is_position_behind(lead):
 					var lp := cam.unproject_position(lead)
 					draw_dashed_line(tp, lp, DIM, 1.0, 4.0)
@@ -328,6 +341,8 @@ func _draw_styled() -> void:
 		_home_marker(cam, home, l.bird.global_position.distance_to(home))
 	if world != null:
 		_score(Vector2(size.x - 24, 38))
+		if not world.balloons.is_empty():
+			_text(Vector2(size.x - 24, 62), "balloons %d" % int(world.stats.get("balloons", 0)), INK, 14, HORIZONTAL_ALIGNMENT_RIGHT)
 
 
 ## The score at `p` (right aligned): your side's downed enemies, in FRIEND, against the other side's, in ENEMY.

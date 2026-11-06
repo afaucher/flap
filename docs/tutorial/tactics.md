@@ -18,6 +18,9 @@ marker, the point the target will be at when the rocket gets there.
 
 **Gun** (40 rounds a pod; ten a second while fire is held, a tap fires three). Fast bullets, about 40 m at most, aimed
 at the same lead marker as rockets (it sits much closer to the target: a bullet takes a fifth of a second to 20 m).
+The marker shows where the **sight** must be, allowing for the bullet's drop and for your view riding above the
+guns, so up close it sits above the target: put the ring on the marker, not on the target. Balloons get a bracket
+and a marker too when they're nearest your sight (within 20 deg).
 - A bullet has no fuse: it has to **hit the bird itself**, so a hawk is far easier to hit than a sparrow.
 - Each hit takes a feather; more hits within a second take a third of one each. The gun **wears a bird down**
   over a long burst; rockets and seekers finish it.
@@ -105,6 +108,16 @@ The wood isn't scenery; it's half the fight.
 - **Clearings and gaps** are open air: good for a seeker bird hunting, bad for a bird being hunted.
 - **Low among the trunks** is a turn fighter's home and a seeker bird's trap.
 - **Perches above where the enemy flies** are ambush seats: the owl sits, waits, and drops on a bird passing below.
+- **Brushing wood costs speed, hitting it costs control.** Touch a trunk or branch from the side (within about 40° of
+  flying along it) and your bird glances off: its feet kick off the bark, it loses speed (more the harder you hit) and
+  turns away, but you keep the stick. Fly into wood squarer than that and it's a bonk: you lose the stick for up to
+  0.35 s (less the slower you hit) and most of your speed.
+- **Your wings are wider than you think.** A crow's wing reaches about half a metre from its body. A wing that strikes
+  wood costs up to a third of your speed; a wingtip, much less. Fly a line close past a trunk and your bird pulls its
+  wings in by reflex, so the wing clears, but with them pulled in it sinks.
+- **Your bird's reflexes help, a little.** Wood about to touch its side: it pulls its wings in and puts its feet out.
+  Wood square ahead: it flares to brake, so it hits slower and is stunned less. On **Novice** it also rolls away from
+  wood it's about to strike, at the cost of some speed.
 - *(Coming: thermals over the clearings, free height for a bird that circles in them. Circling is slow and steady,
   though: the easiest target there is.)*
 

@@ -22,6 +22,10 @@ var colors_built := PackedColorArray()   ## the colours it was built with, befor
 var _vd := PackedByteArray()
 var _noff := 0
 var _flip := false       ## the triangles' winding as SurfaceTool's normals see it
+## Normals given for the first and last rings (one per point; empty: their own, from the triangles on one side): where
+## the tube joins another surface, that surface's normals there, so the light runs on across the join.
+var pin_first := PackedVector3Array()
+var pin_last := PackedVector3Array()
 
 
 ## Build in full -- the same vertices, colours, coordinates and triangles as BodyShape.tube_mesh, in ring order (which
@@ -123,7 +127,8 @@ func _encode_normals(nrm: PackedVector3Array) -> void:
 		_vd.encode_u16(_noff + k * 8 + 6, y)
 
 
-## The smoothed normals of `rows` as the mesh lays them out (w = around + 1 per ring with a seam column).
+## The smoothed normals of `rows` as the mesh lays them out (w = around + 1 per ring with a seam column); the end
+## rings' pinned ones where given.
 func normals(rows: Array) -> PackedVector3Array:
 	var n := around
 	var acc := PackedVector3Array()
@@ -165,7 +170,8 @@ func normals(rows: Array) -> PackedVector3Array:
 	out.resize(rows_n * w)
 	var sg := -1.0 if _flip else 1.0
 	for i in rows_n:
+		var pin := pin_first if i == 0 else (pin_last if i == rows_n - 1 else PackedVector3Array())
 		for j in w:
 			var v := acc[i * n + (j % n)]
-			out[i * w + j] = (v * sg).normalized() if v.length_squared() > 1e-30 else Vector3.UP
+			out[i * w + j] = pin[j % n] if pin.size() == n else ((v * sg).normalized() if v.length_squared() > 1e-30 else Vector3.UP)
 	return out

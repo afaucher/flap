@@ -42,11 +42,15 @@ var flap_phase := 0.0       ## 0..1 through the wingbeat (visual)
 var flap_count := 0
 var stalled := false
 var flare := 0.0            ## 0..1 extra airbrake from the perch assist (visual + drag)
+var tuck := 0.0             ## 0..1 the wings drawn in from outside the stick (Bird's tuck reflex), at TUCK_RATE
+const TUCK_RATE := 10.0     ## /s: a reflex's tuck, in and out (a dive's fold moves at 3)
+var _last_tuck := 0.0
 var extra_accel := Vector3.ZERO  ## world-space push this tick (arena boundary)
 var ground_height := INF        ## m from the bird's underside to the ground below (set by the Bird each tick)
 var wind := Vector3.ZERO        ## m/s, the air's velocity where the bird is (set by the Bird each tick: AirField)
 ## Battle damage: the share of each wing's area its lost flight feathers took (x left, y right; Bird.lose_feathers).
 ## The wings lose that lift, and the weaker wing drops: the bird rolls toward it unless the stick holds it level.
+var lift_scale := 1.0       ## 0..1 of the wing's lift that's working (a downed bird's flailing wings: Bird.tumble)
 var wing_loss := Vector2.ZERO
 const LOSS_ROLL := 1.0          ## bank the stick must hold off, as a share of max bank per unit of loss difference
 
@@ -337,8 +341,12 @@ func step(dt: float, input: FlightInput) -> void:
 	# Wing tuck: the push past half stick, plus some automatic sweep with speed.
 	var fold_push := clampf((-stick.y - 0.5) * 2.0, 0.0, 1.0)
 	var fold_speed := auto_sweep * smoothstep(p.v_best, p.v_best * 2.0, speed)
-	var fold_target := maxf(fold_push, fold_speed) * (1.0 - flare)
-	fold = move_toward(fold, fold_target, 3.0 * dt)
+	var fold_free := maxf(fold_push, fold_speed)
+	var fold_target := maxf(fold_free, tuck) * (1.0 - flare)
+	# (a reflex's tuck pulls the wings in, and lets them out again, at TUCK_RATE: a bird snaps them, a dive's is slower)
+	var reflexive := tuck > fold_free or _last_tuck > fold_free
+	_last_tuck = tuck
+	fold = move_toward(fold, fold_target, (TUCK_RATE if reflexive else 3.0) * dt)
 	# Stall hysteresis: in past the stall angle (or well below stall speed), out once clearly back under it.
 	if not stalled and (alpha > p.alpha_stall or (speed < 0.85 * p.v_stall and alpha > p.alpha_best * 0.5)):
 		stalled = true
@@ -371,7 +379,7 @@ func step(dt: float, input: FlightInput) -> void:
 	var induced_cut := p.k_induced * 0.5 * ground_effect * cl * cl
 	cd = drag_coefficient(cl, alpha, fold) - induced_cut + 1.2 * flare
 	var aero_fade := smoothstep(0.5, 2.0, speed)   # no aero at a standstill (dropping off a perch)
-	var a_lift := q * area * cl / p.mass * aero_fade
+	var a_lift := q * area * cl / p.mass * aero_fade * lift_scale
 	var a_drag := q * area * cd / p.mass * aero_fade
 	_last_drag_accel = a_drag
 	load_factor = a_lift / BirdProfile.G

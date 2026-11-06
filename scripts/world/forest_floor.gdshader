@@ -4,7 +4,8 @@
 // greener, no mounds. Where and how high all comes from the floor's field (`field`: FloorField, the same data the
 // collision and ArenaLayout.ground read); the shader adds each patch's ragged fine edge and the close detail. The
 // mounds are drawn as height on the fine mesh under the wood (`displace`, ArenaBuilder._ground); the big plane round
-// it draws only past `hole_r`. The fine detail fades with distance so it doesn't shimmer.
+// it is a ring with a real hole (ArenaBuilder.floor_ring: no discard here, which would cost every pixel of the floor
+// its early depth test). The fine detail fades with distance so it doesn't shimmer.
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
@@ -46,7 +47,6 @@ uniform float field_size = 1.0;
 uniform float field_res = 0.5;
 uniform bool use_field = false;
 uniform float displace = 0.0;
-uniform float hole_r = 0.0;   // (the big plane: nothing drawn inside this, where the fine mesh is)
 
 varying vec2 wxz;
 varying float v_mound;
@@ -129,9 +129,6 @@ void vertex() {
 
 void fragment() {
 	vec2 p = wxz;
-	if (hole_r > 0.0 && length(p) < hole_r) {
-		discard;
-	}
 	float fp = length(fwidth(p));
 	float keep = 1.0 - smoothstep(0.004, 0.03, fp);   // (fine detail, faded with distance)
 	vec3 pt = patches(p);
@@ -152,60 +149,82 @@ void fragment() {
 		rough = mix(texture(scan_arm, u1).g, texture(scan_arm, u2).g, w);
 	}
 	col *= 1.0 + v_mound * 0.9;
+	// Each layer below is worked out only where it shows (its share over 0): mixed in at 0 it leaves the floor as it
+	// was, so skipping it changes nothing drawn and saves most pixels most of the work. (The moss scan's samples take
+	// their gradients from outside the branch: a branch that differs across a pixel quad can't give texture() its own.)
+	float rough_out = rough;
 	// Moss: lumpy cushions of uneven size, their own green, yellower on their crowns, darker between them.
-	float cush = fbm3(p * 4.5 + 7.0) * 0.7 + fbm3(p * 13.0 + 2.0) * 0.3;
-	float dome = smoothstep(0.35, 0.75, cush);
-	float tone = fbm3(p * 1.7 + 4.0);
-	vec3 mcol = mix(moss, moss_hi, tone * 0.6 + dome * 0.4);
-	mcol *= mix(1.0, 0.6 + 0.5 * dome + 0.3 * vnoise(p * 70.0), keep);
-	vec3 mscan_n = vec3(0.5, 0.5, 1.0);
-	float mscan_r = 0.85;
-	if (use_moss_scan) {
-		vec2 m1 = p / moss_tile + 0.21;
-		vec2 m2 = mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p / (moss_tile * 1.31) + 0.63;
-		float mw = smoothstep(0.35, 0.65, fbm3(p * 0.21 + 31.0));
-		vec3 sc = mix(texture(moss_albedo, m1).rgb, texture(moss_albedo, m2).rgb, mw);
-		float lum = dot(sc, vec3(0.3, 0.59, 0.11));
-		sc = mix(vec3(lum), sc, 1.25) * moss_tint;   // (more colour, greener: it reads as moss under the warm sun)
-		mcol = sc * (0.8 + 0.4 * tone);
-		mscan_n = mix(texture(moss_normal, m1).rgb, texture(moss_normal, m2).rgb, mw);
-		mscan_r = mix(texture(moss_arm, m1).g, texture(moss_arm, m2).g, mw);
+	vec2 m1 = p / moss_tile + 0.21;
+	vec2 m2 = mat2(vec2(0.6, -0.8), vec2(0.8, 0.6)) * p / (moss_tile * 1.31) + 0.63;
+	vec2 m1x = dFdx(m1);
+	vec2 m1y = dFdy(m1);
+	vec2 m2x = dFdx(m2);
+	vec2 m2y = dFdy(m2);
+	if (moss_m > 0.0) {
+		float tone = fbm3(p * 1.7 + 4.0);
+		vec3 mcol;
+		vec3 mn;
+		float mscan_r = 0.85;
+		if (use_moss_scan) {
+			float mw = smoothstep(0.35, 0.65, fbm3(p * 0.21 + 31.0));
+			vec3 sc = mix(textureGrad(moss_albedo, m1, m1x, m1y).rgb, textureGrad(moss_albedo, m2, m2x, m2y).rgb, mw);
+			float lum = dot(sc, vec3(0.3, 0.59, 0.11));
+			sc = mix(vec3(lum), sc, 1.25) * moss_tint;   // (more colour, greener: it reads as moss under the warm sun)
+			mcol = sc * (0.8 + 0.4 * tone);
+			mn = mix(textureGrad(moss_normal, m1, m1x, m1y).rgb, textureGrad(moss_normal, m2, m2x, m2y).rgb, mw);
+			mscan_r = mix(textureGrad(moss_arm, m1, m1x, m1y).g, textureGrad(moss_arm, m2, m2x, m2y).g, mw);
+		} else {
+			float cush = fbm3(p * 4.5 + 7.0) * 0.7 + fbm3(p * 13.0 + 2.0) * 0.3;
+			float dome = smoothstep(0.35, 0.75, cush);
+			mcol = mix(moss, moss_hi, tone * 0.6 + dome * 0.4);
+			mcol *= mix(1.0, 0.6 + 0.5 * dome + 0.3 * vnoise(p * 70.0), keep);
+			// (its relief: the cushions' slope)
+			float e = 0.02;
+			float hmx = fbm3((p + vec2(e, 0.0)) * 4.5 + 7.0) * 0.7 + fbm3((p + vec2(e, 0.0)) * 13.0 + 2.0) * 0.3;
+			float hmz = fbm3((p + vec2(0.0, e)) * 4.5 + 7.0) * 0.7 + fbm3((p + vec2(0.0, e)) * 13.0 + 2.0) * 0.3;
+			mn = mix(vec3(0.5, 0.5, 1.0), normalize(vec3((cush - hmx) / e * 0.06, (cush - hmz) / e * 0.06, 1.0)) * 0.5 + 0.5, keep);
+		}
+		// (needles fallen on the moss near its edges)
+		float rim = smoothstep(0.0, 0.5, moss_m) * (1.0 - smoothstep(0.5, 1.0, moss_m));
+		mcol = mix(mcol, col, rim * 0.6);
+		col = mix(col, mcol, moss_m);
+		rough_out = mix(rough_out, mscan_r, moss_m);
+		nrm = mix(nrm, mn, moss_m);
 	}
-	// (needles fallen on the moss near its edges)
-	float rim = smoothstep(0.0, 0.5, moss_m) * (1.0 - smoothstep(0.5, 1.0, moss_m));
-	mcol = mix(mcol, col, rim * 0.6);
 	// Dirt: dark earth, grit and a few pale stones.
-	float grit = hash12(floor(p * 45.0));
-	vec3 dcol = earth * (0.85 + 0.3 * fbm3(p * 3.0)) * mix(1.0, 0.75 + 0.5 * grit, keep);
-	// (a few small stones: round, of different sizes, a jittered point a cell, earthy greys, not white)
-	vec2 sc = floor(p * 6.0);
-	vec2 so = (vec2(hash12(sc + 2.0), hash12(sc + 9.0)) * 0.6 + 0.2) / 6.0;
-	float srad = (0.012 + 0.03 * hash12(sc + 5.0)) * step(0.93, hash12(sc + 13.0));
-	float stone = 1.0 - smoothstep(srad * 0.6, srad, length(p - sc / 6.0 - so));
-	vec3 stone_col = vec3(0.2, 0.18, 0.15) * (0.8 + 0.4 * hash12(sc + 17.0));
-	dcol = mix(dcol, stone_col, stone * keep);
+	if (dirt_m > 0.0) {
+		float grit = hash12(floor(p * 45.0));
+		vec3 dcol = earth * (0.85 + 0.3 * fbm3(p * 3.0)) * mix(1.0, 0.75 + 0.5 * grit, keep);
+		// (a few small stones: round, of different sizes, a jittered point a cell, earthy greys, not white)
+		vec2 sc = floor(p * 6.0);
+		vec2 so = (vec2(hash12(sc + 2.0), hash12(sc + 9.0)) * 0.6 + 0.2) / 6.0;
+		float srad = (0.012 + 0.03 * hash12(sc + 5.0)) * step(0.93, hash12(sc + 13.0));
+		float stone = 1.0 - smoothstep(srad * 0.6, srad, length(p - sc / 6.0 - so));
+		vec3 stone_col = vec3(0.2, 0.18, 0.15) * (0.8 + 0.4 * hash12(sc + 17.0));
+		dcol = mix(dcol, stone_col, stone * keep);
+		col = mix(col, dcol, dirt_m);
+		rough_out = mix(rough_out, 0.97, dirt_m);
+		nrm = mix(nrm, vec3(0.5 + (grit - 0.5) * 0.2 * keep, 0.5, 1.0), dirt_m);
+	}
 	// The sward: short grass, green and straw, in the openings.
-	float blades = vnoise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * vec2(60.0, 9.0));
-	vec3 scol = mix(sward, sward * vec3(1.35, 1.25, 0.9), fbm3(p * 0.5 + 21.0)) * mix(1.0, 0.75 + 0.5 * blades, keep);
-	col = mix(col, mcol, moss_m);
-	col = mix(col, dcol, dirt_m);
-	col = mix(col, scol, open_m);
+	if (open_m > 0.0) {
+		float blades = vnoise(mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * vec2(60.0, 9.0));
+		vec3 scol = mix(sward, sward * vec3(1.35, 1.25, 0.9), fbm3(p * 0.5 + 21.0)) * mix(1.0, 0.75 + 0.5 * blades, keep);
+		col = mix(col, scol, open_m);
+		rough_out = mix(rough_out, 0.9, open_m);
+		nrm = mix(nrm, vec3(0.5, 0.5 + (blades - 0.5) * 0.25 * keep, 1.0), open_m);
+	}
 	// Past the wood's edge the floor gives way to heath (heath.gdshaderinc), along a ragged line.
 	float heath_k = 0.0;
 	if (heath_on) {
 		heath_k = smoothstep(heath_from, heath_to, length(p) + (big - 0.5) * 16.0 + (fbm(p * 0.3 + 6.0) - 0.5) * 4.0);
-		col = mix(col, heath_albedo(p), heath_k);
+		if (heath_k > 0.0) {
+			col = mix(col, heath_albedo(p), heath_k);
+		}
 	}
 	ALBEDO = col;
-	ROUGHNESS = mix(mix(mix(mix(rough, mscan_r, moss_m), 0.97, dirt_m), 0.9, open_m), 0.95, heath_k);
+	ROUGHNESS = mix(rough_out, 0.95, heath_k);
 	SPECULAR = 0.25;
-	// Relief: the scan's on the litter; the moss its cushions; the dirt its grit; the sward nearly flat.
-	float e = 0.02;
-	float hmx = fbm3((p + vec2(e, 0.0)) * 4.5 + 7.0) * 0.7 + fbm3((p + vec2(e, 0.0)) * 13.0 + 2.0) * 0.3;
-	float hmz = fbm3((p + vec2(0.0, e)) * 4.5 + 7.0) * 0.7 + fbm3((p + vec2(0.0, e)) * 13.0 + 2.0) * 0.3;
-	vec3 mn = normalize(vec3((cush - hmx) / e * 0.06, (cush - hmz) / e * 0.06, 1.0)) * 0.5 + 0.5;
-	nrm = mix(nrm, use_moss_scan ? mscan_n : mix(vec3(0.5, 0.5, 1.0), mn, keep), moss_m);
-	nrm = mix(nrm, vec3(0.5 + (grit - 0.5) * 0.2 * keep, 0.5, 1.0), dirt_m);
-	nrm = mix(nrm, vec3(0.5, 0.5 + (blades - 0.5) * 0.25 * keep, 1.0), open_m);
+	// Relief: the scan's on the litter; the moss its cushions (above); the dirt its grit; the sward nearly flat.
 	NORMAL_MAP = mix(nrm, vec3(0.5, 0.5, 1.0), heath_k * 0.7);
 }

@@ -233,7 +233,7 @@
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\t\t\tscore = IN_REACH_SCORE + d\n",
+    "find": "\t\t\tscore = IN_REACH_SCORE + d + OFF_PATH_COST * off * d\n",
     "replace": "\t\t\tscore = INF\n"
    }
   ]
@@ -2013,8 +2013,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
-    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), float(t.telemetry().health), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
+    "find": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)\n\t\t\tif not l.can_aim():\n\t\t\t\tpass\n\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)",
+    "replace": "\t\t\t_bar(Rect2(tp.x - r, tp.y + r + 6, r * 2.0, 5), Launcher.health_of(t), 0)\n\t\t\tif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)"
    }
   ]
  },
@@ -2896,7 +2896,7 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\t\tsm.set_shader_parameter(\"hole_r\", ff.size * 0.5 - 1.0)\n",
+    "find": "\t\t\tmi.mesh = floor_ring(reach, plane.size.x * 0.5)\n",
     "replace": ""
    }
   ]
@@ -3412,8 +3412,8 @@
   "edits": [
    {
     "file": "scripts/combat/combat_hud.gd",
-    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
-    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+    "find": "\t\t\telif l.weapon != Launcher.Weapon.SEEKERS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\telif l.weapon == Launcher.Weapon.ROCKETS:\n\t\t\t\tdrew_lead = true\n\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
    }
   ]
  },
@@ -3722,8 +3722,13 @@
   "edits": [
    {
     "file": "scripts/flight/flight_assist.gd",
-    "find": "FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, held,",
-    "replace": "FlightInput.new(inp.stick, inp.flap_pressed, inp.flap_held,"
+    "find": "\tvar stick := inp.stick.lerp(ai.stick, w)\n",
+    "replace": "\tvar stick := inp.stick\n"
+   },
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tvar held := inp.flap_held or (ai.flap_held and w >= 0.5)\n",
+    "replace": "\tvar held := inp.flap_held\n"
    }
   ]
  },
@@ -3798,16 +3803,1514 @@
   ]
  },
  {
-  "id": "perch-assist-on-path-candidate-unasked",
-  "bug": "With the candidate following the predicted path, the perch assist (flare and pull) worked on it: a combat bird stooping through the wood was pulled toward branches on its path (the falcon's bonks 3 -> 12 in test_combat_boom_zoom), and a too-strong flare gain no longer showed in test_perching. Except a novice landing, the assist keeps the nearest perch ahead, as before (2026-11-04).",
+  "id": "perch-cone-wide",
+  "bug": "A perch up to 60 deg off the bird's way could be the landing candidate (the old cos 0.5 cone), so the novice landing assist swung the bird round onto the next tree (2026-11-04; the user was swung almost 90 deg onto the next tree).",
   "tests": [
-   "test_combat_boom_zoom"
+   "test_perch_highlight",
+   "test_landing_assist"
   ],
   "edits": [
    {
     "file": "scripts/bird/bird.gd",
-    "find": "\tvar on_candidate := landing   #",
-    "replace": "\tvar on_candidate := true   #"
+    "find": "const CONE_DEG := 25.0",
+    "replace": "const CONE_DEG := 60.0"
+   }
+  ]
+ },
+ {
+  "id": "perch-off-path-free",
+  "bug": "Being off to the side of the path cost a candidate nothing: of a perch ahead and one beside the path that it passes a little nearer, the one beside won (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tscore += OFF_PATH_COST * off * d\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "assist-lock-ignored",
+  "bug": "The landing assist's perch wasn't held: its own turn could hand the candidate to another tree mid-approach (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_perch_highlight"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tvar locked := p == candidate_lock\n",
+    "replace": "\t\tvar locked := false\n"
+   }
+  ]
+ },
+ {
+  "id": "assist-bank-uncapped",
+  "bug": "The landing assist could take the bank all the way from the player's stick (75% of it), making turns the player didn't ask for (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tstick.x = clampf(stick.x, inp.stick.x - MAX_BANK_ADD, inp.stick.x + MAX_BANK_ADD)   # (it nudges the turn, never makes it)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "assist-lock-cone-wide",
+  "bug": "The landing assist held its perch however far round it fell, so it kept pulling for a perch the player had turned away from (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "const LOCK_CONE_DEG := 35.0",
+    "replace": "const LOCK_CONE_DEG := 90.0"
+   }
+  ]
+ },
+ {
+  "id": "assist-lock-kept-on-release",
+  "bug": "The landing assist's held perch outlived catch being released, so the next approach started on a stale perch (2026-11-04; the user was swung almost 90 deg onto the next tree).",
+  "tests": [
+   "test_landing_assist"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\t\tif bird != null:\n\t\t\tbird.candidate_lock = null\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "sfx-3d-no-lead",
+  "bug": "Short 3D sounds unheard: an AudioStreamPlayer3D mixes at nothing until the physics tick after it starts, so the gun shot (all crack in its first 20 ms) was silent in the game and every 3D one-shot lost its attack; baked with no lead-in (2026-11-04). In code this is caught by the bake stamp (rebaking without the lead fails test_sounds' lead-in check and gpu_test_audible).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/sound_recipes.gd",
+    "find": "\tif is_loop(name) or not positional(name):\n\t\treturn s\n\tvar out := D.silence(LEAD_3D)\n",
+    "replace": "\treturn s\n\tvar out := D.silence(LEAD_3D)\n"
+   }
+  ]
+ },
+ {
+  "id": "gun-flash-left-behind",
+  "bug": "Muzzle flashes left in the air where the shot was fired: the bird flew on past them (20 cm a frame), so they sat over its back, then its tail (2026-11-04).",
+  "tests": [
+   "test_gun_tracer"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_fx.gd",
+    "find": "\t\tvar pos: Vector3 = b.pos + (b.get(\"vel\", Vector3.ZERO) as Vector3) * age\n\t\tvar mouth: Callable = b.get(\"mouth\", Callable())\n\t\tif mouth.is_valid() and is_instance_valid(b.get(\"shooter\")):\n\t\t\tpos = (mouth.call() as Vector3) + (b.off as Vector3)\n",
+    "replace": "\t\tvar pos: Vector3 = b.pos\n"
+   }
+  ]
+ },
+ {
+  "id": "gun-tracer-from-back",
+  "bug": "Gun tracers drawn back to where the bullet left the gun, which the bird had flown past: they came out of its back (2026-11-04).",
+  "tests": [
+   "test_gun_tracer"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tvar ahead := (p.vel - p.carrier).length() * maxf(p.age - lag, 0.0)   # (how far it's out of the gun, at the drawn moment)\n\t\tif p.gun_mouth.is_valid() and is_instance_valid(p.shooter):   # (better: from the barrel as it's drawn now)\n\t\t\tahead = maxf((a - (p.gun_mouth.call() as Vector3)).dot(p.vel.normalized()), 0.0)\n",
+    "replace": "\t\tvar ahead := p.travelled\n"
+   }
+  ]
+ },
+ {
+  "id": "gun-flash-physics-ahead",
+  "bug": "Muzzle flashes placed at the gun's mouth as of the latest physics tick, ahead of where the bird is drawn (physics interpolation): in front of its head (2026-11-04).",
+  "tests": [
+   "test_gun_tracer"
+  ],
+  "edits": [
+   {
+    "file": "scripts/tack/tack.gd",
+    "find": "\treturn saddle.get_global_transform_interpolated() * saddle.round_launch(kind, i)",
+    "replace": "\treturn saddle.global_transform * saddle.round_launch(kind, i)"
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-never-starts",
+  "bug": "A downed bird glided on through the down stun, losing about a metre, so a down didn't read as one (2026-11-04; the lab's downed scene showed it).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "\t\tif down_flutter:\n\t\t\tb.start_tumble()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-bonks-the-ground",
+  "bug": "A fluttering bird met the ground faster than a settle, so it bonked and bounced instead of coming down on it.",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif _grace <= 0.0 and n.y > 0.7 and (v.length() < profile.grab_speed_max * 1.6 or tumble):",
+    "replace": "\tif _grace <= 0.0 and n.y > 0.7 and v.length() < profile.grab_speed_max * 1.6:"
+   },
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "model.velocity.y <= 0.0 and (model.velocity.length() < profile.grab_speed_max * 1.6 or tumble):",
+    "replace": "model.velocity.y <= 0.0 and model.velocity.length() < profile.grab_speed_max * 1.6:"
+   }
+  ]
+ },
+ {
+  "id": "down-flutter-wings-still",
+  "bug": "The downed bird's wings held still while it tumbled (nothing drawn of the flutter).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif t.get(\"tumbling\", false) and not sitting:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "respawn-keeps-tumbling",
+  "bug": "A downed bird respawned onto its base while still fluttering down kept its flutter (flailing wings, a third of their lift) when it next flew (2026-11-04, with the flutter turned on in the range).",
+  "tests": [
+   "test_bird_lab"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\ttumble = false   # (a respawn onto the base ends a downed bird's flutter)\n\tmodel.lift_scale = 1.0\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "flying-round-oversized",
+  "bug": "A rocket or seeker in flight was drawn as a plain capsule about 5x the length and 20x the thickness of the round its pod carries, half a crow long (2026-11-04: the user saw it in the lab).",
+  "tests": [
+   "test_flying_round"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_world.gd",
+    "find": "const ROUND_GROW := 2.0",
+    "replace": "const ROUND_GROW := 6.0"
+   }
+  ]
+ },
+ {
+  "id": "glance-is-bonk",
+  "bug": "Every touch of wood at 1 m/s or more was a bonk: a shallow side brush cost 40% of the speed and 0.35 s of no control (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif hit >= GLANCE_MIN and is_glance(n, v):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "glance-by-speed",
+  "bug": "A side hit counted as a glance only under 3 m/s into the wood, so at speed every side hit stunned (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvar hit := -v.dot(n)\n\tif hit <= 0.0:\n\t\treturn false",
+    "replace": "\tvar hit := -v.dot(n)\n\tif hit <= 0.0 or hit >= 3.0:\n\t\treturn false"
+   }
+  ]
+ },
+ {
+  "id": "glance-stuns",
+  "bug": "A glance took the controls away like a bonk (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t_glance_push = n * profile.hop_speed * GLANCE_PUSH\n",
+    "replace": "\t_glance_push = n * profile.hop_speed * GLANCE_PUSH\n\tstun = STUN_TIME\n"
+   }
+  ]
+ },
+ {
+  "id": "glance-keeps-bonk-loss",
+  "bug": "A glance lost 40% of the bird's speed, as the old bonk did, not the claws' drag for how hard it hit (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tvt *= maxf(0.0, 1.0 - GLANCE_FRICTION * hit / maxf(along, 1e-3))\n\tmodel.velocity = vt\n",
+    "replace": "\tvt *= 0.6\n\tmodel.velocity = vt\n"
+   }
+  ]
+ },
+ {
+  "id": "bonk-flat-stun",
+  "bug": "Every bonk stunned for the full 0.35 s, a touch at 1 m/s as long as a head-on hit (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tstun = lerpf(STUN_MIN, STUN_TIME, smoothstep(BONK_MIN, BONK_HARD, hit))",
+    "replace": "\t\tstun = STUN_TIME"
+   }
+  ]
+ },
+ {
+  "id": "glance-no-steer-away",
+  "bug": "After a glance the bird held its stick into the wood: no steer away (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tctl = _steer_away(ctl, glance_assist * _glance_turn / GLANCE_TURN_TIME)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "tuck-reflex-missing",
+  "bug": "No tuck for wood coming from the side: the wings stayed spread into the touch (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\t\tmodel.tuck = tuck_reflex\n",
+    "replace": "\t\t\t\tmodel.tuck = 0.0\n"
+   }
+  ]
+ },
+ {
+  "id": "tuck-reflex-slow",
+  "bug": "The reflex tuck folded at a dive's 3 per second, too slow to have the wings in by the touch (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\tfold = move_toward(fold, fold_target, (TUCK_RATE if reflexive else 3.0) * dt)",
+    "replace": "\tfold = move_toward(fold, fold_target, 3.0 * dt)"
+   }
+  ]
+ },
+ {
+  "id": "wing-tuck-missing",
+  "bug": "No tuck for wood in a wing's way: a bird passing clear of a trunk struck it with its wing (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\t\tmodel.tuck = need * tuck_reflex",
+    "replace": "\t\t\t\tmodel.tuck = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "flare-reflex-missing",
+  "bug": "No flare for wood square ahead: the bird hit at full speed (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t\t_reflex_flare = FLARE_REFLEX * flare_reflex",
+    "replace": "\t\t\t_reflex_flare = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "reflex-on-landing",
+  "bug": "The reflexes fired for the branch the bird was landing on: the flare braked a too-fast approach into a catch (2026-11-04).",
+  "tests": [
+   "test_perching",
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tif _caps.is_empty() or stun > 0.0 or tumble or _grace > 0.0 or _pass_body != null or inp.catch_held or _grab_buffer > 0.0:",
+    "replace": "\tif _caps.is_empty() or stun > 0.0 or tumble or _grace > 0.0 or _pass_body != null:"
+   }
+  ]
+ },
+ {
+  "id": "wing-strike-free",
+  "bug": "A wing striking wood cost nothing (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\tmodel.velocity = model.velocity * (maxf(0.0, spd - lost) / maxf(spd, 1e-3))\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "avoid-no-roll",
+  "bug": "The novice's avoid didn't roll away: it touched the wood (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\ts.x = lerpf(s.x, want, avoid_assist)",
+    "replace": "\tpass"
+   }
+  ]
+ },
+ {
+  "id": "avoid-free",
+  "bug": "The novice's avoid cost no speed (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t\t_reflex_flare = maxf(_reflex_flare, AVOID_DRAG * avoid_assist)",
+    "replace": "\t\tpass"
+   }
+  ]
+ },
+ {
+  "id": "novice-avoid-unwired",
+  "bug": "Novice flying didn't turn the avoid on for the player's bird (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_assist.gd",
+    "find": "\tbird.avoid_assist = AVOID if novice else 0.0",
+    "replace": "\tbird.avoid_assist = 0.0"
+   }
+  ]
+ },
+ {
+  "id": "rake-foot-side-offset",
+  "bug": "The raking foot was offset sideways in the rig's frame, which on a flank touch is into the wood: claws 1.3 cm inside it (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_rake_foot[i] = hip - n * off - dir * _L * 0.06\n",
+    "replace": "\t_rake_foot[i] = hip - n * off - dir * _L * 0.06 + Vector3(SIDES[i] * _L * 0.03, 0.0, 0.0)\n"
+   }
+  ]
+ },
+ {
+  "id": "rake-stale-bark",
+  "bug": "The feet raked a flat plane where the bird first touched, as of the latest tick (ahead of the drawn bird): on a trunk, which curves away, the claws hung 34 cm off the bark (2026-11-04).",
+  "tests": [
+   "test_glance"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif gl.has(\"cap\"):   # (the wood itself",
+    "replace": "\tif false:   # (the wood itself"
+   }
+  ]
+ },
+ {
+  "id": "glance-plays-bonk",
+  "bug": "A glance played the bonk's thud, not the claws' scrape (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))",
+    "replace": "\tcue(\"bonk\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))"
+   }
+  ]
+ },
+ {
+  "id": "glance-alarm",
+  "bug": "A bird cried in alarm at a glance (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))",
+    "replace": "\tcue(\"claw_scrape\", b.global_position, _by_speed(speed + 0.15 * along, 6.0))\n\t_call(b, \"alarm\")"
+   }
+  ]
+ },
+ {
+  "id": "wing-strike-silent",
+  "bug": "A wing strike played the bonk's thud, not the feathers on the bark (2026-11-04).",
+  "tests": [
+   "test_sounds"
+  ],
+  "edits": [
+   {
+    "file": "scripts/audio/game_audio.gd",
+    "find": "\tcue(\"wing_strike\", at, _by_speed(lost, 3.0))",
+    "replace": "\tcue(\"bonk\", at, _by_speed(lost, 3.0))"
+   }
+  ]
+ },
+ {
+  "id": "race-gate-backwards",
+  "bug": "A gate counted when flown through the wrong way (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\tif not (da < 0.0 and db >= 0.0):\n\t\t\treturn -1.0",
+    "replace": "\t\tif not ((da < 0.0) != (db < 0.0)):\n\t\t\treturn -1.0"
+   }
+  ]
+ },
+ {
+  "id": "race-hoop-square",
+  "bug": "A hoop's window taken as the square round it: its corners counted (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\tif kind == \"hoop\":\n\t\t\treturn x * x",
+    "replace": "\t\tif false:\n\t\t\treturn x * x"
+   }
+  ]
+ },
+ {
+  "id": "race-clock-on-perch",
+  "bug": "The race clock ran while the bird sat on the start perch (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tif perch != null:\n\t\t\treturn\n",
+    "replace": "\t\tif false:\n\t\t\treturn\n"
+   }
+  ]
+ },
+ {
+  "id": "race-split-rounded",
+  "bug": "Splits rounded to the tick, not the moment the bird crossed (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tsplits.append(t0 + dt * f)",
+    "replace": "\t\tsplits.append(clock)"
+   }
+  ]
+ },
+ {
+  "id": "race-gates-any-order",
+  "bug": "A later gate counted before the next one, skipping gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\tvar f := g.crossing(a, b)\n",
+    "replace": "\tvar f := g.crossing(a, b)\n\tfor j in range(next + 1, course.gates.size()):\n\t\tif f < 0.0 and course.gates[j].crossing(a, b) >= 0.0:\n\t\t\tnext = j\n\t\t\tg = course.gates[j]\n\t\t\tf = g.crossing(a, b)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-best-keeps-slower",
+  "bug": "A slower time replaced the best (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_record.gd",
+    "find": "b.is_empty() or time < float(b.time)",
+    "replace": "b.is_empty() or time < INF"
+   }
+  ]
+ },
+ {
+  "id": "race-start-in-crown",
+  "bug": "The course started on the treetop start perch, inside its own crown's needles: no gate could be seen from it and the course came out empty (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif out.is_empty():\n\t\tout.append(l.start_perch())",
+    "replace": "\tout = [l.start_perch()]\n\tif out.is_empty():\n\t\tout.append(l.start_perch())"
+   }
+  ]
+ },
+ {
+  "id": "race-turn-too-tight",
+  "bug": "Legs planned tighter than the hawk can turn (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\treturn _leg_radius(all, k) >= envelope.turn_r - 0.01",
+    "replace": "\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "race-lanes-unchecked",
+  "bug": "Gates planned with wood in their way in or out (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "func lanes_clear(g: Gate) -> bool:\n",
+    "replace": "func lanes_clear(g: Gate) -> bool:\n\treturn true\n"
+   }
+  ]
+ },
+ {
+  "id": "race-dive-while-turning",
+  "bug": "Courses asked for a steep dive out of a hard turn (the turn's metres counted toward the dive): the faster birds couldn't get down to the next window (2026-11-05, found by LinePilot).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\treturn envelope.turn_r * (_flat(na).angle_to(ld) + ld.angle_to(_flat(nb)))",
+    "replace": "\treturn 0.0"
+   }
+  ]
+ },
+ {
+  "id": "race-falcon-run-in",
+  "bug": "The level run-in before a gate after a dive was 8 m whatever the bird: the falcon, fastest, couldn't settle into low windows (2026-11-05, found by LinePilot).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\t\treturn maxf(DIVE_RUN, v_fast * DIVE_RUN_S)",
+    "replace": "\t\treturn DIVE_RUN"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-uturn-long",
+  "bug": "A go-around's U-turn came out four times as long: the one-circle case (start and end on the same circle) was skipped (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n",
+    "replace": "\t\t\t\tif dd < 1e-3:\n\t\t\t\t\tcontinue\n\t\t\t\tif dd < 1e-3:   # (one circle: an arc from p round to q)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-stuck-on-ground",
+  "bug": "A racer that came down on the ground never took off again: AIPilot's take-off waited on its own clock, which nothing advanced (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tguide.clock = _clock   # (its take-off from the ground times its rest by this)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "race-ai-height-too-near",
+  "bug": "The racer took its height from a point 0.3 s ahead: the fast birds pitched up and down and bonked into the gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "const VERT_LOOK := 0.6",
+    "replace": "const VERT_LOOK := 0.3"
+   }
+  ]
+ },
+ {
+  "id": "mouse-invert-ignored",
+  "bug": "The mouse's invert setting did nothing: the mouse toward you still pulled (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "\tstick.y += rel.y * sensitivity * (-1.0 if invert_mouse else 1.0)",
+    "replace": "\tstick.y += rel.y * sensitivity"
+   }
+  ]
+ },
+ {
+  "id": "pad-invert-ignored",
+  "bug": "The stick's invert setting did nothing (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "\t\tif invert_pad:\n\t\t\ts.y = -s.y",
+    "replace": "\t\tif false:\n\t\t\ts.y = -s.y"
+   }
+  ]
+ },
+ {
+  "id": "controller-ignores-settings",
+  "bug": "A new PlayerController didn't take the saved mouse setting: the game flew uninverted whatever the menu said (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/player_controller.gd",
+    "find": "var invert_mouse := Settings.invert_mouse_y",
+    "replace": "var invert_mouse := false"
+   }
+  ]
+ },
+ {
+  "id": "settings-not-saved",
+  "bug": "The Settings screen's mouse choice wasn't saved: it was gone next run (2026-11-05).",
+  "tests": [
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/settings_panel.gd",
+    "find": "\t\t\t\t\tSettings.invert_mouse_y = i == 1\n\t\t\t\t\tSettings.save()",
+    "replace": "\t\t\t\t\tSettings.invert_mouse_y = i == 1"
+   }
+  ]
+ },
+ {
+  "id": "pause-runs-on",
+  "bug": "The pause menu opened over a game that kept running (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tget_tree().paused = true\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pause-settings-not-taken",
+  "bug": "A setting changed in the pause menu didn't reach the player's controller until the next run (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\t\tc.take_settings()\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "pause-mouse-held",
+  "bug": "Pausing kept the mouse captured: no cursor to click Resume (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tget_tree().paused = true\n\t_mouse(Input.MOUSE_MODE_VISIBLE)\n",
+    "replace": "\tget_tree().paused = true\n"
+   }
+  ]
+ },
+ {
+  "id": "pause-focus-out-ignored",
+  "bug": "Alt-tabbing away left the game running with the mouse free (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tif what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_out:",
+    "replace": "\tif what == NOTIFICATION_APPLICATION_FOCUS_IN and pause_on_focus_out:"
+   }
+  ]
+ },
+ {
+  "id": "range-no-pause",
+  "bug": "Esc in the range had no pause menu (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/combat_range.gd",
+    "find": "\tpause = PauseMenu.attach(self, [player_ctl], restart)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pause-mouse-not-recaptured",
+  "bug": "Resuming left the mouse free: a click to capture it again, and that click could fire (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\t\tc.take_settings()\n\t_mouse(Input.MOUSE_MODE_CAPTURED)\n",
+    "replace": "\t\tc.take_settings()\n"
+   }
+  ]
+ },
+ {
+  "id": "start-over-does-nothing",
+  "bug": "The pause menu's Start over only resumed: the bird flew on where it was (2026-11-05).",
+  "tests": [
+   "test_pause"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ui/pause_menu.gd",
+    "find": "\tif start_over.is_valid():\n\t\tstart_over.call()\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "pad-start-respawns",
+  "bug": "The gamepad's Start still started over instead of pausing: no pause menu on the pad (2026-11-05).",
+  "tests": [
+   "test_pause",
+   "test_settings"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/input_setup.gd",
+    "find": "\t\"pause\": JOY_BUTTON_START,",
+    "replace": "\t\"respawn\": JOY_BUTTON_START,"
+   }
+  ]
+ },
+ {
+  "id": "race-start-over-perch",
+  "bug": "After the merge with the pause menu, its Start over in a race put you back on the perch you were on, not the course's start, and left the clock and the racers as they were (2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/game.gd",
+    "find": "\t_spawn_player(profile_id, course.start if race else (bird.perch if bird.perch != null else layout.start_perch()))\n\n\nfunc _unhandled_input",
+    "replace": "\t_spawn_player(profile_id, bird.perch if bird.perch != null else layout.start_perch())\n\n\nfunc _unhandled_input"
+   }
+  ]
+ },
+ {
+  "id": "menu-race-course-dropped",
+  "bug": "The Race screen's course choice not passed to the game: every course button raced the arena's own course (2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/menu.gd",
+    "find": "\"--course\", str(COURSES[race_style()]), \"--course-style\", race_style(),",
+    "replace": "\"--course-style\", race_style(),"
+   }
+  ]
+ },
+ {
+  "id": "race-finish-at-last-gate",
+  "bug": "The race finished at the last gate, out in the wood: it starts and ends on the outpost's rail, the clock stopping when the bird lands back on it (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tnext += 1\n\t\tevent = \"gate\"",
+    "replace": "\t\tnext += 1\n\t\tevent = \"gate\"\n\t\tif next >= course.gates.size():\n\t\t\tphase = Phase.FINISHED\n\t\t\ttime = clock\n\t\t\tevent = \"finish\""
+   }
+  ]
+ },
+ {
+  "id": "race-finish-any-perch",
+  "bug": "Landing on any perch after the last gate finished the race, not just the start rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\t\tif perch == course.start:",
+    "replace": "\t\tif perch != null:"
+   }
+  ]
+ },
+ {
+  "id": "race-recent-best-only",
+  "bug": "Only best times were kept, so the HUD's average of the last three ignored the slower finishes (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_record.gd",
+    "find": "\tr.append(time)\n",
+    "replace": "\tif b.is_empty() or time < float(b.time):\n\t\tr.append(time)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-never-home",
+  "bug": "AI racers, every gate taken, glided on instead of landing on the rail: none finished (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tif run.home():\n\t\treturn _home(bird, dt)\n",
+    "replace": "\tif run.home():\n\t\treturn guide._hold_glide(bird, dt)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-ai-home-departure-clearance",
+  "bug": "Racers flying home kept AIPilot's departure clearance round the start rail's tree (the one they took off from), which pushed them off the final approach: the pilot sparrow circled the rail and never landed (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\t\tguide._last_tree = -1   # (the rail is where it's going now, not the tree it left: no departure clearance round it)\n\t\tguide._left_perch = -1\n\t\tguide._takeoff_pos = Vector3.INF\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "lead-mark-on-lead-point",
+  "bug": "The lead mark sat on the lead point itself: the camera rides above the line of fire, so the gunsight over it shot under a near balloon and over a far one (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn from + (lead_point(t) - from).normalized() * SIGHT_RANGE",
+    "replace": "\treturn lead_point(t)"
+   }
+  ]
+ },
+ {
+  "id": "hud-lead-at-lead-point",
+  "bug": "The HUD drew the lead mark at the lead point, not where the sight must be (lead_sight) (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/combat_hud.gd",
+    "find": "\t\t\t\tvar lead := l.lead_sight(t)   # (where the sight must be: the drop, and the camera above the line of fire)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health",
+    "replace": "\t\t\t\tvar lead := l.lead_point(t)\n\t\t\t\tlead_world = lead\n\t\t\t\tif not cam.is_position_behind(lead):\n\t\t\t\t\tvar lp := cam.unproject_position(lead)\n\t\t\t\t\tdraw_dashed_line(tp, lp, DIM, 1.0, 4.0)\n\t\t\t\t\t_diamond(lp, 7.0, INK, false)\n\t\t\telif l.lock_target == t:\n\t\t\t\t_diamond(tp, lerpf(40.0, 9.0, l.lock), LOCKED if l.locked() else INK, l.locked())\n\t_teams(cam, l, t, sp if sight_ok else Vector2.INF)\n\t_warnings(cam, l)\n\t# Your health"
+   }
+  ]
+ },
+ {
+  "id": "lead-no-drop",
+  "bug": "The lead left out the round's drop: a far balloon was shot under (2026-11-05).",
+  "tests": [
+   "test_aim_lead",
+   "test_gun"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\treturn tp + tv * flight + Vector3.UP * 0.5 * Projectile.G * flight * flight",
+    "replace": "\treturn tp + tv * flight"
+   }
+  ]
+ },
+ {
+  "id": "target-birds-only",
+  "bug": "The HUD's target was birds only: a balloon on the sight got no bracket or lead mark (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tfor o in _birds + (_world.balloons if _world != null else []):",
+    "replace": "\tfor o in _birds:"
+   }
+  ]
+ },
+ {
+  "id": "target-down-balloon",
+  "bug": "A balloon that was down could still be the HUD's target (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\t\treturn not (o as TargetBalloon).is_down()",
+    "replace": "\t\treturn true"
+   }
+  ]
+ },
+ {
+  "id": "target-no-hold",
+  "bug": "The HUD's target flicked between two near the sight: a pick wasn't held against one only a little nearer (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/launcher.gd",
+    "find": "\tvar best_a := held * PICK_KEEP if held < INF else PICK_CONE",
+    "replace": "\tvar best_a := held if held < INF else PICK_CONE"
+   }
+  ]
+ },
+ {
+  "id": "ai-targets-balloons",
+  "bug": "The AI's simple fire control took the HUD's target, so it shot at balloons (2026-11-05).",
+  "tests": [
+   "test_aim_lead"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai_combat.gd",
+    "find": "\tvar t := l.target_bird()",
+    "replace": "\tvar t := l.target()"
+   }
+  ]
+ },
+ {
+  "id": "floor-mounds-one-mesh",
+  "bug": "The fine floor mesh was one PlaneMesh over the whole wood (470k triangles): never culled, the whole of it went through the depth pre-pass, the opaque pass and every shadow cascade, about 3.5 ms of GPU (2026-11-05, docs/design/performance.md).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "const FLOOR_TILES := 8 ",
+    "replace": "const FLOOR_TILES := 1 "
+   }
+  ]
+ },
+ {
+  "id": "floor-tiles-gap",
+  "bug": "Tiles of the fine floor mesh that stop a step short of their neighbour: a crack along every tile's edge (2026-11-05, the tiling's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "var w := cuts[ti + 1] - i0 + 1",
+    "replace": "var w := cuts[ti + 1] - i0"
+   }
+  ]
+ },
+ {
+  "id": "floor-hole-by-discard",
+  "bug": "The big ground plane's hole was cut by discard in forest_floor.gdshader: a shader that can discard loses its early depth test, over the whole floor and the fine mesh sharing the shader (2026-11-05).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/forest_floor.gdshader",
+    "find": "\tvec2 p = wxz;\n",
+    "replace": "\tvec2 p = wxz;\n\tif (displace == 0.0 && length(p) < 96.0) {\n\t\tdiscard;\n\t}\n"
+   }
+  ]
+ },
+ {
+  "id": "ground-casts-shadow",
+  "bug": "The big ground plane cast shadows: drawn into every shadow cascade for nothing, there being nothing under the ground to shade (2026-11-05).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # (nothing lies under the ground for it to shade)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "race-rail-no-reset",
+  "bug": "Landing back on the start rail with gates still to take left the clock running: it should reset the run (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\tif perch == course.start:   # (back on the rail before the course is done: the run starts over)\n\t\t_reset()\n",
+    "replace": "\tif perch == course.start and false:\n\t\t_reset()\n"
+   }
+  ]
+ },
+ {
+  "id": "race-home-unplanned",
+  "bug": "Courses ended wherever the tenth gate fell: the way home to the rail could run behind the outpost or round a tree (course 1, 2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif k == gate_count - 1:\n\t\tvar why := home_problem(all)",
+    "replace": "\tif false:\n\t\tvar why := home_problem(all)"
+   }
+  ]
+ },
+ {
+  "id": "race-home-through-wood",
+  "bug": "The way home not checked against the wood: a tree on the line from the last gate to the rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif not layout.segment_clear(last.centre + last.normal * 1.0, a, c):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "race-home-from-behind",
+  "bug": "Home allowed from behind the rail: the bird had to fly round the outpost to land facing it (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif plan > 1.0 and rad_to_deg(ld.angle_to(in_dir)) > HOME_TURN_IN:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "floor-join-t-junction",
+  "bug": "A joined flat block of the fine floor drawn from its corners alone, not every vertex on its edge: its neighbours' vertices sit on its sides (a T), and the rasterizer leaves pixel cracks along them (2026-11-05, the joining's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\tfor i in range(bi, bi + bk):\n\t\tring.append(bj * w + i)\n",
+    "replace": "\tfor i in range(bi, bi + bk, bk):\n\t\tring.append(bj * w + i)\n"
+   }
+  ]
+ },
+ {
+  "id": "floor-join-mirrored",
+  "bug": "The fine floor's flat map read without the PlaneMesh layout's mirror (x running the wrong way): blocks joined flat over mounds on the other side of the wood (2026-11-05, the joining's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "var fi := clampi(int(floor((centre.x + size * 0.5 - i * step - ff.origin.x) / FloorField.RES)), 0, ff.n - 1)",
+    "replace": "var fi := clampi(int(floor((centre.x - size * 0.5 + i * step - ff.origin.x) / FloorField.RES)), 0, ff.n - 1)"
+   }
+  ]
+ },
+ {
+  "id": "floor-ring-over-mound-edge",
+  "bug": "The ring's hole sized to the farthest mound's point alone, not the reach of the shader's bilinear read and its normal round it: the flat ring drawn over the last mounds' edges (2026-11-05).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/floor_field.gd",
+    "find": "\treturn far + 2.0 * RES * sqrt(2.0)\n",
+    "replace": "\treturn far\n"
+   }
+  ]
+ },
+ {
+  "id": "floor-cells-dropped-inside-hole",
+  "bug": "Fine floor cells left to the ring when only part of them lay past its hole: gaps in the floor round the ring's edge (2026-11-05, the cut's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "if (near + centre).length() >= reach:",
+    "replace": "if (near + centre).length() >= reach - 1.0:"
+   }
+  ]
+ },
+ {
+  "id": "race-disc-over-rail",
+  "bug": "A white disc hung over the start rail the whole race, over the head of a bird sitting on it (the start/home marker, 2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_view.gd",
+    "find": "\t_home_ring.visible = next >= n - 1\n",
+    "replace": "\t_home_ring.visible = true\n\t_home_ring.scale = Vector3(0.5, 1.0, 0.5)\n"
+   }
+  ]
+ },
+ {
+  "id": "race-style-ignored",
+  "bug": "A course style's legs and gate count not taken: every style built the all-round course (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tleg_range = _shape.leg\n\tgate_count = _shape.gates\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "race-long-unrouted",
+  "bug": "Long legs only ever as one smooth curve: in the wood a 30-55 m curve nearly always clips a tree, and long courses died at 3-6 gates (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tif not bool(_shape.get(\"route\", false)) or all[k].kind == \"home\":",
+    "replace": "\tif true:"
+   }
+  ]
+ },
+ {
+  "id": "race-technical-hawk-turns",
+  "bug": "Technical courses planned for the hawk's turning circle: its tight turns and S-bends couldn't be made, and they wound round to come home from behind the rail (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "\tc.envelope = Envelope.of(c._shape.get(\"birds\", birds))",
+    "replace": "\tc.envelope = Envelope.of(birds)"
+   }
+  ]
+ },
+ {
+  "id": "route-view-current-waypoint-behind",
+  "bug": "Route view: the line to the current waypoint drawn to the one already passed (route[wp - 1]), so the view showed the bird aiming behind itself (2026-11-05).",
+  "tests": [
+   "test_route_view"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/route_view.gd",
+    "find": "\t_lines(_over, \"current\", [bird.global_position, r[wp]], COL_CURRENT)",
+    "replace": "\t_lines(_over, \"current\", [bird.global_position, r[wp - 1]], COL_CURRENT)"
+   }
+  ]
+ },
+ {
+  "id": "route-view-blocked-a-step-late",
+  "bug": "Route view: the predicted path's red and the star a chord past where it meets wood (2026-11-05).",
+  "tests": [
+   "test_route_view"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/route_view.gd",
+    "find": "clampi(roundi(pilot.predicted_clear / AIPilot.PREDICT_STEP), 0, p.size() - 1)\n\t\tvar cols",
+    "replace": "clampi(roundi(pilot.predicted_clear / AIPilot.PREDICT_STEP) + 1, 0, p.size() - 1)\n\t\tvar cols"
+   }
+  ]
+ },
+ {
+  "id": "route-view-predicted-from-escape",
+  "bug": "AIPilot recorded the last escape it tried as the predicted path, not the prediction toward its aim, so the view drew a path the bird wasn't flying (2026-11-05).",
+  "tests": [
+   "test_route_view"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t\t\tbest_pts = r[2]",
+    "replace": "\t\t\t\tbest_pts = r[2]\n\t\t\tpredicted = r[2]"
+   }
+  ]
+ },
+ {
+  "id": "neck-ring-low-on-nape",
+  "bug": "The neck met the head low on the back of its skull, where the skull already curved in, so the head sat on the neck like a ball and the outline dipped behind it in flight (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_TILT := 0.85",
+    "replace": "const NECK_TILT := 0.29"
+   }
+  ]
+ },
+ {
+  "id": "neck-enters-head-along-axis",
+  "bug": "The neck entered the head along the head's underside axis, not along its surface: a crease all round the head ring (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)",
+    "replace": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1)"
+   }
+  ]
+ },
+ {
+  "id": "neck-leaves-trunk-straight",
+  "bug": "The neck left the trunk straight forward, not along the trunk's surface: a crease round the collar (the head-neck seam, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) + (_ta20[j] - Vector3.FORWARD) * w1 - (tbj[j] as Vector3) * w2)",
+    "replace": "\t\t\trow.append(c + oa.lerp(ob, s) * (1.0 + NECK_FULL * bump) - (tbj[j] as Vector3) * w2)"
+   }
+  ]
+ },
+ {
+  "id": "neck-head-ring-own-normals",
+  "bug": "The neck's head ring lit by its own triangles, not the head's normals: a line in the light round the head (up to 177 deg apart, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_neck_loft.pin_first = pin\n",
+    "replace": "\t_neck_loft.pin_first = PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "neck-trunk-ring-own-normals",
+  "bug": "The neck's trunk ring lit by its own triangles, not the trunk's normals: a line in the light round the collar (20 deg apart, 2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t_neck_loft.pin_last = _tn20\n",
+    "replace": "\t_neck_loft.pin_last = PackedVector3Array()\n"
+   }
+  ]
+ },
+ {
+  "id": "head-ring-normals-unpinned",
+  "bug": "The head's own normals on its neck ring left as its triangles (with the coarse cap under them) made them, so the neck, lit as the true surface, didn't match the head (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t_pin_normals((_head.get_node(\"HeadSurface\") as MeshInstance3D).mesh as ArrayMesh, _hp60, _hn60)\n",
+    "replace": "\t\tpass\n"
+   }
+  ]
+ },
+ {
+  "id": "neck-rows-even",
+  "bug": "The neck's rows evenly spaced, so its first and last steps cut across the bend onto the head and trunk: visibly creased there (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_PACK := 0.8 ",
+    "replace": "const NECK_PACK := 0.0 "
+   }
+  ]
+ },
+ {
+  "id": "head-colours-stop-at-ring",
+  "bug": "The head's colours stopped at the neck ring and the trunk's took over within a few rows: the sparrow's chestnut, the falcon's cap cut off in a line round the head (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\treturn smoothstep(0.2, 0.9, u)",
+    "replace": "\treturn smoothstep(0.75, 1.0, u)"
+   },
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t\t\tc = _head_color_d((_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND) + Vector3.DOWN * (1.0 - u) * NECK_EXT_RUN).normalized(), smoothstep(0.7, 1.0, u))\n",
+    "replace": "\t\t\t\tc = _head_color_d(_head_dir(_ring_th(-TAU * q / HEAD_AROUND), -TAU * q / HEAD_AROUND))\n"
+   }
+  ]
+ },
+ {
+  "id": "head-texture-faint-at-ring",
+  "bug": "The head's feather texture at 0.75 strength right to the neck ring, the neck's at full: the head looked smooth and painted against a feathered neck (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tstrength = lerpf(strength, 1.0, smoothstep(0.6, 1.0, r))",
+    "replace": "\tstrength = strength"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-enters-head-along-axis",
+  "bug": "The GPU neck entered the head along its axis, not the head's surface (the CPU loft fixed, the shader not).",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "(ta - vec3(0.0, 0.0, -1.0)) * w1 - tbj * w2;",
+    "replace": "(ta - vec3(0.0, 0.0, -1.0)) * w1;"
+   }
+  ]
+ },
+ {
+  "id": "gpu-neck-head-ring-own-normals",
+  "bug": "The GPU neck lit its head ring by its own triangles, not the head's normals.",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "\tif (i == 0) {   // the head ring",
+    "replace": "\tif (i == -1) {   // the head ring"
+   }
+  ]
+ },
+ {
+  "id": "gpu-head-colours-stop-at-ring",
+  "bug": "The GPU neck handed the head's colours to the trunk's in its last rows, and only the ring's.",
+  "tests": [
+   "gpu_test_neck"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/neck_place.gdshaderinc",
+    "find": "(texelFetch(neck_tab, ivec2(m, 20 + i), 0) - c_body) * smoothstep(0.2, 0.9, u);",
+    "replace": "(texelFetch(neck_tab, ivec2(m, 1), 0) - c_body) * smoothstep(0.75, 1.0, u);"
+   }
+  ]
+ },
+ {
+  "id": "neck-throat-curled",
+  "bug": "Perched, the throat curled in under the chin and the head looked thrust forward off the neck: the neck's ring, tipped back to fill the nape, crossed the throat at the very bottom of the head, where its surface runs forward (2026-11-05).",
+  "tests": [
+   "test_neck_seam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "const NECK_THROAT := 1.25",
+    "replace": "const NECK_THROAT := 0.0"
    }
   ]
  }

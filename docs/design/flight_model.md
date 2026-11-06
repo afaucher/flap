@@ -236,7 +236,10 @@ FLYING --settle slowly onto anything flat--> GROUNDED --FLAP--> FLYING (jump up,
   - Flap gives one free wingbeat.
   - It can't re-catch the same perch for 0.6 s.
 - **Collisions.**
-  - Trunks and branches: hitting one bounces you off at 0.3 restitution, keeps 60% of your speed, and stuns you for 0.35 s. Grazes under 1 m/s just slide.
+  - Trunks and branches, from the side (at most 40 deg off along the surface, at any speed, not on the back): a **glance**. No stun; the speed into the wood stops, the claws drag 0.4 x that off the speed along it (a hard side hit costs a lot), the legs push off (0.3 x hop speed) and the bird steers away for 0.35 s (`glance_assist`). The feet strike the bark (the rig: `brace` / `glance` telemetry, the claws on the wood) and the claws scrape (`claw_scrape`).
+  - Squarer: a **bonk**. 0.18 of the speed into the wood comes back out, the speed along it loses 0.6 x the hit, and the stun grows with the hit, 0.1 s at 1 m/s into it to 0.35 s at 9 (about head-on at cruise). Touches under 0.4 m/s into it (under 1 m/s, squarer) just slide.
+  - **Wings** strike too: each, shoulder to tip as spread or folded, against the layout's wood each tick; a strike costs 35% of the speed for the whole wing (a tip clip about a third of that), no stun (`wing_struck`, `wing_strike`).
+  - **Reflexes** (`Bird._reflexes`: 0.25 s of flight looked ahead at the layout's wood, `ArenaLayout.wood_near` / `first_touch_among`): wood coming from the side, or into a spread wing's reach, pulls the wings in (`tuck_reflex`, `FlightModel.tuck` at 10/s: less lift, it sinks); wood square ahead flares the bird (`flare_reflex`); a novice's bird also rolls away from either at a speed cost (`avoid_assist`, `FlightAssist.AVOID`). None while catching or leaving a perch. Each switches off at 0. `test_glance` checks them all, both sides; `.un.ps1 --scene res://scenes/bird_lab.tscn --scenario glance_left|wing_clip|head_on` shows them.
   - Settling slowly onto the ground or a trunk top: you stand there (GROUNDED), and flap jumps you up (at least 3.5 m/s upward) with a free wingbeat.
 
 Tests:

@@ -28,7 +28,7 @@ func sample(l: Launcher, dt: float) -> CombatInput:
 	var next: bool = (l.weapon != prefer and l.left(prefer) > 0) or (l.left(l.weapon) == 0 and l.left(other) > 0)
 	if l.weapon == Launcher.Weapon.SEEKERS:
 		return CombatInput.new(l.locked(), false, next)
-	var t := l.target()
+	var t := l.target_bird()
 	if t == null:
 		return CombatInput.new(false, false, next)
 	var lead := l.lead_point(t)

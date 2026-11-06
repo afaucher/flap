@@ -30,6 +30,7 @@ const MAX_LOOSE := 48
 const GUN_BIG := 0.22          ## a bullet's strike, as a fraction of a rocket's burst
 const MUZZLE_BIG := 0.08       ## a muzzle flash, likewise
 
+var flashes_drawn: Array = []  ## where each muzzle flash was last drawn (tests)
 var bursts: Array = []         ## {pos, t, kind, why, embers: [[pos, vel]], puffs: [[offset, drift, size]]}
 var loose: Array = []          ## {node, pos, vel, t, spin, rock, phase, landed, ground}: falling feathers
 var down: Array = []           ## {pos, vel, t, size, col, spin}
@@ -100,9 +101,12 @@ func burst(at: Vector3, why: String, kind: int) -> void:
 	(slot[0] as OmniLight3D).visible = true
 
 
-## A bullet left a gun's mouth at `at`, flying along `dir`: a pinpoint flash (no smoke, no embers, no light).
-func muzzle_flash(at: Vector3, dir: Vector3) -> void:
-	bursts.append({"pos": at + dir.normalized() * 0.03, "t": clock, "kind": Projectile.Kind.GUN, "why": "muzzle", "big": MUZZLE_BIG, "embers": [], "puffs": []})
+## A bullet left a gun's mouth at `at`, flying along `dir`: a pinpoint flash (no smoke, no embers, no light) on the
+## gun's mouth as it's drawn (`mouth`, while `shooter` lives; else riding on `carrier`, its bird's velocity), so it stays
+## at the muzzle as the bird flies on, not left behind it.
+func muzzle_flash(at: Vector3, dir: Vector3, carrier := Vector3.ZERO, mouth := Callable(), shooter: Object = null) -> void:
+	var off := dir.normalized() * 0.03
+	bursts.append({"pos": at + off, "off": off, "vel": carrier, "mouth": mouth, "shooter": shooter, "t": clock, "kind": Projectile.Kind.GUN, "why": "muzzle", "big": MUZZLE_BIG, "embers": [], "puffs": []})
 
 
 ## A hit at `at` knocked out `keys` from `bird`: those feathers fall from where they were, and a puff of down.
@@ -223,14 +227,20 @@ func draw(eye: Vector3, now: float, lag: float) -> void:
 			s[1] = null
 	_mesh.clear_surfaces()
 	_soft.clear_surfaces()
+	flashes_drawn.clear()
 	var hot := false
 	var soft := false
 	for b in bursts:
 		var age: float = now - float(b.t)
 		if age < 0.0:
 			continue
-		var pos: Vector3 = b.pos
+		var pos: Vector3 = b.pos + (b.get("vel", Vector3.ZERO) as Vector3) * age
+		var mouth: Callable = b.get("mouth", Callable())
+		if mouth.is_valid() and is_instance_valid(b.get("shooter")):
+			pos = (mouth.call() as Vector3) + (b.off as Vector3)
 		var big: float = b.big
+		if b.why == "muzzle":
+			flashes_drawn.append(pos)
 		var to_eye := (eye - pos).normalized()
 		var right := to_eye.cross(Vector3.UP).normalized()
 		if right.length() < 0.1:

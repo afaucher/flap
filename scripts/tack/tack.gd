@@ -58,6 +58,13 @@ func muzzle_world(kind: String, i: int) -> Vector3:
 	return saddle.global_transform * saddle.round_launch(kind, i)
 
 
+## The same point where it's drawn this frame (physics interpolation: a frame draws the bird between its last two
+## ticks, behind muzzle_world's, which is the latest tick's): what's drawn on the gun's mouth -- a muzzle flash, the start
+## of a tracer -- is placed at it, or it would sit ahead of the barrel (or, left where it was fired, behind it).
+func muzzle_drawn(kind: String, i: int) -> Vector3:
+	return saddle.get_global_transform_interpolated() * saddle.round_launch(kind, i)
+
+
 func _process(dt: float) -> void:
 	var p0 := Perf.t()
 	update(dt)

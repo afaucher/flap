@@ -11,6 +11,10 @@ extends TestCase
 ## path (above it, or off to the side).
 ## And a perch in the feet's reach right now is caught at once, where they reach it, though the path passes it closer
 ## further on.
+## Off the path's way (left and right): a perch 55 deg off it (the next tree over) is never the candidate, one 15 deg off
+## is; of a perch ahead and one beside the path that the path passes a little nearer, the one ahead; and the landing
+## assist's held perch (Bird.candidate_lock) is kept 30 deg off, past the cone, over a perch dead ahead -- and let go
+## of, that one is.
 
 const DT := 1.0 / 60.0
 var _id := 0
@@ -33,7 +37,78 @@ func setup() -> void:
 	await _case("bank left", p, start, glide, p.v_best, Vector2(-0.8, 0.0), "line")
 	# 4. A branch in the feet's reach right now, which the path meets (closer) only further along: caught here, at once.
 	await _in_reach_now(p, start)
+	for side in [-1.0, 1.0]:
+		await _off_way(p, start, glide, side)
+	await _ahead_beats_beside(p, start, glide)
+	await _held(p, start, glide)
 	finish()
+
+
+## A lone perch `deg` off the path's way, `dist` m out at the path's height (the bird glides on, neutral stick): is it
+## ever the candidate (over the first 20 ticks)?
+func _lone_pick(p: BirdProfile, start: Vector3, glide: Vector3, deg: float, dist: float) -> bool:
+	var layout := ArenaLayout.new()
+	var b := _bird(p, layout, Vector2.ZERO)
+	b.fly_from(start, glide, p.v_best)
+	var path := b.predicted_path()
+	var way := (_along(path, dist) - start).normalized()
+	var to := way.rotated(Vector3.UP, deg_to_rad(deg)) * dist
+	var pr := _branch(layout, start + to - Vector3.UP * Perch.seat_at(Vector3.ZERO, p).y, Vector3.UP.cross(to).normalized())
+	var picked := false
+	for i in 20:
+		await frames(1)
+		picked = picked or b.candidate == pr
+	b.queue_free()
+	await frames(1)
+	return picked
+
+
+func _off_way(p: BirdProfile, start: Vector3, glide: Vector3, side: float) -> void:
+	var what := "left" if side > 0.0 else "right"
+	check(not await _lone_pick(p, start, glide, 55.0 * side, 6.0), "the next tree over, 55 deg to the %s: never the candidate" % what)
+	check(await _lone_pick(p, start, glide, 15.0 * side, 6.0), "a perch 15 deg to the %s: the candidate" % what)
+
+
+## A perch ahead the path passes 2.5 m over, one beside the path 2 m off it (nearer the path, 14 deg off its way):
+## the one ahead is picked.
+func _ahead_beats_beside(p: BirdProfile, start: Vector3, glide: Vector3) -> void:
+	var layout := ArenaLayout.new()
+	var b := _bird(p, layout, Vector2.ZERO)
+	b.fly_from(start, glide, p.v_best)
+	var path := b.predicted_path()
+	var at := _along(path, 7.0)
+	var way := (at - start).normalized()
+	var across := Vector3.UP.cross(way).normalized()
+	var seat_h := Perch.seat_at(Vector3.ZERO, p).y
+	var ahead := _branch(layout, at - Vector3.UP * (seat_h + 2.5), across)
+	var beside := _branch(layout, at + across * 2.0 - Vector3.UP * seat_h, way)
+	await frames(1)
+	check(b.candidate == ahead, "a perch ahead the path passes 2.5 m over beats one 2 m beside it, 14 deg off its way (%s)" % ("beside" if b.candidate == beside else "none"))
+	b.queue_free()
+	await frames(1)
+
+
+## The landing assist's held perch 30 deg off the path's way (outside CONE_DEG, inside LOCK_CONE_DEG), a perch dead
+## ahead: held, it's the candidate; let go, the one ahead is.
+func _held(p: BirdProfile, start: Vector3, glide: Vector3) -> void:
+	var layout := ArenaLayout.new()
+	var b := _bird(p, layout, Vector2.ZERO)
+	b.fly_from(start, glide, p.v_best)
+	var path := b.predicted_path()
+	var seat_h := Perch.seat_at(Vector3.ZERO, p).y
+	var at := _along(path, 6.0)
+	var way := (at - start).normalized()
+	var ahead := _branch(layout, at - Vector3.UP * seat_h, Vector3.UP.cross(way).normalized())
+	var to := way.rotated(Vector3.UP, deg_to_rad(30.0)) * 6.0
+	var held := _branch(layout, start + to - Vector3.UP * seat_h, Vector3.UP.cross(to).normalized())
+	b.candidate_lock = held
+	await frames(1)
+	check(b.candidate == held, "the assist's held perch, 30 deg off, stays the candidate over one dead ahead")
+	b.candidate_lock = null
+	await frames(1)
+	check(b.candidate == ahead, "let go, the one ahead is")
+	b.queue_free()
+	await frames(1)
 
 
 ## A branch from just ahead and below (in reach now) down to the slow bird's sinking path 6 m on: the path passes

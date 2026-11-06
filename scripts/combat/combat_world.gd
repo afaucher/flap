@@ -27,6 +27,7 @@ extends Node3D
 signal downed(bird: Bird)
 signal burst(at: Vector3, why: String, kind: int, surface: String)   ## surface: "bird" | "trunk" | "ground" | "air" (Projectile.step)
 signal launched(p: Projectile)        ## a round left its launcher (GameAudio: the launch and its motor; p.kind GUN: a shot)
+signal balloon_downed(b: TargetBalloon, by: Object)   ## a target balloon is down (deflated or alight): `by` holed or fired it last
 signal struck(bird: Bird, at: Vector3, keys: Array)   ## a burst hurt `bird`, knocking out feathers `keys` (GameAudio: the puff and its call)
 
 static var blast := 1.3     ## m, burst damage radius (tunable; see Projectile.fuse)
@@ -40,6 +41,9 @@ const GUN_CHIP := 1.0 / 3.0     ## of a feather, a bullet's inside the recovery 
 const GUN_SHOVE := 0.6          ## m/s, a bullet's nudge
 const TRACER_LEN := 0.012       ## s of a bullet's flight its streak covers (about 1.3 m)
 const DOWN_STUN := 2.5      ## s
+## A downed bird flutters down out of the fight to the ground (Bird.start_tumble: its wings flail, it drops and rolls,
+## and comes down on the ground and sits there) rather than gliding on through the down stun. Off: it glides on.
+var down_flutter := true
 const SMOKE_EVERY := 0.025  ## s between smoke points
 const SMOKE_LIFE := 2.2     ## s
 
@@ -62,7 +66,11 @@ static var calm_air := true
 
 var _last_hit := {}         ## Bird -> _clock at its last hit (the recovery window)
 var _chip := {}             ## Bird -> bullets' feather fractions summed inside the window
-var stats := {"shots": 0, "hits": 0, "kills": 0}   ## for the player's launcher (`player`)
+var stats := {"shots": 0, "hits": 0, "kills": 0, "balloons": 0}   ## for the player's launcher (`player`)
+var balloons: Array = []    ## TargetBalloon: target practice's balloons. A bullet through one holes it (and flies on); a
+                            ## rocket's or seeker's fuse takes one as it would a bird, and a burst within BALLOON_IGNITE
+                            ## of one sets it alight
+const BALLOON_IGNITE := 0.8 ## m from the envelope
 var player: Launcher = null
 
 var _next_id := 0
@@ -71,11 +79,10 @@ var fx: CombatFx            ## what a burst and a hit look like
 var _clock := 0.0
 var _smoke_mesh: ImmediateMesh
 var _tracer_mesh: ImmediateMesh
+var tracers_drawn: Array = []   ## [tail, head] of each bullet's streak as last drawn (tests)
 var _bodies: Array = []     ## MeshInstance3D per live projectile (pooled)
 var _rocket_mesh: Mesh
 var _seeker_mesh: Mesh
-var _brass: StandardMaterial3D
-var _red: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -86,20 +93,9 @@ func _ready() -> void:
 	add_child(_mesh_node(_tracer_mesh, CombatFx._material(true)))
 	fx = CombatFx.new()
 	add_child(fx)
-	_brass = StandardMaterial3D.new()
-	_brass.albedo_color = Color(0.78, 0.62, 0.3)
-	_brass.metallic = 0.7
-	_brass.roughness = 0.35
-	_red = StandardMaterial3D.new()
-	_red.albedo_color = Color(0.75, 0.15, 0.12)
-	var cap := CapsuleMesh.new()
-	cap.radius = 0.035
-	cap.height = 0.22
-	_rocket_mesh = cap
-	var cap2 := CapsuleMesh.new()
-	cap2.radius = 0.04
-	cap2.height = 0.3
-	_seeker_mesh = cap2
+	# The rounds as they fly: the very rocket and seeker the pods carry (Saddle.flying_round), at the riders' scale.
+	_rocket_mesh = Saddle.flying_round("rockets", Tack.rider_height)
+	_seeker_mesh = Saddle.flying_round("seekers", Tack.rider_height)
 
 
 static func _mesh_node(m: ImmediateMesh, mat: Material) -> MeshInstance3D:
@@ -151,7 +147,7 @@ func spawn(p: Projectile) -> void:
 	_next_id += 1
 	projectiles.append(p)
 	if p.kind == Projectile.Kind.GUN:
-		fx.muzzle_flash(p.pos, p.vel - (Projectile.velocity_of(p.shooter) if is_instance_valid(p.shooter) else Vector3.ZERO))
+		fx.muzzle_flash(p.pos, p.vel - p.carrier, p.carrier, p.gun_mouth if is_instance_valid(p.shooter) else Callable(), p.shooter)
 	else:
 		_smoke.append({"id": p.id, "pts": [[p.pos, _clock]], "open": true, "kind": p.kind})
 	if player != null and p.shooter == player.bird:
@@ -167,6 +163,8 @@ func _physics_process(dt: float) -> void:
 			l.step(dt, self)
 	for p in projectiles:
 		var ev: Dictionary = p.step(dt, layout, birds)
+		if not balloons.is_empty():
+			ev = _through_balloons(p, ev)
 		var trail: Variant = _trail(p.id)
 		if trail != null and (trail.pts.is_empty() or _clock - float(trail.pts[-1][1]) >= SMOKE_EVERY or not p.alive):
 			trail.pts.append([p.pos, _clock])
@@ -175,7 +173,42 @@ func _physics_process(dt: float) -> void:
 				trail.open = false
 			_burst(ev.burst, p.shooter, String(ev.why), p.kind, String(ev.get("surface", "air")), ev.get("near"))
 	projectiles = projectiles.filter(func(q): return q.alive)
+	for bl: TargetBalloon in balloons:
+		if bl.is_down() and not bl.counted:
+			bl.counted = true
+			if player != null and is_instance_valid(bl.last_hit_by) and bl.last_hit_by == player.bird:
+				stats.balloons += 1
+			balloon_downed.emit(bl, bl.last_hit_by)
 	fx.step(dt, self)
+
+
+## Round `p`'s step (from where it was to where it is, or to the event that ended it) through the balloons: a bullet
+## holes each it passes through and flies on; a rocket or seeker, armed, bursts where its fuse first reaches one, if
+## that's before whatever else ended its step. Returns the step's event (`ev`, or the burst on a balloon).
+func _through_balloons(p: Projectile, ev: Dictionary) -> Dictionary:
+	var a := p.last_pos
+	var b: Vector3 = ev.burst if not ev.is_empty() else p.pos
+	if p.kind == Projectile.Kind.GUN:
+		for bl: TargetBalloon in balloons:
+			if bl.hit_ids.has(p.id):
+				continue
+			var at = bl.hit_point(a, b)
+			if at != null:
+				bl.hit_ids[p.id] = true
+				bl.last_hit_by = p.shooter
+				bl.bullet_hit(at, p.vel)
+				if player != null and p.shooter == player.bird:
+					stats.hits += 1
+		return ev
+	if p.travelled < Projectile.ARM:
+		return ev
+	for bl: TargetBalloon in balloons:
+		var at = bl.fuse_point(a, b, Projectile.fuse * 0.6)
+		if at != null:
+			p.alive = false
+			p.pos = at
+			return {"burst": at, "why": "fuse", "surface": "balloon"}
+	return ev
 
 
 ## `b`'s team's base, or null.
@@ -298,6 +331,12 @@ func _burst(at: Vector3, by: Variant, why: String, kind := Projectile.Kind.ROCKE
 	burst.emit(at, why, kind, surface)
 	if why == "expired":
 		return
+	for bl: TargetBalloon in balloons:
+		if bl.burn_r < 0.0 and not bl.is_down() and bl.distance_to(at) <= BALLOON_IGNITE:
+			bl.last_hit_by = by if is_instance_valid(by) else null
+			bl.burst_near(at)
+			if player != null and is_instance_valid(by) and by == player.bird:
+				stats.hits += 1
 	for b in birds:
 		if not is_instance_valid(b) or (is_instance_valid(by) and b == by):
 			continue
@@ -352,6 +391,8 @@ func hit(b: Bird, at: Vector3, strength: float, by: Variant = null, kind := Proj
 	struck.emit(b, at, keys)
 	if was_up and b.is_down():
 		b.stun = DOWN_STUN
+		if down_flutter:
+			b.start_tumble()
 		if by_player:
 			stats.kills += 1
 		if is_instance_valid(by) and teams.has(by) and not friends(by, b):
@@ -367,10 +408,14 @@ func _process(_delta: float) -> void:
 	var lag := Bird.drawn_lag()
 	var heads := _draw_bodies(lag)
 	_draw_smoke(eye, _clock - lag, heads)
-	_draw_tracers(eye, heads)
+	_draw_tracers(eye, heads, lag)
 	fx.draw(eye, _clock - lag, lag)
 	# Forget what has faded.
 	_smoke = _smoke.filter(func(s): return s.open or (s.pts.size() > 0 and _clock - float(s.pts[-1][1]) < SMOKE_LIFE))
+
+
+const ROUND_GROW := 2.0   ## a rocket or seeker in flight is drawn up to this x its true size
+const GROW_OVER := 4.0    ## m it flies before it's drawn that big
 
 
 ## Each projectile where it is at the drawn moment: between its last two ticks, as the birds are (placed here each
@@ -396,11 +441,11 @@ func _draw_bodies(lag: float) -> Dictionary:
 			continue
 		mi.visible = true
 		mi.mesh = _rocket_mesh if p.kind == Projectile.Kind.ROCKET else _seeker_mesh
-		mi.material_override = _brass if p.kind == Projectile.Kind.ROCKET else _red
 		var d := p.vel.normalized() if p.vel.length() > 0.1 else Vector3.FORWARD
 		var side := d.cross(Vector3.UP if absf(d.y) < 0.95 else Vector3.RIGHT).normalized()
-		# (leaving the pod it's drawn at its true size, a few cm, growing to the readable size over its first metres)
-		var grow := lerpf(0.16 if p.kind == Projectile.Kind.ROCKET else 0.1, 1.0, smoothstep(0.0, 4.0, p.travelled))
+		# (leaving the pod at its true size, growing to ROUND_GROW of it over its first GROW_OVER m, so it still reads
+		# out there; its smoke trail carries it further)
+		var grow := lerpf(1.0, ROUND_GROW, smoothstep(0.0, GROW_OVER, p.travelled))
 		var at := p.last_pos.lerp(p.pos, f)
 		heads[p.id] = at
 		mi.global_transform = Transform3D(Basis(side, d, side.cross(d)).scaled(Vector3.ONE * grow), at)   # capsule's long axis is Y
@@ -408,18 +453,25 @@ func _draw_bodies(lag: float) -> Dictionary:
 
 
 ## Bullets: a hot streak each, from where it's drawn back along its flight (TRACER_LEN s of it, no further back than
-## where it left the gun), facing the camera, a little wider far off so it still reads as a line.
-func _draw_tracers(eye: Vector3, heads: Dictionary) -> void:
+## the gun's mouth: the gun flies on with its bird, so not to where it left the gun -- the bird has flown past that,
+## and the streak would come out of its back), facing the camera, a little wider far off so it still reads as a line.
+## `tracers_drawn`: each streak's [tail, head] this frame (tests).
+func _draw_tracers(eye: Vector3, heads: Dictionary, lag := 0.0) -> void:
 	_tracer_mesh.clear_surfaces()
+	tracers_drawn.clear()
 	var started := false
 	for p: Projectile in projectiles:
 		if p.kind != Projectile.Kind.GUN or not heads.has(p.id):
 			continue
 		var a: Vector3 = heads[p.id]
 		var back := p.vel * TRACER_LEN
-		if back.length() > p.travelled:
-			back = back.normalized() * p.travelled
+		var ahead := (p.vel - p.carrier).length() * maxf(p.age - lag, 0.0)   # (how far it's out of the gun, at the drawn moment)
+		if p.gun_mouth.is_valid() and is_instance_valid(p.shooter):   # (better: from the barrel as it's drawn now)
+			ahead = maxf((a - (p.gun_mouth.call() as Vector3)).dot(p.vel.normalized()), 0.0)
+		if back.length() > ahead:
+			back = back.normalized() * ahead
 		var b := a - back
+		tracers_drawn.append([b, a])
 		var seg := a - b
 		if seg.length() < 1e-3:
 			continue

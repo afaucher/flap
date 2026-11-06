@@ -23,7 +23,7 @@ void fragment() {
 	COLOR = vec4(hi, (v - hi) * 2048.0, 0.0, 1.0);
 }
 """
-const PARAMS := ["neck_tab", "neck_ca", "neck_p1", "neck_p2", "neck_cb", "neck_hb", "neck_st", "neck_r", "neck_rev", "neck_ub_off", "neck_flip"]
+const PARAMS := ["neck_tab", "neck_ca", "neck_p1", "neck_p2", "neck_cb", "neck_hb", "neck_st", "neck_r", "neck_rev", "neck_ub_off", "neck_flip", "neck_k"]
 const LOOKS := [   # look direction (yaw deg, pitch deg), fluff, breath
 	[0.0, 0.0, 1.0, 0.0],
 	[70.0, 20.0, 1.0, 0.5],

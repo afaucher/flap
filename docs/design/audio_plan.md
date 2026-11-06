@@ -262,6 +262,11 @@ Still open:
 **Sounds:**
 - `SoundRecipes` holds 50 sounds (108 takes), built on `SoundDsp` (filters, noise, tones, note lists, loops).
 - `tools/bake_sounds.gd` bakes them into `assets/audio/sfx/` in about 4 s.
+- **3D one-shots are baked with 30 ms of silence ahead** (`SoundRecipes.LEAD_3D`, 2026-11-04). An `AudioStreamPlayer3D`
+  mixes at nothing until the physics tick after it starts, then ramps up, so a short sound's first ~20 ms were lost in
+  3D: the gun shot, all crack, was unheard in the game (13-15 dB under itself played flat), and rocket launches,
+  impacts, perch catches and bonks lost their attack. `gpu_test_audible` records the master bus and checks each is
+  heard 4 m off; it needs an audio output.
 - Everything is synthesized except two sounds:
   - the bursts (and the gun's shot, an octave and more higher still and cut to a crack), built on the bang of the CC0 firework recording that ..\cast uses (Freesound 336008), pitched up
     3-7 semitones;

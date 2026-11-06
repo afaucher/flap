@@ -10,8 +10,15 @@ extends RefCounted
 ##     releasing catch hands it all back;
 ##   - the bird's perch assist (Bird.novice_landing) works from ASSIST_REACH, at PERCH_ASSIST at least, its flare
 ##     braking for the height over the perch as well as the speed (an approach from too high comes in too fast);
-##   - perches are candidates from APPROACH out (Bird.approach_radius), so there's room to do it.
+##   - perches are candidates from APPROACH out (Bird.approach_radius), so there's room to do it;
+##   - it stays on the line the player is flying: the perch it engaged on is held (Bird.candidate_lock) so its own
+##     turn can't hand it the next tree, it adds at most MAX_BANK_ADD of the stick's bank to the player's; turn away from the perch and it
+##     falls out of the held perch's cone (Bird.LOCK_CONE_DEG, round the path the player's turn flies), and the assist
+##     lets go.
 ## `strength` 0 turns all of it off (fit() again after changing it).
+##
+## WOOD AVOIDED (the player's bird): it rolls away from wood its flight is about to strike, body or wing, at AVOID
+## strength (Bird.avoid_assist), paying for it in speed; realistic, 0 (the reflexes that soften a touch stay on).
 ##
 ## MORE POWER AND ENDURANCE (EnergyModel, every bird in the scene): stamina lasts STAMINA x as many wingbeats, comes
 ## back RECOVERY x as fast, and the burst refills BURST_REGEN x as fast. The profiles' readable numbers and the polar
@@ -28,9 +35,11 @@ const ASSIST_REACH := 10.0     ## m: the perch assist works from this far while 
 const PERCH_ASSIST := 1.0      ## ... at least this strong (Bird.perch_assist; realistic: the bird's own, 0.6)
 const BLEED_TO := 0.6          ## of the catch speed: the approach bleeds speed toward this (the AI: 0.8)
 const ENGAGE_TIME := 0.3       ## s to ease the assist in once catch is held with a candidate
+const MAX_BANK_ADD := 0.35     ## of full stick: the most bank the assist adds to (or takes from) the player's
 const STAMINA := 1.5           ## novice: wingbeats a full stamina lasts, x the profile's
 const RECOVERY := 2.0          ## novice: stamina regained gliding and perched, x
 const BURST_REGEN := 1.3       ## novice: burst refill, x (more full-strength wingbeats in a sprint)
+const AVOID := 0.5             ## novice: the bird rolls away from wood coming (Bird.avoid_assist), this strong, at a speed cost
 
 var inner: Object = null       ## the controller it wraps (sample()); null when applied by a PlayerController
 var engage := 0.0              ## 0..1, eased in while on
@@ -53,6 +62,7 @@ static func fit(bird: Bird) -> void:
 	var on := novice and strength > 0.0
 	bird.approach_radius = APPROACH if on else Bird.APPROACH_RADIUS
 	bird.novice_landing = on
+	bird.avoid_assist = AVOID if novice else 0.0
 
 
 static func stamina_scale() -> float:
@@ -78,19 +88,30 @@ func apply(bird: Bird, inp: FlightInput, dt: float) -> FlightInput:
 	var on := novice and strength > 0.0 and inp.catch_held and bird.state == Bird.State.FLYING and bird.candidate != null
 	if not on:
 		engage = 0.0   # (catch released, or nothing to land on: the player's at once)
+		if bird != null:
+			bird.candidate_lock = null
 		return inp
+	if bird.candidate_lock != null and bird.candidate != bird.candidate_lock:
+		engage = 0.0   # (the held perch went out of the cone: a fresh approach on the new one)
+	if bird.candidate_lock == null or engage <= 0.0:
+		bird.candidate_lock = bird.candidate
 	if pilot == null or pilot.planner.layout != bird.layout:
 		pilot = AIPilot.new(bird.layout)
 	if engage <= 0.0:
 		pilot._stick = inp.stick   # (its smoothed stick starts from the player's)
-	engage = minf(1.0, engage + dt / ENGAGE_TIME)
+		engage = minf(1.0, dt / ENGAGE_TIME)
+	else:
+		engage = minf(1.0, engage + dt / ENGAGE_TIME)
 	var ai := approach(bird, dt)
 	last_assist = ai
 	var w := strength * engage
 	# Flapping: the player's, and the approach's too once the assist has most of the say. (Flapping in, the climb trim,
 	# FlightModel.trim_alpha, would carry the bird up over the perch; the perch assist's height braking takes it down.)
 	var held := inp.flap_held or (ai.flap_held and w >= 0.5)
-	return FlightInput.new(inp.stick.lerp(ai.stick, w), inp.flap_pressed, held, inp.catch_pressed, true)
+	var stick := inp.stick.lerp(ai.stick, w)
+	stick.x = clampf(stick.x, inp.stick.x - MAX_BANK_ADD, inp.stick.x + MAX_BANK_ADD)   # (it nudges the turn, never makes it)
+	return FlightInput.new(stick, inp.flap_pressed, held, inp.catch_pressed, true)
+
 
 
 ## What the AI pilot flies onto the candidate perch from here: its final approach (AIPilot._fly), aimed at the grip

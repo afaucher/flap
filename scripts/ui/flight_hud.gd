@@ -92,9 +92,9 @@ func _draw() -> void:
 	_prompts(Vector2(sz.x * 0.5, sz.y * 0.5 + 120))
 	_text(Vector2(20, 30), "%s   alt %.1f m%s" % [t.bird, t.altitude, "   [AUTOPILOT]" if autopilot else ""], FG, 18)
 	if gamepad:
-		_text(Vector2(20, 52), "left stick: bank / pitch   right stick: look   LT: flap   A (hold): catch   Back: bird   Start: respawn   Y: autopilot", DIM, 13)
+		_text(Vector2(20, 52), "left stick: bank / pitch   right stick: look   LT: flap   A (hold): catch   Back: bird   Start: pause   Y: autopilot", DIM, 13)
 	else:
-		_text(Vector2(20, 52), "mouse: bank / pitch   space: flap   ctrl (hold): catch   1-5 bird   R respawn   P autopilot   F3 debug", DIM, 13)
+		_text(Vector2(20, 52), "mouse: bank / pitch   space: flap   ctrl (hold): catch   1-5 bird   P autopilot   F3 debug", DIM, 13)
 	if debug:
 		_debug(Vector2(sz.x - 330, 40))
 
@@ -121,7 +121,7 @@ func _draw_styled(sz: Vector2) -> void:
 	_prompts(Vector2(sz.x * 0.5, sz.y - 120), 17)
 	if hints_left > 0.0:
 		var a := clampf(hints_left, 0.0, 1.0)
-		var line := "left stick: bank / pitch   right stick: look   LT: flap   A (hold): catch   Back: bird   Start: respawn   Y: autopilot" if gamepad else "mouse: bank / pitch   space: flap   ctrl (hold): catch   1-5 bird   R respawn   P autopilot   F1 keys   F3 instruments"
+		var line := "left stick: bank / pitch   right stick: look   LT: flap   A (hold): catch   Back: bird   Start: pause   Y: autopilot" if gamepad else "mouse: bank / pitch   space: flap   ctrl (hold): catch   1-5 bird   P autopilot   F1 keys   F3 instruments"
 		_text(Vector2(24, sz.y - 24), line, Color(DIM, DIM.a * a * 2.0), 13)
 	if debug:
 		_speed_tape(Vector2(70, sz.y * 0.5))

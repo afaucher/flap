@@ -8,7 +8,8 @@ extends RefCounted
 ## - the bursts: the bang of Rudmer_Rotteveel's "Whistle and Explosion Single_Firework" (Freesound 336008, CC0, the one
 ##   ..\cast uses for its goblin fireworks), pitched up and shortened to the war tack's pencil-sized rockets, with a
 ##   synthesized crack and debris over it;
-## - the perch catch: the user's claws on a cat tree (CLAWS), one scratch a take;
+## - the perch catch: the user's claws on a cat tree (CLAWS), one scratch a take; a glance's claw scrape, its longest
+##   scratches;
 ## - the five species' calls and alarms: cut from Freesound recordings (CALLS).
 
 const D = preload("res://scripts/audio/sound_dsp.gd")
@@ -17,6 +18,7 @@ const FIREWORK := "res://assets/audio/third_party/freesound/336008__rudmer_rotte
 const CLAWS := "res://assets/audio/recordings/claws_on_cat_tree.wav"
 const SOURCE_PATH := "res://scripts/audio/sound_recipes.gd"
 const DSP_PATH := "res://scripts/audio/sound_dsp.gd"
+const SFX_PATH := "res://scripts/audio/sfx.gd"
 const STAMP_PATH := "res://assets/audio/sfx/baked_from.md5"
 
 ## name -> {takes, loop (s, or 0: a one-shot)}. The recipe is the method _<name>(rng, take).
@@ -33,6 +35,7 @@ const SOUNDS := {
 	"rearm_tick": {"takes": 3}, "rearmed": {},
 	# your bird and the world
 	"perch_catch": {"takes": 6}, "takeoff_push": {"takes": 2}, "ground_land": {"takes": 2}, "bonk": {"takes": 3},
+	"claw_scrape": {"takes": 4}, "wing_strike": {"takes": 3},
 	# calls: a contact call and an alarm for each species
 	"call_crow": {"takes": 3}, "alarm_crow": {"takes": 2}, "call_owl": {"takes": 2}, "alarm_owl": {"takes": 2},
 	"call_hawk": {"takes": 2}, "alarm_hawk": {"takes": 2}, "call_falcon": {"takes": 3}, "alarm_falcon": {"takes": 2},
@@ -61,6 +64,14 @@ static func is_loop(name: String) -> bool:
 	return float(SOUNDS[name].get("loop", 0.0)) > 0.0
 
 
+## A 3D sound starts silent: an AudioStreamPlayer3D gets its volume and panning on the physics tick after it starts
+## playing (until then it mixes at nothing, then ramps up), so a sound's first ~20 ms are lost in 3D. A gun shot is
+## all crack in that time and went unheard; every short 3D one-shot lost its attack. So each sound a positional cue
+## plays (Sfx.CUES) is baked with this much silence ahead of it: 30 ms, under two ticks, less than its own travel time
+## from 10 m off.
+const LEAD_3D := 0.03
+
+
 ## Take `take` (0-based) of `name`, as mono samples.
 static func render(name: String, take := 0) -> PackedFloat32Array:
 	var rng := RandomNumberGenerator.new()
@@ -71,10 +82,29 @@ static func render(name: String, take := 0) -> PackedFloat32Array:
 	return D.normalize(s, -1.0)
 
 
+## Take `take` of `name` as baked (tools/bake_sounds.gd): render() with LEAD_3D of silence ahead of a one-shot that a
+## positional cue plays.
+static func baked(name: String, take := 0) -> PackedFloat32Array:
+	var s := render(name, take)
+	if is_loop(name) or not positional(name):
+		return s
+	var out := D.silence(LEAD_3D)
+	out.append_array(s)
+	return out
+
+
+## Does a positional cue (Sfx.CUES) play `name`?
+static func positional(name: String) -> bool:
+	for c: String in Sfx.CUES:
+		if Sfx.sound_of(c) == name and bool(Sfx.CUES[c].get("positional", false)):
+			return true
+	return false
+
+
 ## The MD5 of the recipes, SoundDsp and the recordings together: tools/bake_sounds.gd stamps the baked set with it.
 static func source_md5() -> String:
 	var src := ""
-	for p: String in [SOURCE_PATH, DSP_PATH]:
+	for p: String in [SOURCE_PATH, DSP_PATH, SFX_PATH]:   # (the cues say which sounds get a 3D lead-in)
 		src += FileAccess.get_file_as_string(p).replace("\r\n", "\n")
 	for p: String in [FIREWORK, CLAWS] + CALL_SOURCES:
 		src += FileAccess.get_md5(p)
@@ -341,6 +371,30 @@ func _perch_catch(_rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
 	var ev: Array = pick[mini(take, pick.size() - 1)]
 	var c := D.highpass(D.cut(s, ev[0], ev[1]), 150.0)
 	return D.fade(D.gate(c), 0.003, 0.05)
+
+
+## A glance (Bird.glanced): the feet strike the bark and the claws rake along it -- the recording's longest scratches
+## (the perch catch has its loudest), each with a toe's knock on the wood at its start and a little bark crumbling off.
+func _claw_scrape(rng: RandomNumberGenerator, take: int) -> PackedFloat32Array:
+	var s := D.load_wav(CLAWS)
+	var evs := D.events(s)
+	evs.sort_custom(func(a: Array, b: Array) -> bool: return a[1] - a[0] > b[1] - b[0])
+	var ev: Array = evs[mini(take, evs.size() - 1)]
+	var c := D.highpass(D.cut(s, ev[0], minf(ev[1], ev[0] + 0.32)), 450.0, 2)
+	c = D.fade(D.gate(c), 0.002, 0.06)
+	c = D.mix(c, D.hit(D.lowpass(D.white(rng, 0.05), 1800.0), 0.001, 0.008), 0.0, -8.0)
+	return D.mix(c, _grains(rng, 10, 0.3, 1500.0, 5000.0, 0.12), 0.03)
+
+
+## A wing striking wood (Bird.wing_struck): the flight feathers slapping and dragging over the bark -- a quick
+## papery slap, a rustle of quills as the wing sweeps past, a few flakes of bark.
+func _wing_strike(rng: RandomNumberGenerator, _take: int) -> PackedFloat32Array:
+	var sec := rng.randf_range(0.14, 0.2)
+	var slap := D.hit(D.bandpass(D.white(rng, 0.05), rng.randf_range(1800.0, 2600.0), 0.9), 0.0008, 0.012)
+	var rustle := D.svf(D.white(rng, sec), func(k: float) -> float: return 2500.0 + 3000.0 * k, 2.0, 1)
+	rustle = D.shape(rustle, func(k: float) -> float: return minf(1.0, k * 10.0) * pow(1.0 - k, 1.5))
+	var s := D.mix(rustle, slap, 0.0, 2.0)
+	return D.mix(s, _grains(rng, 8, sec, 1200.0, 4000.0, 0.15), 0.01)
 
 
 ## Pushing off a branch: the branch's spring creak, then air.

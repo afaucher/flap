@@ -4,7 +4,7 @@ extends Node
 ## already reads -- your bird's telemetry, the Bird signals (perched, released, bonked), the CombatWorld signals
 ## (launched, burst, struck, downed) and the launchers' public state -- and hands it to Sfx. Never reads FlightModel.
 ##   - FlightAudio: your bird's wind, band whooshes and wingbeats (live synthesis).
-##   - Every watched bird: perch catch, take-off push, ground landing, bonk; its species' alarm call when hurt or bonked
+##   - Every watched bird: perch catch, take-off push, ground landing, bonk, a glance's claw scrape, a wing strike; its species' alarm call when hurt or bonked
 ##     hard, now and then its contact call.
 ##   - Combat: each round's launch and its motor (a loop riding the round, Doppler from the camera), its burst (on a
 ##     bird, a trunk, the ground, or a fizzle), feather puffs, the downed flutter. The gun (Projectile GUN): each shot its
@@ -89,6 +89,8 @@ func watch(b: Bird) -> void:
 	b.perched.connect(_on_perched.bind(b))
 	b.released.connect(_on_released.bind(b))
 	b.bonked.connect(_on_bonked.bind(b))
+	b.glanced.connect(_on_glanced.bind(b))
+	b.wing_struck.connect(_on_wing_struck.bind(b))
 	b.tree_exiting.connect(func() -> void: _birds.erase(b))
 
 
@@ -149,6 +151,16 @@ func _on_bonked(_n: Vector3, speed: float, b: Bird) -> void:
 	cue("bonk", b.global_position, _by_speed(speed, 10.0))
 	if speed > 6.0:
 		_call(b, "alarm")
+
+
+## A glance: the claws raking the wood, louder the harder it brushed and the faster along it; no cry.
+func _on_glanced(_n: Vector3, speed: float, along: float, b: Bird) -> void:
+	cue("claw_scrape", b.global_position, _by_speed(speed + 0.15 * along, 6.0))
+
+
+## A wing striking wood: the feathers on the bark, louder the more speed it cost; no cry.
+func _on_wing_struck(_side: int, at: Vector3, lost: float, b: Bird) -> void:
+	cue("wing_strike", at, _by_speed(lost, 3.0))
 
 
 ## A level for something `speed` fast out of `full`: -14 dB at a crawl up to 0 dB.

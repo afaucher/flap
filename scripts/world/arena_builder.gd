@@ -104,23 +104,25 @@ func _ground() -> void:
 			sm.set_shader_parameter("field_origin", ff.origin)
 			sm.set_shader_parameter("field_size", ff.size)
 			sm.set_shader_parameter("field_res", FloorField.RES)
-			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart); the big plane draws only
-			# round it. Solid at the same height: a heightmap from the same field (so a bird stands, a round bursts and
-			# a feather settles on the mound it's drawn on).
-			var fine := MeshInstance3D.new()
+			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart), in tiles so the ones out
+			# of view or out of a shadow cascade are culled, its flat blocks joined (floor_tiles); the big plane is a
+			# ring round it, a real hole (floor_ring). Solid at the same height: a heightmap from the same field (so a bird stands, a round
+			# bursts and a feather settles on the mound it's drawn on).
+			var fine := Node3D.new()
 			fine.name = "FloorMounds"
-			var grid := PlaneMesh.new()
-			grid.size = Vector2(ff.size, ff.size)
-			grid.subdivide_width = int(ff.size / FLOOR_STEP)
-			grid.subdivide_depth = int(ff.size / FLOOR_STEP)
-			fine.mesh = grid
 			fine.position = Vector3(ff.origin.x + ff.size * 0.5, ArenaLayout.GROUND_Y, ff.origin.y + ff.size * 0.5)
-			fine.custom_aabb = AABB(Vector3(-ff.size * 0.5, -0.1, -ff.size * 0.5), Vector3(ff.size, FloorField.MOUND_H + 0.2, ff.size))   # (the mounds rise in the shader)
 			var fm := sm.duplicate() as ShaderMaterial
 			fm.set_shader_parameter("displace", 1.0)
-			fine.material_override = fm
+			# (the ring from where the floor is flat for good: drawn the same by either, the fine mesh stops there)
+			var reach := minf(ff.flat_beyond() / cos(PI / RING_SIDES), ff.size * 0.5 - 1.0)
+			for tm in floor_tiles(ff, reach):
+				var tile := MeshInstance3D.new()
+				tile.mesh = tm
+				tile.material_override = fm
+				fine.add_child(tile)
 			body.add_child(fine)
-			sm.set_shader_parameter("hole_r", ff.size * 0.5 - 1.0)
+			mi.mesh = floor_ring(reach, plane.size.x * 0.5)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # (nothing lies under the ground for it to shade)
 			var hcs := CollisionShape3D.new()
 			hcs.name = "FloorMoundsShape"
 			var hm := HeightMapShape3D.new()
@@ -138,6 +140,162 @@ func _ground() -> void:
 
 const GRASS_PER_M2 := 3.5   ## grass tussocks sown to the square metre over the openings (_grass)
 const FLOOR_STEP := 0.4   ## m between the fine floor mesh's vertices (where the litter's mounds are drawn)
+const FLOOR_TILES := 8    ## the fine floor mesh's tiles a side, each culled on its own (one mesh was drawn whole in every pass)
+const RING_SIDES := 128   ## the big plane's hole, a polygon of this many sides (a multiple of 8: the square's corners on it)
+
+
+## The fine floor mesh over the floor field `ff`, as FLOOR_TILES x FLOOR_TILES tiles: one grid of vertices
+## FLOOR_STEP or less apart, laid out as a PlaneMesh of it would be (in the field's frame: its middle the origin),
+## each vertex computed from its place in the one grid, so a tile's edge is its neighbour's to the bit and they meet
+## without a crack. Only the cells within `reach` m of the middle are drawn (the ring draws the flat floor past it),
+## and a block of cells where the floor is flat (FloorField.flat_cells: no mound, the normal straight up) is drawn as
+## a fan from its middle to every vertex on its edge: the same plane in far fewer triangles, and every vertex a
+## neighbouring cell has on that edge one of the fan's, so no crack opens at a T. Each cell in two triangles
+## otherwise, as the PlaneMesh had them.
+static func floor_tiles(ff: FloorField, reach: float) -> Array[ArrayMesh]:
+	var size := ff.size
+	var segs := int(size / FLOOR_STEP) + 1
+	var step := size / segs
+	var centre := ff.origin + Vector2.ONE * size * 0.5
+	var fc := ff.flat_cells()
+	var flat := PackedByteArray()   # (each grid vertex: flat round it)
+	flat.resize((segs + 1) * (segs + 1))
+	for j in segs + 1:
+		var fj := clampi(int(floor((centre.y + size * 0.5 - j * step - ff.origin.y) / FloorField.RES)), 0, ff.n - 1)
+		for i in segs + 1:
+			var fi := clampi(int(floor((centre.x + size * 0.5 - i * step - ff.origin.x) / FloorField.RES)), 0, ff.n - 1)
+			flat[j * (segs + 1) + i] = fc[fj * ff.n + fi]
+	var cuts: Array[int] = []
+	for k in FLOOR_TILES + 1:
+		cuts.append(int(round(float(k) * segs / FLOOR_TILES)))
+	var out: Array[ArrayMesh] = []
+	for tj in FLOOR_TILES:
+		for ti in FLOOR_TILES:
+			var i0 := cuts[ti]
+			var j0 := cuts[tj]
+			var w := cuts[ti + 1] - i0 + 1
+			var d := cuts[tj + 1] - j0 + 1
+			var verts := PackedVector3Array()
+			verts.resize(w * d)
+			var k := 0
+			for j in d:
+				var z := -size * 0.5 + (j0 + j) * step
+				for i in w:
+					verts[k] = Vector3(size * 0.5 - (i0 + i) * step, 0.0, -z)   # (PlaneMesh's (-x, 0, -z))
+					k += 1
+			# Each cell: 0 drawn as two triangles, 1 in a joined block, 2 past `reach` (not drawn).
+			var cw := w - 1
+			var cd := d - 1
+			var cell := PackedByteArray()
+			cell.resize(cw * cd)
+			for cj in cd:
+				for ci in cw:
+					var a := verts[cj * w + ci]
+					var b := verts[(cj + 1) * w + ci + 1]
+					var near := Vector2(clampf(-centre.x, minf(a.x, b.x), maxf(a.x, b.x)), clampf(-centre.y, minf(a.z, b.z), maxf(a.z, b.z)))
+					if (near + centre).length() >= reach:
+						cell[cj * cw + ci] = 2
+			var idx := PackedInt32Array()
+			for bk: int in FLOOR_JOIN:
+				for bj in range(0, cd - bk + 1, bk):
+					for bi in range(0, cw - bk + 1, bk):
+						if _joinable(cell, cw, bi, bj, bk, flat, segs + 1, i0, j0):
+							for cj in range(bj, bj + bk):
+								for ci in range(bi, bi + bk):
+									cell[cj * cw + ci] = 1
+							_fan(idx, verts, w, bi, bj, bk)
+			for cj in cd:
+				for ci in cw:
+					if cell[cj * cw + ci] == 0:
+						var prev := cj * w
+						var row := (cj + 1) * w
+						idx.append_array([prev + ci, prev + ci + 1, row + ci, prev + ci + 1, row + ci + 1, row + ci])
+			if idx.is_empty():
+				continue
+			var m := _flat_mesh(verts, idx)
+			var x1 := size * 0.5 - i0 * step
+			var z0 := -size * 0.5 + j0 * step
+			m.custom_aabb = AABB(Vector3(x1 - (w - 1) * step, -0.1, -(z0 + (d - 1) * step)), Vector3((w - 1) * step, FloorField.MOUND_H + 0.2, (d - 1) * step))   # (the mounds rise in the shader)
+			out.append(m)
+	return out
+
+
+const FLOOR_JOIN := [8, 4]   ## the flat blocks joined, in cells a side, biggest first (a 2 x 2 block's fan has as many triangles as its cells; fans of 16 and up, their spokes long, shift the far litter's texture a little, seen low)
+
+
+## Whether the bk x bk block of a tile's cells from (bi, bj) can be joined: every cell still drawn on its own, every
+## vertex of it flat (the tile's first vertex at (i0, j0) in the whole grid, `gw` vertices a row).
+static func _joinable(cell: PackedByteArray, cw: int, bi: int, bj: int, bk: int, flat: PackedByteArray, gw: int, i0: int, j0: int) -> bool:
+	for cj in range(bj, bj + bk):
+		for ci in range(bi, bi + bk):
+			if cell[cj * cw + ci] != 0:
+				return false
+	for j in range(bj, bj + bk + 1):
+		for i in range(bi, bi + bk + 1):
+			if flat[(j0 + j) * gw + i0 + i] == 0:
+				return false
+	return true
+
+
+## A bk x bk block's fan: from its middle vertex to each vertex round its edge in turn (all 4 bk of them), each
+## triangle facing up as the PlaneMesh's do.
+static func _fan(idx: PackedInt32Array, verts: PackedVector3Array, w: int, bi: int, bj: int, bk: int) -> void:
+	var c := (bj + (bk >> 1)) * w + bi + (bk >> 1)
+	var ring := PackedInt32Array()
+	for i in range(bi, bi + bk):
+		ring.append(bj * w + i)
+	for j in range(bj, bj + bk):
+		ring.append(j * w + bi + bk)
+	for i in range(bi + bk, bi, -1):
+		ring.append((bj + bk) * w + i)
+	for j in range(bj + bk, bj, -1):
+		ring.append(j * w + bi)
+	for m in ring.size():
+		var a := ring[m]
+		var b := ring[(m + 1) % ring.size()]
+		if (verts[a] - verts[c]).cross(verts[b] - verts[c]).y < 0.0:
+			idx.append_array([c, a, b])
+		else:
+			idx.append_array([c, b, a])
+
+
+## The ground round the fine floor mesh: from a circle `inner` m round the middle (a polygon of RING_SIDES inside it)
+## out to a square `outer` m from the middle each way. A real hole, where a discard in the shader would cost the
+## whole plane its early depth test.
+static func floor_ring(inner: float, outer: float) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for k in RING_SIDES:
+		var dir := Vector2.from_angle(TAU * k / RING_SIDES)
+		var o := dir / maxf(absf(dir.x), absf(dir.y)) * outer
+		verts.append(Vector3(dir.x * inner, 0.0, dir.y * inner))
+		verts.append(Vector3(o.x, 0.0, o.y))
+	for k in RING_SIDES:
+		var a := k * 2
+		var b := ((k + 1) % RING_SIDES) * 2
+		idx.append_array([a, a + 1, b, a + 1, b + 1, b])   # (facing up, as the plane's)
+	return _flat_mesh(verts, idx)
+
+
+## A mesh of triangles lying flat, facing up (normal up, tangent along x, as a PlaneMesh's).
+static func _flat_mesh(verts: PackedVector3Array, idx: PackedInt32Array) -> ArrayMesh:
+	var normals := PackedVector3Array()
+	normals.resize(verts.size())
+	normals.fill(Vector3.UP)
+	var tangents := PackedFloat32Array()
+	tangents.resize(verts.size() * 4)
+	for i in verts.size():
+		tangents[i * 4] = 1.0
+		tangents[i * 4 + 3] = 1.0
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TANGENT] = tangents
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
 
 
 ## Pale strips on the ground under the clearing, avenues and ring: the flight paths, readable from the air.
@@ -712,7 +870,7 @@ func _floor() -> void:
 	var cols := []
 	var cus := []
 	# (bracken grows where the light gets in: thick in the gaps and glades, thin under the clumps)
-	for i in 6400:
+	for i in Pinewood.n(6400):
 		var p := Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary
 		if p.length() > layout.boundary:
 			continue
@@ -755,7 +913,7 @@ func _grass(rng: RandomNumberGenerator) -> void:
 		var reach := float(o.r) * 1.25 + 4.0
 		for i in int(PI * reach * reach * GRASS_PER_M2):
 			spots.append(o.centre + Vector2.from_angle(rng.randf() * TAU) * reach * sqrt(rng.randf()))
-	for i in 9000:
+	for i in Pinewood.n(9000):
 		spots.append(Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * layout.boundary)
 	for p in spots:
 		if p.length() > layout.boundary:
@@ -1374,6 +1532,16 @@ func _timber(key: String, params: Dictionary) -> Material:
 		return _mat("pw_" + key, params.get("wood", Color(0.55, 0.44, 0.32)))
 	var k := "timber_" + key + str(params)
 	if not _mats.has(k):
+		_mats[k] = timber_material(params)
+	return _mats[k]
+
+
+## Weathered timber (planks.gdshader) with `params` set, for a TimberMesh built outside the arena (TargetBalloon's
+## winch); one per set of params, shared.
+static var _timber_cache := {}
+static func timber_material(params: Dictionary) -> Material:
+	var k := str(params)
+	if not _timber_cache.has(k):
 		var m := ShaderMaterial.new()
 		m.shader = PLANKS_SHADER
 		var w := "res://assets/textures/planks/weathered_planks/weathered_planks"
@@ -1384,5 +1552,5 @@ func _timber(key: String, params: Dictionary) -> Material:
 		m.set_shader_parameter("scan_tint", Color(1.58, 1.3, 1.0))
 		for p in params:
 			m.set_shader_parameter(p, params[p])
-		_mats[k] = m
-	return _mats[k]
+		_timber_cache[k] = m
+	return _timber_cache[k]
