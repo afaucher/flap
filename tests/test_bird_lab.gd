@@ -36,8 +36,8 @@ func setup() -> void:
 		var p: BirdProfile = all[k]
 		var row := []
 		for s in LabScenarios.LIST:
-			if LabScenarios.is_pose(s):
-				continue
+			if LabScenarios.is_pose(s) or LabScenarios.in_forest(s):
+				continue   # (the route scenarios fly in the pine wood: test_route_view)
 			var b := Bird.new()
 			add_child(b)
 			b.setup(p, layout, null)
