@@ -1,7 +1,7 @@
 extends TestCase
 ## The pine wood (Pinewood), as grown: the same seed grows the same wood; pines stand clear below their crowns
 ## but for short dead stubs, their limbs and needles up in the crown; the oaks -- one in the clearing -- carry
-## long, nearly level limbs to perch on; every outpost is bolted to its trunk with a landing rail along its
+## long limbs to perch on (sloping no more than 25 deg: they needn't be level); every outpost is bolted to its trunk with a landing rail along its
 ## outer edge that is a perch, facing open air (wood and leaves clear for several metres out), left and right
 ## of the rail alike, with a way in every bird's planner takes (the final swoop onto the rail, the outposts being the
 ## bases birds rearm on); the AI's clearance queries see the decks; and the crowns leave sightlines. The stand has
@@ -246,9 +246,9 @@ func _oaks(a: ArenaLayout) -> void:
 		for br in t.branches:
 			var d: Vector3 = br.tip - br.root
 			var rise := rad_to_deg(atan2(d.y, Vector2(d.x, d.z).length()))
-			if br.perch_id >= 0 and d.length() > 3.5 and absf(rise) < 12.0:
+			if br.perch_id >= 0 and d.length() > 3.0 and absf(rise) < 25.0:
 				long_level += 1
-		check(long_level >= 8, "oak %d carries long, nearly level limbs to perch on (%d)" % [t.id, long_level])
+		check(long_level >= 8, "oak %d carries long limbs to perch on (%d)" % [t.id, long_level])
 	check(oaks >= 3, "a few oaks (%d)" % oaks)
 	check(in_clearing, "an oak stands in the clearing")
 
