@@ -14,6 +14,7 @@ static var extra := PackedStringArray()   ## options the menu adds to the comman
 
 
 func _ready() -> void:
+	mute_if_asked()
 	InputSetup.ensure_actions()
 	var args := OS.get_cmdline_user_args()
 	var i := args.find("--run-test")
@@ -25,6 +26,14 @@ func _ready() -> void:
 	if scene == "":
 		scene = MENU_SCENE if args.is_empty() else GAME_SCENE
 	get_tree().change_scene_to_file.call_deferred(scene)
+
+
+## FLAP_MUTE=1 (test_lib.ps1 starts every off-screen run so: tests, probes, shots, perf -Hidden) mutes the Master
+## bus's output: nothing reaches the speakers, but the mix still runs and an effect on the bus (AudioEffectRecord:
+## gpu_test_audible, probe_gun_audio) still gets the signal. FLAP_SOUND=1 makes the scripts leave it out.
+static func mute_if_asked() -> void:
+	if OS.get_environment("FLAP_MUTE") == "1":
+		AudioServer.set_bus_mute(0, true)
 
 
 ## The scene's options: the command line's, then the menu's.

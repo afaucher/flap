@@ -8,6 +8,8 @@
 # a windowed run (gpu_test_*, render probes) draws as usual, on the real GPU, but its window is never on screen,
 # never in the taskbar and can't take focus. (Off-screen --position is clamped back onto the screen, and a minimized
 # window stops Godot drawing.) FLAP_SHOW_WINDOWS=1 starts them on the user's desktop instead, to watch one.
+# They are silent too: each starts with FLAP_MUTE=1 in its environment (FlapHidden.ChildEnvironment), and Boot mutes
+# the Master bus's output (the mix runs, so gpu_test_audible still records it). FLAP_SOUND=1 to hear one.
 if (-not ('FlapTestProc' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
@@ -94,7 +96,7 @@ public static class FlapHidden {
         }
     }
 
-    const uint CREATE_SUSPENDED = 0x4, CREATE_NO_WINDOW = 0x08000000, EXTENDED_STARTUPINFO_PRESENT = 0x80000;
+    const uint CREATE_SUSPENDED = 0x4, CREATE_UNICODE_ENVIRONMENT = 0x400, CREATE_NO_WINDOW = 0x08000000, EXTENDED_STARTUPINFO_PRESENT = 0x80000;
     const int STARTF_USESTDHANDLES = 0x100;
     static readonly IntPtr PROC_THREAD_ATTRIBUTE_HANDLE_LIST = (IntPtr)0x20002;
 
@@ -110,8 +112,20 @@ public static class FlapHidden {
         }
     }
 
-    // `file args` on the hidden desktop, stdin from NUL, stdout/stderr on the streams returned. Only those three
-    // handles are inherited (so one run's pipes never stay open in another run started meanwhile), and the process
+    // The environment a run starts with: this process's, plus FLAP_MUTE=1 (Boot mutes the Master bus's output, so
+    // nothing reaches the speakers; the mix still runs, and an effect on the bus still records it) unless
+    // FLAP_SOUND=1 asks to hear it. Set in the child only: the caller's shell keeps its own environment.
+    static string ChildEnvironment() {
+        var vars = new System.Collections.Generic.SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables()) vars[(string)e.Key] = (string)e.Value;
+        if (Environment.GetEnvironmentVariable("FLAP_SOUND") != "1") vars["FLAP_MUTE"] = "1";
+        var sb = new StringBuilder();
+        foreach (var kv in vars) sb.Append(kv.Key).Append('=').Append(kv.Value).Append('\0');
+        return sb.ToString();   // (StringToHGlobalUni adds the block's final NUL)
+    }
+
+    // `file args` on the hidden desktop (and silent: ChildEnvironment), stdin from NUL, stdout/stderr on the streams
+    // returned. Only those three handles are inherited (so one run's pipes never stay open in another run started meanwhile), and the process
     // starts suspended until it is in the job and its Process is open, so its exit code and times can be read
     // however soon it exits.
     public static Process Start(string file, string args, out Stream stdout, out Stream stderr) {
@@ -130,6 +144,7 @@ public static class FlapHidden {
         IntPtr size = IntPtr.Zero;
         InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
         IntPtr attrs = Marshal.AllocHGlobal(size);
+        IntPtr env = Marshal.StringToHGlobalUni(ChildEnvironment());
         bool attrsMade = false;
         try {
             if (!InitializeProcThreadAttributeList(attrs, 1, 0, ref size)) throw new Win32Exception();
@@ -144,7 +159,7 @@ public static class FlapHidden {
             si.lpAttributeList = attrs;
             PROCESS_INFORMATION pi;
             if (!CreateProcessW(null, new StringBuilder("\"" + file + "\" " + args), IntPtr.Zero, IntPtr.Zero, true,
-                    CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, IntPtr.Zero, null, ref si, out pi))
+                    CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, env, null, ref si, out pi))
                 throw new Win32Exception();
             bool ready = false;
             try {
@@ -161,6 +176,7 @@ public static class FlapHidden {
         } finally {
             if (attrsMade) DeleteProcThreadAttributeList(attrs);
             Marshal.FreeHGlobal(attrs);
+            Marshal.FreeHGlobal(env);
             Marshal.FreeHGlobal(list);
             CloseHandle(outW); CloseHandle(errW); CloseHandle(nul);
         }

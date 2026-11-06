@@ -356,6 +356,20 @@ func _add_perch(p: Perch) -> void:
 	_add_to_hash(_perch_hash, Vector2(p.position.x, p.position.z), p.id)
 
 
+## The spatial hashes and the perches' reach, from `trees` and `perches` (MapFile, after reading a map: they aren't
+## kept). The escarpment's ROCK entry is not hashed (its queries test the rock itself).
+func rehash() -> void:
+	_tree_hash = {}
+	_perch_hash = {}
+	max_perch_reach = 0.0
+	for t: TreeData in trees:
+		if t.kind != Kind.ROCK:
+			_add_to_hash(_tree_hash, t.base, t.id)
+	for p in perches:
+		max_perch_reach = maxf(max_perch_reach, p.reach())
+		_add_to_hash(_perch_hash, Vector2(p.position.x, p.position.z), p.id)
+
+
 static func _cell(xz: Vector2) -> Vector2i:
 	return Vector2i(floori(xz.x / HASH_CELL), floori(xz.y / HASH_CELL))
 
