@@ -5028,5 +5028,19 @@
     "replace": "if (near + centre).length() >= reach - 1.0:"
    }
   ]
+ },
+ {
+  "id": "race-disc-over-rail",
+  "bug": "A white disc hung over the start rail the whole race, over the head of a bird sitting on it (the start/home marker, 2026-11-05).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_view.gd",
+    "find": "\t_home_ring.visible = next >= n - 1\n",
+    "replace": "\t_home_ring.visible = true\n\t_home_ring.scale = Vector3(0.5, 1.0, 0.5)\n"
+   }
+  ]
  }
 ]
