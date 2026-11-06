@@ -3,6 +3,7 @@ extends TestCase
 ##   .\probe.ps1 -Headless probe_race [--seed 7] [--course <n>] [--out <dir>] [--skills recruit,pilot,ace]
 ##                                    [--birds crow,owl,hawk,falcon,sparrow] [--seconds 150] [--no-trials]
 ##                                    [--plan-for <birds>] (the birds the course is planned for: RaceCourse.Envelope)
+##                                    [--style <RaceCourse.STYLES>] [--guides] (the figure-eights tried) [--pool]
 ## Prints the course gate by gate (kind, height, leg, climb, the turn at the gate before, the tightest radius a smooth
 ## line needs) against each bird's turning circle (at cruise: AIPilot.cruise_turn_radius; at its tightest: 1.2 x its
 ## stall speed at its bank limit), then races every bird at every skill (RaceTrial, all at once: they don't collide)
@@ -34,6 +35,13 @@ func setup() -> void:
 	print("RACE planned for %s: turning circle %.1f m, half span %.2f m, way in %.1f m, way out %.1f m, level run-in %.1f m" % [",".join(plan_for), course.envelope.turn_r, course.envelope.half_span, course.envelope.entry(), course.envelope.exit(), course.envelope.dive_run()])
 	print("RACE arena %d course %d: %d gates, %.0f m, built in %.0f ms; start perch %d at (%.1f, %.1f, %.1f)" % [arena_seed, course_seed,
 		course.gates.size(), course.length(), course.build_ms, course.start.id, course.start.position.x, course.start.position.y, course.start.position.z])
+	if Boot.arg_value(args, "--eight-from") != "":   # (one figure-eight try, as far as it gets: --eight-from <perch>,<n>)
+		var ef := Boot.arg_value(args, "--eight-from").split(",")
+		course.start = layout.perches[int(ef[0])]
+		course._guide_for(course._eight_guides()[int(ef[1])])
+		course.why = {}
+		course._search()
+		print("RACE eight try: %d gates, %s" % [course.gates.size(), course.why])
 	var probs := course.problems()
 	print("RACE candidates: %d (%d checked); options turned away: %s" % [course._pool.size(), course._valid.size(), course.why])
 	print("RACE rules: ", "all kept" if probs.is_empty() else "; ".join(probs))
@@ -170,6 +178,28 @@ func _svg(course: RaceCourse, layout: ArenaLayout, trial: RaceTrial) -> void:
 				var v: Vector2 = at.call(p)
 				pts.append("%.0f,%.0f" % [v.x, v.y])
 			s.append('<polyline points="%s" fill="none" stroke="%s" stroke-width="1.6" opacity="0.8"/>' % [" ".join(pts), colors.get(e.skill, "#333")])
+	if OS.get_cmdline_user_args().has("--guides"):   # (the figure-eights the search would try first, faint)
+		var kept := [course._guide, course._guide_s]
+		for t in course._eight_guides():
+			course._guide_for(t)
+			var gp := PackedStringArray()
+			for q in course._guide:
+				var v: Vector2 = at.call(Vector3(q.x, 0.0, q.y))
+				gp.append("%.0f,%.0f" % [v.x, v.y])
+			s.append('<polyline points="%s" fill="none" stroke="#c040c0" stroke-width="1.5" opacity="0.6"/>' % " ".join(gp))
+		course._guide = kept[0]
+		course._guide_s = kept[1]
+	if OS.get_cmdline_user_args().has("--pool"):   # (every candidate gate that's clear, as a dot)
+		for i in course._pool.size():
+			if course._ok(i):
+				var v: Vector2 = at.call(course._pool[i].centre)
+				s.append('<circle cx="%.0f" cy="%.0f" r="2" fill="%s"/>' % [v.x, v.y, "#ff8080" if course._pool[i].kind == "post" else "#60a0ff"])
+	if not course._guide.is_empty():   # (a figure-eight: the guide the search followed)
+		var gp := PackedStringArray()
+		for q in course._guide:
+			var v: Vector2 = at.call(Vector3(q.x, 0.0, q.y))
+			gp.append("%.0f,%.0f" % [v.x, v.y])
+		s.append('<polyline points="%s" fill="none" stroke="#c040c0" stroke-width="%.0f" opacity="0.25"/>' % [" ".join(gp), RaceCourse.EIGHT_OFF * 2.0 * px])
 	# Legs, coloured by the height they end at.
 	var lo := INF
 	var hi := -INF
