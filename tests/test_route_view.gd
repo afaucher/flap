@@ -2,7 +2,7 @@ extends TestCase
 ## The bird lab's route view (RouteView) draws what the AI plans, read back from its meshes:
 ##  - flying the lab's rail scenarios (a falcon, then a crow, sent to land on the race's start rail in the pine wood),
 ##    sampled through the flight: the drawn route is AIPilot.route point for point (each version of it as it
-##    replans), the waypoint dots the same points, the line to the current waypoint from the bird to route[wp], the
+##    replans; one replan is made part way if it makes none), the waypoint dots the same points, the line to the current waypoint from the bird to route[wp], the
 ##    target's grip line its perch's a -> b and its approach ring round the route's last point but one (the approach
 ##    point), the predicted path AIPilot.predicted from beside the bird;
 ##  - the lattice: every node drawn is a planner node within the radius, the usable ones those FlightPlanner.node_usable
@@ -59,6 +59,8 @@ func _follow(layout: ArenaLayout, arena: ArenaBuilder, id: String, s: Dictionary
 	var landed := false
 	for i in 1500:
 		await frames(1)
+		if i == 120 and routes.size() < 2 and ai.target != null and b.state == Bird.State.FLYING:
+			ai._replan(b)   # (a plan made afresh part way, if it hasn't made one of its own: the view must follow it)
 		view.refresh()
 		if b.state != Bird.State.FLYING:
 			landed = b.state == Bird.State.PERCHED

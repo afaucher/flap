@@ -70,6 +70,13 @@ static func _limb(a: ArenaLayout, t: ArenaLayout.TreeData, y: float, dir: Vector
 	return p
 
 
+## A limb of `t` (no perch) across the middle of each swoop in to `goal` (FlightPlanner.ways_in): no way in is left.
+static func _block_ways_in(a: ArenaLayout, t: ArenaLayout.TreeData, goal: Perch, p: BirdProfile) -> void:
+	for d in FlightPlanner.ways_in(goal, goal.position + goal.facing):
+		var mid := FlightPlanner.approach_point(goal, p, d).lerp(goal.approach_anchor(), 0.5)
+		_limb(a, t, mid.y, Vector3(mid.x - t.base.x, 0.0, mid.z - t.base.y), Vector2(mid.x - t.base.x, mid.z - t.base.y).length() + 1.0, 0.0, false)
+
+
 func _bird(id: String, layout: ArenaLayout, pilot: AIPilot, arena: ArenaBuilder = null) -> Bird:
 	var b := Bird.new()
 	add_child(b)
@@ -89,6 +96,7 @@ static func _going(pilot: AIPilot, target: Perch, route: Array) -> void:
 	pilot._attempt_start = pilot.clock
 	pilot._progress_clock = pilot.clock
 	pilot._min_dist = INF
+	pilot.lined_up = true   # (the route as given: no line-up for the final in its place)
 
 
 func _free_all(nodes: Array) -> void:
@@ -263,7 +271,8 @@ func _takeoff_own_tree() -> void:
 
 ## Routes: leaving a tree toward a perch behind its own trunk, the first leg passes the trunk, not through it; a
 ## bird on a stub right against its trunk still gets a route out; a perch whose swoop in from its approach point
-## another limb of the same tree crosses gets no route (one without that limb does).
+## another limb of the same tree crosses is come in to another way, and with limbs across every way in gets no
+## route (one without them does).
 func _routes_round_own_trees() -> void:
 	var layout := ArenaLayout.new()
 	var t := _tree(layout, 0.0, 0.0, 15.0, 0.4)
@@ -286,7 +295,11 @@ func _routes_round_own_trees() -> void:
 	check(open_route.size() >= 3, "the swoop in is open: a route")
 	_limb(layout, far, mid.y, Vector3(mid.x - far.base.x, 0.0, mid.z - far.base.y), Vector2(mid.x - far.base.x, mid.z - far.base.y).length() + 1.0, 0.0, false)
 	planner = FlightPlanner.new(layout)
-	check(planner.plan_to_perch(sat.position, goal, crow, t.id, sat.id).is_empty(), "another limb of its tree across the swoop in: no route")
+	var other := planner.plan_to_perch(sat.position, goal, crow, t.id, sat.id)
+	check(other.size() >= 3 and planner.way.dot(goal.facing) < 0.99, "another limb of its tree across the swoop in square on: it comes in another way (%d points, way %s)" % [other.size(), str(planner.way)])
+	_block_ways_in(layout, far, goal, crow)
+	planner = FlightPlanner.new(layout)
+	check(planner.plan_to_perch(sat.position, goal, crow, t.id, sat.id).is_empty(), "limbs of its tree across every swoop in: no route")
 
 
 ## Routes out of tight spots: deep in its own crown (every way out passes close to another of its limbs) it leaves
@@ -354,15 +367,14 @@ func _no_goal_still_avoids() -> void:
 		await _free_all([b])
 
 
-## A perch it can't plan a route to (another limb of its tree across the swoop in) is set aside, not picked
+## A perch it can't plan a route to (limbs of its tree across every swoop in) is set aside, not picked
 ## again every second.
 func _sets_aside_perch_without_route() -> void:
 	var layout := ArenaLayout.new()
 	var t := _tree(layout, 0.0, -30.0, 20.0, 0.3)
 	var goal := _limb(layout, t, 9.0, Vector3(0.0, 0.0, 1.0), 3.0)   # (faces +x)
 	var crow := BirdProfile.crow()
-	var mid := FlightPlanner.approach_point(goal, crow).lerp(goal.approach_anchor(), 0.5)
-	_limb(layout, t, mid.y, Vector3(mid.x - t.base.x, 0.0, mid.z - t.base.y), Vector2(mid.x - t.base.x, mid.z - t.base.y).length() + 1.0, 0.0, false)
+	_block_ways_in(layout, t, goal, crow)
 	var pilot := AIPilot.new(layout, 3)
 	var b := _bird("crow", layout, pilot)
 	b.fly_from(Vector3(0.0, 10.0, 0.0), Vector3.FORWARD, 8.0)

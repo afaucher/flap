@@ -25,6 +25,9 @@ var _node_ok := {}      ## Vector3i -> bool
 var _a_perch := -1      ## the perch the route leaves (its branch is skipped), for the plan in progress
 var _b_perch := -1      ## the perch it lands on
 var _a_through := false ## leaving through its own tree (no way out past it)
+var way := Vector3.ZERO ## the way in the last plan_to_perch came in by (from the perch out)
+var heading := Vector3.ZERO   ## the way the bird is flying (horizontal; zero: perched), for ways_in's choice ...
+var turn_r := 0.0             ## ... and its turning circle there
 
 
 func _init(l: ArenaLayout, c := 0.9) -> void:
@@ -32,53 +35,176 @@ func _init(l: ArenaLayout, c := 0.9) -> void:
 	clearance = c
 
 
-## Where the final approach starts: out along the perch's facing and a little below it, so the bird
-## dives under and swoops up into the perch (bleeding speed on the way up, as birds do).
-static func approach_point(p: Perch, profile: BirdProfile) -> Vector3:
-	return p.approach_anchor() + p.facing * approach_length(profile) + Vector3.DOWN * 1.2
+## Where the final approach starts: out from the perch along `dir` (the way in: default the perch's facing) and a little
+## below it, so the bird dives under and swoops up into the perch (bleeding speed on the way up, as birds do).
+static func approach_point(p: Perch, profile: BirdProfile, dir := Vector3.ZERO) -> Vector3:
+	return p.approach_anchor() + _way(p, dir) * approach_length(profile) + Vector3.DOWN * approach_drop(profile)
 
 
 ## A point twice as far out, so the bird reaches the approach point already lined up with the perch.
-static func pre_approach_point(p: Perch, profile: BirdProfile) -> Vector3:
-	return p.approach_anchor() + p.facing * approach_length(profile) * 2.0 + Vector3.DOWN * 0.6
+static func pre_approach_point(p: Perch, profile: BirdProfile, dir := Vector3.ZERO) -> Vector3:
+	return p.approach_anchor() + _way(p, dir) * approach_length(profile) * 2.0 + Vector3.DOWN * approach_drop(profile) * 0.5
+
+
+## m below the perch the final swoop starts: the height a bird gliding at its best speed zooms up as it slows to its
+## catch speed (catch_speed), less what the drag takes (ZOOM_KEPT) -- a falcon's ~1.9 m, a sparrow's ~0.7. A bird
+## that can't climb the swoop arrives under the branch; one that starts too high arrives too fast.
+static func approach_drop(profile: BirdProfile) -> float:
+	var v := catch_speed(profile)
+	return clampf((profile.v_best * profile.v_best - v * v) / (2.0 * BirdProfile.G) * ZOOM_KEPT, DROP.x, DROP.y)
+
+
+## m/s: the speed to arrive at a perch at -- the middle of the bird's window between its stall and the fastest it can
+## catch at.
+static func catch_speed(profile: BirdProfile) -> float:
+	return (profile.v_stall + profile.grab_speed_max) * 0.5
+
+
+const ZOOM_KEPT := 0.6           ## share of the zoom's height the drag leaves it
+const DROP := Vector2(0.6, 2.5)  ## m: the approach drop at least and at most
+
+
+static func _way(p: Perch, dir: Vector3) -> Vector3:
+	return dir if dir != Vector3.ZERO else p.facing
 
 
 static func approach_length(profile: BirdProfile) -> float:
 	return maxf(6.0, profile.v_best * 0.8)
 
 
+## The ways in to perch `p` (horizontal, from the perch out to where the approach starts), the side `from` is on first:
+## a branch's from either side across it, square on and WAY_SKEW deg either way (along it the trunk or the tip is in
+## the way); a treetop's from every side. Given the way the bird is flying (`heading`) and its turning circle (`turn_r`),
+## the one it can line up on soonest first instead: the shortest turn-straight-turn path (Dubins) from `from` to each
+## one's approach point, heading in -- near it (LINEUP_NEAR turning circles), one whose path is clear of `layout`'s wood
+## before one whose isn't.
+static func ways_in(p: Perch, from: Vector3, profile: BirdProfile = null, heading := Vector3.ZERO, turn_r := 0.0, layout: ArenaLayout = null, clearance := 0.9) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if p.kind == Perch.Kind.TREETOP:
+		for k in 8:
+			out.append(p.facing.rotated(Vector3.UP, TAU * k / 8.0))
+	else:
+		for side: float in [1.0, -1.0]:
+			for skew: float in [0.0, WAY_SKEW, -WAY_SKEW]:
+				out.append((p.facing * side).rotated(Vector3.UP, deg_to_rad(skew)))
+	var to := Vector3(from.x - p.position.x, 0.0, from.z - p.position.z)
+	if profile != null and heading != Vector3.ZERO and turn_r > 0.0:
+		var cost := {}
+		for d in out:
+			var app := approach_point(p, profile, d)
+			if on_line(p, profile, d, from, heading):
+				cost[d] = Vector2(app.x - from.x, app.z - from.z).length()   # (in on it already: straight in)
+				continue
+			var ways := Dubins.all(Vector2(from.x, from.z), Vector2(heading.x, heading.z).normalized(), Vector2(app.x, app.z), Vector2(-d.x, -d.z).normalized(), turn_r)
+			cost[d] = (ways[0] as PackedVector2Array).size() if not ways.is_empty() else INF
+			if layout != null and cost[d] < INF and Vector2(app.x - from.x, app.z - from.z).length() < LINEUP_NEAR * turn_r + LINEUP_NEAR_PAD 					and not _turn_clear(layout, ways[0], from.y, maxf(app.y, clearance + 0.5), AIPilot.lineup_clearance(profile)):
+				cost[d] += BLOCKED_LINEUP   # (near: a way in it can't turn onto clear of the wood comes after those it can)
+		out.sort_custom(func(x: Vector3, y: Vector3): return cost[x] < cost[y])
+	elif to.length() > 0.5:
+		var t := to.normalized()
+		out.sort_custom(func(x: Vector3, y: Vector3): return x.dot(t) > y.dot(t))
+	return out
+
+
+## Is a bird at `from` flying `heading` already on the way in `d` to perch `p`: out in front of the perch along it (at
+## least half the approach's length), nose within ON_LINE_DEG of it, and as near its line as the final can correct?
+static func on_line(p: Perch, profile: BirdProfile, d: Vector3, from: Vector3, heading: Vector3) -> bool:
+	var to := p.approach_anchor() - from
+	var inward := -Vector3(d.x, 0.0, d.z).normalized()
+	var along := Vector3(to.x, 0.0, to.z).dot(inward)
+	var side := (Vector3(to.x, 0.0, to.z) - inward * along).length()
+	return along > approach_length(profile) * 0.5 and heading.dot(inward) > cos(deg_to_rad(ON_LINE_DEG)) and side < ON_LINE_SIDE + along * 0.15
+
+
+const ON_LINE_DEG := 25.0
+const ON_LINE_SIDE := 1.0        ## m off the line (and 15% of the way in) a bird on the way in may be
+
+
+## Is the turn-straight-turn path `flat` (x, z points; its height eased from `y0` to `y1`) clear of the wood by `c`?
+static func _turn_clear(layout: ArenaLayout, flat: PackedVector2Array, y0: float, y1: float, c: float) -> bool:
+	var n := flat.size()
+	var prev := Vector3(flat[0].x, y0, flat[0].y)
+	for q in range(2, n + 1, 2):
+		var k := mini(q, n - 1)
+		var pt := Vector3(flat[k].x, lerpf(y0, y1, smoothstep(0.0, 1.0, float(k) / maxf(n - 1, 1))), flat[k].y)
+		if not layout.segment_clear(prev, pt, c):
+			return false
+		prev = pt
+	return true
+
+
+const LINEUP_NEAR := 3.0         ## turning circles (and LINEUP_NEAR_PAD m) from an approach point within which a way in's
+const LINEUP_NEAR_PAD := 25.0    ## line-up path must be clear to be first choice
+const BLOCKED_LINEUP := 1000.0
+const WAY_SKEW := 35.0   ## deg a way in to a branch may come in off square across it
+const WAYS_PLANNED := 3  ## open ways in planned to (best first) before giving up on a perch
+
+
 ## Waypoints from `from` to perch `p` (ending at its approach anchor, on the outer part of the branch), or [] if no route was found.
 ## `from_tree`: the tree the bird is leaving (passed closer on the first leg, which starts right beside it;
-## `from_perch` the perch it is on there). The perch's own tree is passed closer on the last legs.
+## `from_perch` the perch it is on there). The perch's own tree is passed closer on the last legs. It comes in by the
+## first way in (ways_in: the side it's on first) whose final swoop is clear and that it finds a route to; the way
+## chosen is left in `way`.
 func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -1, from_perch := -1) -> Array[Vector3]:
-	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
-	var app := approach_point(p, profile)
-	app.y = maxf(app.y, clearance + 0.5)
-	var pre := pre_approach_point(p, profile)
-	pre.y = maxf(pre.y, clearance + 0.5)
 	var none: Array[Vector3] = []
-	if not swoop_clear(p, profile):
-		return none
-	_a_perch = from_perch
+	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
+	var tried := 0
+	# (Of those, the ways it can line up on through their pre-approach point first: with that leg closed the route turns
+	# straight onto the approach, sharper than a wide turner can.)
 	_b_perch = p.id
-	# Line up through the pre-approach point when that leg is open; otherwise straight to the approach point.
-	var lined_up := _leg_ok(pre, app, -1, p.tree_id)
-	var route := plan(start, pre if lined_up else app, from_tree, p.tree_id, from_perch, p.id)
-	if route.is_empty():
+	var through: Array[Vector3] = []
+	var not_through: Array[Vector3] = []
+	for d in ways_in(p, from, profile, heading, turn_r, layout, clearance):
+		var a := approach_point(p, profile, d)
+		a.y = maxf(a.y, clearance + 0.5)
+		var q := pre_approach_point(p, profile, d)
+		q.y = maxf(q.y, clearance + 0.5)
+		if _leg_ok(q, a, -1, p.tree_id) or (heading != Vector3.ZERO and on_line(p, profile, d, start, heading)):
+			through.append(d)
+		else:
+			not_through.append(d)
+	through.append_array(not_through)
+	for d in through:
+		if tried >= WAYS_PLANNED:
+			break
+		if not swoop_clear(p, profile, d):
+			continue
+		tried += 1
+		var app := approach_point(p, profile, d)
+		app.y = maxf(app.y, clearance + 0.5)
+		var pre := pre_approach_point(p, profile, d)
+		pre.y = maxf(pre.y, clearance + 0.5)
+		_a_perch = from_perch
+		_b_perch = p.id
+		# Line up through the pre-approach point when that leg is open (and the bird isn't in on the line already: it
+		# needn't go back out); otherwise straight to the approach point.
+		var lined_up := not (heading != Vector3.ZERO and on_line(p, profile, d, start, heading)) and _leg_ok(pre, app, -1, p.tree_id)
+		var route := plan(start, pre if lined_up else app, from_tree, p.tree_id, from_perch, p.id)
+		if route.is_empty():
+			continue
+		if lined_up:
+			route.append(app)
+		route.append(p.approach_anchor())
+		way = d
 		return route
-	if lined_up:
-		route.append(app)
-	route.append(p.approach_anchor())
-	return route
+	return none
 
 
-## Is the final swoop from the approach point onto perch `p` clear (the wood by `clearance`, its own tree closer)?
-## Without it, there's no route to the perch.
-func swoop_clear(p: Perch, profile: BirdProfile) -> bool:
-	var app := approach_point(p, profile)
+## Is the final swoop from the approach point along `dir` (default: the perch's facing) onto perch `p` clear (the wood
+## by `clearance`, its own tree closer)?
+func swoop_clear(p: Perch, profile: BirdProfile, dir := Vector3.ZERO) -> bool:
+	var app := approach_point(p, profile, dir)
 	app.y = maxf(app.y, clearance + 0.5)
 	_b_perch = p.id
 	return _leg_ok(app, p.approach_anchor(), -1, p.tree_id)
+
+
+## Has perch `p` any way in (ways_in) whose final swoop is clear? Without one, there's no route to it.
+func has_way_in(p: Perch, profile: BirdProfile) -> bool:
+	for d in ways_in(p, p.position + p.facing):
+		if swoop_clear(p, profile, d):
+			return true
+	return false
 
 
 ## Waypoints from `a` to `b` through free air (both included), or [] if none found. `a_tree` is ignored on

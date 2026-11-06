@@ -183,7 +183,7 @@ func _leaves_base(turned: float) -> void:
 	await frames(2)
 
 
-## Empty, with a base it can't plan the final swoop onto (a branch perch with the wood in the way): it heads that way
+## Empty, with a base it can't plan the final swoop onto from any side (a branch perch boxed in by its tree's limbs): it heads that way
 ## and tries again now and then, rather than planning routes every tick -- to its base, then to any other perch.
 func _no_way_in() -> void:
 	var layout := Pinewood.generate(ARENA_SEED)
@@ -193,12 +193,26 @@ func _no_way_in() -> void:
 	var base: Perch = null
 	var start := Vector3.ZERO
 	for p in layout.perches:
-		if p.position.y < 8.0 or p.position.y > 20.0 or Vector2(p.position.x, p.position.z).length() > 50.0 or planner.swoop_clear(p, prof) or tight.swoop_clear(p, prof):
+		if p.kind != Perch.Kind.BRANCH or p.position.y < 8.0 or p.position.y > 20.0 or Vector2(p.position.x, p.position.z).length() > 50.0:
 			continue
 		start = p.position + p.facing * 20.0 + Vector3.UP * 6.0
 		if layout.obstacle_distance(start) > 3.0:
 			base = p
 			break
+	if base != null:
+		# (Every perch in the wood has a way in from some side now: this one is boxed in by two more limbs of its tree,
+		# along it either side, a little below.)
+		var along := (base.b - base.a).normalized()
+		for side: float in [1.0, -1.0]:
+			var br := ArenaLayout.BranchData.new()
+			br.tree_id = base.tree_id
+			br.radius = 0.06
+			var off := base.facing * side * 0.8 + Vector3.DOWN * 0.25
+			br.root = base.a + off - along * 0.6
+			br.tip = base.b + off + along * 0.6
+			layout.trees[base.tree_id].branches.append(br)
+		if planner.has_way_in(base, prof) or tight.has_way_in(base, prof):
+			base = null
 	check(base != null, "a perch with no way in for a crow")
 	if base == null:
 		return

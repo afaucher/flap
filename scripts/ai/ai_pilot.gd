@@ -51,6 +51,15 @@ const ATTEMPT_TIME := 25.0      ## s to reach a perch before giving it up for GI
 const GIVE_UP_TIME := 60.0
 var _stick := Vector2.ZERO
 var _settling := false          ## steer() let the bird settle onto the ground (spent, low and slow)
+var _around_until := -INF       ## clock until which it flies a go-around (_go_around; -INF: not going round)
+var _around_dir := Vector3.ZERO
+var go_arounds := 0
+var lined_up := false           ## the route's last legs are a line-up (_line_up), or one was tried for this route
+var _aim_ahead := AIM_AHEAD     ## m along the route it aims ahead (further on a line-up's turn: the bank it needs; to
+                                ## the approach point and on, AIM_AHEAD)
+var _spiralling := false        ## circling down to lose height before the approach (_spiral)
+var _spiral_side := 1.0
+var _v_cap := INF               ## this tick's speed for the lift's bank cap (_bank_room; INF: none)
 
 
 func _init(l: ArenaLayout, s := 1) -> void:
@@ -98,6 +107,8 @@ func _perched(bird: Bird) -> FlightInput:
 	if mode != Mode.PERCHED:
 		mode = Mode.PERCHED
 		perches_reached += 1
+		bird.candidate_lock = null
+		_around_until = -INF
 		rest_until = clock + rng.randf_range(0.6, 1.5)
 		target = null
 	_last_tree = bird.perch.tree_id if bird.perch != null else -1   # (also for a bird that spawned perched)
@@ -186,6 +197,7 @@ func _best_perch(bird: Bird, climb_budget: float, floor_y: float) -> Perch:
 func go_to_perch(bird: Bird, perch: Perch) -> void:
 	target = perch
 	_attempt_start = clock
+	_around_until = -INF
 	if bird.state == Bird.State.FLYING:
 		mode = Mode.CRUISE
 	_replan(bird)
@@ -199,15 +211,132 @@ func gave_up_on(perch: Perch) -> bool:
 func _replan(bird: Bird) -> void:
 	replans += 1
 	var p0 := Perf.t()
+	var fd := bird.model.flight_dir()
+	planner.heading = Vector3(fd.x, 0.0, fd.z).normalized() if bird.state == Bird.State.FLYING and Vector2(fd.x, fd.z).length() > 1e-3 else Vector3.ZERO
+	planner.turn_r = _held_radius(bird.profile, maxf(bird.model.speed, bird.profile.v_best), minf(bird.global_position.y, target.position.y)) * LINEUP_MARGIN
 	route = planner.plan_to_perch(bird.global_position + bird.model.flight_dir() * 0.5, target, bird.profile, _last_tree, bird.perch.id if bird.perch != null else -1)
 	Perf.add("ai.plan", p0)
 	wp = 1
+	lined_up = false
+	_aim_ahead = AIM_AHEAD
 	_min_dist = INF
 	_progress_clock = clock
 	if route.is_empty():
 		debug_reason = "no route"
 		_given_up[target.id] = clock + GIVE_UP_TIME   # (no way in: don't pick it again straight away)
 		target = null
+
+
+## Missed the catch: go around -- out and up, away from the perch's tree (not on over the deck or into its limbs), for
+## about a turning circle and a half, then plan the approach afresh from there.
+func _go_around(bird: Bird) -> void:
+	var pos := bird.global_position
+	var fd := bird.model.flight_dir()
+	var h := Vector3(fd.x, 0.0, fd.z).normalized() if Vector2(fd.x, fd.z).length() > 1e-3 else bird.facing
+	var t: ArenaLayout.TreeData = bird.layout.trees[target.tree_id] if target.tree_id >= 0 and target.tree_id < bird.layout.trees.size() else null
+	var away := Vector3(pos.x - t.base.x, 0.0, pos.z - t.base.y) if t != null else Vector3.ZERO
+	_around_dir = (h + away.normalized()).normalized() if away.length() > 0.1 and (h + away.normalized()).length() > 0.1 else h
+	var v := maxf(bird.model.speed, 1.0)
+	_around_until = clock + clampf(1.5 * _held_radius(bird.profile, v, pos.y) / v, AROUND_TIME.x, AROUND_TIME.y)
+	go_arounds += 1
+	bird.candidate_lock = null
+
+
+## Line up for the final: a turn-straight-turn path (Dubins) on the turning circle it holds at its speed (with a
+## margin), from where it is and the way it's flying to the approach point, arriving heading in along the way in. The
+## planned route doesn't know which way the bird is flying: a wide turner reaching its last points still turning
+## overshoots the line onto the perch and misses to the side. Taken in place of the route's last legs if every chord
+## is clear of the wood (lineup_clearance) and it isn't long (a turning circle round and LINEUP_PAD m); true if it was.
+func _line_up(bird: Bird) -> bool:
+	lined_up = true
+	var p := bird.profile
+	var m := bird.model
+	var pos := bird.global_position
+	var way := planner.way if planner.way != Vector3.ZERO else target.facing
+	var app := FlightPlanner.approach_point(target, p, way)
+	app.y = maxf(app.y, planner.clearance + 0.5)
+	var r := _held_radius(p, maxf(m.speed, p.v_best), minf(pos.y, app.y)) * LINEUP_MARGIN
+	var fd := m.flight_dir()
+	var d0 := Vector2(fd.x, fd.z)
+	if d0.length() < 1e-3:
+		return false
+	if FlightPlanner.on_line(target, p, way, pos, Vector3(fd.x, 0.0, fd.z).normalized()):
+		# (In on the line already: on to the approach point if it's still ahead, then in.)
+		var along := (app - pos).dot(-Vector3(way.x, 0.0, way.z).normalized())
+		var straight: Array[Vector3] = [pos]
+		if along > AIM_AHEAD:
+			straight.append(app)
+		straight.append(target.approach_anchor())
+		route = straight
+		wp = 1
+		return true
+	var p0 := Perf.t()
+	for flat: PackedVector2Array in Dubins.all(Vector2(pos.x, pos.z), d0.normalized(), Vector2(app.x, app.z), Vector2(-way.x, -way.z).normalized(), r):
+		var n := flat.size()
+		if n < 2 or n > TAU * r + LINEUP_PAD:
+			continue
+		var pts: Array[Vector3] = []
+		for q in n:
+			pts.append(Vector3(flat[q].x, lerpf(pos.y, app.y, smoothstep(0.0, 1.0, float(q) / (n - 1))), flat[q].y))
+		var clear := true
+		for q in range(0, n - 1, 2):
+			if not bird.layout.segment_clear(pts[q], pts[mini(q + 2, n - 1)], lineup_clearance(p)):
+				clear = false
+				break
+		if clear:
+			pts[0] = pos
+			pts.append(target.approach_anchor())
+			route = pts
+			wp = 1
+			_aim_ahead = maxf(AIM_AHEAD, r * 0.8)   # (the bank the turn needs, by the guidance's own law)
+			Perf.add("ai.plan", p0)
+			return true
+	Perf.add("ai.plan", p0)
+	return false
+
+
+## Energy for the final: the height over the approach point and the speed over cruise (as height), less what a glide
+## that brakes a little loses on the way there (DESCENT_GRADE per metre). Far over (SPIRAL_START m), it circles down
+## where it is -- a turn its lift holds, gliding steeply, no wingbeats -- until it's nearly back on (SPIRAL_STOP), then
+## plans the rest from there: diving the height away would arrive too fast to catch, and a bird can't brake while
+## it's still coming down. The FlightInput of a tick spent circling, or null.
+func _spiral(bird: Bird, dt: float) -> FlightInput:
+	if route.size() < 3 or wp >= route.size() - 1:
+		_spiralling = false
+		return null
+	var p := bird.profile
+	var m := bird.model
+	var pos := bird.global_position
+	var app := route[route.size() - 2]
+	var excess := (pos.y - app.y) + (m.speed * m.speed - p.v_best * p.v_best) / (2.0 * BirdProfile.G) 			- Vector2(app.x - pos.x, app.z - pos.z).length() * DESCENT_GRADE / p.glide_ratio
+	if excess > SPIRAL_START or (_spiralling and excess > SPIRAL_STOP):
+		if not _spiralling:
+			_spiralling = true
+			_spiral_side = -1.0 if _signed_heading(m.flight_dir(), app - pos) < 0.0 else 1.0   # (turning toward where it's going)
+		var r := _held_radius(p, maxf(m.speed, p.v_best), pos.y)
+		var fd := m.flight_dir()
+		var ahead := Vector3(fd.x, 0.0, fd.z).normalized().rotated(Vector3.UP, -_spiral_side * 0.9)
+		var inp := steer(bird, pos + ahead * r, dt, {"gamma": -SPIRAL_GAMMA, "flap": "none", "lift_cap": true, "cruise": p.v_best})
+		_progress_clock = clock   # (circling down is progress)
+		return inp if _settling else FlightInput.new(inp.stick, false, inp.flap_held)
+	if _spiralling:
+		_spiralling = false
+		_replan(bird)
+		if route.is_empty():   # (no way on from here: glide on, and choose again)
+			return _hold_glide(bird, dt)
+	return null
+
+
+## m a line-up's path keeps from the wood: half a wingspan and a margin, at least the avoidance's own (a line-up is
+## flown with the avoidance on; the planner's wider berth is for routes it hasn't turned onto yet).
+static func lineup_clearance(p: BirdProfile) -> float:
+	return maxf(WHISKER_CLEARANCE + 0.2, p.span * 0.5 + 0.35)
+
+
+## m, its turning circle at speed v and height y: the bank it holds there (held_bank) within what guidance allows at
+## that height (_bank_room: its usual 85% of the limit, less near the ground).
+static func _held_radius(p: BirdProfile, v: float, y := INF) -> float:
+	return v * v / (BirdProfile.G * tan(_bank_room(p, y, 0.85, v)))
 
 
 func _fly(bird: Bird, dt: float) -> FlightInput:
@@ -228,6 +357,14 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 	# and leave that one alone for a while.
 	if clock - _attempt_start > ATTEMPT_TIME:
 		return _give_up(bird, dt)
+	if _around_until > -INF:
+		if clock < _around_until:   # (going around: out and climbing, then a fresh approach)
+			var ga := steer(bird, pos + _around_dir * 20.0 + Vector3.UP * 4.0, dt, {"cruise": p.v_best, "lift_cap": true})
+			return ga if _settling else FlightInput.new(ga.stick, false, ga.flap_held)
+		_around_until = -INF
+		_replan(bird)
+		if route.is_empty():
+			return _hold_glide(bird, dt)
 	if dist_perch < _min_dist - 0.5:
 		_min_dist = dist_perch
 		_progress_clock = clock
@@ -238,11 +375,22 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 		if route.is_empty():
 			return _hold_glide(bird, dt)
 
+	# Too much energy for the way left (high above the approach, or fast): circle down here first, then plan on.
+	var spiral := _spiral(bird, dt)
+	if spiral != null:
+		return spiral
+
+	# Near enough the approach point, line up for it (once a route).
+	if not lined_up and route.size() >= 3 and wp < route.size() - 1:
+		var app := route[route.size() - 2]
+		if Vector2(app.x - pos.x, app.z - pos.z).length() < LINEUP_RUNS * _held_radius(p, maxf(m.speed, p.v_best), minf(pos.y, app.y)) + LINEUP_REACH:
+			_line_up(bird)
+
 	# Advance along the route.
 	while wp < route.size() - 1:
 		var to_wp := route[wp] - pos
 		var seg := route[wp] - route[wp - 1]
-		if to_wp.length() < 3.0 or (seg.length() > 0.1 and to_wp.dot(seg) < 0.0):
+		if to_wp.length() < (_aim_ahead if wp < route.size() - 2 else AIM_AHEAD) or (seg.length() > 0.1 and to_wp.dot(seg) < 0.0):
 			wp += 1
 		else:
 			break
@@ -254,11 +402,14 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 		# path should meet the branch from level or above (the swoop up from the approach point does that).
 		aim = target.approach_anchor() + Vector3.UP * AIM_HIGH
 
-	var opts := {"route": true}
+	var opts := {"route": true, "cruise": p.v_best, "lift_cap": true}
+	if wp >= route.size() - 2:
+		opts.cruise = p.v_best / CRUISE_OVER   # (on the approach: no wingbeats above its cruise -- no speed it must lose to catch)
+		opts.slow_to = p.v_best                # (and come down to it by the approach point: the final bleeds the rest)
 	if final and target.position.y < 5.0:
 		opts.floor = 0.8   # (landing low)
 	if final and dist_perch < maxf(10.0, m.speed * 1.5):
-		opts.bleed_to = p.grab_speed_max * 0.8
+		opts.bleed_to = FlightPlanner.catch_speed(p)
 		opts.flap_below = target.position.y - 0.3
 	if final and dist_perch < 4.0:
 		opts.recover = false
@@ -267,14 +418,17 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 		return inp
 
 	# --- SPACE: catch when the bird says it's on; otherwise a flap ---------------------------------
-	# Hold catch through the final approach (only once the target is the perch the bird would catch).
+	# Its target held as the catch candidate on the final (as the novice landing assist holds the player's: another
+	# limb the path passes near doesn't take the highlight), and catch held through the last metres once it's the
+	# perch the bird would catch.
+	bird.candidate_lock = target if final and dist_perch < LOCK_RANGE else null
 	var catch_hold := final and dist_perch < 8.0 and bird.candidate == target
-	# Missed it (flew past), or circling it with the perch out of the forward cone: go around (re-plan out
-	# through the approach points).
+	# Missed it (flew past), or circling it with the perch out of the forward cone: go around (_go_around: out and up,
+	# then a fresh approach).
 	var to_perch := (target.position - pos).normalized()
 	var off_cone := final and dist_perch < 12.0 and dist_perch > 2.0 and m.flight_dir().dot(to_perch) < 0.3 and clock - _progress_clock > 1.5
 	if (final and dist_perch > 4.0 and _min_dist < 2.5 and dist_perch > _min_dist + 2.0) or off_cone:
-		_replan(bird)
+		_go_around(bird)
 	return FlightInput.new(inp.stick, false, inp.flap_held, false, catch_hold)
 
 
@@ -289,6 +443,12 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 ##   bleed_to    landing: pull to bleed speed toward this, flapping only when below `flap_below`
 ##   recover     low-speed recovery (true)
 ##   route       predict along this pilot's route from `wp` (its perch flight) rather than straight at `aim`
+##   cruise      a perch flight's cruise speed: no wingbeats above CRUISE_OVER of it (the ground guard and recovery
+##               still beat)
+##   slow_to     pull gently (SLOW_GAIN) to come down to this speed (the leg into the approach point)
+##   lift_cap    bank no more than the lift holds at this speed (held_bank; a perch flight's turns: a sustained
+##               over-banked turn sinks into a stall spiral); off by default (a race's escape, a combat break pull
+##               harder for their moment; the combat brain caps its own turns)
 ## `avoiding` > 0 afterwards when it flew an escape rather than toward `aim`.
 func steer(bird: Bird, aim: Vector3, dt: float, opts := {}) -> FlightInput:
 	var p := bird.profile
@@ -296,7 +456,8 @@ func steer(bird: Bird, aim: Vector3, dt: float, opts := {}) -> FlightInput:
 	var pos := bird.global_position
 	_settling = false
 	var frac: float = opts.get("bank_frac", 0.85)
-	var bank_room := _bank_room(p, pos.y, frac)
+	_v_cap = m.speed if opts.get("lift_cap", false) else INF
+	var bank_room := _bank_room(p, pos.y, frac, _v_cap)
 	var horiz := Vector2(aim.x - pos.x, aim.z - pos.z).length()
 	var gamma_cmd: float = opts.get("gamma", clampf(atan2(aim.y - pos.y, maxf(horiz, 1.0)), deg_to_rad(-35.0), deg_to_rad(25.0)))
 	var p0 := Perf.t()
@@ -318,6 +479,10 @@ func steer(bird: Bird, aim: Vector3, dt: float, opts := {}) -> FlightInput:
 		"sprint": want_flap = true
 		"none": want_flap = false
 		"hold": want_flap = m.speed < float(opts.get("speed", p.v_best))
+	if opts.has("cruise") and m.speed > float(opts.cruise) * CRUISE_OVER:
+		want_flap = false   # (fast enough: a wingbeat now only adds speed it must lose to land)
+	if opts.has("slow_to") and m.speed > float(opts.slow_to) and not opts.has("bleed_to"):
+		sy = clampf(sy + (m.speed - float(opts.slow_to)) * SLOW_GAIN, -0.8, 0.75)   # (a gentle pull: it rides a little high)
 	if opts.has("bleed_to"):
 		# Bleed speed for the catch (earlier the faster we come in): pull harder the faster we are; no
 		# flapping unless sinking below it.
@@ -362,6 +527,7 @@ func steer(bird: Bird, aim: Vector3, dt: float, opts := {}) -> FlightInput:
 
 func _give_up(bird: Bird, dt: float) -> FlightInput:
 	replans = 0
+	_around_until = -INF
 	_given_up[target.id] = clock + GIVE_UP_TIME
 	target = null
 	return _hold_glide(bird, dt)
@@ -372,7 +538,8 @@ func _hold_glide(bird: Bird, dt: float) -> FlightInput:
 	var m := bird.model
 	var p := bird.profile
 	var low := bird.global_position.y < 6.0
-	var room := _bank_room(p, bird.global_position.y)
+	_v_cap = m.speed
+	var room := _bank_room(p, bird.global_position.y, 0.85, _v_cap)
 	var steer := _avoid(bird, Vector3.INF, m.path_angle, dt)
 	var sx := clampf(_signed_heading(m.flight_dir(), steer[0]) * TURN_GAIN, -room, room) / deg_to_rad(p.max_bank_deg)
 	var sy := clampf((steer[1] - m.path_angle) * 3.0, -0.3, 0.6) if avoiding > 0.0 else (-0.1 if low else 0.0)
@@ -392,7 +559,7 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 	var v := maxf(m.speed, 2.0)
 	var fd := m.flight_dir()
 	var ahead := Vector3(fd.x, 0.0, fd.z).normalized() if Vector2(fd.x, fd.z).length() > 1e-3 else bird.facing
-	var radius := v * v / (BirdProfile.G * tan(maxf(_bank_room(bird.profile, pos.y, frac), deg_to_rad(10.0))))
+	var radius := v * v / (BirdProfile.G * tan(maxf(_bank_room(bird.profile, pos.y, frac, _v_cap), deg_to_rad(10.0))))
 	var horizon := clampf(maxf(v * 1.1, radius * 1.3), 4.0, 30.0) / v + 0.25
 	var near := []
 	for t in bird.layout.trees_near_segment(pos, pos, v * horizon):
@@ -433,6 +600,19 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 	return best
 
 
+const DESCENT_GRADE := 2.0    ## a braking glide on the way to the approach loses this many glide ratios' worth of height
+const SPIRAL_START := 3.0     ## m of energy over the approach's at which it circles down first ...
+const SPIRAL_STOP := 0.5      ## ... and stops circling
+const SPIRAL_GAMMA := deg_to_rad(16.0)   ## the path angle it circles down at
+const AIM_AHEAD := 3.0        ## m: a waypoint this close is passed on to the next (the guidance aims past it)
+const LINEUP_MARGIN := 1.15   ## a line-up's turns this much wider than the circle the bird holds
+const LINEUP_RUNS := 3.0      ## turning circles (and LINEUP_REACH m) from the approach point it lines up within
+const LINEUP_REACH := 25.0
+const LINEUP_PAD := 40.0      ## m more than a turning circle round a line-up may be
+const AROUND_TIME := Vector2(0.6, 2.5)   ## s a go-around flies out for, at least and at most
+const SLOW_GAIN := 0.08      ## stick pulled per m/s over a leg's slow_to
+const CRUISE_OVER := 1.1     ## share of its cruise speed above which a perch flight doesn't beat its wings
+const LOCK_RANGE := 12.0   ## m from its target on the final within which it's held as the catch candidate
 const AIM_HIGH := 0.45      ## m the last metres aim above the branch (the feet reach forward and down from the path)
 const TURN_GAIN := 2.2       ## bank (rad) per radian of heading error
 const PREDICT_STEP := 0.1    ## s, the chord of a predicted path
@@ -444,9 +624,18 @@ const PATH_RATE_DEG := 30.0  ## deg/s the path angle follows its command at, pre
 const BANK_SINK := 0.12      ## rad of path angle lost per unit of extra load factor a bank needs (1/cos - 1)
 
 
-## The bank guidance allows at height y: a steep bank sheds vertical lift, so near the ground it banks gently.
-static func _bank_room(p: BirdProfile, y: float, frac := 0.85) -> float:
-	return deg_to_rad(lerpf(25.0, p.max_bank_deg * frac, clampf((y - 1.5) / 6.0, 0.0, 1.0)))
+## The bank guidance allows at height y: a steep bank sheds vertical lift, so near the ground it banks gently; and at
+## speed `v` no more than the lift holds (held_bank; INF: no cap).
+static func _bank_room(p: BirdProfile, y: float, frac := 0.85, v := INF) -> float:
+	var room := deg_to_rad(lerpf(25.0, p.max_bank_deg * frac, clampf((y - 1.5) / 6.0, 0.0, 1.0)))
+	return minf(room, held_bank(p, v)) if v < INF else room
+
+
+## The steepest bank a bird can hold at speed `v` without sinking into a stall spiral: the lift's load factor
+## (v / v_stall)^2 with a 15% margin (as CombatStyle.lift_bank); 15 deg at least, its bank limit at most.
+static func held_bank(p: BirdProfile, v: float) -> float:
+	var n := 0.85 * pow(maxf(v, 0.1) / p.v_stall, 2.0)
+	return clampf(acos(clampf(1.0 / maxf(n, 1.0), 0.0, 1.0)), deg_to_rad(15.0), deg_to_rad(p.max_bank_deg))
 
 
 ## Fly `horizon` seconds ahead in prediction: steer by the guidance law toward `toward` (a point, following
@@ -468,7 +657,9 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 	var fd := m.flight_dir()
 	var dir := Vector3(fd.x, 0.0, fd.z).normalized() if Vector2(fd.x, fd.z).length() > 1e-3 else bird.facing
 	var pos := bird.global_position
-	var landing := target != null and target.distance_to(pos) < 8.0
+	# (Landing: the last 8 m, or the final leg -- planned clear of the wood with the perch's own tree passed closer -- from
+	# wherever the look-ahead takes it.)
+	var landing := target != null and (target.distance_to(pos) < 8.0 or (mode == Mode.FINAL and follow_route and is_point))
 	var own := target.tree_id if landing else -1
 	var left := _last_tree if _takeoff_pos.distance_to(pos) < DEPARTURE_RANGE and _last_tree != own else -1
 	# Fly it first (where it goes doesn't depend on what it meets), then find the first chord that meets wood,
@@ -481,12 +672,12 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 	var t := 0.0
 	while t < horizon - 1e-6:
 		if is_point and follow_route:
-			while k < route.size() - 1 and pos.distance_to(goal) < 3.0:
+			while k < route.size() - 1 and pos.distance_to(goal) < (_aim_ahead if k < route.size() - 2 else AIM_AHEAD):
 				k += 1
 				goal = route[k]
 		var err := _signed_heading(dir, (goal - pos) if is_point else goal)
 		if t >= PREDICT_LAG:
-			var room := _bank_room(bird.profile, pos.y, frac)
+			var room := _bank_room(bird.profile, pos.y, frac, _v_cap)
 			bank = move_toward(bank, clampf(err * TURN_GAIN, -room, room), roll * PREDICT_STEP)
 		dir = dir.rotated(Vector3.UP, -BirdProfile.G * tan(clampf(bank, -1.4, 1.4)) / v * PREDICT_STEP)
 		# (A steep bank sheds vertical lift: the bird sinks below the path angle asked for.)

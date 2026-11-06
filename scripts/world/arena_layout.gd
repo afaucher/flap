@@ -19,6 +19,7 @@ const GRIP_TIP_GAP := 0.08     ## m, and stops this far short of the tip
 const BOX_MARGIN := 1e-3       ## m, the slack in a clearance query's box test (rounding in the distance test)
 const BAND := 2.0              ## m, the height bands a tree's branches are filed under for clearance queries
 const HANGAR_SIZE := Vector3(0.42, 0.5, 0.44)   ## an outpost's hangar, a box on its deck (along the rail, up, out)
+const DECK_RAIL_LINE := 1      ## deck_lines' strip along the rail (the deck's outer quarter)
 const HANGAR_SIDE := -1.0      ## which end of the deck it stands at (deck x): -1, on the right seen from the rail
 
 enum Tier { UNDERSTORY, CANOPY, EMERGENT }
@@ -494,14 +495,19 @@ func path_blocked_at(near: Array, pts: PackedVector3Array, clearance: float, ign
 
 
 ## Is the straight flight from a to b clear of one tree's trunk, branches and outposts by `clearance`, leaving
-## out the branch that carries perch `skip_perch`? (Taking off or coming in to land: the rest of the perch's own
-## tree still counts.)
+## out the branch that carries perch `skip_perch` -- or, an outpost's rail, the outer strip of that outpost's deck along
+## the rail (the feet reach over its edge; the rest of the deck and its hangar still count, so the way in is still from
+## in front)? (Taking off or coming in to land: the rest of the perch's own tree still counts.)
 func tree_clear(tree_id: int, a: Vector3, b: Vector3, clearance: float, skip_perch := -1) -> bool:
 	if not _tree_clear(trees[tree_id], a, b, clearance, skip_perch):
 		return false
 	for o in outposts:
 		if o.tree_id == tree_id:
-			for seg in deck_lines(o):
+			var lines := deck_lines(o)
+			for k in lines.size():
+				if k == DECK_RAIL_LINE and skip_perch >= 0 and skip_perch == o.rail_perch_id:
+					continue
+				var seg: Array = lines[k]
 				var dp := Geometry3D.get_closest_points_between_segments(a, b, seg[0], seg[1])
 				if dp[0].distance_to(dp[1]) < float(seg[2]) + clearance:
 					return false

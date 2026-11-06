@@ -156,13 +156,13 @@ func _draw_target() -> void:
 
 ## The approach points as the planner uses them (raised clear of the ground).
 func _approach(t: Perch) -> Vector3:
-	var p := FlightPlanner.approach_point(t, bird.profile)
+	var p := FlightPlanner.approach_point(t, bird.profile, pilot.planner.way if t == pilot.target else Vector3.ZERO)
 	p.y = maxf(p.y, pilot.planner.clearance + 0.5)
 	return p
 
 
 func _pre_approach(t: Perch) -> Vector3:
-	var p := FlightPlanner.pre_approach_point(t, bird.profile)
+	var p := FlightPlanner.pre_approach_point(t, bird.profile, pilot.planner.way if t == pilot.target else Vector3.ZERO)
 	p.y = maxf(p.y, pilot.planner.clearance + 0.5)
 	return p
 
