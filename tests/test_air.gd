@@ -82,7 +82,7 @@ func _ridge_profile() -> void:
 
 
 func _pinewood_thermals() -> void:
-	var a := Pinewood.generate(7)
+	var a := Pinewood.grow(7)
 	for o in a.openings:
 		if o.kind == "clearing" or o.kind == "glade":
 			var w := a.air.at(Vector3(o.centre.x, 25.0, o.centre.y)).y

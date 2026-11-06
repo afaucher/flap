@@ -27,7 +27,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
   collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans (`TreeData.form`;
-  `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The floor: `FloorField` (mounds, moss, dirt) drawn by `forest_floor.gdshader`
+  `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The game's arena is a baked map, not a seed: `maps/pinewood_7.map` (`MapFile`: the whole `ArenaLayout`, trees,
+  limbs, branches, perches, outposts, openings, the floor's field, thermals), which `Pinewood.generate` reads when it's
+  there and the generator's options are as baked (`Pinewood.baked`, `as_baked()`), so changing the generator
+  (`Pinewood.grow`) doesn't move it. Re-bake on purpose with
+  `& $godot --path . --headless --script res://tools/bake_map.gd -- 7`, then check what was tuned on it (race courses,
+  the combat AI's tests). Tests of the generator itself use `Pinewood.grow`; `test_map_file` holds the round trip. The floor: `FloorField` (mounds, moss, dirt) drawn by `forest_floor.gdshader`
   on `ArenaBuilder.floor_tiles` (8 x 8 tiles, culled one by one; flat blocks of 8 x 8 and 4 x 4 cells joined in
   crack-free fans where `FloorField.flat_cells` says the floor is flat, `FLOOR_JOIN`) inside `floor_ring` (the big
   plane, a real hole from where the floor is flat for good, `FloorField.flat_beyond`; no discard); `tests/probe_floor_still.gd` renders the floor alone and still, to check a change leaves its look; `tests/probe_floor_map.gd` + `tools/floor_map.py` map its heights and how the mesh draws them. The outposts (as `docs/images/concepts/r4_aces_outpost.jpg`): `ArenaBuilder.PLANKS` hand-sawn planks + one
