@@ -5738,5 +5738,19 @@
     "replace": "\t\tif false:\n\t\t\t_steps_left -= 1"
    }
   ]
+ },
+ {
+  "id": "combat-planner-unfitted",
+  "bug": "The combat AI's flight AI was never fitted to its bird: every combat bird planned routes with the planner's default 0.9 m clearance, not its species' (the hawk's 1.9 m) (2026-11-06).",
+  "tests": [
+   "test_combat_perches"
+  ],
+  "edits": [
+   {
+    "file": "scripts/combat/ai/combat_brain.gd",
+    "find": "\tpilot._fit(b)   # (its clearance",
+    "replace": "\tpass   # (its clearance"
+   }
+  ]
  }
 ]

@@ -4,6 +4,7 @@ extends TestCase
 ## enough, and every rest perch far enough, whatever the rule).
 ##   ambush  a pole pine just where an ambush perch would be (28 m out from the fight) but below the fight, a pine a
 ##           little further off with perches high above it: the owl picks the pine's (CombatTree._ambush_perch)
+##   (and its flight AI is fitted to the bird: its routes keep that species' berth from the wood)
 ##   rest    a tired crow between two pines, the nearer one toward where it has seen the enemy fly: it rests in the
 ##           other, away from it and behind its trunk (CombatTree._nearest_perch)
 
@@ -31,6 +32,8 @@ func _ambush_above() -> void:
 	var high := FlightExam.add_tree(a, "pine", Vector2(-20.0, 25.0), 4)
 	var x: Array = await _brain(a, "owl", Vector3(-45.0, 24.0, 0.0))
 	var br: CombatBrain = x[1]
+	var want := AIPilot.plan_clearance(br.bird.profile)
+	check(is_equal_approx(br.pilot.planner.clearance, want) and br.pilot.turn_radius > 0.0, "the combat AI's routes keep the owl's own berth from the wood (%.2f m, wants %.2f)" % [br.pilot.planner.clearance, want])
 	br.fight_area = Vector3(0.0, 10.0, 0.0)
 	br.fight_seen = 0.0
 	var p := CombatTree._ambush_perch(br)

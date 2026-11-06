@@ -70,6 +70,7 @@ func _init(b: Bird, w: CombatWorld, l: Launcher, sk: CombatSkill = null, seed :=
 	style = CombatStyle.of(b.profile)
 	sense = CombatSense.new(b, w, skill)
 	pilot = AIPilot.new(w.layout, seed)
+	pilot._fit(b)   # (its clearance from the wood and turning circle: its own sample(), which fits it, isn't called)
 	rng.seed = seed
 	_phase = posmod(seed, THINK_EVERY)
 	tree = CombatTree.build(self)

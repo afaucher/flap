@@ -181,9 +181,10 @@ frames. Now:
 In the game (`perf.ps1`, a crow and 3 AI, 30 s): hitched frames 13 -> 9 (0.5%), planning's worst tick 30 -> 19 ms; what's
 left of them is planning and the avoidance together in a tick, ~25 ms frames.
 
-Found on the way: the combat AI's birds plan with the planner's default clearance (0.9 m), never their species' (their
-`AIPilot` isn't fitted: `_fit` runs in its own `sample()`, which `CombatPilot` doesn't call). Fitting them changes their
-routes, so it's left for its own change.
+Found on the way: the combat AI's birds planned with the planner's default clearance (0.9 m), never their species' --
+`CombatBrain` made its `AIPilot` and never fitted it (`_fit` runs in the pilot's own `sample()`, which `CombatPilot`
+doesn't call). Fitted now: over six 3 v 3s (`probe_combat_rest --ai-seed 20..120`) base landings 19 -> 22, downs 4 -> 6,
+touches of wood 46 -> 41, time on the ground 751 -> 701 bird-s (`test_combat_perches` checks the fit).
 
 ## The test, and why its bounds hold
 
