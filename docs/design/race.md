@@ -155,7 +155,16 @@ bird flown by AIPilot from the last gate to the rail, with the course's posts in
 14 or 15 of 15; it's the falcon's known weakness, `flight_model.md`: a final approach planned by speed would fix it).
 The landing home adds 10-30 s and most of the spread between racers: a missed catch costs a loop round the outpost.
 Racers going home drop AIPilot's departure clearance round the rail's tree (they took off from it), which had pushed
-the sparrow off every final approach. The four pilot and ace runs that didn't finish are all the falcon's (seeds
+the sparrow off every final approach.
+
+The falcon's rail landings (2026-11-05): its look-ahead (13-15 m at its speed) reached the rail from beyond the 8 m
+in which AIPilot counts the perch's own tree and outpost as the perch it's landing on, so the deck it was landing on
+blocked its approach and it flew escapes all the way in. Landing now runs wherever the look-ahead reaches the perch.
+From the last gate the falcon lands on courses 1 and 2 (3 of 3 each; it was 0); on course 3 it now fails for a
+different reason: it reaches the rail from the side, low among the outpost pine's lower limbs, too tightly turned to
+line up. Lowering rail approaches less (0.4-0.7 m under the rail, not 1.2) lands it there but loses others elsewhere:
+the final approach is fragile (arriving from the side, the bird's catch candidate not the perch it aims for, the
+falcon's bleed target under its stall speed) and wants planning by speed and turn, not tuning. The four pilot and ace runs that didn't finish are all the falcon's (seeds
 5, 9, 11): a miss, then go-arounds it can't hold its height through. Recruits are slower and miss far more: their
 wider look-ahead, input lag and aim drift take them off the line, and the go-arounds cost them 10-40 s. The ace is no
 faster than the pilot yet: its edge (bank, lag, drift) doesn't buy time on these courses, where every bird flies the

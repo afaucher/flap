@@ -4,6 +4,7 @@ extends TestCase
 ## long it takes, how many approaches and touches of wood. With the course's posts in (`--posts`, the default) or out
 ## (`--no-posts`), to tell the rail's approach from the gates' wood near it.
 ##   .\probe.ps1 -Headless probe_race_home [--seed 7] [--course <n>] [--no-posts] [--seconds 45] [--tries 3]
+##                                         [--birds falcon,...] [--trace <bird>] (its first try's final approaches)
 
 func _init() -> void:
 	timeout_sec = 600.0
@@ -27,8 +28,14 @@ func setup() -> void:
 	var last := course.gates[-1]
 	print("HOME seed %d: rail at %s facing %s, %.0f m from the last gate; posts %s" % [arena_seed, str(course.start.position),
 		str(course.start.facing), course.start.position.distance_to(last.centre), "in" if posts else "out"])
+	for q in layout.perches:   # (the perches round the rail: the bird's catch candidate is whichever its path passes nearest)
+		if q.position.distance_to(course.start.position) < 10.0:
+			print("HOME  perch %d%s tree %d  a %s b %s facing %s  anchor %s  approach %s" % [q.id, " (start)" if q == course.start else "", q.tree_id, str(q.a), str(q.b),
+				str(q.facing), str(q.approach_anchor()), str(FlightPlanner.approach_point(q, BirdProfile.by_id("falcon")))])
 	var entries := []
-	for id in BirdProfile.IDS:
+	var trace := Boot.arg_value(args, "--trace")
+	var birds := (Boot.arg_value(args, "--birds") if Boot.arg_value(args, "--birds") != "" else ",".join(BirdProfile.IDS)).split(",")
+	for id in birds:
 		for t in tries:
 			var b := Bird.new()
 			var pilot := AIPilot.new(layout, 300 + t)
@@ -56,6 +63,12 @@ func setup() -> void:
 					e.approaches += 1
 				e.mode = pl.mode
 				all = false
+				if e.id == trace and e == entries.filter(func(x): return x.id == trace)[0] and pl.mode == AIPilot.Mode.FINAL and f % 3 == 0:
+					var grip := course.start.aim_grip(b.global_position, b.model.flight_dir(), b.profile.grab_radius)
+					var to := grip - b.global_position
+					print("TRACE t=%5.2f d=%5.2f dy=%+5.2f v=%5.2f close=%5.2f path=%+4.0f bank=%+4.0f flare=%.2f cand=%s status=%d hold=%s st=%d avoid=%.1f %s" % [f / 60.0,
+						to.length(), -to.y, b.model.speed, b.model.velocity.dot(to.normalized()), rad_to_deg(b.model.path_angle), rad_to_deg(b.model.bank), b.model.flare,
+						"T" if b.candidate == course.start else ("-" if b.candidate == null else "o"), b.candidate_status, b.last_input.catch_held, b.state, pl.avoiding, pl.route_block if pl.avoiding > 0.0 else ""])
 		if all:
 			break
 	var by := {}
@@ -63,6 +76,6 @@ func setup() -> void:
 		var b: Bird = e.bird
 		print("HOME  %-8s %s  approaches %d  bonks %d  glances %d  wings %d" % [e.id, ("%5.1f s" % e.landed) if e.landed < INF else "  never", e.approaches, b.bonks, b.glances, b.wing_strikes])
 		by[e.id] = by.get(e.id, 0) + int(e.landed < INF)
-	for id in BirdProfile.IDS:
+	for id in birds:
 		print("HOME  %-8s landed %d of %d" % [id, by[id], tries])
 	finish()

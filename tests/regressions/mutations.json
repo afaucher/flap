@@ -4874,5 +4874,19 @@
     "replace": "\tif perch == course.start and false:\n\t\t_reset()\n"
    }
   ]
+ },
+ {
+  "id": "ai-rail-blocks-own-approach",
+  "bug": "A fast bird (the falcon) never landed on an outpost's rail: its 13-15 m look-ahead reached the rail from beyond the last 8 m, where the perch's own outpost still counted as wood, so the deck it was landing on blocked its approach and it flew an escape every tick (2026-11-05).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tvar landing := target != null and target.distance_to(pos) < maxf(8.0, v * horizon + bird.profile.grab_radius)\n",
+    "replace": "\tvar landing := target != null and target.distance_to(pos) < 8.0\n"
+   }
+  ]
  }
 ]
