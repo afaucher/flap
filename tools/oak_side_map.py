@@ -33,17 +33,15 @@ def lerp_col(a, b, t):
 
 
 def trunk_path(oak):
-    """The trunk as ArenaBuilder._trunk draws it (centreline wander left out): [(y, r)]."""
+    """The trunk as ArenaBuilder._trunk draws it, to its top (an oak's ends over the fork): [(y, r)]."""
     h, r0, cb = oak["height"], oak["radius"], oak["crown_base"]
+    top = oak.get("stem", h)
     out = []
     for i in range(40):
-        y = h * i / 39
+        y = top * i / 39
         r = r0 * (1 + (0.4 - 1) * min(max(y / h, 0), 1))
         if cb > 0 and y > cb:
-            u2 = min(max((y - cb) / (h - cb), 0), 1)
-            s = min(max(u2 / 0.1, 0), 1)
-            s = s * s * (3 - 2 * s)
-            r = r0 * (0.9 + (0.36 - 0.9) * s) * (1 + (0.15 - 1) * u2)
+            r = r0 * (0.9 + (0.6 - 0.9) * min(max((y - cb) / max(top - cb, 0.1), 0), 1))
         r *= 1 + 0.55 * math.exp(-y / 0.9)
         out.append((y, r))
     return out

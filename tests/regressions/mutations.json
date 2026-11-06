@@ -5042,5 +5042,33 @@
     "replace": "\t_home_ring.visible = true\n\t_home_ring.scale = Vector3(0.5, 1.0, 0.5)\n"
    }
   ]
+ },
+ {
+  "id": "oak-stem-pillar",
+  "bug": "An oak's trunk ran on up through its crown to the treetop: a thin stem spike drawn, and a full-thickness invisible pillar in the collision and every wood query (2026-11-06).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\treturn Vector3(base.x, ArenaLayout.GROUND_Y + (stem if stem > 0.0 else height), base.y)",
+    "replace": "\t\treturn Vector3(base.x, ArenaLayout.GROUND_Y + height, base.y)"
+   }
+  ]
+ },
+ {
+  "id": "oak-deck-own-limbs",
+  "bug": "An oak outpost's way in was checked against the other trees only: a deck in the fork had its own low limbs across the swoop onto the rail (2026-11-06).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\treturn false",
+    "replace": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\tpass"
+   }
+  ]
  }
 ]

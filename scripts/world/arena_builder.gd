@@ -538,9 +538,9 @@ func _pinewood_trees(i0: int, i1: int) -> void:
 		var cs := CollisionShape3D.new()
 		var shape := CylinderShape3D.new()
 		shape.radius = t.radius
-		shape.height = t.height
+		shape.height = t.trunk_top().y - ArenaLayout.GROUND_Y
 		cs.shape = shape
-		cs.position.y = t.height * 0.5
+		cs.position.y = shape.height * 0.5
 		body.add_child(cs)
 		var oak: bool = t.kind == ArenaLayout.Kind.BROADLEAF
 		var seed := fmod(t.id * 0.6180339, 1.0)
@@ -728,13 +728,12 @@ func _trunk(arr: Array, t: ArenaLayout.TreeData, seed: float) -> void:
 	var rings := []
 	for i in n:
 		var u := pow(float(i) / (n - 1), 1.6)   # (rings closer near the foot, where the flare turns)
-		var y := (t.height + 0.15) * u - 0.15   # (from just under the floor to its full height: the treetop perch's)
+		var top_y := t.trunk_top().y - ArenaLayout.GROUND_Y   # (its full height, the treetop perch's; an oak's bole ends over its fork)
+		var y := (top_y + 0.15) * u - 0.15   # (from just under the floor)
 		pts.append(c + Vector3.UP * y)
 		var r := t.radius * lerpf(1.0, top_share, clampf(y / t.height, 0.0, 1.0))
-		if oak and t.crown_base > 0.0 and y > t.crown_base:   # (above the fork the big limbs have taken the wood: a slim stem on up, wandering)
-			var u2 := clampf((y - t.crown_base) / (t.height - t.crown_base), 0.0, 1.0)
-			r = t.radius * lerpf(0.9, 0.36, smoothstep(0.0, 0.1, u2)) * lerpf(1.0, 0.15, u2)
-			pts[i] += Vector3(sin(seed * 11.0 + u2 * 2.6), 0.0, cos(seed * 7.0 + u2 * 2.2)) * 0.8 * u2
+		if oak and t.crown_base > 0.0 and y > t.crown_base:   # (over the fork the big limbs have taken the wood: the bole narrows to its top)
+			r = t.radius * lerpf(0.9, 0.6, clampf((y - t.crown_base) / maxf(top_y - t.crown_base, 0.1), 0.0, 1.0))
 		radii.append(r * (1.0 + flare * exp(-maxf(y, 0.0) / (0.9 if oak else 0.6))))
 		var ring := []
 		for j in segs:

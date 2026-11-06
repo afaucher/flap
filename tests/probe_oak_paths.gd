@@ -32,7 +32,7 @@ func setup() -> void:
 		for f in t.foliage:
 			leaves.append({"c": [f[0].x, f[0].y, f[0].z], "r": [f[1].x, f[1].y, f[1].z]})
 		oaks.append({"id": t.id, "base": [t.base.x, t.base.y], "height": t.height, "radius": t.radius,
-				"crown_base": t.crown_base, "limbs": limbs, "perches": perches, "leaves": leaves})
+				"crown_base": t.crown_base, "stem": t.trunk_top().y - ArenaLayout.GROUND_Y, "limbs": limbs, "perches": perches, "leaves": leaves})
 	var f := FileAccess.open(out, FileAccess.WRITE)
 	f.store_string(JSON.stringify({"seed": a.seed, "oaks": oaks}))
 	f.close()

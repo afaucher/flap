@@ -4,7 +4,8 @@ extends RefCounted
 ## silhouette, made once and shared (alpha-tested cards in ArenaBuilder's crowns and floor).
 ##   needles   a Scots pine spray: a shoot forking twice, needles in pairs all along it pointing forward,
 ##             blue-green, densest toward the tips (a card is ~0.7 m across)
-##   oak       a twig with clusters of lobed oak leaves (~0.8 m)
+##   oak       shoots off a twig, each with a rosette of English oak leaves at its tip (obovate, deeply and
+##             roundly lobed, eared at the base) and a few along it (~0.8 m)
 ##   grass     a tussock of heath grass: blades from a tight root fanning up and out, curving over, olive at the
 ##             root, straw at the tips (~0.8 m; v runs base 1 -> tip 0)
 ##   sward     a strip of meadow grass, as the heath concept's: many thin upright blades rooted all along the
@@ -83,6 +84,26 @@ class Canvas:
 			var mid := p + dir * f * length
 			stroke(mid - side * env, mid + side * env, 1.6, c)
 		stroke(p, p + dir * length * 0.95, 0.9, c.darkened(0.25))
+
+	## An English oak's leaf (Quercus robur): from a base on almost no stalk, with a small ear (auricle) each side,
+	## widening to its broadest two thirds of the way out, and rounded at the tip; four or five pairs of deep,
+	## rounded lobes (the sinuses cut about half way to the midrib), the two sides out of step a little.
+	func oak_leaf(p: Vector2, dir: Vector2, length: float, width: float, c: Color, rng: RandomNumberGenerator) -> void:
+		var side := Vector2(-dir.y, dir.x)
+		var lobes := rng.randf_range(3.0, 3.8)
+		var phase := [rng.randf_range(-0.1, 0.1), rng.randf_range(0.15, 0.35)]
+		var steps := int(length * 1.5)
+		for i in steps:
+			var f := (i + 0.5) / steps
+			var mid := p + dir * f * length
+			var body := pow(f, 0.7) * (1.0 - pow(f, 3.0)) / 0.56 + 0.3 * exp(-pow((f - 0.06) / 0.035, 2.0))
+			for k in 2:
+				var env := body
+				if f > 0.12 and f < 0.93:
+					env *= 0.3 + 0.7 * pow(absf(sin(PI * ((f - 0.12) / 0.81 * lobes + phase[k]))), 0.7)
+				var sg := 1.0 if k == 0 else -1.0
+				stroke(mid, mid + side * sg * env * width * 0.5, 1.4, c)
+		stroke(p - dir * length * 0.04, p + dir * length * 0.9, 0.9, c.darkened(0.25))
 
 	func image() -> Image:
 		var data := PackedByteArray()
@@ -214,20 +235,31 @@ static func _oak(size: int, s: int) -> ImageTexture:
 	var cv := Canvas.new(size)
 	var px_per_cm := size / 80.0
 	var twig := Color(0.36, 0.3, 0.22)
-	for b in 4:
-		var p := Vector2(size * 0.08, size * rng.randf_range(0.3, 0.7))
-		var dir := Vector2(1.0, rng.randf_range(-0.5, 0.5)).normalized()
-		var length := size * rng.randf_range(0.55, 0.8)
-		var q := p + dir * length
-		cv.stroke(p, q, 2.4, twig, 0.5)
-		for i in 7:
-			var f := lerpf(0.25, 1.0, i / 6.0)
-			var at := p.lerp(q, f)
-			for l in rng.randi_range(2, 4):
-				var ld := dir.rotated(rng.randf_range(-1.6, 1.6))
-				var lc := Color(0.24, 0.36, 0.13).lerp(Color(0.38, 0.47, 0.18), rng.randf()) * rng.randf_range(0.85, 1.1)
-				cv.leaf(at, ld, rng.randf_range(8.0, 12.0) * px_per_cm, rng.randf_range(4.0, 6.0) * px_per_cm, 4, lc)
+	# Shoots off a twig, each zigzagging a little to a rosette of leaves at its tip (an oak's leaves bunch at the
+	# shoot's end), a few more along it.
+	for b in 7:
+		var p := Vector2(size * rng.randf_range(0.05, 0.3), size * rng.randf_range(0.3, 0.7))
+		var dir := Vector2(1.0, rng.randf_range(-0.4, 0.4)).normalized()
+		var length := size * rng.randf_range(0.3, 0.55)
+		var at := p
+		for seg in 3:
+			var nd := dir.rotated(rng.randf_range(-0.3, 0.3))
+			var nx := at + nd * length / 3.0
+			cv.stroke(at, nx, 2.4 - seg * 0.5, twig, 0.8)
+			if seg > 0:
+				for q in 2:
+					_oak_leaf_at(cv, at, nd.rotated((1.0 if q == 0 else -1.0) * rng.randf_range(0.6, 1.3)), rng, px_per_cm, 0.9)
+			at = nx
+		for l in rng.randi_range(4, 6):
+			var ld := dir.rotated(rng.randf_range(-1.9, 1.9))
+			_oak_leaf_at(cv, at, ld, rng, px_per_cm, 1.0)
 	return ImageTexture.create_from_image(cv.image())
+
+
+static func _oak_leaf_at(cv: Canvas, at: Vector2, d: Vector2, rng: RandomNumberGenerator, px_per_cm: float, k: float) -> void:
+	var lc := Color(0.24, 0.36, 0.13).lerp(Color(0.38, 0.47, 0.18), rng.randf()) * rng.randf_range(0.85, 1.1)
+	var length := rng.randf_range(8.0, 12.0) * px_per_cm * k
+	cv.oak_leaf(at, d.rotated(rng.randf_range(-0.4, 0.4)), length, length * rng.randf_range(0.68, 0.78), lc, rng)
 
 
 static func _fern(size: int, s: int) -> ImageTexture:

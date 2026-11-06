@@ -249,6 +249,13 @@ func _oaks(a: ArenaLayout) -> void:
 			if br.perch_id >= 0 and d.length() > 3.0 and absf(rise) < 25.0:
 				long_level += 1
 		check(long_level >= 8, "oak %d carries long limbs to perch on (%d)" % [t.id, long_level])
+		# Its bole ends over the fork: up its axis through the crown there's air between the limbs, no stem.
+		var open := 0
+		var n := 12
+		for k in n:
+			var y := lerpf(t.crown_base + 3.0, t.height * 0.9, k / float(n - 1))
+			open += int(a.obstacle_distance(Vector3(t.base.x, ArenaLayout.GROUND_Y + y, t.base.y)) > 0.0)
+		check(open >= n / 2, "oak %d: no stem up through its crown (%d of %d points up its axis in the air)" % [t.id, open, n])
 	check(oaks >= 3, "a few oaks (%d)" % oaks)
 	check(in_clearing, "an oak stands in the clearing")
 
