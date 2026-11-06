@@ -16,7 +16,7 @@ func _init() -> void:
 
 
 func setup() -> void:
-	var layout := Pinewood.generate(7)
+	var layout := Pinewood.grow(7)
 	var ff := layout.floor_field
 	check(ff != null, "the pine wood has a floor field")
 	var arena := ArenaBuilder.new()

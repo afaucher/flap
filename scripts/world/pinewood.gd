@@ -75,7 +75,39 @@ const GRIP_TRUNK_GAP := ArenaLayout.GRIP_TRUNK_GAP
 const GRIP_TIP_GAP := ArenaLayout.GRIP_TIP_GAP
 
 
+## Whether generate() reads a seed's baked map (MapFile: maps/pinewood_<seed>.map) when there is one. A shipped map
+## is the file, not the seed: the generator can change without moving it (tools/bake_map.gd bakes one again, on purpose).
+static var baked := true
+
+
+## The pine wood for seed `s`: its baked map if there is one (and the generator's options are as it was baked with),
+## else grown fresh (grow()); then the escarpment if it's on.
 static func generate(s: int) -> ArenaLayout:
+	var a: ArenaLayout = null
+	if baked and as_baked():
+		a = MapFile.read(MapFile.path_for("pinewood_%d" % s))
+	if a == null:
+		a = grow(s)
+	if cliff:
+		add_cliff(a)
+	return a
+
+
+## Are the generator's options as the maps were baked with? (Any A/B or evaluation option grows the wood fresh.)
+static func as_baked() -> bool:
+	return area_scale == 1.0 and ages and crown_density == 0.5 and not STUB_PERCHES and FloorField.feet
+
+
+## The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
+## DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
+static func add_cliff(a: ArenaLayout) -> void:
+	var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
+	a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": a.seed}
+	a.add_rock()
+
+
+## The generator: the pine wood grown from seed `s` (no escarpment: generate() adds it).
+static func grow(s: int) -> ArenaLayout:
 	var a := ArenaLayout.new()
 	a.seed = s
 	a.style = "pinewood"
@@ -168,12 +200,6 @@ static func generate(s: int) -> ArenaLayout:
 	a.add_posts()
 	a.floor_field = FloorField.build(a, a.boundary + 12.0)
 	_thermals(a)
-	# The escarpment on the side away from the sun, turned so the light rakes across its face (Escarpment.RAKE; a
-	# DirectionalLight shines along its -Z, so the sun lies along +Z of its basis).
-	if cliff:
-		var to_sun := Basis.from_euler(Vector3(0.0, deg_to_rad(ForestLight.SUN_AZIMUTH), 0.0)) * Vector3.BACK
-		a.escarpment = {"at": atan2(-to_sun.x, -to_sun.z) + Escarpment.RAKE, "foot": a.boundary + Escarpment.FOOT, "seed": s}
-		a.add_rock()
 	return a
 
 

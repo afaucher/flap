@@ -5341,5 +5341,19 @@
     "replace": "\t\t\t\t\tif cp[0].distance_to(cp[1]) < br.radius + OWN_BERTH:\n\t\t\t\t\t\tpass"
    }
   ]
+ },
+ {
+  "id": "hidden-runs-audible",
+  "bug": "Off-screen runs (tests, probes, shots, perf -Hidden) played the game's sound through the user's speakers while they worked: nothing muted them (2026-11-06). Boot mutes the Master bus's output when test_lib.ps1 starts a run with FLAP_MUTE=1; gpu_test_audible stops before playing anything if it isn't muted.",
+  "tests": [
+   "gpu_test_audible"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/boot.gd",
+    "find": "\tif OS.get_environment(\"FLAP_MUTE\") == \"1\":\n\t\tAudioServer.set_bus_mute(0, true)\n",
+    "replace": "\tpass\n"
+   }
+  ]
  }
 ]

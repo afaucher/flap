@@ -15,8 +15,8 @@ func _init() -> void:
 
 
 func setup() -> void:
-	var a := Pinewood.generate(7)
-	var b := Pinewood.generate(7)
+	var a := Pinewood.grow(7)
+	var b := Pinewood.grow(7)
 	eq(a.trees.size(), b.trees.size(), "same seed, same trees")
 	eq(a.perches.size(), b.perches.size(), "same seed, same perches")
 	check(a.outposts.size() > 0 and b.outposts.size() == a.outposts.size() and (a.outposts[0].centre as Vector3).is_equal_approx(b.outposts[0].centre), "same seed, same outposts")
@@ -24,7 +24,7 @@ func setup() -> void:
 	_oaks(a)
 	_outposts(a)
 	for other in [3, 11, 21, 5]:   # (outposts face whatever open air a layout leaves: try several)
-		_outposts(Pinewood.generate(other))
+		_outposts(Pinewood.grow(other))
 	_young_pines(a)
 	_perches_on_the_wood(a)
 	_structure(a)

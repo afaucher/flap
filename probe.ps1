@@ -5,7 +5,8 @@
 #   .\probe.ps1 probe_grade --look golden --out C:\shots\grade
 #   .\probe.ps1 -Headless probe_cliff_plan --out C:\cliff\plan     # no renderer needed
 #   .\probe.ps1 -Engine --gpu-profile probe_load_time               # an engine option (before --); repeat for more
-# As `Godot --path . -- --run-test <name> ...` (no --fixed-fps; add it with -Engine). FLAP_SHOW_WINDOWS=1 shows it.
+# As `Godot --path . -- --run-test <name> ...` (no --fixed-fps; add it with -Engine). FLAP_SHOW_WINDOWS=1 shows it;
+# it's muted (test_lib.ps1), FLAP_SOUND=1 to hear it.
 # (No param block: the test's own --options would bind to it.)
 $Headless = $false; $Engine = @(); $rest = @($args | ForEach-Object { $_ })
 while ($rest.Count -gt 0 -and ($rest[0] -eq "-Headless" -or ($rest[0] -eq "-Engine" -and $rest.Count -gt 1))) {
