@@ -8,7 +8,7 @@ extends TestCase
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
 ## flown through a gate in the simulation count it, and birds flown beside it or through it backwards don't.
 
-const SHARDS := 7
+const SHARDS := 11
 const DT := 1.0 / 60.0
 const ARENA := 7   ## every course here is on the game's arena (Menu.ARENA_SEED); the course seeds are the menu's
 
@@ -40,6 +40,9 @@ func setup() -> void:
 		await _goes_round(16)
 		await _takes_off_again(16)
 		await _lands_from_run_in(16)
+	for k in RaceCourse.STYLES.size():   # (shards 7-10: the menu's course of each style)
+		if in_shard(7 + k):
+			_style_course(RaceCourse.STYLES[k])
 	finish()
 
 
@@ -195,6 +198,44 @@ func _rules_by_hand() -> void:
 	check(probs.is_empty(), "the same post off to the side doesn't: %s" % "; ".join(probs))
 
 
+## The menu's course of `style` (Menu.COURSES): full, every rule kept, and of its style -- technical: twelve gates,
+## short legs, planned for the agile birds' turns; long: seven, long legs, routed through the wood where a smooth
+## curve can't fly clear; level: windows within a few metres of each other; high and low: far apart.
+func _style_course(style: String) -> void:
+	var s: int = Menu.COURSES[style]
+	var l := Pinewood.generate(ARENA)
+	var c := RaceCourse.generate(l, s, BirdProfile.IDS, style)
+	var what := "%s (course %d)" % [style, s]
+	eq(c.style, style, what + ": in its style")
+	eq(c.gates.size(), c.gate_count, what + ": a full course")
+	var probs := c.problems()
+	check(probs.is_empty(), what + ": the rules kept: %s" % "; ".join(probs))
+	var lo := INF
+	var hi := -INF
+	var legs := 0.0
+	var routed := 0
+	for k in c.gates.size():
+		lo = minf(lo, c.gates[k].centre.y)
+		hi = maxf(hi, c.gates[k].centre.y)
+		var a: Vector3 = c.gates[k - 1].centre if k > 0 else c.start.position
+		legs += Vector2(c.gates[k].centre.x - a.x, c.gates[k].centre.z - a.z).length() / c.gates.size()
+		routed += int(c.is_routed(c.gates, k))
+	if style.begins_with("technical"):
+		eq(c.gates.size(), 12, what + ": twelve gates")
+		check(legs <= 21.0, what + ": short legs (%.1f m on average)" % legs)
+		check(c.envelope.turn_r < AIPilot.cruise_turn_radius(BirdProfile.by_id("hawk")) * 0.7, what + ": turns planned for the agile birds (%.1f m)" % c.envelope.turn_r)
+		eq(routed, 0, what + ": no leg routed")
+	else:
+		eq(c.gates.size(), 7, what + ": seven gates")
+		check(legs >= 30.0, what + ": long legs (%.1f m on average)" % legs)
+		check(routed >= 1, what + ": legs routed through the wood (%d)" % routed)
+		near(c.envelope.turn_r, AIPilot.cruise_turn_radius(BirdProfile.by_id("hawk")), 1e-4, what + ": planned for every bird")
+	if style.ends_with("high-low"):
+		check(hi - lo >= 8.0, what + ": windows from %.1f to %.1f m up" % [lo, hi])
+	else:
+		check(hi - lo <= 4.0, what + ": windows level, from %.1f to %.1f m up" % [lo, hi])
+
+
 ## The way home, by hand in an empty wood (the rail facing -z, so home comes in from -z flying +z): a last gate out
 ## in front, facing home, keeps the rules; the same with a tree on the line home, facing away from home, or come
 ## round behind the rail doesn't.
@@ -223,7 +264,7 @@ func _home_by_hand() -> void:
 func _course_rules(s: int) -> RaceCourse:
 	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
-	eq(c.gates.size(), RaceCourse.GATES, "seed %d: a full course" % s)
+	eq(c.gates.size(), c.gate_count, "seed %d: a full course" % s)
 	var probs := c.problems()
 	check(probs.is_empty(), "seed %d: the rules kept: %s" % [s, "; ".join(probs)])
 	check(c.start != null and c.layout.perches.has(c.start), "seed %d: it starts (and ends) on a perch of the wood" % s)
@@ -326,7 +367,7 @@ func _field_finishes(s: int) -> void:
 	for id in BirdProfile.IDS:
 		for sk in ["pilot", "ace"]:
 			var r: Dictionary = by["%s %s" % [sk, id]]
-			eq(r.gates, RaceCourse.GATES, "seed %d: the %s %s takes every gate" % [s, sk, id])
+			eq(r.gates, c.gate_count, "seed %d: the %s %s takes every gate" % [s, sk, id])
 			check(r.time < INF, "seed %d: the %s %s lands home on the rail" % [s, sk, id])
 			check(r.course_bonks == 0, "seed %d: the %s %s doesn't bonk on the course (%d)" % [s, sk, id, r.course_bonks])
 		var rec: Dictionary = by["recruit %s" % id]

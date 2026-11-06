@@ -4,7 +4,7 @@ A course of gates through the pine wood, flown against the clock. This first ver
 how a course is laid out in the wood, what turns and climbs it asks of each bird, and how the AI racers fly it. The
 gates are placeholders (frames, bars and rings); their designs come later.
 
-Play it from the menu's Race screen (your bird, Course 1-3: course seeds 16, 23 and 17 on the game's arena, seed 7, ones that come home cleanly from the centre outpost; rivals: none,
+Play it from the menu's Race screen (your bird, the course: Technical or Long, Level or High and low -- four courses on the game's arena, seed 7, `Menu.COURSES`; rivals: none,
 recruits, pilots or aces, one of each other bird; Novice | Realistic; your best on that course shown), or
 `.\run.ps1 --race [--bird hawk] [--flying novice] [--race-ai recruit|pilot|ace] [--course <n>]` (`--autopilot` or P: an
 ace racer flies your bird). The menu's race has no rider or tack (`--no-rider`); the pause menu's Start over puts
@@ -185,6 +185,33 @@ same line; a racing line of its own (cutting corners, carrying speed) would.
 With the way home planned (2026-11-05, arena 7, courses 16, 23 and 17): on course 16 every pilot and every ace
 finishes, the falcon too (24-62 s; the hawk's landing loops cost it most); on 23 and 17 every pilot and ace but the
 falcon, which fails out on the course, not landing. Recruits finish about half the time.
+
+## Course styles (`RaceCourse.STYLES`, `--course-style`)
+
+A style is a shape and heights, `<shape>-<heights>`; each sets the search's scoring and a few rules (`SHAPES`, `HEIGHTS`):
+
+| | gates | legs | turns scored | other |
+|---|---|---|---|---|
+| technical | 12 | 12-24 m (aim 16) | 40-90 deg, S-bends favoured | planned for the agile birds (crow, owl, sparrow: a 3.4 m circle): the hawk and falcon can't make its turns, by design |
+| long | 7 | 26-55 m (aim 40) | 5-40 deg | a leg the smooth curve can't fly clear is routed through the wood (`route_line`) |
+| (all-round) | 10 | 14-40 m | 20-70 deg | as before |
+
+Heights: level scores climbs and dives down and a narrow spread; high and low scores them up. **Routed legs**: the ways
+out of the gate before and into the next are kept clear straight lanes, as on every leg; between them the AI's own
+route planner (`FlightPlanner`, at the course's clearance) finds the way through the wood, its route no steeper than a
+leg may climb or dive. A routed leg isn't held to the smooth curve's turning circle, and the next gate needn't be in
+sight from the one before (the HUD's arrow shows the way); the AI racer and LinePilot follow the route.
+
+The menu's four (arena 7): technical level, course 7 (12 gates, windows 7-8 m); technical high and low, 13 (2.5-11 m);
+long level, 9 (7 gates, 5-8 m, four trunk gates, from the west outpost); long high and low, 12 (2.5-14 m). Raced
+(probe_race): every pilot and ace crow, owl and sparrow finishes all four; the hawk finishes technical level but not
+technical high and low (its turns aren't planned for it), and most of the long; the falcon fails the long ones, on
+their routed legs (it can't hold a route's corners). `tests/probe_courses.gd --style <s>` sums up many seeds.
+
+Not done: technical courses that cross themselves (the user's ask: the lit gates show the way). Scoring a crossing,
+letting the course wind further and pulling the middle legs back at an early leg made one crossing in 32 courses: the
+beam search picks each gate from those 12-24 m on, and a crossing needs the course planned as a figure of eight from
+the start.
 
 ## Open questions
 
