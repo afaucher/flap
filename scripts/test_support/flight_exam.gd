@@ -70,6 +70,17 @@ static func add_tree(a: ArenaLayout, form: String, at := Vector2.ZERO, s := 1) -
 	return t
 
 
+## A grove round a tree at `at`: GROVE's neighbours (form, bearing deg, metres out) -- a pine stand's spacing, so
+## an approach to the middle tree threads between trunks and crowns.
+const GROVE := [["pine", 20.0, 10.0], ["pole", 95.0, 8.0], ["veteran", 160.0, 11.0], ["pine", 230.0, 9.5], ["pole", 300.0, 8.5]]
+
+
+static func add_grove(a: ArenaLayout, at := Vector2.ZERO, s := 1) -> void:
+	for k in GROVE.size():
+		var g: Array = GROVE[k]
+		add_tree(a, g[0], at + Vector2.from_angle(deg_to_rad(float(g[1]))) * float(g[2]), s + 10 + k)
+
+
 ## An outpost on `t` (facing its most open side, as the pine wood places them); its rail perch, or null.
 static func add_outpost(a: ArenaLayout, t: ArenaLayout.TreeData, s := 1) -> Perch:
 	var rng := RandomNumberGenerator.new()
@@ -113,6 +124,7 @@ class Attempt:
 	var bonks := 0
 	var no_route := 0           ## times the planner found no way to the perch
 	var asked := -INF           ## s it was last sent on (sent again at most once a second)
+	var from: Perch = null      ## a hop's: the perch it starts on
 	var name := ""              ## a gate attempt's course
 	var race: RaceRun = null    ## (gate attempts)
 	var racer: RacePilot = null
@@ -212,6 +224,27 @@ func add_landing(id: String, p: Perch, bearing: float, up := 3.0, out := 30.0, s
 	return at
 
 
+## A bird of species `id` sitting on `from` (another tree's perch), sent to land on `p`: it takes off, flies across and
+## lands, as an AI bird hops from perch to perch. Seeded `s`.
+func add_hop(id: String, from: Perch, p: Perch, s := 1) -> Attempt:
+	build()
+	var at := Attempt.new()
+	at.id = id
+	at.perch = p
+	at.bearing = rad_to_deg(Vector2(from.position.x - p.position.x, from.position.z - p.position.z).angle())
+	at.up = from.position.y - p.position.y
+	at.pilot = AIPilot.new(layout, s)
+	at.bird = Bird.new()
+	host.add_child(at.bird)
+	at.bird.setup(BirdProfile.by_id(id), layout, at.pilot)
+	at.bird.arena = arena
+	at.bird.rig.visible = false
+	at.bird.perch_at(from)
+	at.from = from
+	attempts.append(at)
+	return at
+
+
 ## Fly every attempt until each has landed or `seconds` have passed (all at once: they don't meet).
 func fly(seconds: float) -> void:
 	var was := {}
@@ -243,7 +276,7 @@ func fly(seconds: float) -> void:
 				at.bonks = b.bonks
 				continue
 			left = true
-			if st != was.get(at, -1):
+			if st != was.get(at, Bird.State.PERCHED if at.from != null else -1):
 				if st == Bird.State.PERCHED:
 					at.elsewhere += 1
 				elif st == Bird.State.GROUNDED:

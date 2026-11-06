@@ -4,6 +4,7 @@ extends TestCase
 ## and a table of landed / tried per species.
 ##   .\probe.ps1 -Headless probe_flight_exam [--tree pine|veteran|pole|oak] [--rail] [--birds crow,...]
 ##        [--bearings 0,90,180,270] [--ups 3] [--out 30] [--seconds 40] [--seed 1] [--perches 3,5] [--fails]
+##        [--grove] (other trees round it) [--hop <form>] (from two perches each of a tree of that form 28 m away)
 ##   ... probe_flight_exam --gates [--courses straight,uturn,...] [--skills recruit,pilot,ace]: the gate courses
 
 func _init() -> void:
@@ -30,6 +31,12 @@ func setup() -> void:
 	var ups := _list(args, "--ups", "3")
 	var a := FlightExam.place()
 	var t := FlightExam.add_tree(a, form, Vector2.ZERO, s)
+	if args.has("--grove"):
+		FlightExam.add_grove(a, Vector2.ZERO, s)
+	var hop_from: Array[Perch] = []
+	if Boot.arg_value(args, "--hop") != "":   # (--hop <form>: from that tree's perches 28 m away, one a hop)
+		var ta := FlightExam.add_tree(a, Boot.arg_value(args, "--hop"), Vector2(-28.0, 0.0), s + 5)
+		hop_from = FlightExam.perches_of(a, ta.id)
 	var targets: Array[Perch] = []
 	if args.has("--rail"):
 		var r := FlightExam.add_outpost(a, t, s)
@@ -53,6 +60,11 @@ func setup() -> void:
 	var k := 0
 	for id in birds:
 		for q in targets:
+			if not hop_from.is_empty():
+				for j in 2:   # (two perches of the other tree each)
+					k += 1
+					ex.add_hop(id, hop_from[(q.id * 3 + j * 5) % hop_from.size()], q, 100 + k)
+				continue
 			for be in bearings:
 				for u in ups:
 					k += 1
