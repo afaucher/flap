@@ -279,6 +279,26 @@ Left: the floor's triangles are about 1.4 ms more (`FLOOR_STEP` 4 m against 0.4 
 shader change), most of it far off where the 0.4 m quads are a few pixels; coarser tiles with distance would take
 most of it back, a look change to agree first.
 
+### Fewer floor triangles, the look kept (2026-11-05)
+
+Two cuts that draw the same floor, three runs each against master, 4 birds, quiet machine: GPU **12.28 against
+12.56 ms** (pre-pass 3.77 / 3.90, opaque 3.83 / 3.90, shadows 3.90 / 3.99); the fine mesh 472k triangles to 310k.
+
+- The ring's hole shrunk to where the floor is flat for good (`FloorField.flat_beyond`: the farthest mound texel,
+  plus the shader's bilinear read and its normal round it; 90 m in the default wood, against 127 m), and the fine
+  cells wholly past it dropped: 31 % of the cells, about 148k triangles. The ring draws them flat, as they were.
+- Flat blocks joined (`FLOOR_JOIN`, 8 x 8 then 4 x 4 cells, where `FloorField.flat_cells` has the field 0 at every
+  texel the shader reads for them): each a fan from its centre to every vertex on its edge, so a neighbour's
+  vertices are never left on a side (a T-junction cracks). 4.9 % of the cells, about 15k triangles; the joins are
+  few because the moss and mounds leave few flat blocks inside the hole. Blocks of 16 and 32 shifted the far
+  litter's texture (up to 9 levels once blurred), so the joins stop at 8.
+
+The look checked with `tests/probe_floor_still.gd` against master: close, mid and wide within 2-3 levels once
+blurred over 12 px; about 150 single pixels along the fans' edges differ (rasterization), none visible in crops;
+past 90 m (edge and corner views) up to 5 levels blurred, where the flat fine mesh's self-shadow acne is gone
+(under the heath grass in the game). `test_forest_floor` measures the mesh: every cell inside the hole covered once,
+no lone edge (crack), joined only over flat floor, the ring only over flat floor.
+
 | 20 birds, per frame (ms) | 2026-11-05 (two runs) |
 |---|---|
 | Frame mean / p95 | 26.5-34.7 / 44-57 |

@@ -199,6 +199,51 @@ func height(x: float, z: float) -> float:
 	return lerpf(lerpf(data[k * 4], data[(k + 1) * 4], fu), lerpf(data[(k + n) * 4], data[(k + n + 1) * 4], fu), fv)
 
 
+## Where the floor is drawn flat: 1 at grid point (i, j) when every point from i - 1 to i + 2 and j - 1 to j + 2 has
+## height 0, so anywhere in the cell from (i, j) to (i + 1, j + 1) the shader reads height 0 there and RES either way
+## (no mound, its normal straight up). (A read landing a hair over a cell's edge gives the point past it no weight: the
+## GPU's filter weights are 8-bit.) Off the grid counts as 0, as the shader reads it.
+func flat_cells() -> PackedByteArray:
+	var rows := PackedByteArray()   # (a height in i - 1 .. i + 2 along the row)
+	rows.resize(n * n)
+	for j in n:
+		var run := 0   # (the points with height from i - 1 to i + 2, counted as the window slides)
+		for i in range(-1, 3):
+			if i >= 0 and i < n and data[(j * n + i) * 4] != 0.0:
+				run += 1
+		for i in n:
+			rows[j * n + i] = 1 if run > 0 else 0
+			if i - 1 >= 0 and data[(j * n + i - 1) * 4] != 0.0:
+				run -= 1
+			if i + 3 < n and data[(j * n + i + 3) * 4] != 0.0:
+				run += 1
+	var out := PackedByteArray()
+	out.resize(n * n)
+	for i in n:
+		var run := 0
+		for j in range(-1, 3):
+			if j >= 0 and j < n:
+				run += rows[j * n + i]
+		for j in n:
+			out[j * n + i] = 1 if run == 0 else 0
+			if j - 1 >= 0:
+				run -= rows[(j - 1) * n + i]
+			if j + 3 < n:
+				run += rows[(j + 3) * n + i]
+	return out
+
+
+## How far from the middle the floor can be other than flat: the farthest point with height, plus the reach of the
+## shader's bilinear read and its normal's (RES either way). Past this the floor is a plane at GROUND_Y.
+func flat_beyond() -> float:
+	var far := 0.0
+	for j in n:
+		for i in n:
+			if data[(j * n + i) * 4] != 0.0:
+				far = maxf(far, (origin + Vector2(i, j) * RES).length())
+	return far + 2.0 * RES * sqrt(2.0)
+
+
 ## The heights alone, for a HeightMapShape3D (row by row along x).
 func heights() -> PackedFloat32Array:
 	var out := PackedFloat32Array()

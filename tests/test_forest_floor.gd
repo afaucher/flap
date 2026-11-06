@@ -109,12 +109,11 @@ func setup() -> void:
 	var fine := ground.get_node_or_null("FloorMounds") as Node3D
 	check(fine != null, "a fine floor mesh under the wood")
 	if fine != null:
-		_check_fine_floor(fine, ff)
 		var plane: MeshInstance3D = null
 		for c in ground.get_children():
 			if c is MeshInstance3D:
 				plane = c
-		_check_ring(plane, fine, ff)
+		_check_fine_floor(fine, ff, _check_ring(plane, fine, ff))
 	var space := arena.get_world_3d().direct_space_state
 	var worst := 0.0
 	var rng := RandomNumberGenerator.new()
@@ -182,23 +181,25 @@ func setup() -> void:
 
 
 ## The fine floor mesh as drawn: tiles, each small enough to be culled on its own (one mesh over the whole floor was
-## drawn whole in every pass, 3.5 ms of GPU: docs/design/performance.md); together one grid over the field, fine
-## enough for the mounds, the tiles' edges the same vertices so they meet without a crack; displaced by the field.
-func _check_fine_floor(fine: Node3D, ff: FloorField) -> void:
+## drawn whole in every pass, 3.5 ms of GPU: docs/design/performance.md), displaced by the field, on one grid fine
+## enough for the mounds. Measured from its triangles: every point of the floor inside the ring's hole covered once
+## (no gap, no overlap), the rest left to the ring; no crack (every edge inside shared by two triangles: a T, where a
+## cell's corner sits on a bigger triangle's side, leaves edges of one); the bigger triangles (flat blocks joined)
+## only where the floor is flat, the field's height 0 at their cells' corners and half a metre round (the mesh draws
+## there as the cells would); and far fewer triangles than two a cell.
+func _check_fine_floor(fine: Node3D, ff: FloorField, hole: float) -> void:
 	var tiles: Array[MeshInstance3D] = []
 	for c in fine.get_children():
 		if c is MeshInstance3D:
 			tiles.append(c)
+	var centre := Vector2(fine.position.x, fine.position.z)
 	var widest := 0.0
-	var lo := Vector2(INF, INF)
-	var hi := Vector2(-INF, -INF)
-	var xs := {}
-	var all := {}
-	var total := 0
 	var drawn := true
 	var tall := INF
 	var up := 0
 	var down := 0
+	var xs := {}
+	var tris: Array[PackedVector2Array] = []   # (every triangle, in the field's frame round the middle)
 	for t in tiles:
 		var fm := t.material_override as ShaderMaterial
 		var tex := fm.get_shader_parameter("field") as ImageTexture if fm != null else null
@@ -213,41 +214,96 @@ func _check_fine_floor(fine: Node3D, ff: FloorField) -> void:
 		var arr := t.mesh.surface_get_arrays(0)
 		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
-		total += v.size()
-		for p in v:
-			var w := fine.position + p
-			lo = Vector2(minf(lo.x, w.x), minf(lo.y, w.z))
-			hi = Vector2(maxf(hi.x, w.x), maxf(hi.y, w.z))
-			xs[p.x] = true
-			all[p] = true
-		for i in range(0, idx.size(), 3):   # (facing up as the PlaneMesh did: clockwise from above)
-			if (v[idx[i + 1]] - v[idx[i]]).cross(v[idx[i + 2]] - v[idx[i]]).y < 0.0:
+		for i in range(0, idx.size(), 3):
+			var a := v[idx[i]]
+			var b := v[idx[i + 1]]
+			var c := v[idx[i + 2]]
+			if (b - a).cross(c - a).y < 0.0:   # (facing up as the PlaneMesh did: clockwise from above)
 				up += 1
 			else:
 				down += 1
+			tris.append(PackedVector2Array([Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z)]))
+			xs[a.x] = true
 	var keys := xs.keys()
 	keys.sort()
-	var step := 0.0
+	var step := INF
 	for i in range(1, keys.size()):
-		step = maxf(step, float(keys[i]) - float(keys[i - 1]))
-	var side := int(round(sqrt(all.size())))
-	print("FLOOR fine mesh: %d tiles, the widest %.1f m; together %.1f x %.1f m (the field %.1f), %d vertices on a %d x %d grid %.3f m apart (%d shared at the tiles' edges); %d triangles facing up, %d down" % [tiles.size(), widest, hi.x - lo.x, hi.y - lo.y, ff.size, all.size(), side, side, step, total - all.size(), up, down])
+		step = minf(step, float(keys[i]) - float(keys[i - 1]))
+	var segs := int(round(ff.size / step))
 	check(tiles.size() >= 16 and widest <= ff.size / 4.0 + 0.01, "the fine floor in tiles, each culled on its own (%d, the widest %.1f m of %.1f)" % [tiles.size(), widest, ff.size])
 	check(drawn, "every tile drawing the field's mounds, from the field itself")
 	check(tall >= FloorField.MOUND_H, "each culled with room for the mounds the shader raises (to %.2f m)" % tall)
-	check(lo.distance_to(ff.origin) < 0.01 and hi.distance_to(ff.origin + Vector2.ONE * ff.size) < 0.01, "together over the whole field (%s to %s)" % [lo, hi])
-	check(step <= FloorField.RES and step > 0.0, "fine enough to draw the field's mounds (%.2f m)" % step)
-	eq(all.size(), side * side, "one grid: the tiles' edges the same vertices, no crack between them")
+	check(step <= FloorField.RES and step > 0.0, "fine enough to draw the field's mounds (%.3f m)" % step)
 	check(down == 0 and up > 0, "facing up (%d down)" % down)
+	# Coverage: a point in every cell of the grid (off its diagonals and any fan's spokes), counted under each triangle.
+	var half := ff.size * 0.5
+	var cover := PackedByteArray()
+	cover.resize(segs * segs)
+	var joined := PackedByteArray()   # (the point under a bigger triangle than a cell's)
+	joined.resize(segs * segs)
+	var off := Vector2(0.3137, 0.1871)
+	var edges := {}
+	for tri in tris:
+		var lo := tri[0].min(tri[1]).min(tri[2])
+		var hi := tri[0].max(tri[1]).max(tri[2])
+		var big := absf((tri[1] - tri[0]).cross(tri[2] - tri[0])) * 0.5 > 0.75 * step * step
+		for cj in range(maxi(0, int(floor((lo.y + half) / step - off.y))), mini(segs - 1, int(floor((hi.y + half) / step - off.y))) + 1):
+			for ci in range(maxi(0, int(floor((lo.x + half) / step - off.x))), mini(segs - 1, int(floor((hi.x + half) / step - off.x))) + 1):
+				var p := Vector2(-half + (ci + off.x) * step, -half + (cj + off.y) * step)
+				if Geometry2D.point_is_inside_triangle(p, tri[0], tri[1], tri[2]):
+					cover[cj * segs + ci] += 1
+					if big:
+						joined[cj * segs + ci] = 1
+		for e in 3:
+			var a := tri[e]
+			var b := tri[(e + 1) % 3]
+			var key := Vector4(a.x, a.y, b.x, b.y) if a < b else Vector4(b.x, b.y, a.x, a.y)
+			edges[key] = int(edges.get(key, 0)) + 1
+	var gaps := 0
+	var twice := 0
+	var dropped := 0
+	var n_joined := 0
+	var not_flat := 0
+	for cj in segs:
+		for ci in segs:
+			var k := cj * segs + ci
+			var p := Vector2(-half + (ci + off.x) * step, -half + (cj + off.y) * step)
+			if cover[k] > 1:
+				twice += 1
+			elif cover[k] == 0:
+				dropped += 1
+				if (p + centre).length() < hole:
+					gaps += 1
+			if joined[k] == 1:
+				n_joined += 1
+				for q in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:   # (its corners, and half a metre round)
+					var w := centre + Vector2(-half + (ci + q.x) * step, -half + (cj + q.y) * step)
+					var e := FloorField.RES
+					if ff.height(w.x, w.y) != 0.0 or ff.height(w.x + e, w.y) != 0.0 or ff.height(w.x - e, w.y) != 0.0 or ff.height(w.x, w.y + e) != 0.0 or ff.height(w.x, w.y - e) != 0.0:
+						not_flat += 1
+						break
+	var lone := 0   # (edges of one triangle inside the hole: a crack)
+	for key: Vector4 in edges:
+		if int(edges[key]) == 1 and (Vector2((key.x + key.z) * 0.5, (key.y + key.w) * 0.5) + centre).length() < hole:
+			lone += 1
+	var cells := segs * segs
+	print("FLOOR fine mesh: %d tiles, the widest %.1f m, a %d x %d grid %.3f m apart; %d triangles (%.0f %% of two a cell): %.1f %% of the cells left to the ring, %.1f %% joined in flat blocks; inside the ring's hole %d cells uncovered, %d covered twice, %d lone edges; %d joined cells not flat" % [tiles.size(), widest, segs, segs, step, tris.size(), 100.0 * tris.size() / (2.0 * cells), 100.0 * dropped / cells, 100.0 * n_joined / cells, gaps, twice, lone, not_flat])
+	eq(gaps, 0, "the floor inside the ring's hole all drawn: no gap")
+	eq(twice, 0, "drawn once: no triangles over each other")
+	eq(lone, 0, "no crack: every edge inside the hole shared by two triangles (no T)")
+	check(n_joined > cells / 40, "flat blocks joined (%d cells)" % n_joined)
+	eq(not_flat, 0, "joined only where the floor is flat (height 0 and half a metre round, at each joined cell's corners)")
+	check(tris.size() < 0.7 * 2.0 * cells, "far fewer triangles than two a cell (%d of %d)" % [tris.size(), 2 * cells])
 
 
 ## The ground round the fine floor mesh: a ring with a real hole (no discard in the floor's shader: it cost the whole
 ## floor its early depth test), from inside the fine mesh (no gap) to beyond where the mounds rise (the plane flat
-## through them was z-fighting with their feet), out to the horizon, facing up; casting no shadow (nothing under it).
-func _check_ring(plane: MeshInstance3D, fine: Node3D, ff: FloorField) -> void:
+## through them was z-fighting with their feet), only over flat floor (it draws there as the fine mesh would), out to
+## the horizon, facing up; casting no shadow (nothing under it). Returns how near the middle it comes.
+func _check_ring(plane: MeshInstance3D, fine: Node3D, ff: FloorField) -> float:
 	check(plane != null, "the big plane round the fine mesh")
 	if plane == null:
-		return
+		return 0.0
 	var arr := plane.mesh.surface_get_arrays(0)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
@@ -271,6 +327,18 @@ func _check_ring(plane: MeshInstance3D, fine: Node3D, ff: FloorField) -> void:
 	check(down == 0, "facing up (%d down)" % down)
 	check(not code.contains("discard;"), "the floor's shader has no discard (a hole cut in the mesh instead: the early depth test kept)")
 	eq(plane.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "the ground casts no shadow (nothing under it)")
+	var bumps := 0   # (the floor under the ring not flat: height, or a slope in the shader's normal)
+	var e := FloorField.RES
+	for j in range(-ff.n, ff.n + 1):
+		for i in range(-ff.n, ff.n + 1):
+			var w := Vector2(i, j) * 0.25 + Vector2(0.11, 0.07)
+			if w.length() < nearest or absf(w.x) > ff.size * 0.5 + 1.0 or absf(w.y) > ff.size * 0.5 + 1.0:
+				continue
+			if ff.height(w.x, w.y) != 0.0 or ff.height(w.x + e, w.y) != 0.0 or ff.height(w.x - e, w.y) != 0.0 or ff.height(w.x, w.y + e) != 0.0 or ff.height(w.x, w.y - e) != 0.0:
+				bumps += 1
+	print("FLOOR under the ring: %d points of 0.25 m off flat" % bumps)
+	eq(bumps, 0, "the ring only over flat floor (it draws there as the fine mesh would)")
+	return nearest
 
 
 ## Where a round falling straight down onto (x, z) bursts (Projectile.step against the layout, no birds).

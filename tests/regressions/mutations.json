@@ -2896,7 +2896,7 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\t\tmi.mesh = floor_ring(ff.size * 0.5 - 1.0, plane.size.x * 0.5)\n",
+    "find": "\t\t\tmi.mesh = floor_ring(reach, plane.size.x * 0.5)\n",
     "replace": ""
    }
   ]
@@ -4928,6 +4928,62 @@
     "file": "scripts/race/race_run.gd",
     "find": "\tif perch == course.start:   # (back on the rail before the course is done: the run starts over)\n\t\t_reset()\n",
     "replace": "\tif perch == course.start and false:\n\t\t_reset()\n"
+   }
+  ]
+ },
+ {
+  "id": "floor-join-t-junction",
+  "bug": "A joined flat block of the fine floor drawn from its corners alone, not every vertex on its edge: its neighbours' vertices sit on its sides (a T), and the rasterizer leaves pixel cracks along them (2026-11-05, the joining's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\tfor i in range(bi, bi + bk):\n\t\tring.append(bj * w + i)\n",
+    "replace": "\tfor i in range(bi, bi + bk, bk):\n\t\tring.append(bj * w + i)\n"
+   }
+  ]
+ },
+ {
+  "id": "floor-join-mirrored",
+  "bug": "The fine floor's flat map read without the PlaneMesh layout's mirror (x running the wrong way): blocks joined flat over mounds on the other side of the wood (2026-11-05, the joining's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "var fi := clampi(int(floor((centre.x + size * 0.5 - i * step - ff.origin.x) / FloorField.RES)), 0, ff.n - 1)",
+    "replace": "var fi := clampi(int(floor((centre.x - size * 0.5 + i * step - ff.origin.x) / FloorField.RES)), 0, ff.n - 1)"
+   }
+  ]
+ },
+ {
+  "id": "floor-ring-over-mound-edge",
+  "bug": "The ring's hole sized to the farthest mound's point alone, not the reach of the shader's bilinear read and its normal round it: the flat ring drawn over the last mounds' edges (2026-11-05).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/floor_field.gd",
+    "find": "\treturn far + 2.0 * RES * sqrt(2.0)\n",
+    "replace": "\treturn far\n"
+   }
+  ]
+ },
+ {
+  "id": "floor-cells-dropped-inside-hole",
+  "bug": "Fine floor cells left to the ring when only part of them lay past its hole: gaps in the floor round the ring's edge (2026-11-05, the cut's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "if (near + centre).length() >= reach:",
+    "replace": "if (near + centre).length() >= reach - 1.0:"
    }
   ]
  }

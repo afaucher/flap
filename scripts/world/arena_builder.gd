@@ -105,21 +105,23 @@ func _ground() -> void:
 			sm.set_shader_parameter("field_size", ff.size)
 			sm.set_shader_parameter("field_res", FloorField.RES)
 			# Under the wood, a fine mesh the litter's mounds rise in (FLOOR_STEP m apart), in tiles so the ones out
-			# of view or out of a shadow cascade are culled (floor_tiles); the big plane is a ring round it, a real
-			# hole (floor_ring). Solid at the same height: a heightmap from the same field (so a bird stands, a round
+			# of view or out of a shadow cascade are culled, its flat blocks joined (floor_tiles); the big plane is a
+			# ring round it, a real hole (floor_ring). Solid at the same height: a heightmap from the same field (so a bird stands, a round
 			# bursts and a feather settles on the mound it's drawn on).
 			var fine := Node3D.new()
 			fine.name = "FloorMounds"
 			fine.position = Vector3(ff.origin.x + ff.size * 0.5, ArenaLayout.GROUND_Y, ff.origin.y + ff.size * 0.5)
 			var fm := sm.duplicate() as ShaderMaterial
 			fm.set_shader_parameter("displace", 1.0)
-			for tm in floor_tiles(ff.size):
+			# (the ring from where the floor is flat for good: drawn the same by either, the fine mesh stops there)
+			var reach := minf(ff.flat_beyond() / cos(PI / RING_SIDES), ff.size * 0.5 - 1.0)
+			for tm in floor_tiles(ff, reach):
 				var tile := MeshInstance3D.new()
 				tile.mesh = tm
 				tile.material_override = fm
 				fine.add_child(tile)
 			body.add_child(fine)
-			mi.mesh = floor_ring(ff.size * 0.5 - 1.0, plane.size.x * 0.5)
+			mi.mesh = floor_ring(reach, plane.size.x * 0.5)
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # (nothing lies under the ground for it to shade)
 			var hcs := CollisionShape3D.new()
 			hcs.name = "FloorMoundsShape"
@@ -142,16 +144,30 @@ const FLOOR_TILES := 8    ## the fine floor mesh's tiles a side, each culled on 
 const RING_SIDES := 128   ## the big plane's hole, a polygon of this many sides (a multiple of 8: the square's corners on it)
 
 
-## The fine floor mesh, `size` m a side round the origin, as FLOOR_TILES x FLOOR_TILES tiles: one grid of vertices
-## FLOOR_STEP or less apart, laid out and triangulated as a PlaneMesh of it would be, each vertex computed from its
-## place in the one grid, so a tile's edge is its neighbour's to the bit and they meet without a crack.
-static func floor_tiles(size: float) -> Array[ArrayMesh]:
+## The fine floor mesh over the floor field `ff`, as FLOOR_TILES x FLOOR_TILES tiles: one grid of vertices
+## FLOOR_STEP or less apart, laid out as a PlaneMesh of it would be (in the field's frame: its middle the origin),
+## each vertex computed from its place in the one grid, so a tile's edge is its neighbour's to the bit and they meet
+## without a crack. Only the cells within `reach` m of the middle are drawn (the ring draws the flat floor past it),
+## and a block of cells where the floor is flat (FloorField.flat_cells: no mound, the normal straight up) is drawn as
+## a fan from its middle to every vertex on its edge: the same plane in far fewer triangles, and every vertex a
+## neighbouring cell has on that edge one of the fan's, so no crack opens at a T. Each cell in two triangles
+## otherwise, as the PlaneMesh had them.
+static func floor_tiles(ff: FloorField, reach: float) -> Array[ArrayMesh]:
+	var size := ff.size
 	var segs := int(size / FLOOR_STEP) + 1
 	var step := size / segs
+	var centre := ff.origin + Vector2.ONE * size * 0.5
+	var fc := ff.flat_cells()
+	var flat := PackedByteArray()   # (each grid vertex: flat round it)
+	flat.resize((segs + 1) * (segs + 1))
+	for j in segs + 1:
+		var fj := clampi(int(floor((centre.y + size * 0.5 - j * step - ff.origin.y) / FloorField.RES)), 0, ff.n - 1)
+		for i in segs + 1:
+			var fi := clampi(int(floor((centre.x + size * 0.5 - i * step - ff.origin.x) / FloorField.RES)), 0, ff.n - 1)
+			flat[j * (segs + 1) + i] = fc[fj * ff.n + fi]
 	var cuts: Array[int] = []
 	for k in FLOOR_TILES + 1:
 		cuts.append(int(round(float(k) * segs / FLOOR_TILES)))
-	var indices := {}   # (the triangles of a tile w x d vertices: the same for every tile that size)
 	var out: Array[ArrayMesh] = []
 	for tj in FLOOR_TILES:
 		for ti in FLOOR_TILES:
@@ -167,29 +183,80 @@ static func floor_tiles(size: float) -> Array[ArrayMesh]:
 				for i in w:
 					verts[k] = Vector3(size * 0.5 - (i0 + i) * step, 0.0, -z)   # (PlaneMesh's (-x, 0, -z))
 					k += 1
-			var key := Vector2i(w, d)
-			if not indices.has(key):
-				var idx := PackedInt32Array()
-				idx.resize((w - 1) * (d - 1) * 6)
-				var n := 0
-				for j in range(1, d):
-					var prev := (j - 1) * w
-					var row := j * w
-					for i in range(1, w):
-						idx[n] = prev + i - 1
-						idx[n + 1] = prev + i
-						idx[n + 2] = row + i - 1
-						idx[n + 3] = prev + i
-						idx[n + 4] = row + i
-						idx[n + 5] = row + i - 1
-						n += 6
-				indices[key] = idx
-			var m := _flat_mesh(verts, indices[key])
+			# Each cell: 0 drawn as two triangles, 1 in a joined block, 2 past `reach` (not drawn).
+			var cw := w - 1
+			var cd := d - 1
+			var cell := PackedByteArray()
+			cell.resize(cw * cd)
+			for cj in cd:
+				for ci in cw:
+					var a := verts[cj * w + ci]
+					var b := verts[(cj + 1) * w + ci + 1]
+					var near := Vector2(clampf(-centre.x, minf(a.x, b.x), maxf(a.x, b.x)), clampf(-centre.y, minf(a.z, b.z), maxf(a.z, b.z)))
+					if (near + centre).length() >= reach:
+						cell[cj * cw + ci] = 2
+			var idx := PackedInt32Array()
+			for bk: int in FLOOR_JOIN:
+				for bj in range(0, cd - bk + 1, bk):
+					for bi in range(0, cw - bk + 1, bk):
+						if _joinable(cell, cw, bi, bj, bk, flat, segs + 1, i0, j0):
+							for cj in range(bj, bj + bk):
+								for ci in range(bi, bi + bk):
+									cell[cj * cw + ci] = 1
+							_fan(idx, verts, w, bi, bj, bk)
+			for cj in cd:
+				for ci in cw:
+					if cell[cj * cw + ci] == 0:
+						var prev := cj * w
+						var row := (cj + 1) * w
+						idx.append_array([prev + ci, prev + ci + 1, row + ci, prev + ci + 1, row + ci + 1, row + ci])
+			if idx.is_empty():
+				continue
+			var m := _flat_mesh(verts, idx)
 			var x1 := size * 0.5 - i0 * step
 			var z0 := -size * 0.5 + j0 * step
 			m.custom_aabb = AABB(Vector3(x1 - (w - 1) * step, -0.1, -(z0 + (d - 1) * step)), Vector3((w - 1) * step, FloorField.MOUND_H + 0.2, (d - 1) * step))   # (the mounds rise in the shader)
 			out.append(m)
 	return out
+
+
+const FLOOR_JOIN := [8, 4]   ## the flat blocks joined, in cells a side, biggest first (a 2 x 2 block's fan has as many triangles as its cells; fans of 16 and up, their spokes long, shift the far litter's texture a little, seen low)
+
+
+## Whether the bk x bk block of a tile's cells from (bi, bj) can be joined: every cell still drawn on its own, every
+## vertex of it flat (the tile's first vertex at (i0, j0) in the whole grid, `gw` vertices a row).
+static func _joinable(cell: PackedByteArray, cw: int, bi: int, bj: int, bk: int, flat: PackedByteArray, gw: int, i0: int, j0: int) -> bool:
+	for cj in range(bj, bj + bk):
+		for ci in range(bi, bi + bk):
+			if cell[cj * cw + ci] != 0:
+				return false
+	for j in range(bj, bj + bk + 1):
+		for i in range(bi, bi + bk + 1):
+			if flat[(j0 + j) * gw + i0 + i] == 0:
+				return false
+	return true
+
+
+## A bk x bk block's fan: from its middle vertex to each vertex round its edge in turn (all 4 bk of them), each
+## triangle facing up as the PlaneMesh's do.
+static func _fan(idx: PackedInt32Array, verts: PackedVector3Array, w: int, bi: int, bj: int, bk: int) -> void:
+	var c := (bj + (bk >> 1)) * w + bi + (bk >> 1)
+	var ring := PackedInt32Array()
+	for i in range(bi, bi + bk):
+		ring.append(bj * w + i)
+	for j in range(bj, bj + bk):
+		ring.append(j * w + bi + bk)
+	for i in range(bi + bk, bi, -1):
+		ring.append((bj + bk) * w + i)
+	for j in range(bj + bk, bj, -1):
+		ring.append(j * w + bi)
+	for m in ring.size():
+		var a := ring[m]
+		var b := ring[(m + 1) % ring.size()]
+		if (verts[a] - verts[c]).cross(verts[b] - verts[c]).y < 0.0:
+			idx.append_array([c, a, b])
+		else:
+			idx.append_array([c, b, a])
 
 
 ## The ground round the fine floor mesh: from a circle `inner` m round the middle (a polygon of RING_SIDES inside it)
