@@ -160,6 +160,13 @@ runs under the crown's other limbs. The crow, owl and sparrow take the high line
 seconds slower (median 8.5-9.3 s, was 5): a low circle would serve them, but one rule for every bird is simpler and they
 lose nothing else. The hawk misses one of the big oak's rail from high above.
 
+**Cost.** Planning is cheap on average (84 us a tick in a 3 v 3, `probe_team_cost`) but spikes: a route search that
+can't reach its goal runs the lattice A* to its 8000 expansions, ~210 ms in one tick (half of it the edges' clearance
+checks), and in the game (`perf.ps1`, a crow and 3 AI) such ticks make most of its 0.7% hitched frames. Moving the
+A*'s open set onto a heap (same routes: the flight fingerprints match) didn't change it. Bounding the search or spreading
+it over ticks would, but either changes what the birds do (which searches give up, when a route arrives): not done
+without a decision.
+
 ## The test, and why its bounds hold
 
 `test_flight_exam` runs a scene a shard (17 shards, 10-70 s each; the runner stops a process at 120 s, so the veteran is
