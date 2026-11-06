@@ -188,3 +188,134 @@ and its faces wound as MeshBuild winds them (the legs mirrored, the right leg's 
 same, the right tube showed its inside from below, which the readback alone didn't see).
 
 ![The legs drawn by GDScript and by the shader, and their difference](../images/gpu_body_legs_ab.jpg)
+
+## Baseline, 2026-11-05 (master 4613915)
+
+`.\perf.ps1 -Hidden -Engine --gpu-profile` (crow on autopilot, 15 s), on a quiet machine; the GPU-on-by-default merge
+(f048914, 2026-11-03) profiled the same way the same day for comparison.
+
+| 4 birds, per frame (ms) | 2026-11-03 (f048914) | 2026-11-05 |
+|---|---|---|
+| Frame mean / p95 (vsync 60) | 16.8 / 19.8 | 17.0 / 19.0 |
+| GPU | 8.7 | 14.6 |
+| depth pre-pass / opaque / shadows | 2.5 / 2.4 / 3.2 | 5.0 / 4.6 / 4.2 |
+| Rig (`bird.rig`) | 2.0 | 2.5 |
+| AI (`bird.control`, nearly all `ai.avoid`) | | 1.6 |
+
+TAA (on by default since) costs about 0.8 ms of it (13.8 ms with `--no-taa`: its own pass is 0.12 ms, the rest the
+motion vectors); the look doesn't matter (`--look afternoon` the same). The rest of the rise is the floor's fine mesh
+(below). The 4-bird frame is now GPU-bound at about 15 ms of 16.7.
+
+### Where the GPU went (bisected, 2026-11-05)
+
+Each master commit profiled as above, twice (the second counted: the first compiles shaders), with no other Godot
+running:
+
+| Commit | GPU | pre-pass / opaque / shadows |
+|---|---|---|
+| f048914 GPU rig on by default (5 runs) | 8.7 | 2.5 / 2.4 / 3.2 |
+| 0d5fc0f wood grain from the height map (thermals before it) | 9.0-9.1 | 2.5-2.7 / 2.5 / 3.3-3.5 |
+| f8229cd TAA on | 9.7 | 2.7 / 3.0 / 3.2 |
+| b385da7 treetop perches drawn | 9.9 | 2.6 / 3.0 / 3.6 |
+| **57c299b the ground-cover merge** | **14.0** | **4.3 / 4.7 / 4.2** |
+| 4c802f1 the hangar's hollow | 13.7 | 4.3 / 4.7 / 4.0 |
+| 90a4b66 the heath edge | 14.1 | 4.9 / 4.4 / 4.0 |
+| 4613915 | 14.5 | 5.1 / 4.5 / 4.1 |
+
+The ground-cover merge (needle litter in mounds, the floor field, moss and dirt scans, trunk feet and roots, the
+mixed-age pines, the thermal motes) added 4 ms. Switched off one at a time at 4613915:
+
+| Off | GPU | pre-pass / opaque / shadows |
+|---|---|---|
+| nothing | 14.2-15.0 | 4.9-5.1 / 4.5-4.7 / 4.1-4.5 |
+| the fine floor mesh (`FloorMounds` hidden) | 11.2 | 3.2 / 3.5 / 3.8 |
+| its shadow only | 14.2 | 4.9 / 4.5 / 4.0 |
+| trunk feet and roots (`FloorField.feet`) | 14.7 | 5.1 / 4.6 / 4.2 |
+| mixed ages (`Pinewood.ages`) | 14.3 | 4.8 / 4.7 / 4.0 |
+| thermal motes (`--calm`) | 13.6 | 4.6 / 4.3 / 3.9 |
+| all four | 10.6 | 3.0 / 3.3 / 3.4 |
+
+So it is the fine floor mesh, about 3.5 ms: `ArenaBuilder._ground`'s `FloorMounds`, one `PlaneMesh` over the whole
+floor field (194 m a side) at `FLOOR_STEP` 0.4 m, about 236k vertices and 470k triangles, each vertex displaced by
+the field in the vertex shader. As one mesh it is never culled: the whole of it goes through the depth pre-pass, the
+opaque pass and every shadow cascade whatever the camera sees, and far off its 0.4 m quads are a few pixels each
+(small triangles shade poorly). Hiding it here leaves the big plane's hole open, so the saving is the mesh less a
+flat floor's few tenths of a ms. The rest (feet, ages, motes) is within the runs' spread.
+
+Ways to make it cheaper:
+- **No change to the look**: split `FloorMounds` into tiles (say 8 x 8 of 24 m) so the ones off screen or out of a
+  shadow cascade are culled; cut the big plane's hole in its mesh (a ring) rather than by `discard` in
+  `forest_floor.gdshader`, which turns off early depth rejection over the whole plane.
+- **A look change, to agree first**: coarser steps further off (a clipmap or tile LODs: the mounds are 0.22 m at
+  most, gone in the distance anyway), `FLOOR_STEP` at the field's own 0.5 m (36 % fewer vertices), or no shadow
+  from the mounds (about 0.5 ms).
+
+### The floor made cheaper, its look kept (2026-11-05)
+
+Done (master a428d59 against the change, three runs each, 4 birds, quiet machine):
+
+| | GPU | pre-pass / opaque / shadows |
+|---|---|---|
+| before | 13.9 | 4.6 / 4.5 / 4.1 |
+| tiles, ring, no discard, the ring casting no shadow | 13.7 | 4.5 / 4.5 / 3.9 |
+| and the shader working out each layer only where it shows | **12.3** | **3.8 / 3.8 / 3.9** |
+
+- `ArenaBuilder.floor_tiles`: `FloorMounds` is 8 x 8 tiles (`FLOOR_TILES`) of the same grid, each vertex computed from
+  its place in it so neighbours share their edge to the bit. Culling them saves little in the autopilot's view
+  (most of the floor is in sight); it is what any distance LOD would be built on.
+- `ArenaBuilder.floor_ring`: the big plane a ring with a real hole, and `forest_floor.gdshader` without its
+  `discard` (a shader that can discard loses its early depth test). The ring casts no shadow: nothing is under it.
+- `forest_floor.gdshader`: moss, dirt, the openings' sward and the heath each worked out only where their share is
+  over 0 (mixed in at 0 they changed nothing); the moss's own relief, six noise octaves a pixel, only without the
+  moss scan, where it is used. The pre-pass gains as well as the opaque pass: it runs the fragment shader for the
+  normal-roughness buffer.
+
+The look checked with `tests/probe_floor_still.gd` (the floor alone, still, five views: two runs give the same
+pixels to 1 level): the shader change moves a few pixels at moss edges (the scan's gradients taken outside the
+branch); the tiles shift the needle texture by a fraction of a texel (PlaneMesh's vertices were quantized), up to
+150 levels on single pixels, 0.01 on average, under 2 levels anywhere once blurred over 12 px.
+
+Left: the floor's triangles are about 1.4 ms more (`FLOOR_STEP` 4 m against 0.4 m: 12.3 against 13.7 before the
+shader change), most of it far off where the 0.4 m quads are a few pixels; coarser tiles with distance would take
+most of it back, a look change to agree first.
+
+| 20 birds, per frame (ms) | 2026-11-05 (two runs) |
+|---|---|
+| Frame mean / p95 | 26.5-34.7 / 44-57 |
+| GPU | 15.8-23.1 |
+| AI (`bird.control`) | 8.0-11.3 |
+| Rig | 8.1-8.7 (11.6 on 2026-11-02) |
+| `bird.move` (collision, glances, wing strikes) | 5.1-7.1 |
+| `bird.reflex` | 0.7-1.0 |
+
+At 20 birds the AI and the birds' moving, both on the tick, now cost more than the rigs; the worst frames are three
+catch-up ticks with the AI's avoidance at 30-55 ms.
+
+## A bigger wood (evaluation, 2026-11-05)
+
+`Pinewood.area_scale` (the game's `--wood-area <x>`, `probe_load_time --wood-area <x>`) makes the wood x times the
+area at the same density: the boundary grows with the square root, every count (pines, oaks, poles, veterans,
+saplings, openings, outposts, ferns, grass) with x.
+
+| Area | Trees / perches / outposts | Boundary | Generate | Load (probe) | Memory (static) | GPU, 4 birds (pre-pass / opaque / shadows) | Frame mean, 4 birds |
+|---|---|---|---|---|---|---|---|
+| 1x | 391 / 2041 / 9 | 85 m | 2.7 s | 18.0 s | 269 MB | 14.9 (5.0 / 4.7 / 4.4) | 17.1 ms |
+| 1.5x | 550 / 2936 / 14 | 104 m | 3.9 s | 21.9 s | 375 MB | 17.8 (5.7 / 5.7 / 5.7) | 18.6 ms |
+| 2x | 733 / 4024 / 18 | 120 m | 5.6 s | 26.2 s | 506 MB | 20.9 (6.3 / 6.6 / 7.1) | 22.0 ms |
+| 3x | 1131 / 6487 / 27 | 147 m | 7.3 s | 27.7 s | 793 MB | 27.5 (8.1 / 7.7 / 10.8) | 28.8 ms |
+
+(The 1.5x-3x 4-bird runs shared the machine with other sessions' tests, 45-55 % CPU: their GPU numbers agree with a
+quiet 1x run, their CPU sections are noisy.) At 20 birds, 1x to 2x on a quiet machine: frame mean 26.5 -> 39.9 ms,
+GPU 15.8 -> 24.0, AI 8.0 -> 15.0, `bird.move` 5.1 -> 9.1, rig 8.1 -> 8.4.
+
+- **The GPU grows with the area**: nothing has a visibility range and the sun's shadows reach 160 m
+  (`ForestLight`), so every tree in the view frustum is drawn and shadowed however far off (18M primitives in the
+  probe's frame at 1x, 30M at 2x). Shadows grow fastest. A bigger wood needs far trees drawn and shadowed for less
+  -- visibility ranges with impostors or simpler far trees, shadow distance and cascades -- which is a look change
+  (Rules: fidelity first) to agree before it goes in.
+- **The CPU per bird grows too**, though the wood queries are hashed: `ArenaLayout`'s queries (`tree_clear`,
+  `clear_by`, `obstacle_distance`, `wood_near`, `nearest_wood`) go through every outpost each call, and the AI's
+  perch picks (`AIPilot._best_perch`, `CombatTree._pick_perch`) through every perch; both lists grow with the area.
+  Hashing the outposts and picking from `perches_near` would keep them flat at no cost to the look. Longer flights
+  in a bigger wood also mean more flying ticks; the runs don't separate the two.
+- **Loading** grows by about 4 s a 1x of area (generation and the wood's build), memory by about 120-140 MB.

@@ -2896,7 +2896,7 @@
   "edits": [
    {
     "file": "scripts/world/arena_builder.gd",
-    "find": "\t\t\tsm.set_shader_parameter(\"hole_r\", ff.size * 0.5 - 1.0)\n",
+    "find": "\t\t\tmi.mesh = floor_ring(ff.size * 0.5 - 1.0, plane.size.x * 0.5)\n",
     "replace": ""
    }
   ]
@@ -4858,6 +4858,62 @@
     "file": "scripts/combat/ai_combat.gd",
     "find": "\tvar t := l.target_bird()",
     "replace": "\tvar t := l.target()"
+   }
+  ]
+ },
+ {
+  "id": "floor-mounds-one-mesh",
+  "bug": "The fine floor mesh was one PlaneMesh over the whole wood (470k triangles): never culled, the whole of it went through the depth pre-pass, the opaque pass and every shadow cascade, about 3.5 ms of GPU (2026-11-05, docs/design/performance.md).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "const FLOOR_TILES := 8 ",
+    "replace": "const FLOOR_TILES := 1 "
+   }
+  ]
+ },
+ {
+  "id": "floor-tiles-gap",
+  "bug": "Tiles of the fine floor mesh that stop a step short of their neighbour: a crack along every tile's edge (2026-11-05, the tiling's own failure).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "var w := cuts[ti + 1] - i0 + 1",
+    "replace": "var w := cuts[ti + 1] - i0"
+   }
+  ]
+ },
+ {
+  "id": "floor-hole-by-discard",
+  "bug": "The big ground plane's hole was cut by discard in forest_floor.gdshader: a shader that can discard loses its early depth test, over the whole floor and the fine mesh sharing the shader (2026-11-05).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/forest_floor.gdshader",
+    "find": "\tvec2 p = wxz;\n",
+    "replace": "\tvec2 p = wxz;\n\tif (displace == 0.0 && length(p) < 96.0) {\n\t\tdiscard;\n\t}\n"
+   }
+  ]
+ },
+ {
+  "id": "ground-casts-shadow",
+  "bug": "The big ground plane cast shadows: drawn into every shadow cascade for nothing, there being nothing under the ground to shade (2026-11-05).",
+  "tests": [
+   "test_forest_floor"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_builder.gd",
+    "find": "\t\t\tmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # (nothing lies under the ground for it to shade)\n",
+    "replace": ""
    }
   ]
  },
