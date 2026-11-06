@@ -97,7 +97,8 @@ static func ways_in(p: Perch, from: Vector3, profile: BirdProfile = null, headin
 				continue
 			var ways := Dubins.all(Vector2(from.x, from.z), Vector2(heading.x, heading.z).normalized(), Vector2(app.x, app.z), Vector2(-d.x, -d.z).normalized(), turn_r)
 			cost[d] = (ways[0] as PackedVector2Array).size() if not ways.is_empty() else INF
-			if layout != null and cost[d] < INF and Vector2(app.x - from.x, app.z - from.z).length() < LINEUP_NEAR * turn_r + LINEUP_NEAR_PAD 					and not _turn_clear(layout, ways[0], from.y, maxf(app.y, clearance + 0.5), AIPilot.lineup_clearance(profile)):
+			if layout != null and cost[d] < INF and Vector2(app.x - from.x, app.z - from.z).length() < LINEUP_NEAR * turn_r + LINEUP_NEAR_PAD \
+					and not _turn_clear(layout, ways[0], from.y, maxf(app.y, clearance + 0.5), AIPilot.lineup_clearance(profile)):
 				cost[d] += BLOCKED_LINEUP   # (near: a way in it can't turn onto clear of the wood comes after those it can)
 		out.sort_custom(func(x: Vector3, y: Vector3): return cost[x] < cost[y])
 	elif to.length() > 0.5:

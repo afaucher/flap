@@ -46,7 +46,7 @@ attempts and its median time (`test_flight_exam.RATE`, `TIME`).
 
 ## Baseline and now
 
-Landed / tried, 45 s each (master 25df35b before; this branch after):
+Landed / tried, 45 s each (master before -- 25df35b, and 63f2557 for the rows below the gates; this branch after):
 
 | Scene | crow | owl | hawk | falcon | sparrow |
 |---|---|---|---|---|---|
@@ -57,11 +57,16 @@ Landed / tried, 45 s each (master 25df35b before; this branch after):
 | pine's rail | 16 -> **16** / 16 | 16 -> **16** | 15 -> **16** | 4 -> **16** | 16 -> **16** |
 | big oak's rail | 16 -> **16** / 16 | 16 -> **16** | 16 -> **15** | 7 -> **16** | 16 -> **16** |
 | gates | 30 -> **30** / 30 | 30 -> **30** | 30 -> **30** | 24 -> **30** | 30 -> **30** |
-HEIGHTS_GROVE_HOP
+| pine, 10 m above / 8 m below | 80 -> **88** / 88 | 77 -> **88** | 74 -> **88** | 25 -> **88** | 78 -> **88** |
+| oak, 10 m above / 6 m below | 86 -> **88** / 88 | 85 -> **88** | 74 -> **88** | 40 -> **81** | 77 -> **88** |
+| pine in a grove | 33 -> **44** / 44 | 36 -> **44** | 26 -> **44** | 5 -> **43** | 27 -> **44** |
+| veteran in a grove | 51 -> **60** / 60 | 55 -> **60** | 45 -> **60** | 13 -> **59** | 33 -> **59** |
+| hop, pine to pine | 20 -> **22** / 22 | 20 -> **22** | 20 -> **22** | 4 -> **22** | 19 -> **22** |
+| hop, veteran to oak | 22 -> **22** / 22 | 22 -> **22** | 19 -> **22** | 10 -> **18** | 17 -> **22** |
 
 Median time to land on a lone pine: crow 6.4 -> 4.1 s, owl 6.5 -> 4.0, hawk 8.4 -> 3.6, falcon 13.4 -> 9.0, sparrow
-10.9 -> 4.2. In the generated wood (`test_ai_flight`, 90 s, the flock picking its own perches): greybox 35 -> 48
-perches (0 bonks), pine wood 21 -> 32 perches, 9 -> 4 bonks.
+10.9 -> 4.2. In the generated woods (`test_ai_flight`, 90 s, the flock picking its own perches): greybox arenas 33 -> 48
+and 34 -> 52 perches (0 and 2 -> 0 and 1 bonks); the pine wood 30 -> 32 perches and 6 -> 4 bonks, the falcon 0 -> 4.
 
 ## How the birds differ, and what each needs
 
@@ -151,7 +156,7 @@ How robust each is against a change it isn't about:
 |---|---|---|---|
 | `test_ai_avoidance` | the avoidance and the planner, in hand-built layouts | its own trunks and limbs | yes: controlled scenes, both sides |
 | `test_ai_flight` | the flock chaining perches in two greybox arenas and the pine wood, 90 s | the generated arenas | fair: flock totals with wide bounds; the per-species ">= 4 in both arenas" is one run each |
-| `test_race` (field, run-in, go-round) | every pilot and ace lands home; racers out on the run-in land | course 16 of arena 7: one run each | fragile: one landing each, on one rail in one clearing; it moved with every change here. The exam's rails objective is the robust version; the field check could become "at least 9 of 10 pilots and aces land home" |
+| `test_race` (field, run-in, go-round) | pilots and aces take every gate and land home; racers out on the run-in land | course 16 of arena 7: one run each | fragile where it judged one landing each, on one rail in one clearing: it moved with every change here. The field's landing home is now a share (9 of the 10 pilots and aces); the exam's rails objective judges rail landings over many tries |
 | `test_combat_ai` | rearming, leaving the base, resting, the boxed-in base | `Pinewood.generate(7)` perches and bases | mixed: the scenes are picked from the wood, so a change to the wood changes which perch is tested (the no-way-in base now builds its own) |
 | `test_combat_team`, `test_combat_boom_zoom`, `test_combat` | 3 v 3 and duels | the wood; many seeds averaged | fair: totals over several woods with bounds about three standard deviations short |
 

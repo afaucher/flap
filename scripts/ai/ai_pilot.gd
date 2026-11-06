@@ -308,7 +308,8 @@ func _spiral(bird: Bird, dt: float) -> FlightInput:
 	var m := bird.model
 	var pos := bird.global_position
 	var app := route[route.size() - 2]
-	var excess := (pos.y - app.y) + (m.speed * m.speed - p.v_best * p.v_best) / (2.0 * BirdProfile.G) 			- Vector2(app.x - pos.x, app.z - pos.z).length() * DESCENT_GRADE / p.glide_ratio
+	var excess := (pos.y - app.y) + (m.speed * m.speed - p.v_best * p.v_best) / (2.0 * BirdProfile.G) \
+			- Vector2(app.x - pos.x, app.z - pos.z).length() * DESCENT_GRADE / p.glide_ratio
 	if excess > SPIRAL_START or (_spiralling and excess > SPIRAL_STOP):
 		if not _spiralling:
 			_spiralling = true

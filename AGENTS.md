@@ -55,7 +55,12 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
-- `scripts/ai/`: `AIPilot` (goal, guidance, avoidance), `FlightPlanner` (lattice A*).
+- `scripts/ai/`: `AIPilot` (goal, guidance, avoidance; turns within what the lift holds, lines up for the final on its own
+  turning circle, manages its energy for the catch), `FlightPlanner` (lattice A*, the ways in to a perch), `Dubins`
+  (turn-straight-turn paths). What the AI must be able to do is the flight exam (`docs/design/flight_exam.md`):
+  `FlightExam` (scripts/test_support: lone trees, rails, a grove, hops, gate courses), `test_flight_exam` (each species'
+  share and median time, by scene), `tests/probe_flight_exam.gd` (every attempt; `--trace` one). Judge an AI change
+  there, not on one run in the wood.
 - `scripts/race/`: race mode, a prototype (`docs/design/race.md`; the menu's Race screen, or `.\run.ps1 --race
   [--race-ai recruit|pilot|ace] [--course <n>] [--plan-for <birds>]`; the pause menu's Start over restarts the race). `RaceCourse` generates 10 gates from the layout (posts on
   open ground, low or tall; between two pines; hoops hung from a limb or a rope between two pines) from an outpost's

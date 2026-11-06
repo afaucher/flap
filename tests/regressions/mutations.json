@@ -5327,5 +5327,261 @@
     "replace": "\tpass\n"
    }
   ]
+ },
+ {
+  "id": "ai-one-way-in",
+  "bug": "A branch was come in to from one side only (its facing), so a bird behind the tree flew round it first and a perch whose swoop on that side was blocked had no way in at all: every species landed on 85-90% of a lone pine's perches, the pine's perch 3 on none (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\tfor side: float in [1.0, -1.0]:",
+    "replace": "\t\tfor side: float in [1.0]:"
+   }
+  ]
+ },
+ {
+  "id": "ai-turns-past-lift",
+  "bug": "Perch flights banked to 85% of the bank limit whatever the speed: the falcon, whose lift holds about 50 deg at cruise, sank into a stall spiral in every turn and go-around (8 of 44 of a pine's perches) (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t_v_cap = m.speed if opts.get(\"lift_cap\", false) else INF",
+    "replace": "\t_v_cap = INF"
+   }
+  ]
+ },
+ {
+  "id": "ai-flaps-when-fast",
+  "bug": "A perch flight beat its wings whenever it flew level, however fast: the falcon cruised at 15-16 m/s and came to every final far over its catch speed (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif opts.has(\"cruise\") and m.speed > float(opts.cruise) * CRUISE_OVER:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "ai-catch-speed-under-stall",
+  "bug": "The final bled speed toward 0.8 of the fastest catch, under the stall for the crow, hawk, falcon and sparrow: it pulled into the stall short of the branch (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\treturn (profile.v_stall + profile.grab_speed_max) * 0.5",
+    "replace": "\treturn profile.grab_speed_max * 0.8"
+   }
+  ]
+ },
+ {
+  "id": "ai-approach-drop-fixed",
+  "bug": "Every bird started its final swoop 1.2 m under the perch: too deep for a slow bird to climb (the sparrow passed under the rail at its catch speed), too shallow for a fast one to bleed its speed in (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\treturn clampf((profile.v_best * profile.v_best - v * v) / (2.0 * BirdProfile.G) * ZOOM_KEPT, DROP.x, DROP.y)",
+    "replace": "\treturn 1.2"
+   }
+  ]
+ },
+ {
+  "id": "ai-no-line-up",
+  "bug": "The route's last legs ignored which way the bird was flying: a wide turner reached the approach point still turning and passed the perch to the side (the falcon on an outpost rail 8 of 16) (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t\t_line_up(bird)",
+    "replace": "\t\t\tlined_up = true"
+   }
+  ]
+ },
+ {
+  "id": "ai-line-up-skips-approach",
+  "bug": "On a line-up's turn the guidance aimed most of a turning circle ahead, past the approach point too: the final began 20 m out, high and fast, with no swoop up from below (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\tif to_wp.length() < (_aim_ahead if wp < route.size() - 2 else AIM_AHEAD) or",
+    "replace": "\t\tif to_wp.length() < _aim_ahead or"
+   }
+  ]
+ },
+ {
+  "id": "ai-no-spiral",
+  "bug": "A bird high over its perch dived the height away on the way and came to the final far too fast; a tired crow hit its rest perch at 7.3 m/s and circled under it (2026-11-06).",
+  "tests": [
+   "test_flight_exam",
+   "test_combat_ai"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif excess > SPIRAL_START or (_spiralling and excess > SPIRAL_STOP):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "ai-final-shoved-off-rail",
+  "bug": "Beyond 8 m the perch's own tree and outpost counted as wood at full clearance on the final: the avoidance swerved off the line onto the big oak's rail and the bird passed it to the side (2026-11-06).",
+  "tests": [
+   "test_flight_exam",
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tvar landing := target != null and (target.distance_to(pos) < 8.0 or (mode == Mode.FINAL and follow_route and is_point))",
+    "replace": "\tvar landing := target != null and target.distance_to(pos) < 8.0"
+   }
+  ]
+ },
+ {
+  "id": "ai-go-around-in-place",
+  "bug": "A missed catch was planned again on the spot, behind the perch's tree and flying away: the new route's first leg turned back through the tree's limbs and the bird circled the trunk (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t\t_go_around(bird)",
+    "replace": "\t\t_replan(bird)"
+   }
+  ]
+ },
+ {
+  "id": "ai-candidate-not-held",
+  "bug": "On the final another limb the path passed near took the catch candidate, so the AI never held catch on the perch it was landing on (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tbird.candidate_lock = target if final and dist_perch < LOCK_RANGE else null",
+    "replace": "\tbird.candidate_lock = null"
+   }
+  ]
+ },
+ {
+  "id": "ai-way-by-side-only",
+  "bug": "The way in was chosen by the side the bird was on, not by how soon it could turn onto it: a fast bird flying past took a way it had to loop a full circle for (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tif profile != null and heading != Vector3.ZERO and turn_r > 0.0:",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "ai-on-line-loops",
+  "bug": "A bird already on the approach line was given a full turning circle to line up (no turn-straight-turn path fits a small offset in a few metres): the falcon on the race's run-in looped round the oak (2026-11-06).",
+  "tests": [
+   "test_flight_exam",
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\treturn along > approach_length(profile) * 0.5 and heading.dot(inward)",
+    "replace": "\treturn false and heading.dot(inward)"
+   }
+  ]
+ },
+ {
+  "id": "ai-way-pre-leg-ignored",
+  "bug": "Ways in whose pre-approach leg was closed ranked with the rest: the route then turned straight onto the approach, sharper than the falcon can, and it circled the clearing's oak after a race (2026-11-06).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\t\tif _leg_ok(q, a, -1, p.tree_id) or (heading != Vector3.ZERO and on_line(p, profile, d, start, heading)):",
+    "replace": "\t\tif true:"
+   }
+  ]
+ },
+ {
+  "id": "ai-approach-not-slowed",
+  "bug": "A bird came onto its approach leg as fast as its cruise let it, so the final's few metres couldn't bleed it to its catch speed (the hawk at 10.9 m/s onto the big oak's rail) (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif opts.has(\"slow_to\") and m.speed > float(opts.slow_to) and not opts.has(\"bleed_to\"):",
+    "replace": "\tif false:"
+   }
+  ]
+ },
+ {
+  "id": "ai-escape-lift-capped",
+  "bug": "Every steer() capped its bank at what the lift holds, a race's wood-guard escapes too: the crow put beside a gate turned too wide to get round it (15 go-arounds) (2026-11-06).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\t_v_cap = m.speed if opts.get(\"lift_cap\", false) else INF",
+    "replace": "\t_v_cap = m.speed if opts.get(\"lift_cap\", true) else INF"
+   }
+  ]
+ },
+ {
+  "id": "race-turns-past-lift",
+  "bug": "The racer banked to its skill's share of the limit whatever the speed: the falcon's go-arounds sank it into the ground and it never made a U-turn or a gate behind it (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_pilot.gd",
+    "find": "\tvar max_bank := minf(deg_to_rad(p.max_bank_deg) * skill.bank_frac, AIPilot.held_bank(p, m.speed))",
+    "replace": "\tvar max_bank := deg_to_rad(p.max_bank_deg) * skill.bank_frac"
+   }
+  ]
+ },
+ {
+  "id": "rail-deck-open-from-behind",
+  "bug": "With the whole deck of a rail's outpost left out of the landing's clearance, the planner brought birds in to the rail from behind and below, under the deck (2026-11-06).",
+  "tests": [
+   "test_race",
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/arena_layout.gd",
+    "find": "\t\t\t\tif k == DECK_RAIL_LINE and skip_perch >= 0 and skip_perch == o.rail_perch_id:",
+    "replace": "\t\t\t\tif skip_perch >= 0 and skip_perch == o.rail_perch_id:"
+   }
+  ]
  }
 ]
