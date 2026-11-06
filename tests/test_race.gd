@@ -365,21 +365,26 @@ func _field_finishes(s: int) -> void:
 	for r in trial.results():
 		by["%s %s" % [r.skill, r.id]] = r
 	var pairs := 0
-	var home := 0
+	var missed: Array = []
 	for id in BirdProfile.IDS:
+		var home := 0
 		for sk in ["pilot", "ace"]:
 			var r: Dictionary = by["%s %s" % [sk, id]]
 			eq(r.gates, c.gate_count, "seed %d: the %s %s takes every gate" % [s, sk, id])
-			home += 1 if r.time < INF else 0
+			if r.time < INF:
+				home += 1
+			else:
+				missed.append("%s %s" % [sk, id])
 			check(r.course_bonks == 0, "seed %d: the %s %s doesn't bonk on the course (%d)" % [s, sk, id, r.course_bonks])
-	# (One landing each on one rail in one clearing: a share, not every one -- the flight exam's rails objective judges
-	# rail landings over many tries, docs/design/flight_exam.md.)
-	check(home >= 9, "seed %d: the pilots and aces land home on the rail (%d of 10)" % [s, home])
+		# (One landing each on one rail in one clearing: one of the two may miss, but every species lands home -- the
+		# flight exam's rails objective judges rail landings over many tries, docs/design/flight_exam.md.)
+		check(home >= 1, "seed %d: the pilot or the ace %s lands home on the rail" % [s, id])
 		var rec: Dictionary = by["recruit %s" % id]
 		var ace: Dictionary = by["ace %s" % id]
 		if rec.time < INF and ace.time < INF:
 			pairs += 1
 			check(rec.time > ace.time, "seed %d: the recruit %s (%.1f s) is slower than the ace (%.1f s)" % [s, id, rec.time, ace.time])
+	check(missed.size() <= 1, "seed %d: the pilots and aces land home on the rail (missed: %s)" % [s, ", ".join(missed)])
 	check(pairs >= 2, "seed %d: recruits finished to compare (%d)" % [s, pairs])
 	trial.queue_free()
 
