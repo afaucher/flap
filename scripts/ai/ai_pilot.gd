@@ -30,8 +30,6 @@ var avoiding := 0.0
 var perches_reached := 0
 var replans := 0
 var debug_reason := ""
-var route_block := ""           ## (probes) what the route's predicted path met when avoidance last flew an escape
-var _why := ""
 var turn_radius := -1.0         ## m, at cruise (set on the first tick)
 var min_perch_height := 0.0
 
@@ -397,7 +395,6 @@ func _avoid(bird: Bird, aim: Vector3, gamma: float, dt: float, frac := 0.85, fol
 	if aim != Vector3.INF and _predict(bird, near, aim, true, gamma, horizon, frac, follow_route)[0] >= horizon:
 		avoiding = maxf(0.0, avoiding - dt)
 		return [want, gamma]
-	route_block = _why
 	if aim == Vector3.INF and _predict(bird, near, ahead, false, gamma, horizon, frac)[0] >= horizon:
 		avoiding = maxf(0.0, avoiding - dt)
 		return [ahead, gamma]
@@ -445,7 +442,7 @@ static func _bank_room(p: BirdProfile, y: float, frac := 0.85) -> float:
 ## rate up to the room it has at that height, the path angle easing toward `gamma` less what the bank sheds.
 ## Returns [seconds clear (`horizon` if all of it), final heading]. Coming in to land, the perch's own tree counts
 ## too, closer (OWN_TREE_CLEARANCE) and without the perch's branch, and the path ends where it passes closest to
-## the perch if that's in the feet's reach (the catch: wherever the look-ahead reaches the perch). Just after take-off, so does the tree it left (past the
+## the perch if that's in the feet's reach (the catch). Just after take-off, so does the tree it left (past the
 ## first PUSH_OFF metres, which it passes through as it lets go). With `to_beat` (the fan's best score so far, a clear
 ## one): [-1, final heading] if the path couldn't score more even clear (horizon + 2 + its end heading . `want_h`),
 ## without checking it against the wood.
@@ -459,11 +456,7 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 	var fd := m.flight_dir()
 	var dir := Vector3(fd.x, 0.0, fd.z).normalized() if Vector2(fd.x, fd.z).length() > 1e-3 else bird.facing
 	var pos := bird.global_position
-	# Landing: wherever the look-ahead reaches the perch (at least the last 8 m), the path ends at the catch and the
-	# perch's own tree and outpost count closer, its own branch or rail left out. (Only the last 8 m, and a fast bird
-	# -- the falcon's look-ahead is 13-15 m -- had the rail it was landing on, one of the outpost's deck lines, block
-	# its approach from further out: an escape every tick, and it never landed on a rail.)
-	var landing := target != null and target.distance_to(pos) < maxf(8.0, v * horizon + bird.profile.grab_radius)
+	var landing := target != null and target.distance_to(pos) < 8.0
 	var own := target.tree_id if landing else -1
 	var left := _last_tree if _takeoff_pos.distance_to(pos) < DEPARTURE_RANGE and _last_tree != own else -1
 	# Fly it first (where it goes doesn't depend on what it meets), then find the first chord that meets wood,
@@ -508,17 +501,14 @@ func _predict(bird: Bird, near: Array, toward: Vector3, is_point: bool, gamma: f
 		if o.centre.x >= lo.x - od and o.centre.x <= hi.x + od and o.centre.z >= lo.y - od and o.centre.z <= hi.y + od:
 			decks.append(o)
 	var blocked := layout.path_blocked_at(close, pts, WHISKER_CLEARANCE, own, left, decks)
-	_why = "wood at %.1f s (%s)" % [blocked * PREDICT_STEP, str(pts[blocked + 1].round())] if blocked >= 0 else ""
 	# The trees it is leaving and landing on, closer, up to the first chord the rest of the wood blocks.
 	var upto := (pts.size() - 1 if blocked < 0 else blocked) if left >= 0 or own >= 0 else 0
 	for i in upto:
 		var a := pts[i]
 		var b := pts[i + 1]
 		if left >= 0 and a.distance_to(_takeoff_pos) > FlightPlanner.PUSH_OFF and not layout.tree_clear(left, a, b, OWN_TREE_CLEARANCE, _left_perch):
-			_why = "the tree it left at %.1f s" % (i * PREDICT_STEP)
 			return [i * PREDICT_STEP, dir]
 		if own >= 0 and not layout.tree_clear(own, a, b, OWN_TREE_CLEARANCE, target.id):
-			_why = "its perch's own tree at %.1f s (%s)" % [i * PREDICT_STEP, str(b.round())]
 			return [i * PREDICT_STEP, dir]
 	if blocked >= 0:
 		return [blocked * PREDICT_STEP, dir]

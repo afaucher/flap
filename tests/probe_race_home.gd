@@ -66,9 +66,9 @@ func setup() -> void:
 				if e.id == trace and e == entries.filter(func(x): return x.id == trace)[0] and pl.mode == AIPilot.Mode.FINAL and f % 3 == 0:
 					var grip := course.start.aim_grip(b.global_position, b.model.flight_dir(), b.profile.grab_radius)
 					var to := grip - b.global_position
-					print("TRACE t=%5.2f d=%5.2f dy=%+5.2f v=%5.2f close=%5.2f path=%+4.0f bank=%+4.0f flare=%.2f cand=%s status=%d hold=%s st=%d avoid=%.1f %s" % [f / 60.0,
+					print("TRACE t=%5.2f d=%5.2f dy=%+5.2f v=%5.2f close=%5.2f path=%+4.0f bank=%+4.0f flare=%.2f cand=%s status=%d hold=%s st=%d avoid=%.1f" % [f / 60.0,
 						to.length(), -to.y, b.model.speed, b.model.velocity.dot(to.normalized()), rad_to_deg(b.model.path_angle), rad_to_deg(b.model.bank), b.model.flare,
-						"T" if b.candidate == course.start else ("-" if b.candidate == null else "o"), b.candidate_status, b.last_input.catch_held, b.state, pl.avoiding, pl.route_block if pl.avoiding > 0.0 else ""])
+						"T" if b.candidate == course.start else ("-" if b.candidate == null else "o"), b.candidate_status, b.last_input.catch_held, b.state, pl.avoiding])
 		if all:
 			break
 	var by := {}
