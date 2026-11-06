@@ -64,6 +64,13 @@ const WING_MARGIN := 0.4          ## m beyond half a wingspan the flown line kee
 const RIM_LANE := 3.0             ## m either side of the window its edges' lanes run clear
 const CURVE_STEPS := 10           ## chords of a leg's flown line
 const MISS_NEAR := 10.0           ## m: crossing a gate's plane this close outside its window is a miss
+const HOME_MAX := 45.0            ## m in plan from the last gate to the rail (the way home, flown and landed)
+const HOME_REACH := 25.0          ## m toward home a leg can be counted on to make: every gate stays within reach of it
+const HOME_PULL := 5              ## the last this many legs are scored for heading home
+const HOME_OUT := 15.0            ## m further out in front of the run-in the last legs head for
+const HOME_LEAVE := 90.0          ## deg at most the way home turns from the last gate's way through
+const HOME_TURN_IN := 120.0       ## deg at most from the way home onto the rail's run-in, at its start
+const HOME_NEAR := 3.0            ## m from the rail within which its own tree and outpost don't count on the line home
 
 
 ## What the course is planned for: the widest-turning and widest-winged of the birds racing it (by default all five:
@@ -425,7 +432,13 @@ class Plan:
 
 
 func _search() -> void:
-	gates = []
+	var got := _beam()
+	gates = got[0]
+	_turn_posts()
+
+
+## The beam search from the start: [gates, score] of the best plan found.
+func _beam() -> Array:
 	var beams: Array[Plan] = [Plan.new()]
 	var best: Plan = null
 	for k in GATES:
@@ -452,9 +465,8 @@ func _search() -> void:
 			if best == null or p.gates.size() > best.gates.size() or (p.gates.size() == best.gates.size() and s > best.score + _finish_score(best)):
 				best = p
 	if best == null:
-		return
-	gates = best.gates
-	_turn_posts()
+		return [[] as Array[Gate], -INF]
+	return [best.gates, best.score + _finish_score(best)]
 
 
 ## A plan's whole-course score: heights spread, both turn directions, every kind.
@@ -486,6 +498,7 @@ func _grow(b: Plan) -> Array[Plan]:
 	for i in _near(from, LEG.y):
 		if b.used.has(i):
 			continue
+		var last_leg := b.gates.size() == GATES - 1
 		var cand := _pool[i]
 		var leg := cand.centre - from
 		var plan := Vector2(leg.x, leg.z).length()
@@ -495,8 +508,14 @@ func _grow(b: Plan) -> Array[Plan]:
 			continue
 		var ld := Vector3(leg.x, 0.0, leg.z) / plan
 		var n: Vector3 = ld if cand.kind == "post" else (cand.normal if cand.normal.dot(ld) >= 0.0 else -cand.normal)
+		if last_leg and cand.kind == "post":   # (the last post gate turned halfway to home)
+			n = (ld + _flat(home_in() - cand.centre).normalized()).normalized()
 		if rad_to_deg(n.angle_to(ld)) > ENTRY_DEG:
 			continue
+		var goal_in := home_in() + _flat(start.facing) * HOME_OUT   # (home from out in front: the side the rail faces)
+		var home_d := Vector2(cand.centre.x - goal_in.x, cand.centre.z - goal_in.z).length()
+		if home_d > HOME_MAX + (GATES - 1 - b.gates.size()) * HOME_REACH:
+			continue   # (home out of reach of the legs left)
 		if has_last and rad_to_deg(last_n.angle_to(ld)) > ENTRY_DEG:
 			continue
 		if not _grade_ok(leg.y, plan, turn_arc(last_n if has_last else start.facing, ld, n)):
@@ -516,6 +535,9 @@ func _grow(b: Plan) -> Array[Plan]:
 			var in_leg := b.gates[-1].centre - prev_from
 			turn = rad_to_deg(AIPilot._signed_heading(Vector3(in_leg.x, 0.0, in_leg.z), ld)) * -1.0
 		var s := -absf(plan - 25.0) / 10.0 + minf(absf(leg.y), 8.0) / 4.0 + _rng.randf() * 0.8 + float(RARITY.get(cand.describe(), 0.0))
+		if b.gates.size() >= GATES - HOME_PULL:   # (the last legs: toward home's run-in)
+			var pull := float(b.gates.size() - (GATES - HOME_PULL) + 1) / HOME_PULL   # (stronger the nearer the end)
+			s += pull * (Vector2(from.x - goal_in.x, from.z - goal_in.z).length() - home_d) / 5.0
 		if cand.kind == "post" and posts_so_far >= GATES / 2 - 1:
 			s -= 2.0   # (posts fit anywhere: past half the course, the other kinds first)
 		if not b.gates.is_empty():
@@ -530,9 +552,10 @@ func _grow(b: Plan) -> Array[Plan]:
 			var wound := 0.0   # (the course's turning so far: turning back against it keeps it from spiralling)
 			for t0 in b.turns:
 				wound += t0
-			if absf(turn) > 15.0 and signf(turn) != signf(wound) and absf(wound) > 60.0:
+			var closing := b.gates.size() >= GATES - HOME_PULL   # (the last legs close the loop home: no unwinding)
+			if not closing and absf(turn) > 15.0 and signf(turn) != signf(wound) and absf(wound) > 60.0:
 				s += minf(absf(wound) / 60.0, 3.0)
-			if absf(wound + turn) > 120.0 and absf(wound + turn) > absf(wound):
+			if not closing and absf(wound + turn) > 120.0 and absf(wound + turn) > absf(wound):
 				s -= 1.5   # (winding on round one way)
 		opts.append([s, i, n, turn])
 	opts.sort_custom(func(x, y): return x[0] > y[0])
@@ -676,6 +699,51 @@ func _fits(b: Plan, g: Gate, marked: bool) -> String:
 		var far: Vector3 = all[k - 2].centre if k >= 2 else start.position + Vector3.UP * 0.3
 		if far.distance_to(g.centre) > NEXT_TWO_MAX or not _sees(far, g):
 			return "sight two back"
+	if k == GATES - 1:
+		var why := home_problem(all)
+		if why != "":
+			var r := RegEx.create_from_string("[0-9.]+")
+			return "home: " + r.sub(why, "#", true)
+	return ""
+
+
+## Where the rail's run-in starts: out in front of it (the way it faces) by a turning circle and a half, a little
+## below it (the landing comes up to the rail).
+func home_in() -> Vector3:
+	return start.position + _flat(start.facing) * envelope.entry() + Vector3.DOWN * 0.8
+
+
+## What's wrong with the way home from the last of `all` to the rail ("" if nothing): at most HOME_MAX in plan; the
+## rail in sight from the last gate; the straight line from it to the run-in's start (home_in) clear of the wood by
+## half a wingspan and a margin and of every gate's posts and ropes, turning at most HOME_LEAVE from the last gate's way
+## through and HOME_TURN_IN onto the run-in; the run-in itself clear (its last HOME_NEAR m by the rail's own tree and
+## outpost aside); a climb the birds can make. No detour round a tree: home is straight there, then straight in.
+func home_problem(all: Array) -> String:
+	var last: Gate = all[-1]
+	var rail := start.position + Vector3.UP * 0.3
+	var a := home_in()
+	var leg := a - last.centre
+	var plan := Vector2(leg.x, leg.z).length()
+	var ld := _flat(leg).normalized()
+	var in_dir := -_flat(start.facing)
+	if Vector2(rail.x - last.centre.x, rail.z - last.centre.z).length() > HOME_MAX:
+		return "home %.0f m from the last gate" % Vector2(rail.x - last.centre.x, rail.z - last.centre.z).length()
+	if plan > 1.0 and rad_to_deg(last.normal.angle_to(ld)) > HOME_LEAVE:
+		return "home turns %.0f deg out of the last gate" % rad_to_deg(last.normal.angle_to(ld))
+	if plan > 1.0 and rad_to_deg(ld.angle_to(in_dir)) > HOME_TURN_IN:
+		return "home turns %.0f deg onto the rail's run-in" % rad_to_deg(ld.angle_to(in_dir))
+	if not _grade_ok(rail.y - last.centre.y, plan + envelope.entry()):
+		return "home climbs %.1f m in %.1f m" % [rail.y - last.centre.y, plan + envelope.entry()]
+	var c := envelope.clearance()
+	if not layout.segment_clear(last.centre + last.normal * 1.0, a, c):
+		return "wood on the line home"
+	if not layout.segment_clear(a, rail - in_dir * HOME_NEAR, c):
+		return "the rail's run-in isn't clear"
+	for g: Gate in all:
+		if not _leg_clear_of(last.centre, a, g, g == last) or not _leg_clear_of(a, rail, g, false):
+			return "the line home passes a gate's posts or ropes"
+	if not line_of_sight(last.centre, rail):
+		return "the rail not seen from the last gate"
 	return ""
 
 
@@ -848,9 +916,8 @@ func _turn_posts() -> void:
 			continue
 		var into := g.centre - (_leg_start_k(k))
 		var n := Vector3(into.x, 0.0, into.z).normalized()
-		if k + 1 < gates.size():
-			var out := gates[k + 1].centre - g.centre
-			n = (n + Vector3(out.x, 0.0, out.z).normalized()).normalized()
+		var out := (gates[k + 1].centre if k + 1 < gates.size() else start.position) - g.centre   # (the last: home)
+		n = (n + Vector3(out.x, 0.0, out.z).normalized()).normalized()
 		var was := _copy(g)
 		g.face(n, layout.ground(g.centre.x, g.centre.z))
 		if not problems().is_empty():
@@ -904,6 +971,10 @@ func problems() -> PackedStringArray:
 			var far: Vector3 = gates[k - 2].centre if k >= 2 else start.position + Vector3.UP * 0.3
 			if far.distance_to(g.centre) > NEXT_TWO_MAX or not _sees(far, g):
 				out.append("gate %d: not seen two gates back" % k)
+	if not gates.is_empty():
+		var why := home_problem(gates)
+		if why != "":
+			out.append(why)
 	return out
 
 
@@ -952,9 +1023,11 @@ static func tightest_radius(a: Vector3, na: Vector3, b: Vector3, nb: Vector3) ->
 	return best
 
 
-## The course's whole length (m, gate centre to gate centre from the start).
+## The course's whole length (m, gate centre to gate centre from the start, and home to the rail).
 func length() -> float:
 	var s := 0.0
 	for k in gates.size():
 		s += _from_k(k).distance_to(gates[k].centre)
+	if not gates.is_empty():
+		s += gates[-1].centre.distance_to(start.position)
 	return s

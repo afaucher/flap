@@ -10,6 +10,7 @@ extends TestCase
 
 const SHARDS := 8
 const DT := 1.0 / 60.0
+const ARENA := 7   ## every course here is on the game's arena (Menu.ARENA_SEED); the course seeds are the menu's
 
 
 func _init() -> void:
@@ -23,22 +24,22 @@ func setup() -> void:
 		_record()
 		_rules_by_hand()
 		_dubins()
-		_course_rules(11)
+		_course_rules(12)
 	if in_shard(1):
-		await _course_in_the_wood(7)
+		await _course_in_the_wood(4)
 	if in_shard(2):
-		await _ai_takes_the_first_gate(7)
+		await _ai_takes_the_first_gate(4)
 	if in_shard(3):
-		await _flyable(11)
+		await _flyable(12)
 	if in_shard(4):
-		await _flyable(7)
+		await _flyable(4)
 	if in_shard(5):
-		await _field_finishes(7)
+		await _field_finishes(2)
 	if in_shard(6):
-		await _goes_round(7)
-		await _takes_off_again(7)
+		await _goes_round(4)
+		await _takes_off_again(4)
 	if in_shard(7):
-		await _lands_home(7)
+		await _lands_home(2)
 	finish()
 
 
@@ -196,7 +197,7 @@ func _rules_by_hand() -> void:
 
 ## The generated course: whole, every rule kept, varied.
 func _course_rules(s: int) -> RaceCourse:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	eq(c.gates.size(), RaceCourse.GATES, "seed %d: a full course" % s)
 	var probs := c.problems()
@@ -224,7 +225,7 @@ func _course_rules(s: int) -> RaceCourse:
 ## In the built wood: the posts are solid; rays through each window along its way in and out meet no collision;
 ## and birds flown in the simulation count a gate through its window, not beside it or backwards.
 func _course_in_the_wood(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	var trees0 := l.trees.size()
 	var trial := RaceTrial.new()
@@ -269,7 +270,7 @@ func _course_in_the_wood(s: int) -> void:
 ## leg by at least four of the five birds, and every bird at least nine of the ten legs (2026-11-05: seed 11 all of
 ## them; seed 7 all but the falcon's leg 1, a descent out of a 62 deg turn).
 func _flyable(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	var res := await LinePilot.fly_course(l, c, BirdProfile.IDS, self)
 	for k in c.gates.size():
@@ -283,7 +284,7 @@ func _flyable(s: int) -> void:
 ## Every bird at pilot and ace finishes seed 7's course, without bonking; a recruit, where it finishes, is slower
 ## than the ace of its species (2026-11-05: pilot 18.6-24.6 s, ace 18.7-24.5, recruits 25.4-32.6 or out).
 func _field_finishes(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	var trial := RaceTrial.new()
 	add_child(trial)
@@ -318,7 +319,7 @@ func _field_finishes(s: int) -> void:
 ## which AIPilot can't land on a rail yet (its 13-15 m look-ahead meets the outpost it's landing on as wood: race.md).
 ## The falcon's flown too, so the day it lands this says so (a check to flip then).
 func _lands_home(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	c.apply(l)
 	var arena := ArenaBuilder.new()
@@ -377,7 +378,7 @@ static func _length(pts: PackedVector2Array) -> float:
 
 ## A racer put down on the ground mid-race takes off again and flies on.
 func _takes_off_again(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	var trial := RaceTrial.new()
 	add_child(trial)
@@ -409,7 +410,7 @@ func _takes_off_again(s: int) -> void:
 
 ## Put beside a gate on a clear line (a miss, left and right), a racer goes round and comes back through it.
 func _goes_round(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	var trial := RaceTrial.new()
 	add_child(trial)
@@ -443,7 +444,7 @@ func _goes_round(s: int) -> void:
 ## An AI racer leaves the start and flies through the first gate (the pipeline works; how well it races is
 ## probe_race's to measure).
 func _ai_takes_the_first_gate(s: int) -> void:
-	var l := Pinewood.generate(s)
+	var l := Pinewood.generate(ARENA)
 	var c := RaceCourse.generate(l, s)
 	var trial := RaceTrial.new()
 	add_child(trial)

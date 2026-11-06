@@ -57,7 +57,8 @@ const SKILLS := [   ## [CombatSkill preset, label, what it means]
 const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land)."
-const COURSES := [7, 11, 3]   ## the Race screen's courses: RaceCourse seeds, on the game's arena (ARENA_SEED)
+const COURSES := [2, 4, 12]   ## the Race screen's courses: RaceCourse seeds on the game's arena (ARENA_SEED) that
+                              ## make a full course with its way home
 const ARENA_SEED := 7          ## the game's arena with no --seed (the best times are kept per arena too)
 const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
 	["", "None", "Just you and the clock."],

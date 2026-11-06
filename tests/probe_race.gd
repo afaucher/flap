@@ -182,6 +182,12 @@ func _svg(course: RaceCourse, layout: ArenaLayout, trial: RaceTrial) -> void:
 		var b: Vector2 = at.call(g.centre)
 		s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="#202020" stroke-width="1" stroke-dasharray="6,4"/>' % [a.x, a.y, b.x, b.y])
 		prev = g.centre
+	if not course.gates.is_empty():   # (home: the last gate to the rail's run-in, then in to the rail)
+		var hp := [course.gates[-1].centre, course.home_in(), course.start.position]
+		for j in 2:
+			var a: Vector2 = at.call(hp[j])
+			var b: Vector2 = at.call(hp[j + 1])
+			s.append('<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="#e07800" stroke-width="2.5" stroke-dasharray="6,4"/>' % [a.x, a.y, b.x, b.y])
 	var ks := {"post": "#c03020", "trunk": "#1a7a3a", "hoop": "#2050c0"}
 	for k in course.gates.size():
 		var g := course.gates[k]
