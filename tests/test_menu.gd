@@ -292,6 +292,23 @@ func _race() -> void:
 			game.start_over()   # (checked at once: the racers leave the rail on their next tick)
 			check(game.bird.perch == game.course.start and game.race_run.phase == RaceRun.Phase.READY, what + ": Start over puts you back on the start, the clock reset")
 			check(game.racers[0].bird.perch == game.course.start, what + ": and the racers")
+		if game.course != null and rivals == "":   # (laps: landing home sets the gates back for the next take-off)
+			var n := game.course.gates.size()
+			game.bird.perch_at(game.layout.perches[0] if game.layout.perches[0] != game.course.start else game.layout.perches[1])
+			game.race_run.phase = RaceRun.Phase.RUNNING
+			game.race_run.next = n
+			game.race_view.set_next(n)
+			await frames(2)
+			check(game.race_run.home() and game.race_view._mats[0].albedo_color == RaceView.PASSED, what + ": every gate taken: drawn passed")
+			game.bird.perch_at(game.course.start)
+			await frames(2)
+			check(game.race_run.finished() and game.race_run.laps == 1, what + ": landed home: a lap")
+			check(game.race_view._mats[0].albedo_color == RaceView.NEXT and game.race_view._mats[n - 1].albedo_color == RaceView.LATER,
+				what + ": and the gates set back, the first lit next")
+			game.bird.fly_from(game.course.start.position + Vector3.UP, game.course.start.facing, game.bird.profile.v_best)
+			await frames(2)
+			check(game.race_run.phase == RaceRun.Phase.RUNNING and game.race_run.next == 0 and game.race_run.clock < 0.1,
+				what + ": off the rail again: the next lap's clock running, from the first gate")
 		eq(game.ai_birds.size(), 0, what + ": no perch-to-perch AI birds")
 		var tacks := 0
 		for c in game.bird.rig.get_children():

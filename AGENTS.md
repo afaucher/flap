@@ -81,7 +81,8 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `probe_courses`, for the free search's; `probe_race --guides` draws the tries); `problems()` lists
   any rule broken. `apply()` puts the posts into the layout (solid). `RaceRun` the rules (a gate through its window
   the way it faces, in order; the clock from leaving the start rail to landing back on it, every gate taken (landing there
-  sooner resets the run); misses;
+  sooner resets the run; landing home sets the gates back, `lit()`, and leaving the rail again starts the next lap,
+  `laps`); misses;
   splits within the tick), `RacePilot` an
   AI racer (a FlightInput only): it follows the course's planned line by an L1 pursuit, its skill (`CombatSkill`
   presets) degrading look-ahead, bank, reaction, aim and pace; a missed gate it goes round on a planned Dubins path

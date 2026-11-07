@@ -312,8 +312,8 @@ func _physics_process(_dt: float) -> void:
 func _race_tick(dt: float) -> void:
 	race_run.step(_race_prev, bird.global_position, dt, RaceRun.perch_of(bird))
 	_race_prev = bird.global_position
-	if race_run.event in ["gate", "reset"]:
-		race_view.set_next(race_run.next)
+	if race_run.event in ["gate", "reset", "finish"]:   # (landed home: the gates set back for the next lap)
+		race_view.set_next(race_run.lit())
 	if race_run.event == "finish":
 		race_hud.new_best = RaceRecord.offer(race_key, race_run.time, race_run.splits)
 		race_hud.average = RaceRecord.average(race_key)

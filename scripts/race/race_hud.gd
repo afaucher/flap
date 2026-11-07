@@ -4,7 +4,8 @@ extends Control
 ## the gate count under it; the last split against your best's at that gate (green ahead, red behind) for a few
 ## seconds; top right your best time and the average of your last three; a bracket on the next gate with its distance
 ## (every gate taken: on the start rail, to land on), a fainter one on the gate after, and an arrow at the screen's
-## edge when the next is off screen; at the finish, your time and whether it's a best.
+## edge when the next is off screen; at the finish, your time and whether it's a best, and the lap the next take-off
+## starts (the lap under the gate count from the second on).
 
 const FG := Color(0.95, 0.95, 0.9, 0.95)
 const DIM := Color(0.95, 0.95, 0.9, 0.5)
@@ -54,7 +55,8 @@ func _draw() -> void:
 	var phase: int = s.phase
 	var shown: float = s.time if phase == RaceRun.Phase.FINISHED else s.clock
 	_text(top - Vector2(200, 0), clock_text(shown), FG, 40, 400)
-	var under := "Gate %d/%d" % [s.next + 1, s.count]
+	var laps: int = s.get("laps", 0)
+	var under := ("Lap %d   " % (laps + 1) if laps > 0 else "") + "Gate %d/%d" % [s.next + 1, s.count]
 	if phase == RaceRun.Phase.FINISHED:
 		under = "Finished"
 	elif s.get("home", false):
@@ -79,6 +81,7 @@ func _draw() -> void:
 		_text(top + Vector2(-200, 74), line, col, 22, 400)
 	if phase == RaceRun.Phase.FINISHED:
 		_text(Vector2(0, sz.y * 0.4), ("New best!  " if new_best else "") + clock_text(s.time), AHEAD if new_best else FG, 44, sz.x)
+		_text(Vector2(0, sz.y * 0.4 + 56), "Take off for lap %d" % (laps + 1), DIM, 22, sz.x)
 		return
 	if s.has("after_centre") and s.after_centre != null:
 		_bracket(s.after_centre, 12.0, Color(MARK, 0.35), false)

@@ -10,7 +10,9 @@ extends RefCounted
 ##     to go back for (the time lost is the penalty);
 ##   - each gate's split is the moment the bird crossed it, found within the tick (so splits don't round to 1/60 s);
 ##   - landing on the rail with a gate still to take resets the run (ready to start again, the clock at 0); landing
-##     anywhere else doesn't stop the clock.
+##     anywhere else doesn't stop the clock;
+##   - laps: landing home sets the gates back (lit(): the first lit next again, ready for the take-off; the lap's
+##     time, splits and gates taken kept); leaving the rail again starts the next lap, the clock from 0.
 
 enum Phase { READY, RUNNING, FINISHED }
 
@@ -21,9 +23,10 @@ var next := 0             ## the gate to fly through next (= the gates' count: a
 var splits: Array[float] = []   ## s at each gate passed
 var misses := 0
 var missed_at: Array[int] = []  ## the gate each miss was at
-var time := INF           ## the finish time
-var event := ""           ## this tick's: "start", "gate", "miss", "finish" (landed home), "reset" (landed on the rail
-                          ## with gates to go) or ""
+var time := INF           ## the last lap's time
+var laps := 0             ## laps finished
+var event := ""           ## this tick's: "start" (left the rail: a run or the next lap), "gate", "miss", "finish" (landed
+                          ## home), "reset" (landed on the rail with gates to go) or ""
 
 
 func _init(c: RaceCourse) -> void:
@@ -39,11 +42,11 @@ static func perch_of(bird: Bird) -> Perch:
 ## (null if it isn't: perch_of).
 func step(a: Vector3, b: Vector3, dt: float, perch: Perch) -> void:
 	event = ""
-	if phase == Phase.FINISHED:
-		return
-	if phase == Phase.READY:
+	if phase != Phase.RUNNING:
 		if perch != null:
 			return
+		if phase == Phase.FINISHED:   # (off the rail again: the next lap)
+			_reset()
 		phase = Phase.RUNNING
 		event = "start"
 	var t0 := clock
@@ -52,6 +55,7 @@ func step(a: Vector3, b: Vector3, dt: float, perch: Perch) -> void:
 		if perch == course.start:
 			phase = Phase.FINISHED
 			time = clock
+			laps += 1
 			event = "finish"
 		return
 	if perch == course.start:   # (back on the rail before the course is done: the run starts over)
@@ -79,8 +83,14 @@ func _reset() -> void:
 	missed_at.clear()
 
 
+## Landed home (the gates set back: the next take-off starts another lap).
 func finished() -> bool:
 	return phase == Phase.FINISHED
+
+
+## The gate to light as next: the next to take, or once home the first (set back for the next lap).
+func lit() -> int:
+	return 0 if phase == Phase.FINISHED else next
 
 
 ## Every gate taken, not yet landed: on the way home to the rail.
@@ -88,16 +98,17 @@ func home() -> bool:
 	return phase == Phase.RUNNING and next >= course.gates.size()
 
 
-## What the HUD shows: {phase, clock, next, count, splits, time, misses, home (every gate taken: land on the rail),
-## next_centre (the next gate's, or the rail's home), after_centre (the gate after it, the rail after the last, or
+## What the HUD shows: {phase, clock, next, count, splits, time, misses, laps, home (every gate taken: land on the rail),
+## next_centre (the lit gate's, or the rail's home), after_centre (the gate after it, the rail after the last, or
 ## null)}.
 func state() -> Dictionary:
 	var s := {"phase": phase, "clock": clock, "next": next, "count": course.gates.size(), "splits": splits.duplicate(),
-		"time": time, "misses": misses, "home": next >= course.gates.size()}
-	if next < course.gates.size():
-		s["next_centre"] = course.gates[next].centre
-		s["after_centre"] = course.gates[next + 1].centre if next + 1 < course.gates.size() else course.start.position
-	elif phase != Phase.FINISHED:
+		"time": time, "misses": misses, "laps": laps, "home": phase == Phase.RUNNING and next >= course.gates.size()}
+	var k := lit()
+	if k < course.gates.size():
+		s["next_centre"] = course.gates[k].centre
+		s["after_centre"] = course.gates[k + 1].centre if k + 1 < course.gates.size() else course.start.position
+	else:
 		s["next_centre"] = course.start.position
 		s["after_centre"] = null
 	return s

@@ -5799,5 +5799,48 @@
     "replace": "\tif false:\n\t\tdrop = minf(drop, maxf(DROP.x, p.approach_anchor().y - APPROACH_FLOOR))"
    }
   ]
+ },
+ {
+  "id": "race-no-second-lap",
+  "bug": "Once home on the rail the race was over: leaving the rail again didn't start another lap (2026-11-06).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\tif phase != Phase.RUNNING:\n\t\tif perch != null:",
+    "replace": "\tif phase == Phase.FINISHED:\n\t\treturn\n\tif phase != Phase.RUNNING:\n\t\tif perch != null:"
+   }
+  ]
+ },
+ {
+  "id": "race-gates-not-set-back",
+  "bug": "Landing home left every gate drawn passed: they weren't set back (the first lit next) for the next lap's take-off (2026-11-06).",
+  "tests": [
+   "test_race",
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_run.gd",
+    "find": "\treturn 0 if phase == Phase.FINISHED else next",
+    "replace": "\treturn next"
+   }
+  ]
+ },
+ {
+  "id": "race-view-not-reset-on-finish",
+  "bug": "The game recoloured the gates on a gate or a reset but not on the finish, so they stayed drawn passed after landing home (2026-11-06).",
+  "tests": [
+   "test_menu"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/game.gd",
+    "find": "\tif race_run.event in [\"gate\", \"reset\", \"finish\"]:",
+    "replace": "\tif race_run.event in [\"gate\", \"reset\"]:"
+   }
+  ]
  }
 ]

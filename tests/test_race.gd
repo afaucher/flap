@@ -2,7 +2,8 @@ extends TestCase
 ## Race mode (RaceCourse, RaceRun, RaceRecord): a gate counts only through its window the way it faces; the gates go
 ## in order; the clock starts off the start rail and stops when the bird lands back on it with every gate taken (not
 ## before, not on another perch); a miss is counted and the gate stays next; best times are kept only when better, and
-## landing on the rail with gates to go resets the run; the average of the last three finishes counts the slower ones too. The AI field (pilots and aces) takes every gate
+## landing on the rail with gates to go resets the run; landing home sets the gates back and keeps the lap's time, and
+## leaving the rail again starts the next lap (the clock from 0, the gates in order from the first); the average of the last three finishes counts the slower ones too. The AI field (pilots and aces) takes every gate
 ## without bonking and lands home on the rail. The way home is planned: straight from the last gate to a run-in in
 ## front of the rail (hand-built: a tree on the line, a last gate facing away, home from behind all break it). The generated course keeps its rules on two seeds, every bird can fly it
 ## (LinePilot, in the simulation), and in the built wood (its collision) each window's way in and out is open; birds
@@ -135,11 +136,34 @@ func _run_rules() -> void:
 	check(r.finished(), "landed on the rail: finished")
 	eq(r.event, "finish", "the finish's event")
 	near(r.time, t2 + DT, 1e-6, "the time: the tick it landed")
+	eq(r.laps, 1, "a lap finished")
+	check(r.lit() == 0 and r.next == 3, "landed home: the gates set back, the first lit next (the lap's gates taken kept)")
+	eq(r.splits.size(), 3, "the lap's splits kept (for the record)")
+	check(not r.state().home and r.state().next_centre == gs[0].centre, "the HUD's mark back on the first gate, not the rail")
+	var lap1 := r.time
 	for i in 60:
-		r.step(at, at + Vector3(0, 0, -1), DT, null)
+		r.step(at, at, DT, st)
+	check(r.finished() and r.event == "", "sitting on the rail once home: still finished, nothing happens")
 	near(r.clock, r.time, 1e-6, "the clock stops at the finish")
+	# Off the rail again: the next lap.
+	r.step(at, at + Vector3(0, 0, -0.2), DT, null)
+	eq(r.event, "start", "off the rail again: a start")
+	check(r.phase == RaceRun.Phase.RUNNING and is_equal_approx(r.clock, DT), "the next lap's clock from 0")
+	check(r.next == 0 and r.splits.is_empty() and r.misses == 0, "its gates from the first, splits and misses cleared")
+	near(r.time, lap1, 1e-6, "the last lap's time kept while the next runs")
+	r.step(Vector3(0, 5, -19.5), Vector3(0, 5, -20.5), DT, null)
+	eq(r.next, 0, "on the next lap too the second gate first doesn't count")
+	for z in [10.0, 20.0, 30.0]:
+		r.step(Vector3(0, 5, 0.5 - z), Vector3(0, 5, -0.5 - z), DT, null)
+	eq(r.next, 3, "the next lap's gates taken in order")
+	r.step(at, at, DT, null)
 	r.step(at, at, DT, st)
-	check(r.finished() and r.next == 3, "landing on the rail again once finished changes nothing")
+	check(r.finished() and r.laps == 2 and r.event == "finish", "home again: the second lap finished")
+	check(r.time < lap1, "its own time, from its own start (%.3f s, the first %.3f)" % [r.time, lap1])
+	r.step(at, at + Vector3(0, 0, -0.2), DT, null)
+	r.step(Vector3(0, 5, -9.5), Vector3(0, 5, -10.5), DT, null)
+	r.step(at, at, DT, st)
+	check(r.event == "reset" and r.laps == 2 and r.phase == RaceRun.Phase.READY, "a third lap given up on the rail: reset, not a lap")
 	# Back on the rail with gates to go: the run starts over.
 	var r2 := RaceRun.new(c)
 	r2.step(at, at + Vector3(0, 0, -0.2), DT, null)
