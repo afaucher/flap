@@ -5425,5 +5425,38 @@
     "replace": "const LOWER_TUCK := -0.04"
    }
   ]
+ },
+ {
+  "id": "race-eight-home-unchecked",
+  "bug": "A figure-eight accepted with the way home's rules broken: it ended where home turns back onto the rail's run-in (2026-11-06).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "(c.gates.size() >= c.gate_count - EIGHT_SHORT and c.crossings() > 0 and c.problems().is_empty())",
+    "replace": "(c.gates.size() >= c.gate_count - EIGHT_SHORT and c.crossings() > 0)"
+   }
+  ]
+ },
+ {
+  "id": "race-eight-guide-behind-rail",
+  "bug": "A figure-eight's guide left its second lobe for home wherever it headed for the run-in's start, even from behind the rail: the course came home with a U-turn onto the run-in (2026-11-06).",
+  "tests": [
+   "test_race"
+  ],
+  "edits": [
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "absf(off) < 50.0 and absf(turn_in) < HOME_TURN_IN - 30.0 and",
+    "replace": "absf(off) < 50.0 and"
+   },
+   {
+    "file": "scripts/race/race_course.gd",
+    "find": "var cost := absf(off) + absf(turn_in) * 0.5 + to.length() * 0.5",
+    "replace": "var cost := absf(off) + to.length() * 0.5"
+   }
+  ]
  }
 ]

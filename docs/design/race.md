@@ -192,7 +192,7 @@ A style is a shape and heights, `<shape>-<heights>`; each sets the search's scor
 
 | | gates | legs | turns scored | other |
 |---|---|---|---|---|
-| technical | 12 | 12-24 m (aim 16) | 40-90 deg, S-bends favoured | planned for the agile birds (crow, owl, sparrow: a 3.4 m circle): the hawk and falcon can't make its turns, by design |
+| technical | a figure-eight of 14-18 (12 if none fits) | 12-24 m (aim 16) | 40-90 deg, S-bends favoured | planned for the agile birds (crow, owl, sparrow: a 3.4 m circle): the hawk and falcon can't make its turns, by design |
 | long | 7 | 26-55 m (aim 40) | 5-40 deg | a leg the smooth curve can't fly clear is routed through the wood (`route_line`) |
 | (all-round) | 10 | 14-40 m | 20-70 deg | as before |
 
@@ -202,17 +202,35 @@ route planner (`FlightPlanner`, at the course's clearance) finds the way through
 leg may climb or dive. A routed leg isn't held to the smooth curve's turning circle, and the next gate needn't be in
 sight from the one before (the HUD's arrow shows the way); the AI racer and LinePilot follow the route.
 
-The menu's four (arena 7, the map baked 2026-11-06 with the new oaks and pines): technical level, course 8 (12 gates,
-windows 7-8.4 m); technical high and low, 19 (2.3-11 m); long level, 13 (7 gates, 7-8 m); long high and low, 12
-(2.3-11 m). On that wood most seeds' courses turn one way only (probe_courses: 7L 0R and the like); test_race's
-`_course_rules` takes seed 28, which turns both ways. Raced on the wood before that bake (probe_race; not yet re-raced): every pilot and ace crow, owl and sparrow finishes all four; the hawk finishes technical level but not
-technical high and low (its turns aren't planned for it), and most of the long; the falcon fails the long ones, on
-their routed legs (it can't hold a route's corners). `tests/probe_courses.gd --style <s>` sums up many seeds.
+**Figure-eights** (technical; the lit gates show the way where it crosses itself). The beam search follows a guide:
+two lobes (circles of 20-26 m) joined by the two lines that touch both and cross between them. The way out runs on
+along the first line, 6-12 m past where it touches the second lobe, through the middle, round the first lobe, back
+through the middle across the way out, and round the second lobe the other way until it heads home from in front of
+the rail (`_guide_for`). The way out leaves 30-60 deg off the rail's facing, away from the second lobe: straighter out,
+the second lobe swings round behind the rail and home needs a U-turn onto the run-in. Guides are tried round the two
+rails nearest the middle, either lobe first, each rail's six with a candidate gate near the most of their way
+(`_eight_guides`), the seed's rail first. Each gate keeps within 20 m of the guide (free within 6), a little further
+along it than the last; a plan of 14-18 gates that has crossed itself and keeps the way home's rules is a
+figure-eight (`eight`, `crossings()`). If none fits, the free search's 12 gates. `RaceCourse.eights` off (or
+`probe_courses --no-eights`) for the free search's; `probe_race --guides` draws the guides tried, `--eight <n>` keeps
+the nth try however far it got.
 
-Not done: technical courses that cross themselves (the user's ask: the lit gates show the way). Scoring a crossing,
-letting the course wind further and pulling the middle legs back at an early leg made one crossing in 32 courses: the
-beam search picks each gate from those 12-24 m on, and a crossing needs the course planned as a figure of eight from
-the start.
+Why it took that: small lobes (16-22 m) left the search with too few gate sites a 45 deg turn away and it died 4-9
+gates in; one-lobe loops came home after the crossing from behind the rail; an 8 centred on the rail put the second
+lobe behind it. On arena 7 (2026-11-06) about a quarter of seeds make an eight (7 of 27 level, 5 of 30 high and low),
+in 2-28 s; a seed that doesn't spends 10-35 s on the tries before the free course. They're mostly posts: the wood
+has few trunk and hoop sites facing along a lobe, and posts stand at 2.3 or 7 m, so a high and low eight reaching 8 m
+of height needs a wood gate high on the way.
+
+The menu's four (arena 7, the map baked 2026-11-06 with the new oaks and pines): technical level, course 19 (a
+figure-eight of 17 gates from the rail next out from the middle, windows 7-8 m); technical high and low, 35 (a figure-eight of
+15 gates from the middle rail, 2.3-11 m); long level, 13 (7 gates, 7-8 m); long high and low, 12 (2.3-11 m). On that
+wood most seeds' free courses turn one way only (probe_courses: 7L 0R and the like); test_race's `_course_rules` takes
+seed 28, which turns both ways. Raced (probe_race, pilots and aces): on both eights every crow, owl and sparrow takes
+every gate; the hawk and falcon miss on technical 35 as planned, and on 19 the pilot hawk finishes; the finishes lost
+after the last gate (sparrow and falcon on 19, the falcon on 35) are the landing the combat AI session is fixing. The
+long ones were raced on the wood before that bake: every pilot and ace crow, owl and sparrow finished; the falcon
+failed on their routed legs (it can't hold a route's corners). `tests/probe_courses.gd --style <s>` sums up many seeds.
 
 ## Open questions
 

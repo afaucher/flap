@@ -58,7 +58,7 @@ const CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch.
 Left mouse / F: fire.  Q: switch weapon."
 const FLIGHT_CONTROLS := "Mouse: steer.  Space: flap.  Ctrl: catch a perch (hold it to see where you'll land)."
 const COURSE_SHAPES := [   ## [RaceCourse shape, label, what it means]
-	["technical", "Technical", "Twelve gates close together, tight turns between the trunks. Made for the agile birds: the hawk and falcon will struggle."],
+	["technical", "Technical", "A figure of eight: gates close together, tight turns, and it crosses itself (the lit gates show the way). Made for the agile birds: the hawk and falcon will struggle."],
 	["long", "Long", "Seven gates far apart. Between them, find your own way through the wood."],
 ]
 const COURSE_HEIGHTS := [   ## [RaceCourse heights, label, what it means]
@@ -66,7 +66,7 @@ const COURSE_HEIGHTS := [   ## [RaceCourse heights, label, what it means]
 	["high-low", "High and low", "Gates low by the ground and high under the crowns: dive and climb."],
 ]
 const COURSES := {   ## RaceCourse style -> the seed of its course on the game's arena (ARENA_SEED): a full one, home kept
-	"technical-level": 8, "technical-high-low": 19, "long-level": 13, "long-high-low": 12,
+	"technical-level": 19, "technical-high-low": 35, "long-level": 13, "long-high-low": 12,
 }
 const ARENA_SEED := 7          ## the game's arena with no --seed (the best times are kept per arena too)
 const RIVALS := [   ## [--race-ai, label, what it means] ("": racing alone)
