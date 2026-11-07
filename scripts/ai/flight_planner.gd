@@ -68,6 +68,13 @@ static func approach_drop(profile: BirdProfile, p: Perch = null) -> float:
 	return drop
 
 
+## m/s: the speed to come to perch `p`'s approach point at -- what its swoop up (approach_drop) bleeds to the catch
+## speed, its cruise at most (under a low perch the swoop is shallower: it comes in slower).
+static func approach_speed(profile: BirdProfile, p: Perch) -> float:
+	var c := catch_speed(profile)
+	return minf(profile.v_best, sqrt(c * c + 2.0 * BirdProfile.G * approach_drop(profile, p) / ZOOM_KEPT))
+
+
 ## m/s: the speed to arrive at a perch at -- the middle of the bird's window between its stall and the fastest it can
 ## catch at.
 static func catch_speed(profile: BirdProfile) -> float:

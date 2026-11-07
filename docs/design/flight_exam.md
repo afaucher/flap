@@ -72,8 +72,8 @@ big-trees changed the oak -- its new numbers are below the table):
 
 Big-trees' oak (a short trunk to the fork, big low limbs, a crown above: 24 perches where there were 11), now: its
 crown 60 / 60 for the crow, owl, hawk and sparrow, 58 / 60 for the falcon; its low tier 36 / 36 for the crow, owl and
-sparrow, the hawk 35 / 36 (about 21 before the route floor, 28 before the line hold, below) and the falcon 30 / 36 (about 5 before it, 14 before
-the high line-up, 26 before lining up at cruise, below). Close in on the line:
+sparrow, the hawk 35 / 36 (about 21 before the route floor, 28 before the line hold, below) and the falcon 30 / 36 from 4 sides, 70 / 72 from 8 (about 5
+before it, 14 before the high line-up, 26 before lining up at cruise, below). Close in on the line:
 every species 11 / 11, in 1.3-2.0 s.
 
 Median time to land on a lone pine: crow 6.4 -> 4.1 s, owl 6.5 -> 4.0, hawk 8.4 -> 3.6, falcon 13.4 -> 9.0, sparrow
@@ -172,8 +172,15 @@ cruise, no wingbeats above it): the falcon at ~14 m/s under the oak's crown, a 1
 Now the whole line-up, not only the approach leg, beats no wings above cruise and pulls gently down to it. The falcon's
 share of the oak's low limbs went from 26 to 30 of 36 (from above and below 31 to 34), the hawk's from 33 to 35.
 
+**Come to a shallow swoop slower** (`FlightPlanner.approach_speed`). With the approach point floored under a low
+perch, the swoop up is shallower and bleeds less: coming to it at cruise, the falcon reached the oak's low limbs at
+~12.3 m/s, over its catch, and passed. The approach leg now slows to what the swoop bleeds to the catch speed (its cruise
+when the swoop is full depth). The falcon's share of the low limbs went from 67 to 70 of 72, from above and below 32 to
+34 of 36. (Within two landings of the bounds' margin, so it has no regression entry: a bound that tight would fail on a
+subtle change elsewhere.)
+
 **What's left.** The oak's low tier is still the hardest place, judged from all 8 sides for the hawk and falcon: the
-hawk makes 72 of 72, the falcon 67 (from above and below 32 of 36); the rest of the oak, 60 of 60. The hawk misses one of the big oak's rail from high above.
+hawk makes 72 of 72, the falcon 70 (from above and below 34 of 36); the rest of the oak, 60 of 60. The hawk misses one of the big oak's rail from high above.
 
 **Cost.** In the big-trees wood one clearance check is ~60 us (three-quarters of it walking a big tree's branches), and
 a route search asks thousands: a bird's first search somewhere took 100-200 ms in a tick, most of the game's hitched
