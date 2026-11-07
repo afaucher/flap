@@ -239,7 +239,7 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 	if starts.is_empty():
 		# Wedged in (its berth from the wood overlaps a neighbour's crown): the first leg out may pass closer.
 		starts = _attach(a, a_tree, true, minf(clearance, START_CLEARANCE))
-	var goals := _attach(b, b_tree, false)
+	var goals := _goals(b, b_tree)
 	Perf.add("  attach (in ai.plan)", a0)
 	if starts.is_empty() or goals.is_empty():
 		return []
@@ -589,12 +589,15 @@ func _leg_clear(pts: Array[Vector3], i: int, j: int, a_tree: int, b_tree: int) -
 ## A leg from a to b: clear of the wood by `clearance` (or `c`), except the tree it leaves (`a_tree`) and the one it lands
 ## on (`b_tree`), which it may pass OWN_TREE_CLEARANCE from, leaving out the perches' branches and the push-off
 ## and catch at the ends.
-func _leg_ok(a: Vector3, b: Vector3, a_tree: int, b_tree: int, c := -1.0) -> bool:
+func _leg_ok(a: Vector3, b: Vector3, a_tree: int, b_tree: int, c := -1.0, near: Variant = null) -> bool:
 	if c < 0.0:
 		c = clearance
+	# (`near`: the trees near an area the leg lies in, gathered once for many legs -- segment_clear_among skips any
+	# tree its box can't meet, so a wider set gives the same answer.)
+	var trees: Array = near if near != null else layout.trees_near_segment(a, b, c)
 	if a_tree < 0 and b_tree < 0:
-		return layout.segment_clear(a, b, c)
-	if not layout.segment_clear_among(layout.trees_near_segment(a, b, c), a, b, c, a_tree, b_tree):
+		return layout.segment_clear_among(trees, a, b, c)
+	if not layout.segment_clear_among(trees, a, b, c, a_tree, b_tree):
 		return false
 	var d := b - a
 	var end := minf(PUSH_OFF, d.length() * 0.5)
@@ -842,6 +845,24 @@ func _neighbours(k: Vector3i) -> Array[Vector3i]:
 
 
 ## Lattice nodes near `p` that it can fly to directly (or from, `leaving`); `tree` is the tree at `p`.
+## _attach for a route's end (b on tree `b_tree`, perch _b_perch): kept on the layout, as it depends on nothing that
+## changes -- a bird planning again to the same perch the same way in (a go-around, a stuck replan, its teammate) gets
+## the same answer without checking ~75 legs against the perch's tree again.
+func _goals(b: Vector3, b_tree: int) -> Array[Vector3i]:
+	if not layout.has_meta(GOALS):
+		layout.set_meta(GOALS, {})
+	var cache: Dictionary = layout.get_meta(GOALS)
+	var key := [b, b_tree, _b_perch, clearance]
+	if cache.has(key):
+		return cache[key]
+	var got := _attach(b, b_tree, false)
+	cache[key] = got
+	return got
+
+
+const GOALS := "plan_goals"
+
+
 func _attach(p: Vector3, tree: int, leaving: bool, c := -1.0) -> Array[Vector3i]:
 	var out: Array[Vector3i] = []
 	var cx := roundi(p.x / LATTICE)
@@ -850,10 +871,14 @@ func _attach(p: Vector3, tree: int, leaving: bool, c := -1.0) -> Array[Vector3i]
 	for i in LEVELS.size():
 		if absf(LEVELS[i] - p.y) < 9.0:
 			levels.append(i)
+	# (The trees near every leg below, gathered once: the box from p to the farthest node it tries.)
+	var cc := clearance if c < 0.0 else c
+	var reach := Vector3(absf(p.x - cx * LATTICE) + 2.0 * LATTICE, 0.0, absf(p.z - cz * LATTICE) + 2.0 * LATTICE)
+	var near := layout.trees_near_segment(p - reach, p + reach, cc)
 	for ly in levels:
 		for dx in range(-2, 3):
 			for dz in range(-2, 3):
 				var k := Vector3i(cx + dx, ly, cz + dz)
-				if _usable(k) and (_leg_ok(p, _pos(k), tree, -1, c) if leaving else _leg_ok(_pos(k), p, -1, tree, c)):
+				if _usable(k) and (_leg_ok(p, _pos(k), tree, -1, c, near) if leaving else _leg_ok(_pos(k), p, -1, tree, c, near)):
 					out.append(k)
 	return out

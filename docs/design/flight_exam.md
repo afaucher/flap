@@ -194,8 +194,11 @@ frames. Now:
 A 3 v 3's slowest search went from ~136 ms to ~7 ms (90% under 3.6 ms), so spreading a search over ticks isn't needed.
 In the game (`perf.ps1`, a crow and 3 AI, 30 s, the planner's parts as sub-sections of `ai.plan`): the search itself
 now peaks under 1 ms a tick. What's left of planning's spikes is the legs onto and off the lattice (`_attach`: up to
-~75 candidate nodes a side, each a clearance check near its tree, ~16 ms at worst, about once in 30 s) and the ways in
-(~5 ms). Most of the hitched frames now are the avoidance (`ai.avoid`, up to ~25 ms in a tick) and the GPU (~17 ms
+~75 candidate nodes a side, each a clearance check near its tree). The trees near them are gathered once a side, and a
+route's end is kept on the layout (`_goals`: the same perch the same way in gives the same answer), which took the
+average from 22 to 13 us a tick and the worst from ~16 to ~13 ms; the worst tick of planning is still ~24 ms about
+once in 30 s (a bird's first request, its legs checked against the big tree it's leaving), and the ways in ~5 ms.
+Hitched frames vary run to run on the same build (8, 15, 16, 18 in 30 s), so one run compares nothing. Most of the hitched frames now are the avoidance (`ai.avoid`, up to ~25 ms in a tick) and the GPU (~17 ms
 frames), not planning.
 
 Found on the way: the combat AI's birds planned with the planner's default clearance (0.9 m), never their species' --
