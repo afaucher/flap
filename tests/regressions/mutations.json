@@ -1667,8 +1667,8 @@
    },
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\t\tif not swoop_clear(p, profile, d):\n\t\t\tcontinue",
-    "replace": "\t\tif false:\n\t\t\tcontinue"
+    "find": "\t\tvar swoop := swoop_clear(p, profile, d)",
+    "replace": "\t\tvar swoop := true"
    }
   ]
  },
@@ -5725,8 +5725,8 @@
   "edits": [
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\t\tout.append(cs[lo] if lo < cs.size() else -1.0)",
-    "replace": "\t\tout.append(cs[0] if lo < cs.size() else -1.0)"
+    "find": "\t\t\t\t\tout[(q - i0) * 27 + Table.dir(k, k2)] = lo if lo < cs.size() else Table.NONE",
+    "replace": "\t\t\t\t\tout[(q - i0) * 27 + Table.dir(k, k2)] = 0 if lo < cs.size() else Table.NONE"
    }
   ]
  },
@@ -5739,8 +5739,8 @@
   "edits": [
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\t\t\t\tfor c in cs:   # (widest first)",
-    "replace": "\t\t\t\tfor c in []:   # (widest first)"
+    "find": "\t\t\t\tfor ci in cs.size():   # (widest first)",
+    "replace": "\t\t\t\tfor ci in 0:   # (widest first)"
    }
   ]
  },
@@ -5753,8 +5753,8 @@
   "edits": [
    {
     "file": "scripts/ai/flight_planner.gd",
-    "find": "\t\tif _steps_left > 0:\n\t\t\t_steps_left -= 1",
-    "replace": "\t\tif false:\n\t\t\t_steps_left -= 1"
+    "find": "\tif _steps_left > 0:\n\t\t_steps_left -= 1\n\treturn true",
+    "replace": "\treturn true"
    }
   ]
  },

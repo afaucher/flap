@@ -178,19 +178,25 @@ hawk makes 72 of 72, the falcon 67 (from above and below 32 of 36); the rest of 
 **Cost.** In the big-trees wood one clearance check is ~60 us (three-quarters of it walking a big tree's branches), and
 a route search asks thousands: a bird's first search somewhere took 100-200 ms in a tick, most of the game's hitched
 frames. Now:
-- The lattice's clearance is worked out ahead (`FlightPlanner.prepare`: every node's and edge's widest clearance it
-  clears, for each species' clearance and the default; the check only gets harder as the clearance grows, so one number
-  answers it for each). The game and the range do it on the loading screen, over up to 6 threads (more contend: on 32
-  cores 16 took 32 s): ~3 s for the arena's 69,000 edges. It gives the same answers as the checks (`test_plan_table`:
-  every node and a spread of edges, every clearance; the routes; a 3 v 3's flight fingerprint unchanged), so headless
-  runs -- the tests -- leave it out and fly the same. A 3 v 3's slowest search went from ~136 ms to ~16 ms.
+- The lattice's clearance is worked out ahead (`FlightPlanner.prepare`, a `FlightPlanner.Table`: for every node and each
+  of its 26 neighbours, the widest of the planners' clearances -- each species' and the default -- it clears, as a byte;
+  the check only gets harder as the clearance grows, so one byte answers it for each). Flat byte arrays indexed by the
+  node's place in the lattice: a lookup is integer arithmetic. The game and the range do it on the loading screen, over
+  up to 6 threads (more contend: on 32 cores 16 took 32 s): ~3 s for the arena's ~3,500 free nodes. It gives the same
+  answers as the checks (`test_plan_table`: every node and a spread of edges, every clearance; the routes; a 3 v 3's
+  flight fingerprint unchanged), so headless runs -- the tests -- leave it out and fly the same.
+- With the table, the A* runs on flat arrays by the same node index (`_search_indexed`: costs, parents, the open set,
+  its heap) instead of dictionaries keyed by lattice coordinates: the same steps in the same order, ties broken alike,
+  so the same routes. A step went from ~30 us to ~17 us (GDScript's own cost per operation is what's left).
 - A bird's route request (`plan_to_perch`, every way in it tries) ends after `REQUEST_EXPANSIONS` (600) search steps,
-  route or not (~20 ms with the table; the longest a 3 v 3 needs is ~490). Steps, not time, so a run is the same on any
-  machine.
-- The A*'s open set is a binary heap (the same node first, so the same routes).
+  route or not (~10 ms now; the longest a 3 v 3 needs is ~400). Steps, not time, so a run is the same on any machine.
 
-In the game (`perf.ps1`, a crow and 3 AI, 30 s): hitched frames 13 -> 9 (0.5%), planning's worst tick 30 -> 19 ms; what's
-left of them is planning and the avoidance together in a tick, ~25 ms frames.
+A 3 v 3's slowest search went from ~136 ms to ~7 ms (90% under 3.6 ms), so spreading a search over ticks isn't needed.
+In the game (`perf.ps1`, a crow and 3 AI, 30 s, the planner's parts as sub-sections of `ai.plan`): the search itself
+now peaks under 1 ms a tick. What's left of planning's spikes is the legs onto and off the lattice (`_attach`: up to
+~75 candidate nodes a side, each a clearance check near its tree, ~16 ms at worst, about once in 30 s) and the ways in
+(~5 ms). Most of the hitched frames now are the avoidance (`ai.avoid`, up to ~25 ms in a tick) and the GPU (~17 ms
+frames), not planning.
 
 Found on the way: the combat AI's birds planned with the planner's default clearance (0.9 m), never their species' --
 `CombatBrain` made its `AIPilot` and never fitted it (`_fit` runs in the pilot's own `sample()`, which `CombatPilot`

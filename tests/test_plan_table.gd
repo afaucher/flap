@@ -12,36 +12,44 @@ func setup() -> void:
 	a.half_extent = 40.0
 	a.boundary = 40.0
 	FlightPlanner.prepare(a)
-	var table: Dictionary = a.get_meta(FlightPlanner.EDGE_TABLE)
+	var tb := FlightPlanner.table_of(a)
 	var cs := FlightPlanner.species_clearances()
-	check(cs.size() >= 2 and cs.has(FlightPlanner.DEFAULT_CLEARANCE), "the table covers each species' clearance and the default (%s)" % str(cs))
+	check(tb != null and cs.size() >= 2 and cs.has(FlightPlanner.DEFAULT_CLEARANCE), "the table covers each species' clearance and the default (%s)" % str(cs))
 	# Every node and a spread of edges: the table's answer against the check's, at each clearance.
 	var fp := FlightPlanner.new(a)
 	var nodes := 0
 	var node_wrong := 0
-	for k: Vector3i in table.n:
-		nodes += 1
-		for c in cs:
-			fp.clearance = c
-			if (float(table.n[k]) >= c) != fp.node_usable(k):
-				node_wrong += 1
 	var edges := 0
 	var edge_wrong := 0
 	var clear_some := 0
 	var blocked_some := 0
 	var i := 0
-	for k: Vector3i in table.e:
-		for k2: Vector3i in table.e[k]:
-			i += 1
-			if i % 7 != 0:
-				continue
-			edges += 1
-			var w := float(table.e[k][k2])
-			clear_some += 1 if w >= cs[-1] else 0
-			blocked_some += 1 if w < cs[0] else 0
-			for c in cs:
-				if (w >= c) != a.segment_clear(FlightPlanner.node_pos(k), FlightPlanner.node_pos(k2), c):
-					edge_wrong += 1
+	for x in range(-tb.n, tb.n + 1):
+		for z in range(-tb.n, tb.n + 1):
+			for y in FlightPlanner.LEVELS.size():
+				var k := Vector3i(x, y, z)
+				nodes += 1
+				for ci in cs.size():
+					fp.clearance = cs[ci]
+					if (tb.node(k, ci) == 1) != fp.node_usable(k):
+						node_wrong += 1
+				if tb.node(k, cs.size() - 1) != 1:
+					continue
+				for dx in [-1, 0, 1]:
+					for dy in [-1, 0, 1]:
+						for dz in [-1, 0, 1]:
+							var k2 := Vector3i(k.x + dx, k.y + dy, k.z + dz)
+							if k2 == k or tb.edge(k, k2, 0) < 0:
+								continue
+							i += 1
+							if i % 7 != 0:
+								continue
+							edges += 1
+							clear_some += 1 if tb.edge(k, k2, cs.size() - 1) == 1 else 0
+							blocked_some += 1 if tb.edge(k, k2, 0) == 0 else 0
+							for ci in cs.size():
+								if (tb.edge(k, k2, ci) == 1) != a.segment_clear(FlightPlanner.node_pos(k), FlightPlanner.node_pos(k2), cs[ci]):
+									edge_wrong += 1
 	print("table: %d nodes, %d edges sampled (%d clear at the narrowest, %d blocked at the widest); wrong %d, %d" % [nodes, edges, clear_some, blocked_some, node_wrong, edge_wrong])
 	check(nodes > 1000 and edges > 1000, "the table covers the lattice (%d nodes, %d edges sampled)" % [nodes, edges])
 	check(clear_some > 0 and blocked_some > 0, "with edges both clear and blocked to tell apart")
@@ -49,8 +57,8 @@ func setup() -> void:
 	eq(edge_wrong, 0, "every edge answers as segment_clear does, at every clearance")
 	# The same routes with the table as without it: every perch of the pine, from round the oak.
 	var b := FlightExam.place()
-	var tb := FlightExam.add_tree(b, "pine")
-	FlightExam.add_outpost(b, tb)
+	var tree_b := FlightExam.add_tree(b, "pine")
+	FlightExam.add_outpost(b, tree_b)
 	FlightExam.add_tree(b, "oak", Vector2(14.0, 6.0), 3)
 	b.half_extent = 40.0
 	b.boundary = 40.0

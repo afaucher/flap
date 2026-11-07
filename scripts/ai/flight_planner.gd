@@ -25,8 +25,8 @@ var layout: ArenaLayout
 var clearance := DEFAULT_CLEARANCE
 const DEFAULT_CLEARANCE := 0.9
 var _node_ok := {}      ## Vector3i -> bool
-var _table := {}        ## the layout's table (prepare), and whether it holds this clearance: for this search
-var _table_on := false
+var _table: Table = null   ## the layout's table (prepare) and this clearance's index in it (-1: not there): for this search
+var _ci := -1
 var _order := 0
 var _steps_left := -1   ## search steps left in this route request (REQUEST_EXPANSIONS; -1: no limit, as for a race course)
 var _seen := {}         ## Vector3i -> {Vector3i -> bool}: edges checked, where the layout's table hasn't them (_edge_clear)
@@ -166,10 +166,16 @@ func plan_to_perch(from: Vector3, p: Perch, profile: BirdProfile, from_tree := -
 	var start := Vector3(from.x, maxf(from.y, clearance + 0.6), from.z)   # (a bird on the ground)
 	var tried := 0
 	_steps_left = REQUEST_EXPANSIONS
-	for d in ways_in(p, from, profile, heading, turn_r, layout, clearance):
+	var w0 := Perf.t()
+	var ways := ways_in(p, from, profile, heading, turn_r, layout, clearance)
+	Perf.add("  ways in (in ai.plan)", w0)
+	for d in ways:
 		if tried >= WAYS_PLANNED:
 			break
-		if not swoop_clear(p, profile, d):
+		var s0 := Perf.t()
+		var swoop := swoop_clear(p, profile, d)
+		Perf.add("  swoops (in ai.plan)", s0)
+		if not swoop:
 			continue
 		tried += 1
 		var app := approach_point(p, profile, d)
@@ -218,8 +224,12 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 	_a_perch = a_perch
 	_b_perch = b_perch
 	_a_through = false
-	if _leg_ok(a, b, a_tree, b_tree):
+	var l0 := Perf.t()
+	var direct := _leg_ok(a, b, a_tree, b_tree)
+	Perf.add("  direct legs (in ai.plan)", l0)
+	if direct:
 		return [a, b]
+	var a0 := Perf.t()
 	var starts := _attach(a, a_tree, true)
 	if starts.is_empty() and a_tree >= 0:
 		# Deep in a crown, every way out passes close to another of its own limbs: leave through them (it passes
@@ -230,16 +240,29 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 		# Wedged in (its berth from the wood overlaps a neighbour's crown): the first leg out may pass closer.
 		starts = _attach(a, a_tree, true, minf(clearance, START_CLEARANCE))
 	var goals := _attach(b, b_tree, false)
+	Perf.add("  attach (in ai.plan)", a0)
 	if starts.is_empty() or goals.is_empty():
 		return []
+	var q0 := Perf.t()
+	var found_route := _search(a, b, starts, goals, a_tree, b_tree)
+	Perf.add("  search (in ai.plan)", q0)
+	return found_route
+
+
+## plan()'s lattice search from `starts` to `goals`, and its route.
+func _search(a: Vector3, b: Vector3, starts: Array[Vector3i], goals: Array[Vector3i], a_tree: int, b_tree: int) -> Array[Vector3]:
+	_table = table_of(layout)
+	_ci = _table.index_of(clearance) if _table != null else -1
+	if _ci >= 0:
+		var got = _search_indexed(a, b, starts, goals)
+		if got != null:
+			return _route(a, b, got, a_tree, b_tree)
 	var goal_set := {}
 	for g in goals:
 		goal_set[g] = true
 	# A* over lattice keys.
 	# (The open set's cheapest node comes off a binary heap -- the first opened of equals, as a scan of it in order
 	# took them, so the routes are the same.)
-	_table = layout.get_meta(EDGE_TABLE, {})
-	_table_on = float((_table.get("c_set", {}) as Dictionary).get(clearance, -1.0)) >= 0.0
 	var open := {}          # key -> f
 	var opened := {}        # key -> the order it was opened in (kept while it's open)
 	var heap := []          # [f, order, key]
@@ -252,10 +275,8 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 		came[s] = null
 	var found = null
 	var expansions := 0
-	while not open.is_empty() and expansions < MAX_EXPANSIONS and _steps_left != 0:
+	while not open.is_empty() and expansions < MAX_EXPANSIONS and _step():
 		expansions += 1
-		if _steps_left > 0:
-			_steps_left -= 1
 		var cur = _pop(open, opened, heap)
 		open.erase(cur)
 		opened.erase(cur)
@@ -282,11 +303,218 @@ func plan(a: Vector3, b: Vector3, a_tree := -1, b_tree := -1, a_perch := -1, b_p
 	while k != null:
 		keys.push_front(k)
 		k = came[k]
+	return _route(a, b, keys, a_tree, b_tree)
+
+
+## A search step, if this request has one left (REQUEST_EXPANSIONS; none counted for a plan with no limit).
+func _step() -> bool:
+	if _steps_left == 0:
+		return false
+	if _steps_left > 0:
+		_steps_left -= 1
+	return true
+
+
+## The route a -> b through lattice nodes `keys` ([] if none), string-pulled.
+func _route(a: Vector3, b: Vector3, keys: Array, a_tree: int, b_tree: int) -> Array[Vector3]:
+	if keys.is_empty():
+		var none: Array[Vector3] = []
+		return none
 	var pts: Array[Vector3] = [a]
 	for key in keys:
 		pts.append(_pos(key))
 	pts.append(b)
 	return smooth(pts, a_tree, b_tree)
+
+
+# (_search_indexed's per-node state, by the table's node index; `_stamp` marks what belongs to this search.)
+var _sid := 0
+var _g := PackedFloat64Array()
+var _g_at := PackedInt32Array()
+var _came := PackedInt32Array()
+var _of := PackedFloat64Array()        # open: f
+var _oo := PackedInt64Array()          # open: the order it was opened in
+var _o_at := PackedInt32Array()        # open while == _sid
+var _goal_at := PackedInt32Array()
+var _ok := PackedByteArray()           # _usable's answers mirrored: 0 not asked, 1 no, 2 yes
+var _hf := PackedFloat64Array()        # the heap: f, order, node
+var _ho := PackedInt64Array()
+var _hk := PackedInt32Array()
+
+
+## The A* of plan() over the table's flat node indices instead of dictionaries (the game's, with prepare's table): the
+## same search step for step -- the same neighbours in the same order, the same ties -- so the same route. The lattice
+## keys of the route, [] if none, or null if a start or goal lies outside the table (plan() searches as before).
+func _search_indexed(a: Vector3, b: Vector3, starts: Array[Vector3i], goals: Array[Vector3i]) -> Variant:
+	var tb := _table
+	var count := tb.nodes.size()
+	for k in starts + goals:
+		if tb.idx(k) < 0:
+			return null
+	if _g.size() != count:
+		_g.resize(count)
+		_g_at.resize(count)
+		_g_at.fill(0)
+		_came.resize(count)
+		_of.resize(count)
+		_oo.resize(count)
+		_o_at.resize(count)
+		_o_at.fill(0)
+		_goal_at.resize(count)
+		_goal_at.fill(0)
+		_ok.resize(count)
+		_ok.fill(0)
+	_sid += 1
+	var sid := _sid
+	_hf.resize(0)
+	_ho.resize(0)
+	_hk.resize(0)
+	var open_n := 0
+	for g in goals:
+		_goal_at[tb.idx(g)] = sid
+	for st in starts:
+		var i := tb.idx(st)
+		var c := _cost(a, _pos(st))
+		_g[i] = c
+		_g_at[i] = sid
+		_came[i] = -1
+		open_n += _open_i(i, c + _pos(st).distance_to(b), sid)
+	var found := -1
+	var expansions := 0
+	var levels := LEVELS.size()
+	var side := tb.side
+	var n := tb.n
+	while open_n > 0 and expansions < MAX_EXPANSIONS and _step():
+		expansions += 1
+		var cur := _pop_i(sid)
+		_o_at[cur] = 0
+		open_n -= 1
+		if _goal_at[cur] == sid:
+			found = cur
+			break
+		var cy := cur % levels
+		var ct := cur / levels
+		var ck := Vector3i(ct / side - n, cy, ct % side - n)
+		var cp := _pos(ck)
+		var base := cur * 27
+		var gc := _g[cur]
+		for dy in [-1, 0, 1]:
+			var ly: int = cy + dy
+			if ly < 0 or ly >= levels:
+				continue
+			var ny: float = LEVELS[ly]
+			var rise := ny - cp.y
+			var climb := maxf(0.0, rise) * CLIMB_COST
+			for dx in [-1, 0, 1]:
+				var nx: int = ck.x + dx
+				for dz in [-1, 0, 1]:
+					if dx == 0 and dz == 0 and dy == 0:
+						continue
+					var nz: int = ck.z + dz
+					var ni := -1
+					if absi(nx) <= n and absi(nz) <= n:
+						ni = ((nx + n) * side + (nz + n)) * levels + ly
+					var usable: bool
+					if ni < 0:
+						usable = _usable(Vector3i(nx, ly, nz))
+					else:
+						var m := _ok[ni]
+						if m == 0:
+							usable = _usable(Vector3i(nx, ly, nz))
+							_ok[ni] = 2 if usable else 1
+						else:
+							usable = m == 2
+					if not usable or ni < 0:   # (outside the table: plan() would never reach it either)
+						continue
+					var np := Vector3(nx * LATTICE, ny, nz * LATTICE)
+					var ng: float = gc + cp.distance_to(np) + climb
+					if _g_at[ni] == sid and ng >= _g[ni]:
+						continue
+					var v := tb.edges[base + (dx + 1) * 9 + (dy + 1) * 3 + (dz + 1)]
+					var clear: bool
+					if v == Table.UNSET:
+						clear = _edge_clear(ck, Vector3i(nx, ly, nz), cp, np)
+					else:
+						clear = v <= _ci
+					if not clear:
+						continue
+					_g[ni] = ng
+					_g_at[ni] = sid
+					_came[ni] = cur
+					open_n += _open_i(ni, ng + np.distance_to(b), sid)
+	if found < 0:
+		return []
+	var keys := []
+	var i := found
+	while i >= 0:
+		var y := i % levels
+		var t := i / levels
+		keys.push_front(Vector3i(t / side - n, y, t % side - n))
+		i = _came[i]
+	return keys
+
+
+## Open node `i` at `f` (or lower it there), and push it on the heap; 1 if it wasn't open (the open count grows).
+func _open_i(i: int, f: float, sid: int) -> int:
+	var fresh := 0
+	if _o_at[i] != sid:
+		_o_at[i] = sid
+		_oo[i] = _order
+		_order += 1
+		fresh = 1
+	_of[i] = f
+	var o := _oo[i]
+	var at := _hf.size()
+	_hf.append(f)
+	_ho.append(o)
+	_hk.append(i)
+	while at > 0:
+		var up := (at - 1) >> 1
+		if not (_hf[at] < _hf[up] or (_hf[at] == _hf[up] and _ho[at] < _ho[up])):
+			break
+		_swap(at, up)
+		at = up
+	return fresh
+
+
+## The open node with the lowest f (the first opened of equals); entries a lowered f left behind are skipped.
+func _pop_i(sid: int) -> int:
+	while _hf.size() > 0:
+		var f := _hf[0]
+		var o := _ho[0]
+		var k := _hk[0]
+		var last := _hf.size() - 1
+		_swap(0, last)
+		_hf.resize(last)
+		_ho.resize(last)
+		_hk.resize(last)
+		var i := 0
+		while true:
+			var l := 2 * i + 1
+			if l >= last:
+				break
+			var c := l
+			if l + 1 < last and (_hf[l + 1] < _hf[l] or (_hf[l + 1] == _hf[l] and _ho[l + 1] < _ho[l])):
+				c = l + 1
+			if not (_hf[c] < _hf[i] or (_hf[c] == _hf[i] and _ho[c] < _ho[i])):
+				break
+			_swap(i, c)
+			i = c
+		if _o_at[k] == sid and _of[k] == f and _oo[k] == o:
+			return k
+	return -1
+
+
+func _swap(x: int, y: int) -> void:
+	var tf := _hf[x]
+	_hf[x] = _hf[y]
+	_hf[y] = tf
+	var to := _ho[x]
+	_ho[x] = _ho[y]
+	_ho[y] = to
+	var tk := _hk[x]
+	_hk[x] = _hk[y]
+	_hk[y] = tk
 
 
 ## Put `key` in the open set at `f` (or lower it there), and on the heap.
@@ -386,15 +614,14 @@ func _pos(k: Vector3i) -> Vector3:
 	return Vector3(k.x * LATTICE, LEVELS[k.y], k.z * LATTICE)
 
 
-## Where lattice node `k` is (x and z in LATTICE steps, y the index into LEVELS).
 ## Is the lattice edge a -> b (at `pa`, `pb`) clear of the wood by `clearance`? From the layout's table (prepare)
 ## when it has one for this clearance, else checked and kept (one way: the check isn't quite symmetric) -- the same
 ## answer either way. In a big wood a check is ~60 us and a search asks thousands.
 func _edge_clear(a: Vector3i, b: Vector3i, pa: Vector3, pb: Vector3) -> bool:
-	if _table_on:
-		var row: Dictionary = (_table.e as Dictionary).get(a, {})
-		if row.has(b):
-			return float(row[b]) >= clearance
+	if _table != null and _ci >= 0:
+		var got := _table.edge(a, b, _ci)
+		if got >= 0:
+			return got == 1
 	if _seen_c != clearance:
 		_seen_c = clearance
 		_seen.clear()
@@ -412,6 +639,64 @@ static var prepare_jobs := 0   ## threads prepare uses (0: the cores less one, a
 const PREPARE_JOBS := 6        ## (more contend: on 32 cores 6 threads took 2.8 s, 16 took 32 s)
 
 
+## The lattice's clearance, worked out ahead (prepare): for each node and each of its 26 neighbours (a slot of 27, the
+## middle unused), the widest of the planners' clearances (`cs`, widest first) it clears, as that clearance's index --
+## the check only gets harder as the clearance grows, so it clears every narrower one too. NONE: not even the narrowest;
+## UNSET: not worked out (a node not free at the narrowest, which no search uses). Flat byte arrays indexed by the
+## node's place in the lattice: a lookup is integer arithmetic, no hashing.
+class Table:
+	const NONE := 255
+	const UNSET := 254
+	var n := 0                 ## the lattice runs -n..n in x and z
+	var side := 1
+	var cs: Array[float] = []
+	var c_index := {}          ## clearance -> its index in cs
+	var nodes := PackedByteArray()
+	var edges := PackedByteArray()
+
+	func _init(half: int, clearances: Array[float]) -> void:
+		n = half
+		side = 2 * n + 1
+		cs = clearances
+		for i in cs.size():
+			c_index[cs[i]] = i
+		nodes.resize(side * side * LEVELS.size())
+		nodes.fill(UNSET)
+		edges.resize(nodes.size() * 27)
+		edges.fill(UNSET)
+
+	## Node `k`'s index (-1: outside the lattice).
+	func idx(k: Vector3i) -> int:
+		if absi(k.x) > n or absi(k.z) > n or k.y < 0 or k.y >= LEVELS.size():
+			return -1
+		return ((k.x + n) * side + (k.z + n)) * LEVELS.size() + k.y
+
+	## The slot of the edge a -> b among a's 27 (b a neighbour of a).
+	static func dir(a: Vector3i, b: Vector3i) -> int:
+		return (b.x - a.x + 1) * 9 + (b.y - a.y + 1) * 3 + (b.z - a.z + 1)
+
+	## The index of clearance `c` in cs, or -1 if the table hasn't it.
+	func index_of(c: float) -> int:
+		return int(c_index.get(c, -1))
+
+	## Is node `k` free at clearance index `ci`: 1 yes, 0 no, -1 not in the table.
+	func node(k: Vector3i, ci: int) -> int:
+		var i := idx(k)
+		if i < 0 or nodes[i] == UNSET:
+			return -1
+		return 1 if nodes[i] <= ci else 0
+
+	## Is the edge a -> b clear at clearance index `ci`: 1 yes, 0 no, -1 not in the table.
+	func edge(a: Vector3i, b: Vector3i, ci: int) -> int:
+		var i := idx(a)
+		if i < 0:
+			return -1
+		var v := edges[i * 27 + dir(a, b)]
+		if v == UNSET:
+			return -1
+		return 1 if v <= ci else 0
+
+
 ## The clearances planners use (each species' AIPilot.plan_clearance, and the default), widest first.
 static func species_clearances() -> Array[float]:
 	var cs: Array[float] = [DEFAULT_CLEARANCE]   # (a planner not yet fitted to its bird plans with this)
@@ -424,10 +709,9 @@ static func species_clearances() -> Array[float]:
 	return cs
 
 
-## Work out every lattice edge's clearance in `l` ahead, for every species' clearance, over the machine's cores (the
-## loading screen does it with the layout): each directed edge between nodes free at the narrowest gets the widest
-## clearance it clears (or -1) -- the check only gets harder as the clearance grows, so that answers it for each.
-## The planners then look edges up instead of checking them: the same routes, without the ~150 ms first searches.
+## Work out the lattice's clearance in `l` ahead (Table), for every planner's clearance, over the machine's cores (the
+## loading screen does it with the layout). The planners then look nodes and edges up instead of checking them: the
+## same routes, without the ~150 ms first searches.
 static func prepare(l: ArenaLayout) -> void:
 	if l.has_meta(EDGE_TABLE):
 		return
@@ -441,6 +725,11 @@ static func prepare_for_play(l: ArenaLayout) -> void:
 		prepare(l)
 
 
+## The layout's table, or null.
+static func table_of(l: ArenaLayout) -> Table:
+	return l.get_meta(EDGE_TABLE) if l.has_meta(EDGE_TABLE) else null
+
+
 static func _prepare(l: ArenaLayout) -> void:
 	var t0 := Time.get_ticks_msec()
 	for t in l.trees:   # (what the checks build on first use, built now: the threads below only read)
@@ -449,70 +738,70 @@ static func _prepare(l: ArenaLayout) -> void:
 	for o in l.outposts:
 		l.deck_lines(o)
 	var cs := species_clearances()
+	var tb := Table.new(int(l.half_extent / LATTICE) + 1, cs)
 	var probe := FlightPlanner.new(l, cs[-1])
-	var n := int(l.half_extent / LATTICE) + 1
-	var free := {}
-	var nodes := {}   # (each node: the widest clearance it's free at, or -1 -- node_usable only gets harder as it grows)
-	for x in range(-n, n + 1):
-		for z in range(-n, n + 1):
+	var free: Array[Vector3i] = []
+	for x in range(-tb.n, tb.n + 1):
+		for z in range(-tb.n, tb.n + 1):
 			for y in LEVELS.size():
 				var k := Vector3i(x, y, z)
-				var w := -1.0
-				for c in cs:   # (widest first)
-					probe.clearance = c
+				var w := Table.NONE
+				for ci in cs.size():   # (widest first)
+					probe.clearance = cs[ci]
 					if probe.node_usable(k):
-						w = c
+						w = ci
 						break
-				nodes[k] = w
-				if w >= 0.0:
-					free[k] = true
-	var edges: Array[Vector3i] = []   # (pairs: from, to)
-	for k: Vector3i in free:
-		for dy in [-1, 0, 1]:
-			for dx in [-1, 0, 1]:
-				for dz in [-1, 0, 1]:
-					var k2 := Vector3i(k.x + dx, k.y + dy, k.z + dz)
-					if k2 != k and free.has(k2):
-						edges.append(k)
-						edges.append(k2)
-	var m := edges.size() / 2
+				tb.nodes[tb.idx(k)] = w
+				if w != Table.NONE:
+					free.append(k)
 	var jobs := clampi(OS.get_processor_count() - 1, 1, PREPARE_JOBS) if prepare_jobs <= 0 else prepare_jobs
 	var threads: Array[Thread] = []
+	var m := free.size()
 	for j in jobs:
 		var th := Thread.new()
-		th.start(_prepare_part.bind(l, edges, cs, m * j / jobs, m * (j + 1) / jobs))
+		th.start(_prepare_part.bind(l, tb, free, m * j / jobs, m * (j + 1) / jobs))
 		threads.append(th)
-	var out := PackedFloat64Array()
-	for th in threads:
-		out.append_array(th.wait_to_finish())   # (in order: each thread's part, edge by edge)
-	var e := {}
-	for i in m:
-		var a := edges[2 * i]
-		if not e.has(a):
-			e[a] = {}
-		e[a][edges[2 * i + 1]] = out[i]
-	var c_set := {}
-	for c in cs:
-		c_set[c] = 0.0
-	l.set_meta(EDGE_TABLE, {"e": e, "n": nodes, "c_set": c_set})
-	print_verbose("FlightPlanner.prepare: %d edges, %d clearances, %d threads, %d ms" % [m, cs.size(), jobs, Time.get_ticks_msec() - t0])
+	for j in jobs:
+		var part: PackedByteArray = threads[j].wait_to_finish()   # (27 a node, for its share of `free`, in order)
+		var i0 := m * j / jobs
+		for q in range(i0, m * (j + 1) / jobs):
+			var base := tb.idx(free[q]) * 27
+			var at := (q - i0) * 27
+			for d in 27:
+				tb.edges[base + d] = part[at + d]
+	l.set_meta(EDGE_TABLE, tb)
+	print_verbose("FlightPlanner.prepare: %d free nodes, %d clearances, %d threads, %d ms" % [m, cs.size(), jobs, Time.get_ticks_msec() - t0])
 
 
-## (prepare's work for edges i0..i1, on a thread of its own: each edge's widest clearance it clears, by halving.)
-static func _prepare_part(l: ArenaLayout, edges: Array[Vector3i], cs: Array[float], i0: int, i1: int) -> PackedFloat64Array:
-	var out := PackedFloat64Array()
-	for i in range(i0, i1):
-		var pa := node_pos(edges[2 * i])
-		var pb := node_pos(edges[2 * i + 1])
-		var lo := 0                 # (cs is widest first: find the first index it clears; all after clear too)
-		var hi := cs.size()
-		while lo < hi:
-			var mid := (lo + hi) / 2
-			if l.segment_clear(pa, pb, cs[mid]):
-				hi = mid
-			else:
-				lo = mid + 1
-		out.append(cs[lo] if lo < cs.size() else -1.0)
+## (prepare's work for free nodes i0..i1, on a thread of its own: each edge to a free neighbour, the widest clearance
+## it clears, found by halving; 27 slots a node.)
+static func _prepare_part(l: ArenaLayout, tb: Table, free: Array[Vector3i], i0: int, i1: int) -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize((i1 - i0) * 27)
+	out.fill(Table.UNSET)
+	var cs := tb.cs
+	for q in range(i0, i1):
+		var k := free[q]
+		var pa := node_pos(k)
+		for dx in [-1, 0, 1]:
+			for dy in [-1, 0, 1]:
+				for dz in [-1, 0, 1]:
+					var k2 := Vector3i(k.x + dx, k.y + dy, k.z + dz)
+					if k2 == k:
+						continue
+					var i2 := tb.idx(k2)
+					if i2 < 0 or tb.nodes[i2] == Table.NONE:
+						continue
+					var pb := node_pos(k2)
+					var lo := 0          # (cs is widest first: find the first index it clears; all after clear too)
+					var hi := cs.size()
+					while lo < hi:
+						var mid := (lo + hi) / 2
+						if l.segment_clear(pa, pb, cs[mid]):
+							hi = mid
+						else:
+							lo = mid + 1
+					out[(q - i0) * 27 + Table.dir(k, k2)] = lo if lo < cs.size() else Table.NONE
 	return out
 
 
@@ -523,12 +812,10 @@ static func node_pos(k: Vector3i) -> Vector3:
 func _usable(k: Vector3i) -> bool:
 	if _node_ok.has(k):
 		return _node_ok[k]
-	var ok: bool
-	var nt: Dictionary = (layout.get_meta(EDGE_TABLE, {}) as Dictionary)
-	if nt.has("n") and float((nt.c_set as Dictionary).get(clearance, -1.0)) >= 0.0:
-		ok = float((nt.n as Dictionary).get(k, -1.0)) >= clearance   # (prepare's table: the same answer)
-	else:
-		ok = node_usable(k)
+	var tb := table_of(layout)
+	var ti := tb.index_of(clearance) if tb != null else -1
+	var got := tb.node(k, ti) if ti >= 0 else -1   # (prepare's table: the same answer)
+	var ok := got == 1 if got >= 0 else node_usable(k)
 	_node_ok[k] = ok
 	return ok
 
