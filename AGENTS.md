@@ -3,7 +3,9 @@
 Flap is a bird flight combat demo in Godot 4.7: a greybox arena of trees and perches, mouse + space controls,
 five bird species. Start with `README.md`, then `docs/design/flight_model.md` (how everything works and why)
 and `docs/research/` (the bird and flight-sim research behind the numbers). The build system is ported from
-`..\cast`.
+`..\cast`. Designing or changing a bird (a new species, or any part of one: numbers, wing, body, head, bill,
+legs, plumage, poses): the `bird-design` skill, `.claude/skills/bird-design/` (the method, the rules, each part's
+reference, a new species' checklist, the mistakes already made).
 
 ## This file overrides `scratch/AGENTS.md` for this project
 The `AGENTS.md` one level up describes a different, networked project (host-only simulation, 2D raycasts,
