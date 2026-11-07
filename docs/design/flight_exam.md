@@ -45,6 +45,26 @@ trees the game has, but alone, on flat ground, in still air:
 | - | Turn only as hard as the lift holds | each species' share of its flying time banked past `AIPilot.held_bank` (+5 deg) |
 | - | Begin each final at its speed | nine finals in ten begin under 1.35 x its cruise (`FINAL_FAST`) |
 
+Each objective, each species: landed (or through every gate) / tried now, the share it must make (`RATE`), and its
+median time against its bound (`TIME`, `TIME_SCALE`) -- `test_flight_exam`, seeded, so a run gives these exactly. On
+top, every species in every scene: at most 3% of its flying time banked past what its lift holds, nine finals in ten
+begun under 1.35 x its cruise, and at most 0.1 touches of wood a try (0.25 under the oak's crown).
+
+| Objective | crow | owl | hawk | falcon | sparrow |
+|---|---|---|---|---|---|
+| Every perch, lone pine | 44/44 (>= 95%), 4.2 s (< 8) | 44/44 (>= 95%), 4.0 s (< 8) | 44/44 (>= 90%), 3.6 s (< 12) | 44/44 (>= 85%), 8.8 s (< 16) | 44/44 (>= 95%), 4.3 s (< 8) |
+| Every perch, veteran pine | 60/60 (>= 95%), 4.4 s (< 8) | 60/60 (>= 95%), 4.3 s (< 8) | 60/60 (>= 90%), 4.2 s (< 12) | 60/60 (>= 85%), 9.8 s (< 16) | 60/60 (>= 95%), 4.7 s (< 8) |
+| Every perch, pole pine | 28/28 (>= 95%), 3.8 s (< 8) | 28/28 (>= 95%), 4.0 s (< 8) | 28/28 (>= 90%), 3.3 s (< 12) | 28/28 (>= 90%), 9.8 s (< 16) | 28/28 (>= 95%), 4.1 s (< 8) |
+| Every perch, oak crown | 60/60 (>= 95%), 4.4 s (< 8) | 60/60 (>= 95%), 4.2 s (< 8) | 60/60 (>= 90%), 4.1 s (< 12) | 60/60 (>= 85%), 9.8 s (< 16) | 60/60 (>= 95%), 4.5 s (< 8) |
+| Oak's low limbs (~4.5 m) | 36/36 (>= 95%), 9.1 s (< 24) | 36/36 (>= 95%), 8.9 s (< 24) | 72/72 (>= 95%), 10.7 s (< 36) | 70/72 (>= 90%), 13.4 s (< 48) | 36/36 (>= 95%), 9.7 s (< 24) |
+| Oak's low limbs, 10 m above / 6 m below | - | - | 35/36 (>= 85%), 11.7 s (< 36) | 34/36 (>= 80%), 10.9 s (< 48) | - |
+| Outpost rails (pine, big oak) | 32/32 (>= 95%), 10.2 s (< 16) | 32/32 (>= 95%), 10.8 s (< 16) | 32/32 (>= 90%), 14.3 s (< 24) | 31/32 (>= 85%), 11.3 s (< 32) | 32/32 (>= 95%), 8.7 s (< 16) |
+| Pine, 10 m above / 8 m below | 44/44 (>= 95%), 6.7 s (< 12) | 44/44 (>= 95%), 7.0 s (< 12) | 44/44 (>= 90%), 9.7 s (< 18) | 43/44 (>= 85%), 8.8 s (< 24) | 44/44 (>= 95%), 7.8 s (< 12) |
+| Pine in a grove | 22/22 (>= 95%), 3.9 s (< 8) | 22/22 (>= 95%), 4.0 s (< 8) | 22/22 (>= 90%), 3.3 s (< 12) | 22/22 (>= 85%), 2.6 s (< 16) | 22/22 (>= 95%), 4.2 s (< 8) |
+| Hop, pine to pine | 22/22 (>= 95%), 5.2 s (< 13) | 22/22 (>= 95%), 5.0 s (< 13) | 22/22 (>= 90%), 6.0 s (< 19) | 22/22 (>= 85%), 10.4 s (< 26) | 22/22 (>= 95%), 5.2 s (< 13) |
+| Close in on the line | 11/11 (>= 95%), 2.0 s (< 4) | 11/11 (>= 95%), 2.0 s (< 4) | 11/11 (>= 90%), 1.6 s (< 6) | 11/11 (>= 85%), 1.3 s (< 8) | 11/11 (>= 95%), 1.9 s (< 4) |
+| Gate courses, 3 skills | 30/30 (>= 95%), 5.2 s (< 8) | 30/30 (>= 95%), 3.7 s (< 8) | 30/30 (>= 90%), 4.7 s (< 12) | 30/30 (>= 90%), 3.7 s (< 16) | 30/30 (>= 95%), 3.4 s (< 8) |
+
 An attempt passes if the bird sits on the perch (or has taken every gate) within 45 s. A bird that sits on another
 perch first is sent on again; one that gives the perch up is asked again. Each species is judged on its share of
 attempts and its median time (`test_flight_exam.RATE`, `TIME`).
