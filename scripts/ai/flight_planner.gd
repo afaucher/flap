@@ -47,20 +47,25 @@ func _init(l: ArenaLayout, c := DEFAULT_CLEARANCE) -> void:
 ## Where the final approach starts: out from the perch along `dir` (the way in: default the perch's facing) and a little
 ## below it, so the bird dives under and swoops up into the perch (bleeding speed on the way up, as birds do).
 static func approach_point(p: Perch, profile: BirdProfile, dir := Vector3.ZERO) -> Vector3:
-	return p.approach_anchor() + _way(p, dir) * approach_length(profile) + Vector3.DOWN * approach_drop(profile)
+	return p.approach_anchor() + _way(p, dir) * approach_length(profile) + Vector3.DOWN * approach_drop(profile, p)
 
 
 ## A point twice as far out, so the bird reaches the approach point already lined up with the perch.
 static func pre_approach_point(p: Perch, profile: BirdProfile, dir := Vector3.ZERO) -> Vector3:
-	return p.approach_anchor() + _way(p, dir) * approach_length(profile) * 2.0 + Vector3.DOWN * approach_drop(profile) * 0.5
+	return p.approach_anchor() + _way(p, dir) * approach_length(profile) * 2.0 + Vector3.DOWN * approach_drop(profile, p) * 0.5
 
 
 ## m below the perch the final swoop starts: the height a bird gliding at its best speed zooms up as it slows to its
 ## catch speed (catch_speed), less what the drag takes (ZOOM_KEPT) -- a falcon's ~1.9 m, a sparrow's ~0.7. A bird
-## that can't climb the swoop arrives under the branch; one that starts too high arrives too fast.
-static func approach_drop(profile: BirdProfile) -> float:
+## that can't climb the swoop arrives under the branch; one that starts too high arrives too fast. Under a low perch
+## (`p`) no deeper than leaves the approach point APPROACH_FLOOR up: lower, a wide turner lining up there has the ground
+## limiting its bank and the understory in its way (the falcon on the big-trees oak's 4.5 m limbs, 50 of 72).
+static func approach_drop(profile: BirdProfile, p: Perch = null) -> float:
 	var v := catch_speed(profile)
-	return clampf((profile.v_best * profile.v_best - v * v) / (2.0 * BirdProfile.G) * ZOOM_KEPT, DROP.x, DROP.y)
+	var drop := clampf((profile.v_best * profile.v_best - v * v) / (2.0 * BirdProfile.G) * ZOOM_KEPT, DROP.x, DROP.y)
+	if p != null:
+		drop = minf(drop, maxf(DROP.x, p.approach_anchor().y - APPROACH_FLOOR))
+	return drop
 
 
 ## m/s: the speed to arrive at a perch at -- the middle of the bird's window between its stall and the fastest it can
@@ -71,6 +76,7 @@ static func catch_speed(profile: BirdProfile) -> float:
 
 const ZOOM_KEPT := 0.6           ## share of the zoom's height the drag leaves it
 const DROP := Vector2(0.6, 2.5)  ## m: the approach drop at least and at most
+const APPROACH_FLOOR := 3.3      ## m up the approach point stays at least, where the perch allows (approach_drop)
 
 
 static func _way(p: Perch, dir: Vector3) -> Vector3:

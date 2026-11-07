@@ -446,8 +446,8 @@ func _fly(bird: Bird, dt: float) -> FlightInput:
 			var over := pos.y - (a0.y + leg.y * t)
 			if over > LINE_OVER:
 				opts.gamma = clampf(atan2(leg.y, flat) - over * LINE_HOLD, deg_to_rad(-35.0), deg_to_rad(25.0))
-	if wp >= route.size() - 2:
-		opts.cruise = p.v_best / CRUISE_OVER   # (on the approach: no wingbeats above its cruise -- no speed it must lose to catch)
+	if wp >= route.size() - 2 or lined_up:
+		opts.cruise = p.v_best / CRUISE_OVER   # (lining up and on the approach: no wingbeats above its cruise -- a tighter circle, no speed it must lose to catch)
 		opts.slow_to = p.v_best                # (and come down to it by the approach point: the final bleeds the rest)
 	if final and target.position.y < 5.0:
 		opts.floor = 0.8   # (landing low)

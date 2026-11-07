@@ -5,7 +5,8 @@ extends TestCase
 ##   1-2 veteran ... a veteran pine (broad, low crown): from in front and behind (1), from the sides (2)
 ##   3 pole      ... a pole-stage pine (slim, low perches)
 ##   4-5 oak     ... an oak's crown (its limbs from 6 m up): the crow, owl and sparrow (4), the hawk and falcon (5)
-##   6-7 oak_low ... the oak's low limbs (~4.5 m, under the crown: little room under it to slow down and turn), as 4-5
+##   6, 7, 17 oak_low ... the oak's low limbs (~4.5 m, under the crown: little room under it to slow down and turn): the
+##               crow, owl and sparrow (6) from 4 sides, the hawk (7) and the falcon (17) from 8
 ##   8-9 rails   an outpost's rail on a pine (8) and on the clearing's big oak (9), from 8 sides, 3 and 10 m above
 ##   10 gates    the gate courses (FlightExam.COURSES: straight, climb, dive, tight and wide turns, a U-turn, a gate
 ##               behind, a slalom, an S-bend, up and down) at recruit, pilot and ace
@@ -24,17 +25,18 @@ extends TestCase
 ## a subtle change to the wood, a profile or the flight model moves a rate a few per cent, which they absorb; losing a
 ## way of flying (a side to land from, the bank the lift holds, the line-up, the energy on the final) costs tens.
 
-const SHARDS := 17
+const SHARDS := 18
 const SECONDS := 45.0       ## s each try has
 const LOW_TIER := 6.0       ## m: an oak's limbs under this are its low tier (oak_low)
+const EIGHT := [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]
 const OAK_BIRDS := [["crow", "owl", "sparrow"], ["hawk", "falcon"]]   ## the oak's and grove's shards' species
 ## Share each species must land on, by scene (default: "*"). The falcon's and the hawk's floors are lower under the
 ## oak's crown (its low limbs ~4.5 m up: their stall speeds and turning circles leave them little room there).
 const RATE := {
 	"*": {"crow": 0.95, "owl": 0.95, "hawk": 0.9, "falcon": 0.85, "sparrow": 0.95},
-	"oak_low": {"hawk": 0.85, "falcon": 0.65},
+	"oak_low": {"hawk": 0.95, "falcon": 0.85},
 	"pole": {"falcon": 0.9},
-	"oak_low_heights": {"hawk": 0.8, "falcon": 0.6},
+	"oak_low_heights": {"hawk": 0.85, "falcon": 0.8},
 	"gates": {"falcon": 0.9},
 }
 ## Median s to land, by species (a scene can stretch it: TIME_SCALE).
@@ -63,8 +65,11 @@ func setup() -> void:
 	for j in 2:
 		if in_shard(4 + j):
 			await _tree("oak", [0.0, 90.0, 180.0, 270.0], [3.0], "oak", false, 1, OAK_BIRDS[j])
-		if in_shard(6 + j):
-			await _tree("oak", [0.0, 90.0, 180.0, 270.0], [3.0], "oak_low", false, -1, OAK_BIRDS[j])
+	if in_shard(6):
+		await _tree("oak", [0.0, 90.0, 180.0, 270.0], [3.0], "oak_low", false, -1, OAK_BIRDS[0])
+	for j in 2:   # (the hawk and the falcon from 8 sides each, a shard each: their shares there are the closest judged)
+		if in_shard([7, 17][j]):
+			await _tree("oak", EIGHT, [3.0], "oak_low", false, -1, [OAK_BIRDS[1][j]])
 	if in_shard(8):
 		await _rail("pine")
 	if in_shard(9):

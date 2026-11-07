@@ -381,9 +381,13 @@ func _field_finishes(s: int) -> void:
 		check(home >= 1, "seed %d: the pilot or the ace %s lands home on the rail" % [s, id])
 		var rec: Dictionary = by["recruit %s" % id]
 		var ace: Dictionary = by["ace %s" % id]
-		if rec.time < INF and ace.time < INF:
+		if rec.gates == c.gate_count and ace.gates == c.gate_count:
+			# (Round the course to the last gate: what the skill changes. Home onto the rail is the flight AI's landing,
+			# the same for every skill, and a go-around there can swing it either way: judged above.)
 			pairs += 1
-			check(rec.time > ace.time, "seed %d: the recruit %s (%.1f s) is slower than the ace (%.1f s)" % [s, id, rec.time, ace.time])
+			var rt: float = rec.splits[-1]
+			var at: float = ace.splits[-1]
+			check(rt > at, "seed %d: the recruit %s (%.1f s to the last gate) is slower than the ace (%.1f s)" % [s, id, rt, at])
 	check(missed.size() <= 1, "seed %d: the pilots and aces land home on the rail (missed: %s)" % [s, ", ".join(missed)])
 	check(pairs >= 2, "seed %d: recruits finished to compare (%d)" % [s, pairs])
 	trial.queue_free()

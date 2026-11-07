@@ -5485,20 +5485,6 @@
   ]
  },
  {
-  "id": "ai-approach-drop-fixed",
-  "bug": "Every bird started its final swoop 1.2 m under the perch: too deep for a slow bird to climb (the sparrow passed under the rail at its catch speed), too shallow for a fast one to bleed its speed in (2026-11-06).",
-  "tests": [
-   "test_flight_exam"
-  ],
-  "edits": [
-   {
-    "file": "scripts/ai/flight_planner.gd",
-    "find": "\treturn clampf((profile.v_best * profile.v_best - v * v) / (2.0 * BirdProfile.G) * ZOOM_KEPT, DROP.x, DROP.y)",
-    "replace": "\treturn 1.2"
-   }
-  ]
- },
- {
   "id": "ai-no-line-up",
   "bug": "The route's last legs ignored which way the bird was flying: a wide turner reached the approach point still turning and passed the perch to the side (the falcon on an outpost rail 8 of 16) (2026-11-06).",
   "tests": [
@@ -5750,6 +5736,34 @@
     "file": "scripts/combat/ai/combat_brain.gd",
     "find": "\tpilot._fit(b)   # (its clearance",
     "replace": "\tpass   # (its clearance"
+   }
+  ]
+ },
+ {
+  "id": "ai-lineup-at-speed",
+  "bug": "A line-up's turns were flown as fast as the bird's cruise cap let it (the falcon ~14 m/s under the big-trees oak's crown, a 17 m circle): it swung wide, the avoidance took over and it looped away; the approach leg alone came down to cruise (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/ai_pilot.gd",
+    "find": "\tif wp >= route.size() - 2 or lined_up:",
+    "replace": "\tif wp >= route.size() - 2:"
+   }
+  ]
+ },
+ {
+  "id": "ai-approach-under-low-perch",
+  "bug": "The approach point sat its full drop under a low perch (the falcon's 1.9 m under the big-trees oak's 4.5 m limbs, 2.6 m up): lining up there the ground limited its bank and it met the understory (50 of 72) (2026-11-06).",
+  "tests": [
+   "test_flight_exam"
+  ],
+  "edits": [
+   {
+    "file": "scripts/ai/flight_planner.gd",
+    "find": "\tif p != null:\n\t\tdrop = minf(drop, maxf(DROP.x, p.approach_anchor().y - APPROACH_FLOOR))",
+    "replace": "\tif false:\n\t\tdrop = minf(drop, maxf(DROP.x, p.approach_anchor().y - APPROACH_FLOOR))"
    }
   ]
  }
