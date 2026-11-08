@@ -37,6 +37,11 @@ tick, the lofts and legs stepped with those while the body and feathers moved sm
   (the game's `--rig-tick`, kept for comparison), the feathers were interpolated but the lofts and the legs' bones
   aren't, so they stepped with the ticks: on a frame with no tick, or two, the wing surface held still or jumped
   against its own feathers. `test_rig_pacing`.
+  The wingbeat too: the rig draws it as of the drawn moment (`FlightModel.phase_at` / `beating_at`, from the time since
+  the beat began over the beat as the ticks run it, `beat_cycle`), not as the last tick left it. Read off the tick,
+  the sparrow's beat (7 ticks) showed 6 poses: at 80 fps a quarter of the frames held the last one and a slow frame
+  jumped several. Held beats run one into the next (the rig eases only where flapping starts or stops).
+  `test_drawn_wingbeat`.
 - **Simulation on the tick, drawing for the drawn moment** (Godot's physics interpolation docs). The birds, the AI,
   the flight model, rounds in flight and trail sampling run in `_physics_process`. What `_process` places by hand is
   placed for `drawn_lag()` behind the tick, with interpolation off on those nodes: rounds between their last two

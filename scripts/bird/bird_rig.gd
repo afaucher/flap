@@ -103,7 +103,6 @@ var _beat := 0.0                ## 0 .. 1: how far the wings follow the beat (fl
 var _beat_flap := 0.0           ## the beat's flap and hand lift this tick (kept while it fades out)
 var _beat_lift := 0.0
 var _beat_src := 0              ## what drives the beat: 0 none, 1 flapping, 2 the flare's braking beats
-var _beat_phase := 0.0
 var _beat_off := Vector2.ZERO   ## the drawn wings' flap and hand lift against the beat's, easing out (a beat change)
 var _att := Quaternion.IDENTITY
 var _att_set := false
@@ -1844,14 +1843,14 @@ func animate(t: Dictionary, dt: float) -> void:
 		var sb := smoothstep(0.0, 1.0, _beat)
 		flap_t = lerpf(flap_t, _beat_flap, sb)
 		lift_t = lerpf(lift_t, _beat_lift, sb)
-		# Where the beat changes -- the flare's braking beats taking over at the catch, a new flap starting --
-		# the wings carry on from where they are and the difference eases out over BEAT_FADE.
+		# Where the beat changes -- the flare's braking beats taking over at the catch, flapping starting --
+		# the wings carry on from where they are and the difference eases out over BEAT_FADE. Held beats run one into
+		# the next (FlightModel.beating_at, phase_at: the top of one is the top of the next), so that isn't a change:
+		# eased, a sparrow's wing (BEAT_FADE longer than its beat) never caught up with its beat.
 		var src := 2 if landing else (1 if beating else 0)
-		var phase: float = t.get("flap_phase", 0.0)
-		if src != _beat_src or (src == 1 and phase < _beat_phase - 0.2):
+		if src != _beat_src:
 			_beat_off = Vector2(flap - flap_t, hand_lift - lift_t)
 		_beat_src = src
-		_beat_phase = phase
 		_beat_off = _beat_off.move_toward(Vector2.ZERO, _beat_off.length() * minf(dt / BEAT_FADE, 1.0) + 1e-4)
 		flap_t += _beat_off.x
 		lift_t += _beat_off.y

@@ -39,6 +39,7 @@ var flap_time := 0.0        ## s left in the current downstroke
 var flap_cooldown := 0.0    ## s until the next wingbeat may start
 var flap_strength := 0.0    ## strength of the current downstroke
 var flap_phase := 0.0       ## 0..1 through the wingbeat (visual)
+var beat_t := 0.0           ## s since the current wingbeat began (visual: phase_at)
 var flap_count := 0
 var stalled := false
 var flare := 0.0            ## 0..1 extra airbrake from the perch assist (visual + drag)
@@ -79,6 +80,7 @@ var climb_alpha := 0.0      ## rad, neutral stick's angle of attack with full-st
 ## wingbeat trims only part of the way: its best climb is near the glide's).
 var flap_trim := 0.0
 var _duty := -1.0           ## flap_duty(), once worked out
+var _cycle := -1.0          ## beat_cycle(), once worked out
 
 # --- Outputs (read by the HUD, camera, rig) --------------------------------------------------------
 var lift_dir := UP
@@ -198,6 +200,21 @@ func flap_duty() -> float:
 	return _duty
 
 
+## How long a held wingbeat lasts as step() runs it, from one beat's start to the next (s): the period rounded up to
+## whole ticks, as flap_duty counts them (the sparrow's 0.1 s is 7 ticks: the cooldown is left a hair over 0 after 6).
+func beat_cycle() -> float:
+	if _cycle >= 0.0:
+		return _cycle
+	var dt := 1.0 / Engine.physics_ticks_per_second
+	var beat := 1
+	var cool := maxf(0.0, profile.flap_period - dt)
+	while cool > 0.0:
+		beat += 1
+		cool = maxf(0.0, cool - dt)
+	_cycle = beat * dt
+	return _cycle
+
+
 ## The wingbeat's thrust averaged over the beat at airspeed `v` and strength `s`, split along the path (x) and across
 ## it toward the lift (y), for a path `gamma` above the horizon: below best-glide speed the thrust is aimed partly from
 ## the heading (step()), so it tilts up from the path by less the steeper the climb.
@@ -301,8 +318,25 @@ func flap(free := false) -> bool:
 	flap_time = profile.flap_period * profile.downstroke
 	flap_cooldown = profile.flap_period
 	flap_phase = 0.0
+	beat_t = 0.0
 	flap_count += 1
 	return true
+
+
+## The wingbeat as drawn `lag` s before the latest tick (a frame between ticks: Bird.drawn_lag), so the beat moves every
+## frame, not once a tick (the sparrow's beat is 7 ticks: at 80 fps a quarter of the frames held the last pose and a slow
+## frame jumped several): the phase (0..1) through the beat as the ticks run it (beat_cycle), so held beats run one
+## into the next (over the period alone, each held at the top for its last tick, not flapping, and the rig eased into
+## every beat as a new one). A beat starts at the start of its tick's step, so a moment in the last tick is never before it.
+func phase_at(lag: float) -> float:
+	if flap_count == 0:
+		return flap_phase
+	return clampf((beat_t - lag) / beat_cycle(), 0.0, 1.0)
+
+
+## Is the wing in a beat `lag` s before the latest tick (its last tick included, the next beat not begun)?
+func beating_at(lag: float) -> bool:
+	return flap_count > 0 and beat_t - lag <= beat_cycle() + 1e-6
 
 
 func step(dt: float, input: FlightInput) -> void:
@@ -357,6 +391,7 @@ func step(dt: float, input: FlightInput) -> void:
 	if input.flap_held and can_flap():
 		flap()
 	flap_cooldown = maxf(0.0, flap_cooldown - dt)
+	beat_t += dt
 	var driving := flap_time > 0.0
 	flap_phase = clampf(1.0 - flap_cooldown / p.flap_period, 0.0, 1.0) if flap_cooldown > 0.0 else 1.0
 

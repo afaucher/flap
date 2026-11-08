@@ -5842,5 +5842,103 @@
     "replace": "\tif race_run.event in [\"gate\", \"reset\"]:"
    }
   ]
+ },
+ {
+  "id": "wingbeat-phase-per-tick",
+  "bug": "The rig was posed every frame but read the wingbeat's phase as the last tick left it, so the beat stepped with the ticks: at 80 fps a quarter of frames held the sparrow's last pose and a slow frame jumped several (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\treturn clampf((beat_t - lag) / beat_cycle(), 0.0, 1.0)\n",
+    "replace": "\treturn flap_phase\n"
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-phase-not-drawn",
+  "bug": "The rig took telemetry's tick phase, not the phase at the drawn moment (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tt.flap_phase = model.phase_at(lag)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-frame-lag-dropped",
+  "bug": "A frame posed the wingbeat as of the latest tick, not its own drawn moment (Bird._process not passing drawn_lag) (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\t_animate_rig(at - _posed_t, lag)\n",
+    "replace": "\t_animate_rig(at - _posed_t)\n"
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-lag-ahead",
+  "bug": "The drawn wingbeat ran a lag ahead of the latest tick instead of behind it (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\treturn clampf((beat_t - lag) / beat_cycle(), 0.0, 1.0)\n",
+    "replace": "\treturn clampf((beat_t + lag) / beat_cycle(), 0.0, 1.0)\n"
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-over-period",
+  "bug": "The drawn beat ran over the set period, not the beat as the ticks run it (the sparrow's 0.1 s is 7 ticks), so each held beat sat at the top for its last tick (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/flight/flight_model.gd",
+    "find": "\treturn clampf((beat_t - lag) / beat_cycle(), 0.0, 1.0)\n",
+    "replace": "\treturn clampf((beat_t - lag) / profile.flap_period, 0.0, 1.0)\n"
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-gap-not-flapping",
+  "bug": "The rig saw a held beat's last tick as not flapping, so it eased into every next beat as a new one and a sparrow's wing (the ease longer than its beat) never caught up: at the top its hand was still folded 20 deg (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird.gd",
+    "find": "\tt.flapping = model.beating_at(lag)\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "wingbeat-eased-every-beat",
+  "bug": "The rig eased into every held beat as a new one when the phase wrapped round, so a sparrow's wing never caught up with its beat (2026-11-08).",
+  "tests": [
+   "test_drawn_wingbeat"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tif src != _beat_src:\n",
+    "replace": "\t\tif src != _beat_src or (src == 1 and float(t.flap_phase) < 0.05):\n"
+   }
+  ]
  }
 ]

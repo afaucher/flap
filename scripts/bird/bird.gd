@@ -291,13 +291,14 @@ func _physics_process(dt: float) -> void:
 func _process(_dt: float) -> void:
 	if not _per_frame:
 		return
-	var at := _sim_t - drawn_lag()
+	var lag := drawn_lag()
+	var at := _sim_t - lag
 	if is_nan(_posed_t):   # (first drawn: posed for a tick, as the tick it was placed on would have)
 		_posed_t = at - 1.0 / Engine.physics_ticks_per_second
 	if at <= _posed_t:
 		return
 	var p0 := Perf.t()
-	_animate_rig(at - _posed_t)
+	_animate_rig(at - _posed_t, lag)
 	_posed_t = at
 	Perf.add("bird.rig", p0)
 
@@ -1181,9 +1182,10 @@ func _grip_point() -> Variant:
 	return null
 
 
-## Pose the rig for `dt` of simulated time: every time up close, every 2nd time past 30 m, every 4th past 60 m from
-## the camera; not at all while it's hidden.
-func _animate_rig(dt: float) -> void:
+## Pose the rig for `dt` of simulated time, as of `lag` s before the latest tick (the wingbeat then:
+## FlightModel.phase_at, beating_at): every time up close, every 2nd time past 30 m, every 4th past 60 m from the camera; not at
+## all while it's hidden.
+func _animate_rig(dt: float, lag := 0.0) -> void:
 	if rig == null or not rig.visible:
 		return
 	_rig_dt += dt
@@ -1195,5 +1197,8 @@ func _animate_rig(dt: float) -> void:
 		every = 1 if d < 30.0 else (2 if d < 60.0 else 4)
 	if _rig_tick % every != 0 and state == State.FLYING:
 		return
-	rig.animate(telemetry(), _rig_dt)
+	var t := telemetry()
+	t.flap_phase = model.phase_at(lag)
+	t.flapping = model.beating_at(lag)
+	rig.animate(t, _rig_dt)
 	_rig_dt = 0.0
