@@ -27,11 +27,36 @@ One value, `fold`, drives elbow and wrist together, because the anatomy does too
 | `twist` | angle of attack |
 | `alula` | angle of attack above 12° at low speed; the flare |
 | `slot` | (1 − fold) × slowness |
-| `tail.spread`, `tail.pitch`, `tail.twist` | slowness, turn rate, flare, bank |
+| `tail.spread`, `tail.pitch`, `tail.twist` | slowness, turn rate, flare, bank; the twist against the roll's rate (below) |
+| `roll_twist`, `roll_fold`, `roll_sweep`, `roll_flap` (per wing) | the roll's rate (below) |
 | `look` | catch candidate, right stick, threats |
 | `foot` ×2 | perch grip point, ground |
 
 All of these come from `Bird.telemetry()`, as the rig's inputs do today.
+
+### The roll's shape (`BirdRig._roll_shape`; research `docs/research/turning_kinematics.md`)
+
+A bird has no ailerons: it rolls by making its wings differ. Each wing's controls are the shared ones plus its own
+offsets (`wing_fold(i)`, `wing_twist(i)`, `wing_sweep(i)`, `wing_flap(i)`), set from `roll_cmd`, the drawn bank's rate
+as a share of the species' roll rate with a short lead (a kick as the roll starts, a check as it stops), so the wings
+differ only while the bank is changing and are alike in a held turn. At full rate:
+
+- **Twist:** the outer wing (the one rising) up and the inner down, each by what strip theory says rolls it at that
+  rate, 0.29 p b / V degrees (more when slow), drawn 1.5x so it reads from the chase camera, at most 15 deg.
+- **Flex:** the inner wing shortened by 14 % of its reach (the one measured peregrine), more at high lift, less fast,
+  as the fold that cuts the reach so (`_reach_at`, `_fold_for_reach`).
+- **Flapping:** the outer wing's beat 25 % wider and 6 deg further forward in the first half of the downstroke, a third
+  of that reversed in the second half, the upstroke alike.
+- **Rolling back toward level:** 0.7 of the roll in's shape.
+- **Tail:** 16 deg against the roll's rate (rolling in, the tail more level than the body; rolling out, overbanked),
+  plus 0.1 of the bank toward level when held, at most 30 deg. (It used to twist with the bank, -0.25 x bank: overbanked
+  rolling in and held.)
+- **Head:** counter-rolled 0.9 of the body's bank (owl 0.95), to 60 deg from the body's.
+
+`BirdRig.roll_shape` off: the wings move as one, the tail and head as before (A/B). `test_roll_shape` flies each bird
+through a roll each way and measures the drawn feathers against these numbers; `tests/probe_turn_wings.gd` films the
+moves (level, rolling in, held, rolling out, rolling the other way, a flapping turn) from behind, behind rolled with
+the bird, and over its back (`--flat` for the before). A/B: `docs/images/turn_wings_ab_<bird>.jpg`.
 
 ## Where IK goes (Godot 4.7 modifiers)
 
@@ -129,7 +154,7 @@ The model uses 1.5 spans with a 1.5 m minimum, a deliberate exaggeration so down
   - The solve is analytic, in GDScript:
     - The wing is FK from the control values, plus a two-bone IK onto the flank anchor as it folds.
     - The legs are a short femur held near level in the world (the knee stays inside the belly), then two-bone IK with the ankle bending aft. An owl's outer toe swings back when it grips.
-    - The head look is clamped to ±110° yaw (owl ±135°) and ±60° pitch, and the head stays level with the world. It also holds still in world space through the trunk's jolts (the touchdown dip, the pitch from flare to perch) and catches up within a few frames.
+    - The head look is clamped to ±110° yaw (owl ±135°) and ±60° pitch, and the head stays level with the world (counter-rolled 0.9 of the bank, to 60° from the body's: the roll's shape, above). It also holds still in world space through the trunk's jolts (the touchdown dip, the pitch from flare to perch) and catches up within a few frames.
     - Small motion: the trunk dips on touchdown while the feet stay on the grip; the tail pumps a few times; the plumage fluffs perched (owl most) and sleeks fast; the bird breathes. On take-off the feet keep pushing on the perch for 0.15 s, so the legs extend.
   - Godot's own `TwoBoneIK3D` / `LookAtModifier3D` give the same result. Solving in code keeps the feathers, which ride on the solved bones, in step with the pose in the same tick, and keeps the solve testable headless.
   - While folding, feather directions blend from following their IK-moved bone to their designed folded direction (aft along the body), so the folded wing lies flat.

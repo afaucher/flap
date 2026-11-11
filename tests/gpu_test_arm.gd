@@ -75,6 +75,12 @@ func setup() -> void:
 			rig.hand_lift = q[4]
 			rig.fluff = q[5]
 			rig.breath = q[6]
+			# (the last pose mid-roll: each wing its own -- BirdRig._roll_shape -- the left the outer, the right the inner)
+			var rolling := k == POSES.size() - 1
+			rig.roll_twist = PackedFloat32Array([deg_to_rad(9.0), deg_to_rad(-9.0)] if rolling else [0.0, 0.0])
+			rig.roll_fold = PackedFloat32Array([0.0, 0.12] if rolling else [0.0, 0.0])
+			rig.roll_sweep = PackedFloat32Array([5.0, 0.0] if rolling else [0.0, 0.0])
+			rig.roll_flap = PackedFloat32Array([deg_to_rad(6.0), deg_to_rad(-6.0)] if rolling else [0.0, 0.0])
 			rig._cpu_arm = true   # (the rig's own lofts too, built in full this pose, to compare with)
 			rig._arm_built = [{}, {}]
 			rig.apply_pose()

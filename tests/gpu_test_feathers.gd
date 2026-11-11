@@ -3,7 +3,7 @@ extends TestCase
 ## placement (feather_place.gdshaderinc, the same file the feather shader draws with) is read back from the GPU and
 ## compared, feather by feather, with BirdRig's -- every species; spread, half-folded with the hand lifted and the
 ## alula out, folded; flapped, twisted, swept, the primaries slotted; the tail fanned, pitched and twisted; feathers
-## lost, and the coverts over them ruffled. A knocked-out feather's copy (feather_copy) is where the rig puts it.
+## lost, and the coverts over them ruffled; mid-roll, each wing its own (BirdRig._roll_shape). A knocked-out feather's copy (feather_copy) is where the rig puts it.
 ## Their angles change with the fold and the slot each pose; their definitions are written once.
 ## A GPU test: runs windowed (.\test_runner.ps1 -Gpu), since the headless renderer runs no shaders.
 
@@ -80,6 +80,12 @@ func setup() -> void:
 			rig.tail_pitch = q[7]
 			rig.tail_twist = q[8]
 			rig.slot = q[9]
+			# (the last pose mid-roll: each wing its own -- BirdRig._roll_shape -- the left the outer, the right the inner)
+			var rolling := k == POSES.size() - 1
+			rig.roll_twist = PackedFloat32Array([deg_to_rad(9.0), deg_to_rad(-9.0)] if rolling else [0.0, 0.0])
+			rig.roll_fold = PackedFloat32Array([0.0, 0.12] if rolling else [0.0, 0.0])
+			rig.roll_sweep = PackedFloat32Array([5.0, 0.0] if rolling else [0.0, 0.0])
+			rig.roll_flap = PackedFloat32Array([deg_to_rad(6.0), deg_to_rad(-6.0)] if rolling else [0.0, 0.0])
 			rig.lost = {} if k < 2 else {BirdRig.feather_key(0, WingShape.Kind.PRIMARY, 3): true, BirdRig.feather_key(1, WingShape.Kind.SECONDARY, 4): true, 3005: true}
 			rig._cpu_feathers = true   # (the rig's own placement as well, to compare with)
 			rig.apply_pose()

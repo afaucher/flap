@@ -90,6 +90,8 @@ The wing is a jointed arm: **shoulder** (humerus) -> **elbow** (radius/ulna) -> 
   wings, twisting it creates asymmetric lift that gives roll and **proverse yaw**, which helps
   coordinate a banked turn. Twist also adds **nose-up pitch**, which raises the wings' AoA and
   recovers the lift lost when banking [DRONE-TAIL][PHAN24].
+  Direction and timing: twisted *against* the roll as it enters, reversed on the exit, a roll-rate
+  command rather than a bank setting -- `turning_kinematics.md` section 4.
 - Tail fan + pitch-up = the main **airbrake** at landing (see section 4).
 
 ---

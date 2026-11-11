@@ -57,7 +57,10 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   `bonk_steep`, `bonk_slow`, `head_on`, `wing_clip`; probes `probe_bonk_angles` (how birds hit wood, braces and false
   alarms, the look-ahead's cost), `probe_glance_close` (renders a glance up close), `probe_reflex_trace`, `probe_touch_cost`.
 - `scripts/bird/`: `Bird` (CharacterBody3D: perch state machine, collision, telemetry), `BirdRig` (skeleton,
-  wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`), `WingShape` (per-species planform,
+  wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`; each wing its own controls, so a roll
+  shapes them apart -- the outer twisted up, the inner twisted down and flexed, the outer beating wider, the tail
+  against the roll, the head counter-rolled: `_roll_shape`, `BirdRig.roll_shape` off for the A/B,
+  `docs/research/turning_kinematics.md`, `test_roll_shape`, `tests/probe_turn_wings.gd` films the moves), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance; turns within what the lift holds, lines up for the final on its own
   turning circle, manages its energy for the catch), `FlightPlanner` (lattice A*, the ways in to a perch), `Dubins`

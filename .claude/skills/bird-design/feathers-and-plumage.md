@@ -7,7 +7,9 @@ Docs: `docs/design/wing_rig.md` (as built), `wing_rig_plan.html` (the plan; part
 
 - Bones in one plane, driven by `fold` alone (elbow and wrist coupled). Controls per wing: `flap`, `fold`, `sweep`,
   `twist`, `alula`, plus `hand_lift` (upstroke), `slot`, `tail_spread` / `pitch` / `twist`, `flex` (feather bend).
-  Their sources: `wing_rig.md` "Control values".
+  Their sources: `wing_rig.md` "Control values". Each wing also has its own offsets (`roll_twist`, `roll_fold`,
+  `roll_sweep`, `roll_flap`; read a wing's own with `wing_fold(i)` etc., not the shared value): the roll's shape
+  (`_roll_shape`, `turning_kinematics.md`), set from the roll's rate, so the wings differ only while the bank changes.
 - Flight is forward kinematics; folding blends in an analytic two-bone IK (`smoothstep(0.55, 1, fold)`): the wrist to
   `fold_anchor`, the elbow pole `fold_elbow`, both slid onto the species' flank at build (`body.onto_flank`). The solve
   is GDScript, not Godot's IK nodes, so feathers stay in step and it tests headless (the plan said otherwise).

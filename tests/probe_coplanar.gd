@@ -40,9 +40,9 @@ func _initialize() -> void:
 				if worst < TOL * rig._L / 0.45:
 					hits += 1
 					if hits <= 40:
-						var nd := rig._defs.size()
-						var da: Dictionary = rig._defs[a - nd]
-						var db: Dictionary = rig._defs[b - nd]
+						var nd := (rig._defs_w[1] as Array).size()
+						var da: Dictionary = rig._defs_w[1][a - nd]
+						var db: Dictionary = rig._defs_w[1][b - nd]
 						print("%s  %s i%d bone %d layer %.4f  ~  %s i%d bone %d layer %.4f   gap %.3f mm" % [id, _k(rig.feather_kinds[a]), da.i, da.bone, da.layer, _k(rig.feather_kinds[b]), db.i, db.bone, db.layer, worst * 1000.0])
 		print("%s: %d coplanar overlapping pairs (%s)" % [id, hits, pose])
 		rig.free()

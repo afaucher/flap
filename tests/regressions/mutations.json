@@ -5940,5 +5940,89 @@
     "replace": "\t\tif src != _beat_src or (src == 1 and float(t.flap_phase) < 0.05):\n"
    }
   ]
+ },
+ {
+  "id": "tail-overbanked-in-turns",
+  "bug": "The tail twisted with the bank (-0.25 x bank, overbanked) in a held turn and rolling in; birds twist it against the roll and, held, a little toward level (turning_kinematics.md section 4; 2026-11-10).",
+  "tests": [
+   "test_roll_shape"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\t_tail_bank = lerpf(_tail_bank, 0.0 if sitting else TAIL_BANK * bank, ks)\n\t\t_tail_roll = lerpf(_tail_roll, deg_to_rad(TAIL_ROLL_DEG) * cmd, kr)\n",
+    "replace": "\t\t_tail_bank = lerpf(_tail_bank, 0.0 if sitting else -0.25 * bank, ks)\n\t\t_tail_roll = lerpf(_tail_roll, -deg_to_rad(TAIL_ROLL_DEG) * cmd, kr)\n"
+   }
+  ]
+ },
+ {
+  "id": "wings-roll-as-one",
+  "bug": "Both wings were drawn alike through a roll (one set of controls for the pair): no twist or flex between them, so nothing moved as the bird rolled (2026-11-10).",
+  "tests": [
+   "test_roll_shape"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "func wing_fold(i: int) -> float:\n\treturn clampf(fold + roll_fold[i], 0.0, 1.0)\n\n\nfunc wing_twist(i: int) -> float:\n\treturn twist + roll_twist[i]\n",
+    "replace": "func wing_fold(i: int) -> float:\n\treturn clampf(fold, 0.0, 1.0)\n\n\nfunc wing_twist(i: int) -> float:\n\treturn twist\n"
+   }
+  ]
+ },
+ {
+  "id": "roll-shape-from-bank",
+  "bug": "Wing asymmetry driven by the bank, not the roll's rate, would hold the wings different through a held turn; a bird's are alike once the roll stops (2026-11-10).",
+  "tests": [
+   "test_roll_shape"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tcmd = clampf(_roll_rate + ROLL_LEAD * (_roll_rate - prev) / maxf(dt, 1e-5), -ROLL_CMD_MAX, ROLL_CMD_MAX)\n",
+    "replace": "\t\tcmd = clampf(bank / deg_to_rad(profile.max_bank_deg), -ROLL_CMD_MAX, ROLL_CMD_MAX)\n"
+   }
+  ]
+ },
+ {
+  "id": "roll-inner-outer-swapped",
+  "bug": "The inner and outer wing swapped: the wing on the inside of the roll twisted up and stayed spread, which would roll the bird the other way (2026-11-10).",
+  "tests": [
+   "test_roll_shape"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tvar inner := 1.0 if s * cmd > 0.0 else 0.0",
+    "replace": "\t\tvar inner := 1.0 if s * cmd < 0.0 else 0.0"
+   }
+  ]
+ },
+ {
+  "id": "head-roll-gain-low",
+  "bug": "The head kept only 0.7 of the body's bank out of its roll; a bird's counter-rolls about 0.9 of it to the neck's reach (pigeon, 0.91), level-eyed through a turn (2026-11-10).",
+  "tests": [
+   "test_roll_shape"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\tif roll_shape:\n\t\t# The head counter-rolls",
+    "replace": "\tif false:\n\t\t# The head counter-rolls"
+   }
+  ]
+ },
+ {
+  "id": "feather-codes-cleared-per-wing",
+  "bug": "With each wing's feather set rebuilt at its own fold, the CPU placement cleared the atlas codes as the second wing rebuilt, dropping the first wing's: codes no longer matched their feathers, the outer vane on the wrong side (2026-11-10).",
+  "tests": [
+   "test_feather_texture"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/bird_rig.gd",
+    "find": "\t\tif redef[i]:\n\t\t\tvar pd := Perf.t()\n",
+    "replace": "\t\tif redef[i]:\n\t\t\tif not gpu_place:\n\t\t\t\tfeather_codes.clear()\n\t\t\tvar pd := Perf.t()\n"
+   }
+  ]
  }
 ]

@@ -74,6 +74,36 @@ var slot := 0.0                 ## 0..1
 var tail_spread := 0.2
 var tail_pitch := 0.0           ## rad, + = tail down
 var tail_twist := 0.0           ## rad
+## The roll's shape (_roll_shape): per wing, left and right, offsets on the shared values above -- a roll is made by
+## the two wings differing (docs/research/turning_kinematics.md). wing_fold(i) etc. are each wing's own.
+var roll_twist := PackedFloat32Array([0.0, 0.0])   ## rad, on `twist`
+var roll_fold := PackedFloat32Array([0.0, 0.0])    ## on `fold`
+var roll_sweep := PackedFloat32Array([0.0, 0.0])   ## deg, on `sweep`
+var roll_flap := PackedFloat32Array([0.0, 0.0])    ## rad, on `flap`
+var roll_cmd := 0.0              ## the roll as the wings answer it: its rate (1 = the species' roll rate, + rolling right) with a lead
+var _roll_rate := 0.0            ## the drawn bank's rate, smoothed (1 = the species' roll rate)
+var _roll_bank := NAN            ## the bank last animate
+var _tail_bank := 0.0            ## the tail's twist: the bank's share and the roll's
+var _tail_roll := 0.0
+## (docs/research/turning_kinematics.md section 10; [S] sourced, [E] estimated, [G] a choice for the game)
+const ROLL_TAU := 0.035          ## s: how fast the wings take the roll's shape (the roll's time constant, 15-40 ms) [E]
+const ROLL_LEAD := 0.025         ## s: the shape leads the roll's rate (the kick as it starts, the check as it stops) [E]
+const ROLL_CMD_MAX := 1.5
+const ROLL_OUT := 0.7            ## rolling back toward level, the shape this much of the roll in's (dihedral, damping) [E]
+const ROLL_TWIST_K := 0.29       ## each wing's twist: delta = K p b / V (deg; p deg/s, b m, V m/s), strip theory [E]
+const ROLL_READ := 1.5           ## drawn this many times the real twist, so it reads from the chase camera [G]
+const ROLL_TWIST_MAX := 15.0     ## deg, each wing
+const ROLL_SPAN := 0.14          ## the inner wing's reach cut at the full roll rate and 0.7 of CL max (the peregrine, 14 %) [S]
+const ROLL_BEAT := 0.25          ## flapping: the outer wing's beat this much wider at the full roll rate, the inner's narrower [S]
+const ROLL_BEAT_SWEEP_DEG := 6.0 ## flapping: the outer wing's downstroke this much further forward (the pigeon's) [G]
+const BEAT_MID_DEG := 10.0       ## the beat's middle (animate: 10 + 45 cos)
+const TAIL_ROLL_DEG := 16.0      ## the tail's twist against the roll at the full roll rate (12-20) [E]
+const TAIL_BANK := 0.1           ## held, the tail's twist toward level, of the bank [G]
+const TAIL_TWIST_MAX := 30.0     ## deg [S]
+const HEAD_ROLL_GAIN := 0.9      ## the head's counter-roll, of the body's bank (the pigeon's 0.91) [S]
+const HEAD_ROLL_MAX := 60.0      ## deg from the body's: the neck's reach [E]
+var roll_phase := 0.0            ## the wingbeat's phase the roll's shape was last set for (tests)
+var _reach_tab := PackedFloat32Array()
 var look_dir := Vector3.FORWARD ## rig space, where the head looks
 var world_up := Vector3.UP      ## rig space, for head stabilisation
 var foot_targets: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
@@ -123,6 +153,7 @@ var fold_elbow: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]   ## folded elbow,
 ## try it (rig gallery: --feather-shader). docs/research/feather_rendering.md has its status.
 static var plain_feathers := true
 static var flat_perch := false   ## rig gallery: the old level perched pose (before/after comparisons)
+static var roll_shape := true    ## the wings and tail take the roll's shape (BirdRig._roll_shape); off: both wings alike (A/B)
 var feather_material: ShaderMaterial
 var feather_xforms: Array[Transform3D] = []
 var feather_codes: PackedFloat32Array = []    ## plumage level 6: each feather_xforms entry's atlas code (INSTANCE_CUSTOM.b); tests
@@ -243,10 +274,10 @@ var legs: LegRig                      ## the detailed legs and feet (LegRig.enab
 var toe_tips: Array = [[], []]        ## per side, each toe's tip as drawn [inner, middle, outer, hallux] (tests)
 var _fairings: Array = [[], []]       ## per side: [patagium, humerus, forearm, hand] (the wing's thickness)
 var _built := false
-var _defs: Array = []
+var _defs_w: Array = [[], []]   ## per side: its feather set at its own fold (CPU placement)
 var _clock := -1.0
-var _defs_fold := -1.0
-var _defs_slot := -1.0
+var _defs_fold := PackedFloat32Array([-1.0, -1.0])
+var _defs_slot := PackedFloat32Array([-1.0, -1.0])
 
 
 func build(p: BirdProfile) -> void:
@@ -1764,9 +1795,110 @@ static func _scaled(c: Color, k: float) -> Color:
 
 # --- Telemetry -> control values -------------------------------------------------------------------------
 
+## The roll's shape (docs/research/turning_kinematics.md section 10). A bird has no ailerons: it rolls by making its
+## wings differ -- the outer wing (the one rising) twisted up, the inner twisted down and flexed at the elbow and wrist,
+## shorter -- and, flapping, by the outer wing beating wider and further forward early in the downstroke. The
+## difference follows the roll's *rate*, not its bank (the roll answers the wings within ~15-40 ms): it builds as the
+## roll starts, overshoots briefly as it stops (`roll_cmd`, the rate with a lead), and the wings are alike again in a
+## held turn. The tail twists against the roll's rate (rolling in, more level than the body; rolling out, overbanked)
+## and, held, a little toward level. Visual only: the flight model's roll is its own. Off (roll_shape false), the wings
+## move as one and the tail twists with the bank (-0.25 x bank), as before.
+func _roll_shape(t: Dictionary, dt: float, sitting: bool, busy: bool, ks: float) -> void:
+	var bank: float = t.bank
+	var still := sitting or busy   # (perched, landing, or downed: no roll to shape)
+	var rate := 0.0
+	if dt > 1e-5 and not is_nan(_roll_bank) and not still:
+		rate = (bank - _roll_bank) / dt / deg_to_rad(maxf(profile.roll_rate_deg, 1.0))
+	_roll_bank = bank
+	var prev := _roll_rate
+	if dt > 0.0:
+		_roll_rate = lerpf(_roll_rate, clampf(rate, -1.5, 1.5), 1.0 - exp(-dt / ROLL_TAU))
+	var cmd := 0.0
+	if roll_shape and not still:
+		cmd = clampf(_roll_rate + ROLL_LEAD * (_roll_rate - prev) / maxf(dt, 1e-5), -ROLL_CMD_MAX, ROLL_CMD_MAX)
+	# Rolling back toward level the shape is gentler (the wings' dihedral and damping help).
+	if cmd * bank < 0.0:
+		cmd *= ROLL_OUT
+	roll_cmd = cmd
+	var kr := 1.0 - exp(-dt / ROLL_TAU) if dt > 0.0 else 0.0
+	# Twist, each wing: what rolls the wing at this rate by strip theory, delta ~ 0.29 p b / V (section 9.1: slower,
+	# the same roll needs more), drawn ROLL_READ times so it reads from the chase camera.
+	var speed := maxf(float(t.speed), float(t.v_stall))
+	var p_deg := cmd * profile.roll_rate_deg
+	var tw := minf(ROLL_TWIST_K * absf(p_deg) * profile.span / speed * ROLL_READ, ROLL_TWIST_MAX)
+	# Flex, the inner wing: a share of its reach (the peregrine's 14 %), more at high lift where it rolls the wing
+	# (section 9.2), as the fold that shortens the wing so.
+	var cl_share := clampf(float(t.get("cl", 0.0)) / maxf(profile.cl_max, 0.1), 0.0, 1.0)
+	var cut := minf(ROLL_SPAN * (0.3 + cl_share) * absf(cmd), 0.3)
+	var cut_fold := 0.0
+	if cut > 1e-4:
+		cut_fold = maxf(_fold_for_reach(_reach_at(fold) * (1.0 - cut), fold) - fold, 0.0)
+	# Flapping: the outer wing beats wider and swings further forward in the first half of the downstroke, a third of
+	# that reversed in the second half, the upstroke nearly alike (section 2; the pigeon's pronation flips mid-stroke).
+	var ph: float = t.get("flap_phase", 0.0)
+	roll_phase = ph
+	var w_beat := (lerpf(1.0, -1.0 / 3.0, smoothstep(0.2, 0.32, ph)) * (1.0 - smoothstep(0.45, 0.55, ph)) + smoothstep(0.92, 1.0, ph)) * _beat
+	var mag := minf(absf(cmd), 1.0)
+	for i in 2:
+		var s: float = SIDES[i]
+		if not roll_shape:
+			roll_twist[i] = 0.0
+			roll_fold[i] = 0.0
+			roll_sweep[i] = 0.0
+			roll_flap[i] = 0.0
+			continue
+		var inner := 1.0 if s * cmd > 0.0 else 0.0   # (rolling right, cmd > 0: the right wing is the inner one)
+		var way := (-1.0 if inner > 0.0 else 1.0) if absf(cmd) > 0.0 else 0.0   # (+ the outer wing, - the inner)
+		roll_twist[i] = lerpf(roll_twist[i], deg_to_rad(tw) * way, kr)
+		roll_fold[i] = lerpf(roll_fold[i], cut_fold * inner, kr)
+		roll_sweep[i] = ROLL_BEAT_SWEEP_DEG * w_beat * mag * maxf(way, 0.0)
+		roll_flap[i] = (flap - deg_to_rad(BEAT_MID_DEG)) * ROLL_BEAT * w_beat * mag * way   # (the beat itself is followed exactly)
+	# The tail: the bank's share eased as before, the roll's quicker, as the wings'; capped where the drone's roll
+	# moment peaked (30 deg).
+	if roll_shape:
+		_tail_bank = lerpf(_tail_bank, 0.0 if sitting else TAIL_BANK * bank, ks)
+		_tail_roll = lerpf(_tail_roll, deg_to_rad(TAIL_ROLL_DEG) * cmd, kr)
+		tail_twist = clampf(_tail_bank + _tail_roll, -deg_to_rad(TAIL_TWIST_MAX), deg_to_rad(TAIL_TWIST_MAX))
+	else:
+		_tail_bank = lerpf(_tail_bank, 0.0 if sitting else -bank * 0.25, ks)
+		_tail_roll = 0.0
+		tail_twist = _tail_bank
+
+
+## The wing's reach (plane, from the midline to its longest primary's tip) at a fold: a table made once, for the roll's
+## flex, set as a share of the reach.
+func _reach_at(f: float) -> float:
+	if _reach_tab.is_empty():
+		var lp := 0.0
+		for fd in shape.feathers(0.0):
+			if int(fd.kind) == WingShape.Kind.PRIMARY:
+				lp = maxf(lp, float(fd.len))
+		_reach_tab.resize(101)
+		for k in 101:
+			var j := shape.joints(k / 100.0)
+			_reach_tab[k] = (j[3] + (j[3] - j[2]).normalized() * lp).x
+	var x := clampf(f, 0.0, 1.0) * 100.0
+	var k0 := mini(int(x), 99)
+	return lerpf(_reach_tab[k0], _reach_tab[k0 + 1], x - k0)
+
+
+## The fold, from `from` up, at which the wing reaches `r`.
+func _fold_for_reach(r: float, from: float) -> float:
+	var f := clampf(from, 0.0, 1.0)
+	var prev := _reach_at(f)
+	while f < 1.0:
+		var nf := minf(f + 0.01, 1.0)
+		var nr := _reach_at(nf)
+		if nr <= r:
+			return lerpf(f, nf, clampf((prev - r) / maxf(prev - nr, 1e-6), 0.0, 1.0))
+		f = nf
+		prev = nr
+	return 1.0
+
+
 ## Take another rig's control values and solve the same pose (the bird lab's onion-skin ghosts).
 func copy_pose_from(src: BirdRig) -> void:
-	for key in ["flap", "hand_lift", "fold", "sweep", "twist", "alula", "slot", "tail_spread", "tail_pitch", "tail_twist", "look_dir", "world_up", "toe_grip", "neck_ext", "head_offset", "fluff", "breath"]:
+	for key in ["flap", "hand_lift", "fold", "sweep", "twist", "alula", "slot", "tail_spread", "tail_pitch", "tail_twist", "look_dir", "world_up", "toe_grip", "neck_ext", "head_offset", "fluff", "breath", "roll_twist", "roll_fold", "roll_sweep", "roll_flap"]:
 		set(key, src.get(key))
 	foot_targets = src.foot_targets.duplicate()
 	rake_w = src.rake_w.duplicate()
@@ -1885,7 +2017,7 @@ func animate(t: Dictionary, dt: float) -> void:
 	if sitting:
 		tail_t -= deg_to_rad(25.0) * lean   # (leaning, the tail cocks up)
 	tail_pitch = lerpf(tail_pitch, tail_t, ks)
-	tail_twist = lerpf(tail_twist, -float(t.bank) * 0.25 if not sitting else 0.0, ks)
+	_roll_shape(t, dt, sitting, landing or bool(t.get("tumbling", false)), ks)
 	# Airflow on the feathers: a little always, more with speed, almost none perched.
 	var air := 0.04 if sitting else 0.15 + 0.6 * clampf((speed - float(t.v_best) * 0.5) / (float(t.v_best) * 1.5), 0.0, 1.0)
 	if feather_material != null:
@@ -2183,7 +2315,24 @@ static func chain_end(mid: Vector3, target: Vector3, l2: float) -> Vector3:
 
 func _wing_plane(i: int) -> Basis:
 	var s: float = SIDES[i]
-	return Basis(Vector3.BACK, s * flap) * Basis(Vector3.RIGHT, twist)
+	return Basis(Vector3.BACK, s * wing_flap(i)) * Basis(Vector3.RIGHT, wing_twist(i))
+
+
+## Each wing's own controls: the shared values plus the roll's offsets for that side (0 left, 1 right).
+func wing_fold(i: int) -> float:
+	return clampf(fold + roll_fold[i], 0.0, 1.0)
+
+
+func wing_twist(i: int) -> float:
+	return twist + roll_twist[i]
+
+
+func wing_sweep(i: int) -> float:
+	return sweep + roll_sweep[i]
+
+
+func wing_flap(i: int) -> float:
+	return flap + roll_flap[i]
 
 
 ## Plane (top view) point -> rig space, for one side, before IK.
@@ -2191,8 +2340,9 @@ func _to_rig(i: int, p2: Vector2) -> Vector3:
 	var s: float = SIDES[i]
 	var shoulder := Vector3(s * shape.shoulder.x, 0.0, shape.shoulder.y)
 	var swept := p2
-	if absf(sweep) > 1e-4:
-		swept = shape.shoulder + (p2 - shape.shoulder).rotated(deg_to_rad(-sweep))
+	var sw := wing_sweep(i)
+	if absf(sw) > 1e-4:
+		swept = shape.shoulder + (p2 - shape.shoulder).rotated(deg_to_rad(-sw))
 	var flat := Vector3(s * swept.x, 0.0, swept.y)
 	return shoulder + _wing_plane(i) * (flat - shoulder) + Vector3(0.0, _sh_up, 0.0)
 
@@ -2214,29 +2364,33 @@ func apply_pose() -> void:
 	if marks_material != null and absf(flex - _flex_set) > 1e-6:
 		_flex_set = flex
 		marks_material.set_shader_parameter("flex", flex)
-	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do.
-	# (GPU placement: the shader works out the angles that change with them; the set itself is only needed here when
-	# the feathers are placed here too)
-	if cpu_place and (_defs.is_empty() or absf(fold - _defs_fold) > 0.002 or absf(slot - _defs_slot) > 0.01):
-		var pd := Perf.t()
-		_defs = shape.feathers(fold, slot, _under_row)
-		if not gpu_place:
-			_custom_dirty = true
-			feather_codes.clear()
-		Perf.add("  feather_defs (in wings)", pd)
-		_defs_fold = fold
-		_defs_slot = slot
-	var defs := _defs if cpu_place else _gpu_set
 	var lengths := shape.bone_lengths()
-	var j2 := shape.joints(fold)
-	var ik_w := smoothstep(0.55, 1.0, fold)
 	var unit := _L / 0.45   # feather layer offsets scale with the bird
 	var gpu_defs := gpu_place and (_defs_lost != lost.hash() or _custom_dirty or _paint_dirty)
 	var gpu_idle := gpu_place and not cpu_place and not gpu_defs   # (nothing about any feather to write this pose)
 	if gpu_defs:
 		_defs_lost = lost.hash()
+	# Feather definitions only change with fold and slot, which move slowly: rebuild them when they do, each wing at its
+	# own fold (in a roll the inner wing flexes). (GPU placement: the shader works out the angles that change with them;
+	# the set itself is only needed here when the feathers are placed here too)
+	var redef := [false, false]
+	for i in 2:
+		redef[i] = cpu_place and ((_defs_w[i] as Array).is_empty() or absf(wing_fold(i) - _defs_fold[i]) > 0.002 or absf(slot - _defs_slot[i]) > 0.01)
+	if (redef[0] or redef[1]) and not gpu_place:
+		_custom_dirty = true   # (once for both wings: the codes are written for both in order)
+		feather_codes.clear()
 	for i in 2:
 		var s: float = SIDES[i]
+		var fold_i := wing_fold(i)
+		if redef[i]:
+			var pd := Perf.t()
+			_defs_w[i] = shape.feathers(fold_i, slot, _under_row)
+			Perf.add("  feather_defs (in wings)", pd)
+			_defs_fold[i] = fold_i
+			_defs_slot[i] = slot
+		var defs: Array = _defs_w[i] if cpu_place else _gpu_set
+		var j2 := shape.joints(fold_i)
+		var ik_w := smoothstep(0.55, 1.0, fold_i)
 		var sh := _to_rig(i, j2[0])
 		var el_fk := _to_rig(i, j2[1])
 		var wr_fk := _to_rig(i, j2[2])
@@ -2285,14 +2439,14 @@ func apply_pose() -> void:
 			_pose_px(i, 1, elbow, panel)
 			_pose_px(i, 2, wrist, s)
 			_pose_px(i, 3, hand, alula)
-			_pose_px(i, 4, arm_n, fold)
-			_pose_px(i, 5, hand_n, sweep if absf(sweep) > 1e-4 else 0.0)
+			_pose_px(i, 4, arm_n, fold_i)
+			_pose_px(i, 5, hand_n, wing_sweep(i) if absf(wing_sweep(i)) > 1e-4 else 0.0)
 			_pose_px(i, 6, fold_y, unit)
 			_pose_px(i, 7, folded_dir, shape.root_chord() * float(LIMB[3].t[0]))
 			_pose_px(i, 8, wp.x, slot)
 			_pose_px(i, 9, wp.y, 0.0)
 			_pose_px(i, 10, wp.z, 0.0)
-			_pose_px(i, 11, WingShape.bone_angles(fold), 0.0)
+			_pose_px(i, 11, WingShape.bone_angles(fold_i), 0.0)
 		var pf := Perf.t()
 		var fj := -1
 		for f in ([] if gpu_idle else defs):
@@ -2332,7 +2486,7 @@ func apply_pose() -> void:
 			# toward their designed folded direction (aft along the body), so the folded wing lies flat.
 			if ik_w > 0.0:
 				if int(f.bone) != WingShape.Bone.HAND:
-					d = d.slerp(_fk_feather_dir(i, f, fold), ik_w).normalized()
+					d = d.slerp(_fk_feather_dir(i, f, fold_i), ik_w).normalized()
 				d = d.slerp(folded_dir, ik_w * ik_w).normalized()
 				n = n.slerp(fold_y, ik_w).normalized()
 			var root: Vector3 = a.lerp(b, f.t)
@@ -2347,7 +2501,7 @@ func apply_pose() -> void:
 			# (folded, the feathers lie flat in their stack: their arch would cross them through the layer below)
 			var sz := 1.0
 			if f.kind == WingShape.Kind.LESSER_COVERT and int(f.bone) != WingShape.Bone.HAND:
-				sz = maxf(smoothstep(0.3, 0.9, fold), 0.001)   # (spread, the arm's surface is these coverts; they come out as it slackens)
+				sz = maxf(smoothstep(0.3, 0.9, fold_i), 0.001)   # (spread, the arm's surface is these coverts; they come out as it slackens)
 			var key := feather_key(i, int(f.kind), int(f.i), int(f.bone))
 			if not lost.is_empty() and _ruffled(i, f):
 				# Battle damage: the covert over a lost flight feather has lost what it lay on -- it stands up off the
@@ -2382,7 +2536,7 @@ func apply_pose() -> void:
 		var rc := shape.root_chord()
 		# The arm wing: one smooth surface over the skin web, the arm and its coverts (it slackens away as the
 		# wing folds); the arm's own pieces sit inside it, slimmed, until folded.
-		_loft_arm(i, fr[0], sh, elbow, wrist, arm_n, s, 1.0 - fold)
+		_loft_arm(i, fr[0], sh, elbow, wrist, arm_n, s, 1.0 - fold_i)
 		Perf.add("  arm_loft (in wings)", pl)
 		pl = Perf.t()
 		# (slim: folded, they lie under the feather stack, which needs no filling between its layers)
@@ -2540,6 +2694,13 @@ func apply_pose() -> void:
 		(m.material_override as ShaderMaterial).set_shader_parameter("sweep", blink)
 	fwd = Vector3(sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
 	var up := world_up.slerp(Vector3.UP, 0.3)
+	if roll_shape:
+		# The head counter-rolls to keep its eyes level -- nearly all the body's bank, to the neck's reach (the pitch as
+		# before): the roll taken out of the world's up, the rest eased as before, then the head rolled back level.
+		var phi := atan2(-world_up.x, world_up.y)
+		var gain := HEAD_ROLL_GAIN if profile.id != "owl" else 0.95   # (an owl's eyes barely move in its skull)
+		up = world_up.rotated(Vector3.BACK, -phi).slerp(Vector3.UP, 0.3).rotated(Vector3.BACK,
+			clampf(gain * phi, -deg_to_rad(HEAD_ROLL_MAX), deg_to_rad(HEAD_ROLL_MAX)))
 	if absf(fwd.dot(up.normalized())) > 0.98:
 		up = Vector3.BACK
 	head_basis = Basis.looking_at(fwd, up)
@@ -3035,7 +3196,8 @@ static func _bezier(a: Vector3, b: Vector3, c: Vector3, d: Vector3, u: float) ->
 func _fk_feather_dir(i: int, f: Dictionary, fold_v: float) -> Vector3:
 	var a := WingShape.bone_angles(fold_v)
 	var bone_deg: float = [a.x, a.y, a.z][int(f.bone)]
-	var d2 := WingShape.dir2(bone_deg + float(f.rel) - (sweep if absf(sweep) > 1e-4 else 0.0))
+	var sw := wing_sweep(i)
+	var d2 := WingShape.dir2(bone_deg + float(f.rel) - (sw if absf(sw) > 1e-4 else 0.0))
 	return (_wing_plane(i) * Vector3(SIDES[i] * d2.x, 0.0, d2.y)).normalized()
 
 
