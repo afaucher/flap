@@ -33,7 +33,9 @@ Docs: `docs/design/wing_rig.md` (as built), `wing_rig_plan.html` (the plan; part
   outer neighbour. `probe_coplanar` finds z-fighting pairs.
 - Drawn as one shared mesh in two MultiMeshes (plain, emarginated), each with a mirrored underside copy for two-sided
   colour. UV.x -1..1 across the vane, UV.y base to tip. Silhouette cards (~66: scapular, flank, rump, vent tracts) in
-  the body's colour, kept flat and small (lifted, they stood off the back as a shelf); `--no-cards`.
+  the body's colour, kept flat and small (lifted, they stood off the back as a shelf); `--no-cards`. The scapulars lie
+  flat as a field from the back out over the wing's root, each card a chord of what is under it (`_lay_card`; they
+  cover the gap behind the arm wing; `docs/research/scapulars.md`, `test_scapulars`).
 - **GPU placement** (`feather_place.gdshaderinc`, default) from the joints; each feather's angle is linear in fold and
   slot so it's defined once. The GDScript placement is the reference (headless); `gpu_test_feathers` compares them per
   feather (0.2 um), `gpu_test_feather_image` per pixel. Change both.

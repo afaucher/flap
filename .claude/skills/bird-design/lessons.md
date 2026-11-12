@@ -38,6 +38,9 @@ measurement of what is drawn.**
 - Body tiles too busy ("pinecone / leopard"); square covert tips ("tombstones"); a mirrored projection's herringbone
   down the keel; down shells as floating dashed lines -> replaced by fraying the body's edge.
 - Silhouette cards made larger and lifted stood off the back as a shelf.
+- Scapular cards laid on the tangent at their roots read as two raised slabs, and left the white underwing showing in
+  the gap behind the arm wing. Aimed out along the wing they stood up like blinds. Real ones run straight back and lie
+  flat over the wing's root: set each card's tip on what is under it (`docs/research/scapulars.md`).
 - `BACKLIGHT` is shadowed by the feather above: use transmittance.
 - Heads at 2x life forced stubby beaks.
 

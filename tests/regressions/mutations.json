@@ -6024,5 +6024,47 @@
     "replace": "\t\tif redef[i]:\n\t\t\tif not gpu_place:\n\t\t\t\tfeather_codes.clear()\n\t\t\tvar pd := Perf.t()\n"
    }
   ]
- }
+ },
+  {
+    "id": "scapulars-stand-off-the-back",
+    "bug": "The scapular cards were laid on the tangent at their roots, inboard on the back: two raised slabs that lit apart from the back, while beside the body behind the arm wing the white underwing showed through (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\t\tif not spl.is_empty():\n\t\t\tvar laid := _lay_card(d)\n",
+        "replace": "\t\tif false:\n\t\t\tvar laid := _lay_card(d)\n"
+      }
+    ]
+  },
+  {
+    "id": "scapulars-fan-past-folded-back",
+    "bug": "Folded, the rear scapulars ran past the body's outline where it tapers to the tail, fanning out at the lower back (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\t\treturn Vector3(signf(p.x) * minf(absf(p.x), lerpf(w, absf(p.x), open)), p.y, p.z)\n",
+        "replace": "\t\treturn p\n"
+      }
+    ]
+  },
+  {
+    "id": "scapulars-follow-other-wing",
+    "bug": "Each side's scapulars must follow their own wing's fold (a roll folds one wing more): with the sides swapped they spread and drew in with the other wing (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar wi := 0 if float(d.side) < 0.0 else 1\n\tvar open := 1.0 - wing_fold(wi)\n\tvar reach",
+        "replace": "\tvar wi := 1 if float(d.side) < 0.0 else 0\n\tvar open := 1.0 - wing_fold(wi)\n\tvar reach"
+      }
+    ]
+  }
 ]

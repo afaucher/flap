@@ -1091,7 +1091,10 @@ func _texture_body() -> void:
 ## The textured shell is smooth, so its outline is a clean curve; on a bird the feathers there lie over each other
 ## and their tips break it. Small cards in the tracts that show most, each coloured with the body's own colour where
 ## it is rooted and drawn with the lesser-covert atlas cells (row "contour" of the feather material):
-##   scapular  over each shoulder, onto the wing's root (and the top of the folded wing)
+##   scapular  over each shoulder: a field of long feathers from a narrow band high on the shoulder, running back
+##             nearly along the body and lying flat -- over the back, then out onto the wing's root behind the arm
+##             (they hide the join of back and wing, docs/research/scapulars.md), over the folded wing's top when it
+##             closes
 ##   flank     low on each side, along the folded wing's lower edge
 ##   rump      the uppertail coverts, over the tail's base (they follow the tail's pitch part way)
 ##   vent      the undertail coverts
@@ -1099,10 +1102,18 @@ func _texture_body() -> void:
 ## [from, to] (deg: 0 the side, 90 the back, -90 the keel; mirrored for the left side unless `centre`); `u` along
 ## the trunk [from, to] (0 front .. 1 back; "sh" / "hip" mark the shoulder's or hip's u, plus the offset); `len`
 ## (share of L) and `w` (share of len); `lift` (deg off the surface: the tip stands off it); `tail` how far the
-## cards follow the tail's pitch; `arch` the cards' camber (1: a flight feather's).
+## cards follow the tail's pitch; `arch` the cards' camber (1: a flight feather's). Lying tracts (the scapulars):
+## `len_back` the back row's length (rows grow from `len`), `splay` [folded, spread] (deg out from straight back, as
+## that wing folds; scaled by the species' `SCAP_REACH`), `fan` (deg: a row's cards splayed apart, the outer most).
+## Each card is laid flat on what is under its tip -- the back's shell, or the spread wing's root -- not on the
+## tangent at its root, and arched to the surface between (`_lay_card`), so none stands off the bird.
 static var silhouette_cards := true
+## How far each species' scapulars lap out onto the spread wing (1: the most): broad tracts in hawks and owls, a narrow
+## one of few large feathers in falcons, small in songbirds (Nitzsch 1867; the photos in docs/research/scapulars.md) [E].
+const SCAP_REACH := {"hawk": 1.0, "owl": 1.0, "crow": 0.8, "falcon": 0.6, "sparrow": 0.55}
 const CARD_TRACTS := {
-	"scapular": {"rows": 3, "n": 4, "t": [42.0, 72.0], "u": ["sh", -0.02, "sh", 0.22], "len": 0.1, "w": 0.45, "lift": 0.0, "tail": 0.0, "arch": 0.25},
+	"scapular": {"rows": 4, "n": 3, "t": [34.0, 64.0], "u": ["sh", -0.03, "sh", 0.2], "len": 0.13, "len_back": 0.26, "w": 0.42, "lift": 0.0, "tail": 0.0, "arch": 0.4,
+		"splay": [0.0, 16.0], "fan": 10.0},
 	"flank": {"rows": 2, "n": 4, "t": [-36.0, -62.0], "u": ["sh", 0.12, "hip", 0.06], "len": 0.11, "w": 0.55, "lift": 4.0, "tail": 0.0},
 	"rump": {"rows": 2, "n": 5, "t": [58.0, 122.0], "u": ["", 0.8, "", 0.95], "len": 0.12, "w": 0.6, "lift": 4.0, "tail": 0.5, "centre": true},
 	"vent": {"rows": 2, "n": 4, "t": [-62.0, -118.0], "u": ["", 0.8, "", 0.95], "len": 0.11, "w": 0.6, "lift": 5.0, "tail": 0.4, "centre": true},
@@ -1113,6 +1124,7 @@ var _cards: MultiMesh
 var _cards_u: MultiMesh
 var _card_defs: Array = []   ## per card: {pos, n, aft (trunk space), len, w, lift, tail, colour, row}
 var _cards_pitch := INF
+var _cards_fold := Vector2(INF, INF)   ## (each wing's fold the bridging cards were last laid for)
 var _cover_fold := INF
 
 
@@ -1152,9 +1164,13 @@ func _build_cards() -> void:
 					if side < 0.0:
 						t = PI - t
 					var sp: Array = _trunk_point(t, u)
+					var ln := lerpf(float(c.len), float(c.get("len_back", c.len)), r / maxf(float(c.rows) - 1.0, 1.0)) * _L
+					if c.has("splay"):
+						ln *= 0.8 + 0.2 * float(SCAP_REACH.get(profile.id, 0.8))
 					# (front rows lie over the rows behind: their tips cover the next row's bases)
-					_card_defs.append({"pos": sp[0], "n": sp[1], "aft": sp[2], "len": float(c.len) * _L, "w": float(c.len) * float(c.w) * _L,
-						"lift": deg_to_rad(float(c.lift)), "tail": float(c.tail), "arch": float(c.get("arch", 0.6)), "colour": _body_color_at(u, sin(t), absf(cos(t))), "row": float(int(c.rows) - r)})
+					_card_defs.append({"pos": sp[0], "n": sp[1], "aft": sp[2], "len": ln, "w": ln * float(c.w),
+						"lift": deg_to_rad(float(c.lift)), "tail": float(c.tail), "arch": float(c.get("arch", 0.6)), "colour": _card_colour(c, u, t), "row": float(int(c.rows) - r),
+						"splay": c.get("splay", []), "fan": float(c.get("fan", 0.0)) * (0.5 - f), "side": side})
 					card_tracts.append(tract)
 	var n := _card_defs.size()
 	_cards = _multimesh(_feather_mesh(PLAIN_PROFILE), n, marks_material, "SilhouetteCards")
@@ -1178,7 +1194,15 @@ func _build_cards() -> void:
 	_pose_cards()
 
 
-## Lay the silhouette cards for this pose (only the rump's and vent's change: they follow the tail's pitch).
+## A card's colour: the body's where it is rooted -- but a bridging card (a scapular, rooted low on the side to reach
+## the wing) is a feather of the back's tract, so it takes the back's colour at that point along the trunk.
+func _card_colour(c: Dictionary, u: float, t: float) -> Color:
+	if c.has("splay"):
+		return _body_color_at(u, sin(deg_to_rad(70.0)), cos(deg_to_rad(70.0)))
+	return _body_color_at(u, sin(t), absf(cos(t)))
+
+
+## Lay the silhouette cards for this pose (the rump's and vent's follow the tail's pitch, the scapulars each wing's fold).
 func _pose_cards() -> void:
 	if _cards == null:
 		return
@@ -1193,11 +1217,74 @@ func _pose_cards() -> void:
 			var td := (tail_dir - n * n.dot(tail_dir)).normalized()
 			aft = aft.slerp(td, float(d.tail)).normalized()
 		var dir := (aft * cos(float(d.lift)) + n * sin(float(d.lift))).normalized()
-		var base: Vector3 = d.pos + n * ((0.0006 + 0.0004 * float(d.row)) * unit) - dir * float(d.len) * 0.08
-		var xf := _feather_xform(base, dir, n, float(d.len), float(d.w), float(d.arch))
+		var arch := float(d.arch)
+		var ln := float(d.len)
+		var spl: Array = d.splay
+		if not spl.is_empty():
+			var laid := _lay_card(d)
+			dir = laid[0]
+			n = laid[1]
+			arch = laid[2]
+			ln = laid[3]
+		var base: Vector3 = d.pos + n * ((0.0006 + 0.0004 * float(d.row)) * unit) - dir * ln * 0.08
+		var xf := _feather_xform(base, dir, n, ln, float(d.w) * ln / float(d.len), arch)
 		card_xforms.append(xf)
 		_cards.set_instance_transform(i, xf)
 		_cards_u.set_instance_transform(i, xf)
+
+
+## A lying card (a scapular) for this pose: [dir, normal, arch, length]. Straight back, splayed out by the species' reach as
+## its wing spreads; its tip set on what is under it -- the back's shell inside the body's outline, the wing's root
+## (as high as the shoulder) outside it while the wing is spread -- so the card is a chord of the surface, and arched
+## to meet the surface between its ends (the back is convex: a chord would sink into it).
+func _lay_card(d: Dictionary) -> Array:
+	var spl: Array = d.splay
+	var wi := 0 if float(d.side) < 0.0 else 1
+	var open := 1.0 - wing_fold(wi)
+	var reach := float(SCAP_REACH.get(profile.id, 0.8))
+	var a := deg_to_rad(lerpf(float(spl[0]), float(spl[1]) * reach, open) + float(d.fan) * open)
+	var root: Vector3 = d.pos
+	var aft: Vector3 = d.aft
+	var back := Vector3(0.0, 0.0, signf(aft.z) if absf(aft.z) > 1e-6 else 1.0)
+	var lv := back * cos(a) + Vector3(float(d.side), 0.0, 0.0) * sin(a)
+	var ln := float(d.len) * lerpf(0.72, 1.0, open)   # (folded, they lie closer: the folded wing takes the place they reach to)
+	var sh_y := 0.0
+	if not (wing_joints[wi] as Array).is_empty():
+		sh_y = (_trunk.transform.affine_inverse() * (wing_joints[wi][0] as Vector3)).y
+	var under := func(x: float, z: float) -> float:
+		var y := _shell_top(x, z)
+		return maxf(y, lerpf(y, sh_y, open)) if is_nan(y) == false else sh_y
+	# Folded, the tips follow the back's taper (over the folded wing's top), not out past the body where it narrows.
+	var inside := func(p: Vector3) -> Vector3:
+		var w := body.ring_at(p.z)[1] * 0.7   # (on the back's top, where the folded wing's inner edge lies under it)
+		return Vector3(signf(p.x) * minf(absf(p.x), lerpf(w, absf(p.x), open)), p.y, p.z)
+	# (two passes: the tip's run along the level depends on its drop)
+	var tip: Vector3 = inside.call(root + lv * ln)
+	for k in 2:
+		tip.y = under.call(tip.x, tip.z)
+		var drop := tip.y - root.y
+		var run := sqrt(maxf(ln * ln - drop * drop, ln * ln * 0.25))
+		tip = inside.call(Vector3(root.x + lv.x * run, tip.y, root.z + lv.z * run))
+	tip.y = under.call(tip.x, tip.z)
+	var dir := (tip - root).normalized()
+	var mid := (root + tip) * 0.5
+	var sag := maxf(under.call(mid.x, mid.z) - mid.y, 0.0)
+	var arch := clampf(sag / (CAMBER * ln), float(d.arch), 4.0)
+	var n: Vector3 = (d.n as Vector3).lerp(Vector3.UP, 0.5)
+	n = (n - dir * n.dot(dir)).normalized()
+	return [dir, n, arch, ln]
+
+
+## The back's shell height at (x, z) in trunk space (its upper half), or the ring's centre height outside its outline.
+func _shell_top(x: float, z: float) -> float:
+	var r := body.ring_at(z)
+	if r[1] <= 1e-5:
+		return r[0]
+	var c := absf(x) / r[1]
+	if c >= 1.0:
+		return r[0]
+	var cc := pow(c, BodyShape.N_TOP * 0.5)
+	return r[0] + r[2] * pow(sqrt(maxf(1.0 - cc * cc, 0.0)), 2.0 / BodyShape.N_TOP)
 
 
 func _multimesh(mesh: Mesh, count: int, mat: Material, node_name: String) -> MultiMesh:
@@ -2601,8 +2688,9 @@ func apply_pose() -> void:
 		_cover_fold = fold   # (how much of each flight feather's inner vane its neighbour hides: more as the wing closes)
 		marks_material.set_shader_parameter("cover", lerpf(0.45, 0.85, fold))
 	_pose_bone("tail", _tail_base, _tail_base + tb * Vector3(0, 0, profile.tail_length), tn)
-	if _cards != null and absf(tail_pitch - _cards_pitch) > 1e-3:
+	if _cards != null and (absf(tail_pitch - _cards_pitch) > 1e-3 or Vector2(wing_fold(0), wing_fold(1)).distance_to(_cards_fold) > 0.005):
 		_cards_pitch = tail_pitch
+		_cards_fold = Vector2(wing_fold(0), wing_fold(1))
 		_pose_cards()
 
 	Perf.add("rig.tail_cards", p0)
