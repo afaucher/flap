@@ -222,6 +222,11 @@ var _neck_loft := LoftMesh.new()   ## the neck's surface (built in full only whe
 ## built in the body shader (neck_place / arm_place / trouser_place.gdshaderinc) from a few numbers a pose and the
 ## bird's fixed tables (_neck_tab, _body_tab), not in GDScript.
 static var gpu_body := true   ## (needs a RenderingDevice: headless runs build them here)
+## The arm wing's feather coordinates laid evenly (docs/design/wing_rig.md, "The arm wing's chart"): v across the chord by
+## the distance over the surface from the leading edge (round its thickness, over the spread wing's whole chord), so
+## the tile is as dense across the chord as along the arm. Off: v by the chord's share of a shorter rest chord, the
+## tile stretched 2-6x across the chord and smeared where it wraps the leading edge (tests/probe_wing_uv.gd).
+static var arm_chart_even := true
 var gpu_neck := false
 var _cpu_neck := false            ## (GPU neck) loft it here as well this pose (tests compare the two)
 var _neck_tab: ImageTexture
@@ -567,6 +572,36 @@ const ROOT_ROWS := 4
 const ARM_REBUILD := 0.002   ## the arm wing is rebuilt in full when its loop on the body moves this far (x L)
 
 
+## Station k's feather coordinates (fixed: the coverts ride on the surface as it flexes and folds): (its distance out
+## along the arm, the chord v spans, the thickness it runs round at the leading edge), m. v at a section point x (0 the
+## leading edge .. 1 the trailing) is |(x * chord, naca(x) * thickness)| / the tile: about the distance over the surface
+## from the leading edge. Even (arm_chart_even): the spread wing's own chord (the bone's depth behind the leading edge,
+## plus the coverts beyond it) and thickness; else the old rest chord and no thickness.
+func _arm_station_chart(k: int) -> Vector3:
+	var u := lerpf(ARM_U0, 1.0, clampf(float(k) / ARM_STATIONS, 0.0, 1.0))
+	var l := shape.bone_lengths()
+	var rc := shape.root_chord()
+	if not arm_chart_even:
+		return Vector3((u - ARM_U0) * (l[0] + l[1]) + _L * 0.04, rc * lerpf(0.6, 0.35, u), 0.0)
+	# (out along the arm from the body's loop: the connector rows span most of the first ARM_U0 of the arm, which the
+	# old 0.04 L squeezed into a few millimetres of the chart -- feathers drawn twice the size there)
+	var along := (u - 0.25 * ARM_U0) * (l[0] + l[1])
+	var j := shape.joints(0.0)   # (the spread wing, in its plane)
+	var span := j[0].distance_to(j[2])
+	var le := (j[2] - j[0]) / maxf(span, 1e-5)
+	var side := signf(le.cross(j[1] - j[0]))   # (the elbow lies behind the leading edge)
+	var arc := u * (l[0] + l[1])
+	var bone := j[0].lerp(j[1], arc / maxf(l[0], 1e-5)) if arc <= l[0] else j[1].lerp(j[2], (arc - l[0]) / maxf(l[1], 1e-5))
+	var depth := maxf(side * le.cross(bone - (j[0] + le * span * u)), 0.0)
+	var thick := rc * lerpf(0.14, 0.055, u) * (1.0 + 0.15 * exp(-pow((u - 0.25) / 0.2, 2.0)))
+	return Vector3(along, depth + rc * lerpf(0.42, 0.26, u), thick)
+
+
+## How much of its loop point's own u station k keeps (arm_chart_even: fading to the loop's leading point's by station 3).
+func _arm_u_keep(k: int) -> float:
+	return 1.0 - smoothstep(0.0, 3.0, float(k)) if arm_chart_even else 1.0
+
+
 ## The arm wing's covering, lofted each pose from the body to the wrist. On a bird the skin web
 ## (propatagium), the arm's muscle and the small covert feathers over them read as ONE smooth surface -- the
 ## feathers hide where skin meets arm -- so this is one loft, not separate pieces with creases where they
@@ -626,7 +661,7 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 	cols = _arm_cols[i][flip]
 	for k in ARM_STATIONS + 2:   # stations ARM_U0 .. 1, then the closed wrist end (inside the hand's piece)
 		var u := lerpf(ARM_U0, 1.0, clampf(float(k) / ARM_STATIONS, 0.0, 1.0))
-		aus.append(Vector2((u - ARM_U0) * (l_h + l_f) + _L * 0.04, rc * lerpf(0.6, 0.35, u)))
+		aus.append(_arm_station_chart(k))
 		var e := sh + le * span * u
 		# Near the body the surface flexes rather than pivots: its sections ease from the body's plane at the root
 		# to the wing's by about 40% of the way out, so a raised or lowered wing bends at the shoulder.
@@ -728,10 +763,14 @@ func _loft_arm(i: int, mi: MeshInstance3D, sh: Vector3, elbow: Vector3, wrist: V
 	for k in rows.size():
 		var urow: Array = []
 		var u2row: Array = []
-		var au: Vector2 = aus[k]
+		var au: Vector3 = aus[k]
 		for j in ARM_AROUND + 1:
 			var a := TAU * (j % ARM_AROUND) / ARM_AROUND
-			urow.append(Vector2((luv[j % ARM_AROUND] as Vector2).x - s * au.x / unit, (luv[0] as Vector2).y + 0.5 * (1.0 - cos(a)) * au.y / unit))
+			var ax := 0.5 * (1.0 - cos(a))
+			# (u: the loop point's own, fading to its leading point's over the first stations -- kept all the way out, the
+			# loop's spread in u sheared the tile across ever narrower chords toward the wrist)
+			var u0 := lerpf((luv[0] as Vector2).x, (luv[j % ARM_AROUND] as Vector2).x, _arm_u_keep(k))
+			urow.append(Vector2(u0 - s * au.x / unit, (luv[0] as Vector2).y + Vector2(ax * au.y, _naca(ax) * au.z).length() / unit))
 			u2row.append(Vector2(NO_PERIOD, -clampf(sin(a) * (-1.0 if flip else 1.0) * 4.0, -1.0, 1.0)))
 		auv.append(urow)
 		auv2.append(u2row)
@@ -3109,7 +3148,8 @@ func _setup_gpu_arm() -> void:
 				put.call(j, 5 + nz + i * (ARM_STATIONS + 2) + k, col4.call(by_row[k][j]))
 	for k in ARM_STATIONS + 2:
 		var u := lerpf(ARM_U0, 1.0, clampf(float(k) / ARM_STATIONS, 0.0, 1.0))
-		put.call(k, 5 + nz + 2 * (ARM_STATIONS + 2), Vector4((u - ARM_U0) * (lengths[0] + lengths[1]) + _L * 0.04, rc * lerpf(0.6, 0.35, u), 0.0, 0.0))
+		var ch := _arm_station_chart(k)
+		put.call(k, 5 + nz + 2 * (ARM_STATIONS + 2), Vector4(ch.x, ch.y, ch.z, _arm_u_keep(k)))
 	_body_tab = ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGBAF, buf.to_byte_array()))
 	_arm_pose_buf.resize(ARM_POSE_W * 2 * 4)
 	_arm_pose_tex = ImageTexture.create_from_image(Image.create_from_data(ARM_POSE_W, 2, false, Image.FORMAT_RGBAF, _arm_pose_buf.to_byte_array()))

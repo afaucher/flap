@@ -12,7 +12,7 @@
 //   y2 (slope of bottom) | y3 the feather grid's ring z | y4 .. y4 + nz - 1 the trunk's feather grid (uv, uv2) |
 //   y4 + nz plumage (0 back 1 rump 2 breast 3 belly 4 vent 5 flanks 6 band 7 bib 8 scapulars; 9 band from, to, bib
 //   edge, has band; 10 scapulars from, to, has scapulars, has bib; 11 line, soft) |
-//   y5 + nz .. : the arm stations' colours, side 0 then side 1 (12 rows of 16) | then the stations' (along, chord)
+//   y5 + nz .. : the arm stations' colours, side 0 then side 1 (12 rows of 16) | then the stations' (along, chord, thickness, how much of the loop point's u kept: their feather coordinates)
 #include "res://scripts/bird/body_place.gdshaderinc"
 uniform sampler2D arm_pose : filter_nearest, repeat_disable;
 const int AR_STATIONS = 10;
@@ -262,7 +262,8 @@ void arm_vertex(int side, int r, int j, out vec3 pos, out vec3 nrm, out vec4 col
 	int k = max(r - AR_ROOT, 0);
 	vec4 au = bt(k, 5 + body_nz + 2 * (AR_STATIONS + 2));
 	float a = AR_TAU * float(jj) / float(AR_AROUND);
-	vec2 suv = vec2(lfc.x - s * au.x / unit, fc0.y + 0.5 * (1.0 - cos(a)) * au.y / unit);
+	float ax = 0.5 * (1.0 - cos(a));   // (v: about the distance over the surface from the leading edge, BirdRig._arm_station_chart)
+	vec2 suv = vec2(mix(fc0.x, lfc.x, au.w) - s * au.x / unit, fc0.y + length(vec2(ax * au.y, ar_naca(ax) * au.z)) / unit);
 	vec2 suv2 = vec2(AR_NO_PERIOD, -clamp(sin(a) * (flip ? -1.0 : 1.0) * 4.0, -1.0, 1.0));
 	if (r >= AR_ROOT) {
 		col = bt(jj, tab + k);

@@ -34,6 +34,7 @@ func _ready() -> void:
 	BirdRig.gpu_feathers = not args.has("--cpu-feathers")   # (the feathers placed by the rig, not the shader; A/B)
 	BirdRig.gpu_body = not args.has("--cpu-body")   # (the neck, arm wings and trousers built by the rig, not the shader)
 	BirdRig.silhouette_cards = not args.has("--no-cards")
+	BirdRig.arm_chart_even = not args.has("--arm-chart-old")   # (the arm wing's feather coordinates as they were: A/B)
 	BirdRig.outline_down = not args.has("--no-down")
 	if Boot.arg_value(args, "--legs") != "":
 		LegRig.enabled = Boot.arg_value(args, "--legs") == "detail"
@@ -44,8 +45,11 @@ func _ready() -> void:
 	if time_arg != "":
 		t = float(time_arg)
 		frozen = true
-	# (--light flat: the old look, one ambient colour and no shadows)
-	Lighting.studio(self, Boot.arg_value(args, "--light") if Boot.arg_value(args, "--light") != "" else "studio", sun_arg == "back")
+	# (--light flat: the old look, one ambient colour and no shadows; --light game: the game's own (ForestLight, `--look`))
+	if Boot.arg_value(args, "--light") == "game":
+		ForestLight.setup(self)
+	else:
+		Lighting.studio(self, Boot.arg_value(args, "--light") if Boot.arg_value(args, "--light") != "" else "studio", sun_arg == "back")
 	var x := 0.0
 	var profiles := BirdProfile.all()
 	if only != "":
@@ -130,6 +134,38 @@ func _ready() -> void:
 		cam.look_at_from_position(at + from.normalized() * dist, at, Vector3.UP)
 		if view == "toes":
 			cam.near = dist - profiles[0].body_length * 0.02
+	if view in ["root", "rootf"]:   # close on one wing's root, where it leaves the body: from behind and above, or ahead
+		var r0 := rigs[0]
+		var s0 := r0.to_global(r0.wing_joints[0][0] as Vector3)
+		var s1 := r0.to_global(r0.wing_joints[1][0] as Vector3)
+		var hd := r0.to_global(r0._head_pos)
+		var mid_s := (s0 + s1) * 0.5
+		var fwd := Vector3(hd.x - mid_s.x, 0.0, hd.z - mid_s.z).normalized()
+		var out := (s0 - mid_s).normalized()
+		var bl := profiles[0].body_length
+		var zoom := float(Boot.arg_value(args, "--zoom")) if Boot.arg_value(args, "--zoom") != "" else 1.0
+		var at := s0 + out * 0.12 * bl - fwd * 0.1 * bl
+		var from := out * 0.3 + Vector3.UP * 0.8 + fwd * (-0.6 if view == "root" else 0.7)
+		cam.near = 0.005
+		cam.look_at_from_position(at + from.normalized() * bl * 0.7 / zoom, at, Vector3.UP)
+		focus = at
+	if view in ["rider", "back", "fore"]:   # close on the bird's top: from the rider's seat over the head, or wings spread
+		var r0 := rigs[0]   # from behind and above (back) or ahead and above (fore)
+		var sh := r0.to_global(((r0.wing_joints[0][0] as Vector3) + (r0.wing_joints[1][0] as Vector3)) * 0.5)
+		var hd := r0.to_global(r0._head_pos)
+		var fwd := Vector3(hd.x - sh.x, 0.0, hd.z - sh.z).normalized()
+		var bl := profiles[0].body_length
+		var zoom := float(Boot.arg_value(args, "--zoom")) if Boot.arg_value(args, "--zoom") != "" else 1.0
+		cam.near = 0.005
+		if view == "rider":   # (the rider sits behind the shoulders; eyes about 6 cm up, looking past the head)
+			cam.look_at_from_position(sh - fwd * 0.12 * bl / zoom + Vector3.UP * 0.14 * bl / zoom, hd + fwd * 0.5 * bl - Vector3.UP * 0.05 * bl, Vector3.UP)
+			cam.fov = 60.0
+		else:
+			var off := Vector3(0.0, 0.9, 1.0) if view == "back" else Vector3(0.0, 0.7, -1.0)
+			var at := sh - fwd * 0.1 * bl
+			off = (Basis.looking_at(fwd) * off).normalized()   # (in the bird's frame: +z behind it)
+			cam.look_at_from_position(at + off * profiles[0].span * 0.62 / zoom, at, Vector3.UP)
+		focus = sh
 	if view in ["head", "profile", "nape", "throat"]:   # close on the face: three-quarter front, or side on; or on where the
 		var h := rigs[0].to_global(rigs[0]._head_pos)   # neck meets the head, from behind and above (nape) or below (throat)
 		var off := {"head": Vector3(0.45, 0.15, -1.0), "profile": Vector3(1.0, 0.05, -0.05), "nape": Vector3(0.8, 0.45, 0.7),
