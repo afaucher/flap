@@ -3,7 +3,7 @@ extends TestCase
 ## (or its outpost's rail), each species sent to land on each from several bearings round it; prints every attempt
 ## and a table of landed / tried per species.
 ##   .\probe.ps1 -Headless probe_flight_exam [--tree pine|veteran|pole|oak] [--rail] [--birds crow,...]
-##        [--bearings 0,90,180,270] [--ups 3] [--out 30] [--seconds 40] [--seed 1] [--perches 3,5] [--stamina 0.2] [--fails]
+##        [--bearings 0,90,180,270] [--ups 3] [--out 30] [--seconds 40] [--seed 1] [--perches 3,5] [--stamina 0.2] [--fails] [--low]
 ##        [--grove] (other trees round it) [--hop <form>] (from two perches each of a tree of that form 28 m away)
 ##   ... probe_flight_exam --gates [--courses straight,uturn,...] [--skills recruit,pilot,ace]: the gate courses
 
@@ -44,6 +44,8 @@ func setup() -> void:
 			targets.append(r)
 	else:
 		targets = FlightExam.perches_of(a, t.id)
+	if args.has("--low"):   # (an oak's low tier only: test_flight_exam's oak_low, under its LOW_TIER)
+		targets = targets.filter(func(q): return q.position.y < 6.0)
 	var only := Boot.arg_value(args, "--perches")
 	if only != "":
 		var keep: Array[Perch] = []
@@ -94,6 +96,13 @@ func setup() -> void:
 				times.append(at.landed)
 		times.sort()
 		print("EXAM %-8s landed %3d / %3d   median %.1f s" % [id, r.x, r.y, times[times.size() / 2] if not times.is_empty() else INF])
+		var over: Array[float] = []
+		for at in ex.attempts:
+			if at.id == id:
+				over.append(at.line_over)
+		over.sort()
+		if not over.is_empty():
+			print("EXAM %-8s over a descending leg's line: median %.2f m, 90%% %.2f, most %.2f" % [id, over[over.size() / 2], over[mini(over.size() - 1, int(over.size() * 0.9))], over[-1]])
 		_flown(ex.attempts, id)
 	var by_perch := ""
 	for q in targets:

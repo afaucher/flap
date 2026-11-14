@@ -133,6 +133,7 @@ class Attempt:
 	var over_bank := 0          ## ... of them banked past what the lift holds (AIPilot.held_bank, OVER_BANK more)
 	var turned := 0.0           ## deg its heading turned through in all (a loop: 360)
 	var finals: Array[float] = []   ## its speed over its cruise (v_best) as each final began
+	var line_over := 0.0        ## m: the most it rode above a descending leg of its route (cruising, past the leg's first metre)
 	var _was_final := false
 	var _heading := Vector3.ZERO
 
@@ -320,6 +321,15 @@ func _measure(at: Attempt) -> void:
 	at._was_final = final
 	if absf(m.bank) > AIPilot.held_bank(b.profile, m.speed) + OVER_BANK:
 		at.over_bank += 1
+	if at.race == null and at.pilot.mode == AIPilot.Mode.CRUISE and at.pilot.wp >= 1 and at.pilot.wp < at.pilot.route.size():
+		# (Down a leg that descends, how far above its line: AIPilot holds it down to it, LINE_OVER.)
+		var a0: Vector3 = at.pilot.route[at.pilot.wp - 1]
+		var leg: Vector3 = at.pilot.route[at.pilot.wp] - a0
+		var flat := Vector2(leg.x, leg.z).length()
+		if flat > 1.0 and leg.y < -0.5:
+			var along := Vector2(b.global_position.x - a0.x, b.global_position.z - a0.z).dot(Vector2(leg.x, leg.z) / flat)
+			if along > 1.0 and along < flat:
+				at.line_over = maxf(at.line_over, b.global_position.y - (a0.y + leg.y * along / flat))
 	var fd := m.flight_dir()
 	var h := Vector3(fd.x, 0.0, fd.z)
 	if h.length() < 0.2:

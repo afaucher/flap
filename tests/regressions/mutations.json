@@ -2618,8 +2618,8 @@
   "edits": [
    {
     "file": "scripts/world/pinewood.gd",
-    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d):\n\t\t\t\tcontinue\n",
-    "replace": ""
+    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d) or not _deck_clear(t, o, c, float(yy), d, wood):\n",
+    "replace": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood):\n"
    }
   ]
  },
@@ -5648,7 +5648,7 @@
  },
  {
   "id": "race-round-descends-in-turn",
-  "bug": "A go-around came down from its loop in the last turn onto the run-in: gaining speed there, its turn widened, it strayed off the path and planned again, round and round (2026-11-06).",
+  "bug": "A go-around came down from its loop in the last turn onto the run-in: gaining speed there, its turn widened, it strayed off the path and planned again, round and round (2026-11-06). Caught on course 16 in the wood until the 2026-11-12 re-bake; now by test_race's _falcon_goes_round, in the open.",
   "tests": [
    "test_race"
   ],
@@ -5704,8 +5704,9 @@
  },
  {
   "id": "ai-rides-above-descent",
-  "bug": "Down a descending leg the AI aimed at its end and lagged above the line, where the planned clearance under the wood above didn't hold: under the big-trees oak's crown the avoidance climbed the hawk over a low limb and it reached the approach point 2.7 m high and fast (28 of the 36 low limbs) (2026-11-06).",
+  "bug": "Down a descending leg the AI aimed at its end and lagged above the line, where the planned clearance under the wood above didn't hold: under the big-trees oak's crown the avoidance climbed the hawk over a low limb and it reached the approach point 2.7 m high and fast (28 of the 36 low limbs) (2026-11-06). The two-stemmed oak's exam (2026-11-12) no longer showed it; test_ai_avoidance's descending leg does.",
   "tests": [
+   "test_ai_avoidance",
    "test_flight_exam"
   ],
   "edits": [
@@ -6022,6 +6023,34 @@
     "file": "scripts/bird/bird_rig.gd",
     "find": "\t\tif redef[i]:\n\t\t\tvar pd := Perf.t()\n",
     "replace": "\t\tif redef[i]:\n\t\t\tif not gpu_place:\n\t\t\t\tfeather_codes.clear()\n\t\t\tvar pd := Perf.t()\n"
+   }
+  ]
+ },
+ {
+  "id": "outpost-ignores-own-limbs",
+  "bug": "An outpost's place was checked only for its way in and the line out from the rail, not the deck, the hangar or the room over it: an oak's limbs out of the fork ran up through every oak outpost's deck and hangar (2026-11-11).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d) or not _deck_clear(t, o, c, float(yy), d, wood):\n",
+    "replace": "\t\t\tif not _way_in(a, t, o, c, float(yy), d):\n"
+   }
+  ]
+ },
+ {
+  "id": "oak-limbs-from-one-spot",
+  "bug": "An oak's big limbs all left the fork with its crown limbs, eight or more from one spot of the bole, where a real oak forks in two or three stems with its other limbs spread up the bole (2026-11-11).",
+  "tests": [
+   "test_pinewood"
+  ],
+  "edits": [
+   {
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\tvar root: Vector3 = on_stem.call(rng.randf_range(OAK_FORM.on_stem.x, OAK_FORM.on_stem.y))\n",
+    "replace": "\t\tvar root: Vector3 = c + Vector3.UP * (fork + rng.randf_range(-0.3, 0.4))\n"
    }
   ]
  }

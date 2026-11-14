@@ -319,16 +319,23 @@ this: no pine stands in an opening, the counts in 16 m squares vary more than a 
 fifth of the young pines are in shade. `tests/probe_layout_map.gd` draws the plan.
 
 The trees are shaped for perching, with clear branches below the crown that a bird can reach:
-- **Oaks** (`Pinewood._grow_oak`, `OAK_FORM`, 2026-11-06): a short trunk that forks low (a quarter of the height).
-  The solid trunk stops just above the fork (`TreeData.stem`, `trunk_top()`), so collision and every wood query see
-  no pillar up through the crown. From the fork:
-  - big scaffold limbs, each in three curved pieces (`_bend`);
-  - long low limbs with side limbs, the open perches under the crown;
-  - crown limbs that climb from the fork and hold up the top.
+- **Oaks** (`Pinewood._grow_oak`, `OAK_FORM`; reshaped 2026-11-11 after `docs/research/oak_form.md`): a short
+  trunk that forks low (a quarter of the height) into two or three stems, as a real oak's fork does, never eight
+  limbs from one spot. The solid trunk stops just above the stems' feet (`TreeData.stem`, `trunk_top()`), so
+  collision and every wood query see no pillar up through the crown.
+  - The stems (`two_stems`, 0.72 or 0.62 of the trunk's radius) leave the fork a little apart up it (`stem_gap`),
+    climb steeply and carry the top of the crown.
+  - The big scaffold limbs, each in three curved pieces (`_bend`), leave the stem nearest their way a metre or so over
+    the fork (`on_stem`, `limb_ratio`), round the oak but for the side between its first two stems (`deck_side`).
+  - Long low limbs with side limbs, the open perches under the crown, leave the bole one under another, 0.7-1.5 m
+    under the fork (`low_top`, `low_gap`), each round from the last by the golden angle.
 
-  Leaf clouds sit over the crown tips, with rings that close the top. An outpost deck sits in the fork, its way in
-  kept clear of the oak's own limbs (`_way_in`, `OWN_BERTH`). The leaves are English oak's (`FoliageTex` `oak_leaf`):
-  obovate, lobed, eared at the stalk.
+  `test_pinewood` holds the fork: two or three stems leave from the fork up, no more than three limbs leave any metre
+  of the bole, and they're spread up it. Leaf clouds sit over the crown tips, with rings that close the top. An
+  outpost deck sits in the fork on the side kept for it: its way in clear of the oak's own limbs (`_way_in`,
+  `OWN_BERTH`), and its room (the deck, its hangar, 0.3 m under and 0.6 m over it, but for the strip it's bolted on
+  by) clear of the tree's drawn limbs (`_deck_clear`; the limbs used to run up through every oak's deck and hangar).
+  The leaves are English oak's (`FoliageTex` `oak_leaf`): obovate, lobed, eared at the stalk.
 - **Pines:** whorled crowns, with one more whorl and three or four limbs to a whorl on the mature pines and the
   veterans (`_grow_pine`'s `more`), each long limb tufted at its tip.
 

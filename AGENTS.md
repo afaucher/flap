@@ -28,9 +28,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   TAA over 2x MSAA by default (`Antialias`; `--no-taa`, F7): it clears the speckle on feather cards' edges and fine
   texture that MSAA leaves.
 - `scripts/world/`: `Perch`, `ArenaLayout` (pure data + generator + geometric queries), `ArenaBuilder` (meshes,
-  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans, and oaks forking low with their
+  collision). `Pinewood` grows a mixed-age wood: mature pines, pole-stage pines and a few veterans, and oaks forking low into two or three stems with their
   solid trunk ending at the fork (`TreeData.stem`, `trunk_top()`: collision and wood queries use it; `docs/design/flight_model.md`
-  section 5), shaped for clear perches below the crown (`tests/probe_tree_paths.gd` + `tools/tree_side_map.py` draw one from the side) (`TreeData.form`;
+  section 5; how real oaks are built and ours against them: `docs/research/oak_form.md`, `tools/oak_form.py` + `oak_chart.py`), shaped for clear perches below the crown (`tests/probe_tree_paths.gd` + `tools/tree_side_map.py` draw one from the side; `--grow` the wood as grown now, `--exam` the flight exam's oak); an outpost's deck, hangar and the room over it are kept clear of its tree's drawn limbs (`Pinewood._deck_clear`; `tests/probe_oak_outpost.gd` measures and renders each oak's) (`TreeData.form`;
   `Pinewood.ages` off for an A/B; `tests/probe_pine_ages.gd` renders them, `probe_tree_stats` counts them). The game's arena is a baked map, not a seed: `maps/pinewood_7.map` (`MapFile`: the whole `ArenaLayout`, trees,
   limbs, branches, perches, outposts, openings, the floor's field, thermals), which `Pinewood.generate` reads when it's
   there and the generator's options are as baked (`Pinewood.baked`, `as_baked()`), so changing the generator
@@ -93,7 +93,7 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   rail, AIPilot.go_to_perch lands it; `RaceView` placeholder gates,
   `RaceHud` (the clock top centre; best and the average of the last three top right), `RaceRecord` best and recent
   times. `RaceTrial` (test_support) races birds headless; `tests/probe_courses.gd` sums up many course seeds (full, kinds, heights,
-  the way home); `tests/probe_combat_rest.gd` watches a 3 v 3's base landings (`--ai-seed`); `tests/probe_race_home.gd` lands each bird on the rail from
+  the way home); `tests/probe_go_round.gd` puts birds beside a gate in the open and counts their go-arounds (`--above`, `--speeds`); `tests/probe_combat_rest.gd` watches a 3 v 3's base landings (`--ai-seed`); `tests/probe_race_home.gd` lands each bird on the rail from
   the last gate (the AI falcon can't yet; `--trace <bird>`: its final approaches); `tests/probe_race.gd` prints a
   course leg by leg against each bird's turning circle, races every bird at every skill, writes an SVG map
   (`.\probe.ps1 -Headless probe_race [--seed n] [--plan-for crow,owl,sparrow]`). Flyability apart from the AI:

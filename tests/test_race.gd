@@ -29,7 +29,7 @@ func setup() -> void:
 		_rules_by_hand()
 		_home_by_hand()
 		_dubins()
-		_course_rules(28)
+		_course_rules(11)
 		_crossings_by_hand()
 		_eight_guide_by_hand()
 	if in_shard(1):
@@ -44,6 +44,7 @@ func setup() -> void:
 		await _field_finishes(16)
 	if in_shard(6):
 		await _goes_round()
+		await _falcon_goes_round()
 		await _takes_off_again(16)
 		await _lands_from_run_in(16)
 	for k in RaceCourse.STYLES.size():   # (shards 7-10: the menu's course of each style)
@@ -636,6 +637,43 @@ func _goes_round() -> void:
 		var e: Dictionary = x[0]
 		check(e.run.next > k, "the %s put %s of the gate goes round and through it (go-arounds %d)" % [x[1], "left" if x[2] < 0.0 else "right", e.pilot.go_arounds])
 		check(e.pilot.go_arounds >= 1, "the %s put %s of the gate went round" % [x[1], "left" if x[2] < 0.0 else "right"])
+	trial.queue_free()
+
+
+## A falcon (the widest turner, fastest) missing a gate in the open 8 m above it -- left and right, short of the gate's
+## line and past it, at cruise and 1.3x -- goes round once and through it: the go-around's loop holds its height to
+## the straight run-in. Coming down in the loop's last turn it gained speed, the turn widened, it strayed off the path
+## and planned again (2 of these 8 went round twice; on the wood's course 16, round and round past two gates).
+## (tests/probe_go_round.gd measures these starts and more: the hawk, other heights and speeds.)
+func _falcon_goes_round() -> void:
+	var l := FlightExam.place()
+	var gs: Array[RaceCourse.Gate] = [FlightExam.post_gate(Vector3(0, 7, -30), Vector3(0, 0, 1)),
+		FlightExam.post_gate(Vector3(0, 7, 0), Vector3(0, 0, 1)), FlightExam.post_gate(Vector3(0, 7, 30), Vector3(0, 0, 1))]
+	var c := RaceCourse.from_gates(l, Perch.branch(-1, Vector3(0, 7, -60), Vector3(0, 7, -60), Vector3(0, 0, 1), -1, 0.05), gs)
+	var trial := RaceTrial.new()
+	add_child(trial)
+	trial.setup(l, c)
+	var k := 1
+	var g := c.gates[k]
+	var es := []
+	for sp: float in [1.0, 1.3]:
+		for side: float in [-1.0, 1.0]:
+			for back: float in [3.0, -6.0]:
+				var e := trial.add_ai("falcon", "pilot", 7)
+				e.run.phase = RaceRun.Phase.RUNNING
+				e.run.next = k
+				var at: Vector3 = g.centre - g.normal * back + g.right() * side * (g.half_w + 3.0) + Vector3.UP * 8.0
+				e.bird.fly_from(at, g.normal, e.bird.profile.v_best * sp)
+				e.prev = at
+				es.append({"e": e, "nm": "%s, %s its line, at %.1fx cruise" % ["left" if side < 0.0 else "right", "short of" if back > 0.0 else "past", sp], "rounds": -1})
+	for f in 60 * 30:
+		await trial.step()
+		for x in es:
+			if x.rounds < 0 and x.e.run.next > k:
+				x.rounds = x.e.pilot.go_arounds
+	for x in es:
+		check(x.rounds >= 0, "the falcon 8 m over a gate it missed (%s) goes round and through it within 30 s (go-arounds %d)" % [x.nm, x.e.pilot.go_arounds])
+		check(x.rounds <= 1, "the falcon 8 m over a gate it missed (%s) goes round once (%d)" % [x.nm, x.rounds])
 	trial.queue_free()
 
 

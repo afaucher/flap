@@ -29,12 +29,19 @@ const CLEARING := 20.0   ## m, the clearing round the big oak (to its nearest pi
 const GLADE := {"r": Vector2(16.0, 18.0), "at": Vector2(42.0, 56.0)}
 const GAPS := {"count": 7, "r": Vector2(6.0, 10.0)}
 const OAK := {"count": 4, "h": Vector2(17.0, 22.0), "r": Vector2(0.65, 0.9), "limb": Vector2(6.0, 9.5), "glade": 11.0}
-## The oak's form (_grow_oak): the fork's height (of the tree's), how far (m) the bole goes on over it, how many big
-## limbs and long low limbs, how far a big limb climbs out of the fork, then reaches out, then on, its side fork's
+## The oak's form (_grow_oak): the fork's height (of the tree's), how far (m) the bole goes on over it at least, how
+## many big limbs and long low limbs; the share of oaks forking in two stems (the rest three), how far up the bole
+## (m) each stem's foot is from the last, how much a stem swells where it leaves (_limb's `swell`: a fork's stems
+## hardly do), how far out along its stem (m, level) a big limb leaves, and its radius over its stem's, how far
+## round (rad) either side of the way between its first two stems no big limb grows (an outpost's side); how far
+## under the fork (m) the first low limb leaves the bole and how far apart the rest (their way round it the golden
+## angle apart, so neighbours up the bole are far apart round it: the low tier keeps its room under the crown); how far a big limb climbs out of the fork, then reaches out, then on, its side fork's
 ## length, a low limb's whole reach and its side limb's length, how many limbs climb from the fork to carry the
 ## top of the crown, the leaf cloud over each limb's end in the crown (m, across and up), and the dome's middle (of
 ## the height) and the rings (elevations) that close its top. (`OAK.limb` and `glade` space the wood round the oaks.)
-const OAK_FORM := {"fork": Vector2(0.24, 0.28), "stem": 1.6, "scaffold": Vector2i(4, 5), "low": Vector2i(2, 3),
+const OAK_FORM := {"fork": Vector2(0.24, 0.28), "stem": 1.2, "scaffold": Vector2i(4, 5), "low": Vector2i(2, 3),
+	"two_stems": 0.6, "stem_gap": Vector2(0.35, 0.6), "stem_collar": 0.25, "on_stem": Vector2(0.2, 0.5), "limb_ratio": Vector2(0.5, 0.62), "deck_side": 0.9,
+	"low_top": 0.7, "low_gap": Vector2(0.35, 0.45),
 	"lean": Vector2(3.5, 4.5), "reach": Vector2(4.8, 6.0), "reach2": Vector2(3.0, 4.5), "side": Vector2(3.8, 5.0),
 	"low_reach": Vector2(10.0, 13.0), "low_side": Vector2(2.5, 4.0), "crown_limbs": Vector2i(2, 3), "cloud": Vector2(2.9, 1.8), "crown": 0.7, "rings": [0.55, 1.0]}
 ## Pole-stage pines (in little groups, in the half-light) and veterans (alone, at the clumps' edges); `crown` is
@@ -45,6 +52,7 @@ const VETERAN := {"count": 6, "h": Vector2(18.0, 24.0), "r": Vector2(0.42, 0.52)
 static var ages := true
 const SAPLING := {"count": 140, "h": Vector2(1.6, 6.0), "r": Vector2(0.03, 0.08), "spacing": 3.2}
 const OUTPOSTS := 9
+const GOLDEN := 2.39996   ## rad: the golden angle, round from one limb to the next up a bole
 ## An outpost's way in: the final swoop onto the rail comes up from out in front and a little below, so it faces only
 ## where that corridor is clear -- APPROACH m out from the rail, sinking APPROACH_DROP m, clear of every other tree by
 ## APPROACH_BERTH m (the AI's widest: the falcon starts its swoop 10 m out, the hawk keeps 1.9 m from the wood). A
@@ -465,9 +473,9 @@ static func _old_pine_draws(t: ArenaLayout.TreeData, rng: RandomNumberGenerator)
 ## its rise per metre changing smoothly from `slopes.x` at the trunk to `slopes.y` along the middle -- the
 ## stretch from `span.x` to `span.y` of its length, exactly straight, its perch -- to `slopes.z` at the tip, the
 ## tip curling `curl` m sideways; radius `r0` tapering to `taper` of it, with a collar where it leaves the
-## trunk (radius `trunk_r` there). Solid as five chords (BranchData), the middle one the perch (if `perch`);
+## trunk (radius `trunk_r` there), `swell` wider than the limb at the trunk's axis. Solid as five chords (BranchData), the middle one the perch (if `perch`);
 ## drawn as the curve (`key`: its material). Returns {pts, mid: BranchData, tip}.
-static func _limb(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, d: Vector3, length: float, slopes: Vector3, span: Vector2, r0: float, trunk_r: float, key: String, perch := true, curl := 0.0, taper := 0.35, solid := true) -> Dictionary:
+static func _limb(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, d: Vector3, length: float, slopes: Vector3, span: Vector2, r0: float, trunk_r: float, key: String, perch := true, curl := 0.0, taper := 0.35, solid := true, swell := 0.75) -> Dictionary:
 	var side := d.cross(Vector3.UP).normalized()
 	var xb := span.x * length
 	var xt := span.y * length
@@ -488,7 +496,7 @@ static func _limb(a: ArenaLayout, t: ArenaLayout.TreeData, root: Vector3, d: Vec
 	var rad := func(x: float, collar: bool) -> float:
 		var r := r0 * lerpf(1.0, taper, x / length)
 		if collar:
-			r *= 1.0 + 0.75 * exp(-maxf(x - trunk_r, 0.0) / (2.2 * r0))
+			r *= 1.0 + swell * exp(-maxf(x - trunk_r, 0.0) / (2.2 * r0))
 		return r
 	# The perch starts where the collar has died away to 5% (6 r0 past the trunk; nearer, the wood swells over a
 	# straight line), and the drawn tube has a ring there, so the wood as drawn and the grip line meet.
@@ -562,38 +570,83 @@ static func _r_at(t: ArenaLayout.TreeData, y: float) -> float:
 	return t.radius * lerpf(1.0, 0.4, clampf(y / t.height, 0.0, 1.0))
 
 
-## An old oak, after docs/images/concepts/oak_a.jpg: a short, massive bole that ends just over its fork (`t.stem`);
-## four or five big limbs out of the fork that climb, then wander outward in three pieces, forking as they go; two
-## or three long low limbs below the fork reaching out sideways, nearly level, lifting at the tips, each with a
-## side limb; two or three limbs climbing out of the middle of the fork to carry the top of the crown; and one
-## broad dome of leaves over it all. Not a botanical oak: the wood is laid out to land on, most
-## of its perches under the dome's rim, open from the side and below. Each piece has a straight stretch -- a
-## perch, sloped as the piece runs -- and its end bends into the next piece's line (`_bend`), so a limb wanders
-## without a kink. Its own random numbers (`rng`, from the layout's seed and the oak's place), so a change here
-## leaves the rest of the wood as it was.
+## An old oak, after docs/images/concepts/oak_a.jpg and the oaks in docs/research/oak_form.md: a short, massive bole
+## that forks low into two or three stems (`OAK_FORM.two_stems`, between them about as thick as the bole: Leonardo's
+## rule), their feet spread up the top of the bole, which ends just over them (`t.stem`); each stem climbs steeply to
+## carry the top of the crown and branches out under it, and puts out the big limbs -- four or five in all, each off
+## the stem nearest its way -- a metre or two over the fork, which climb, then wander outward in three pieces, forking
+## as they go; two or three long low limbs off the bole below the fork, one under another (`low_gap` apart), each
+## round from the last by the golden angle, reaching out sideways, nearly level, lifting at the tips, each with a side
+## limb; and one broad dome of leaves over it all. So only the stems leave the fork and the limbs off the bole are
+## spread up it (a real oak's fork is two or three stems, not eight limbs from one spot). Not a botanical oak: the wood
+## is laid out to land on, most of its perches under the dome's rim, open from the side and below. Each piece has a
+## straight stretch -- a perch, sloped as the piece runs -- and its end bends into the next piece's line (`_bend`), so
+## a limb wanders without a kink. Its own random numbers (`rng`, from the layout's seed and the oak's place), so a
+## change here leaves the rest of the wood as it was.
 static func _grow_oak(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberGenerator, big: bool) -> void:
 	var c := Vector3(t.base.x, 0.0, t.base.y)
 	var h := t.height
 	var s := 1.15 if big else 1.0
 	var fork := h * rng.randf_range(OAK_FORM.fork.x, OAK_FORM.fork.y)
 	t.crown_base = fork
-	t.stem = fork + OAK_FORM.stem
 	var ang0 := rng.randf() * TAU
 	var longest := 0.0
 	var crown_tips: Array[Vector3] = []   # (limb ends up in the dome: leaves over them)
 	var open_tips: Array[Vector3] = []    # (limb ends under it: left bare)
-	# The big limbs: out of the fork and up, then out, then on, turned back the other way.
+	# The stems: out of the fork, their feet a little apart up the bole, climbing steeply (wandering, too steep to
+	# perch on) to under the top of the dome and there branching out under it -- the wood that carries the top of
+	# the crown. Two stems are each 0.72 of the bole's radius, three 0.62 (their areas summing to about the bole's).
+	var n_stem := 2 if rng.randf() < OAK_FORM.two_stems else 3
+	var stem_r := t.radius * (0.72 if n_stem == 2 else 0.62)
+	var stems: Array = []   # [{d, at: its first piece's curve, r0}]
+	var foot := fork
+	for k in n_stem:
+		var ang := ang0 + TAU * k / n_stem + rng.randf_range(-0.3, 0.3)
+		var d := Vector3(sin(ang), 0.0, cos(ang))
+		var root := c + Vector3.UP * foot
+		var r0 := stem_r * rng.randf_range(0.95, 1.05)
+		var turn := rng.randf_range(0.3, 0.5) * (1.0 if rng.randf() < 0.5 else -1.0)
+		var l1 := t.radius * 0.6 + rng.randf_range(2.5, 3.5) * s
+		var p1 := _limb(a, t, root, d, l1, Vector3(3.0, rng.randf_range(1.6, 2.0), 1.3), Vector2(0.2, 0.7), r0, t.radius * 0.6, "oak_limb", false, _bend(turn, l1, 0.7), 0.6, true, OAK_FORM.stem_collar)
+		stems.append({"d": d, "at": p1.at, "r0": r0})
+		var d2 := d.rotated(Vector3.UP, turn)
+		var l2 := rng.randf_range(2.5, 3.5) * s
+		var p2 := _limb(a, t, p1.tip, d2, l2, Vector3(1.3, rng.randf_range(0.8, 1.0), 0.6), Vector2(0.15, 0.7), r0 * 0.6, -10.0, "oak_limb", false, rng.randf_range(-0.5, 0.5), 0.6)
+		# A limb off the climb out to the dome's upper flank,
+		var od := d.rotated(Vector3.UP, -signf(turn) * rng.randf_range(0.6, 1.0))
+		var o1 := _limb(a, t, p1.tip, od, rng.randf_range(4.0, 5.5) * s, Vector3(0.7, rng.randf_range(0.35, 0.5), 0.2), Vector2(0.12, 0.75), r0 * 0.35, -10.0, "oak_limb", false, rng.randf_range(-1.0, 1.0), 0.35)
+		crown_tips.append(o1.tip)
+		# and its head: two or three limbs spreading out under the top.
+		var n_head := rng.randi_range(2, 3)
+		var head0 := rng.randf() * TAU
+		for j in n_head:
+			var hd := Vector3(sin(head0 + TAU * j / n_head), 0.0, cos(head0 + TAU * j / n_head))
+			var hb := _limb(a, t, p2.tip, hd, rng.randf_range(3.5, 5.0) * s, Vector3(0.7, rng.randf_range(0.3, 0.45), 0.15), Vector2(0.12, 0.75), r0 * 0.3, -10.0, "oak_limb", false, rng.randf_range(-1.0, 1.0), 0.35)
+			crown_tips.append(hb.tip)
+		if k < n_stem - 1:
+			foot += rng.randf_range(OAK_FORM.stem_gap.x, OAK_FORM.stem_gap.y)
+	# The bole ends just over the stems' feet: its top is in among them.
+	t.stem = maxf(foot + 0.4, fork + OAK_FORM.stem)
+	# The big limbs: off the stem nearest their way, a metre or two over the fork, out and up, then out, then on,
+	# turned back the other way -- round the oak but for the side between its first two stems, kept for an
+	# outpost's deck (`deck_side` either side of it: _outpost finds it).
+	var deck_at := ang0 + PI / n_stem
 	var n_big := rng.randi_range(OAK_FORM.scaffold.x, OAK_FORM.scaffold.y)
 	for k in n_big:
-		var ang := ang0 + TAU * k / n_big + rng.randf_range(-0.3, 0.3)
+		var ang := deck_at + OAK_FORM.deck_side + (TAU - 2.0 * OAK_FORM.deck_side) * (k + 0.5) / n_big + rng.randf_range(-0.2, 0.2)
 		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var root := c + Vector3.UP * (fork + rng.randf_range(-0.3, 0.4))
-		var r0 := t.radius * rng.randf_range(0.5, 0.58)
+		var host: Dictionary = stems[0]
+		for st in stems:
+			if (st.d as Vector3).dot(d) > (host.d as Vector3).dot(d):
+				host = st
+		var on_stem: Callable = host.at
+		var root: Vector3 = on_stem.call(rng.randf_range(OAK_FORM.on_stem.x, OAK_FORM.on_stem.y))
+		var r0: float = float(host.r0) * rng.randf_range(OAK_FORM.limb_ratio.x, OAK_FORM.limb_ratio.y)
 		var turn1 := rng.randf_range(0.3, 0.6) * (1.0 if rng.randf() < 0.5 else -1.0)
 		var turn2 := -signf(turn1) * rng.randf_range(0.3, 0.6)
-		var l1 := t.radius + rng.randf_range(OAK_FORM.lean.x, OAK_FORM.lean.y) * s
-		var sl1 := Vector3(1.3, rng.randf_range(0.55, 0.75), rng.randf_range(0.4, 0.5))
-		var p1 := _limb(a, t, root, d, l1, sl1, Vector2(0.2, 0.75), r0, t.radius, "oak_limb", false, _bend(turn1, l1, 0.75), 0.6)
+		var l1 := t.radius + rng.randf_range(OAK_FORM.lean.x, OAK_FORM.lean.y) * s - _flat_from(c, root)
+		var sl1 := Vector3(1.2, rng.randf_range(0.5, 0.7), rng.randf_range(0.4, 0.5))
+		var p1 := _limb(a, t, root, d, l1, sl1, Vector2(0.2, 0.75), r0, float(host.r0), "oak_limb", false, _bend(turn1, l1, 0.75), 0.6)
 		var d2 := d.rotated(Vector3.UP, turn1)
 		var l2 := rng.randf_range(OAK_FORM.reach.x, OAK_FORM.reach.y) * s
 		var sl2 := Vector3(sl1.z, rng.randf_range(0.1, 0.3), rng.randf_range(0.2, 0.4))
@@ -613,38 +666,15 @@ static func _grow_oak(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumber
 		var f2 := _limb(a, t, p2.tip, ud, rng.randf_range(5.0, 7.0) * s, Vector3(1.0, rng.randf_range(0.6, 0.8), rng.randf_range(0.35, 0.5)), Vector2(0.12, 0.7), r0 * 0.42, -10.0, "oak_limb", false, rng.randf_range(-1.2, 1.2), 0.4)
 		crown_tips.append(f2.tip)
 		longest = maxf(longest, _flat_from(c, f2.tip))
-	# The crown's limbs: out of the middle of the fork, climbing steeply (wandering, too steep to perch on) to under
-	# the top of the dome and there branching out under it -- the wood that carries the top of the crown.
-	var n_crown := rng.randi_range(OAK_FORM.crown_limbs.x, OAK_FORM.crown_limbs.y)
-	for k in n_crown:
-		var ang := ang0 + TAU * (k + 0.5) / n_crown + rng.randf_range(-0.4, 0.4)
-		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var root := c + Vector3.UP * (fork + rng.randf_range(0.2, 0.8))
-		var r0 := t.radius * rng.randf_range(0.42, 0.5)
-		var turn := rng.randf_range(0.3, 0.5) * (1.0 if rng.randf() < 0.5 else -1.0)
-		var l1 := t.radius * 0.6 + rng.randf_range(2.5, 3.5) * s
-		var p1 := _limb(a, t, root, d, l1, Vector3(3.0, rng.randf_range(1.6, 2.0), 1.3), Vector2(0.2, 0.7), r0, t.radius * 0.6, "oak_limb", false, _bend(turn, l1, 0.7), 0.6)
-		var d2 := d.rotated(Vector3.UP, turn)
-		var l2 := rng.randf_range(2.5, 3.5) * s
-		var p2 := _limb(a, t, p1.tip, d2, l2, Vector3(1.3, rng.randf_range(0.8, 1.0), 0.6), Vector2(0.15, 0.7), r0 * 0.6, -10.0, "oak_limb", false, rng.randf_range(-0.5, 0.5), 0.6)
-		# A limb off the climb out to the dome's upper flank,
-		var od := d.rotated(Vector3.UP, -signf(turn) * rng.randf_range(0.6, 1.0))
-		var o1 := _limb(a, t, p1.tip, od, rng.randf_range(4.0, 5.5) * s, Vector3(0.7, rng.randf_range(0.35, 0.5), 0.2), Vector2(0.12, 0.75), r0 * 0.35, -10.0, "oak_limb", false, rng.randf_range(-1.0, 1.0), 0.35)
-		crown_tips.append(o1.tip)
-		# and its head: two or three limbs spreading out under the top.
-		var n_head := rng.randi_range(2, 3)
-		var head0 := rng.randf() * TAU
-		for j in n_head:
-			var hd := Vector3(sin(head0 + TAU * j / n_head), 0.0, cos(head0 + TAU * j / n_head))
-			var hb := _limb(a, t, p2.tip, hd, rng.randf_range(3.5, 5.0) * s, Vector3(0.7, rng.randf_range(0.3, 0.45), 0.15), Vector2(0.12, 0.75), r0 * 0.3, -10.0, "oak_limb", false, rng.randf_range(-1.0, 1.0), 0.35)
-			crown_tips.append(hb.tip)
 	# The long low limbs: off the bole below the fork, between the big limbs, out sideways, sagging, tips lifting,
 	# each with a side limb off its first piece.
 	var n_low := rng.randi_range(OAK_FORM.low.x, OAK_FORM.low.y)
+	var low_y := fork - OAK_FORM.low_top
 	for k in n_low:
-		var ang := ang0 + TAU * (k + 0.5) / n_low + rng.randf_range(-0.35, 0.35)
+		var ang := deck_at + PI + k * GOLDEN + rng.randf_range(-0.2, 0.2)   # (the highest away from the deck's side)
 		var d := Vector3(sin(ang), 0.0, cos(ang))
-		var root := c + Vector3.UP * (fork - rng.randf_range(0.6, 1.4))
+		var root := c + Vector3.UP * low_y
+		low_y -= rng.randf_range(OAK_FORM.low_gap.x, OAK_FORM.low_gap.y)
 		var r0 := t.radius * rng.randf_range(0.34, 0.4)
 		var turn := rng.randf_range(-0.35, 0.35)
 		var l1 := t.radius + rng.randf_range(OAK_FORM.low_reach.x, OAK_FORM.low_reach.y) * 0.6 * s
@@ -855,14 +885,20 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 	# oak, try the gaps between its limb levels too.)
 	var best := -1.0
 	var ys: Array = [y] if not oak else [t.stem - 0.6, t.stem - 1.1, t.stem - 0.2, t.crown_base - 0.4]
+	if oak:   # (and every height from under the fork to the bole's top, for a gap between the limbs)
+		var yy := t.crown_base - 1.6
+		while yy < t.stem - 0.2:
+			ys.append(yy)
+			yy += 0.3
 	for yy in ys:
+		var wood := _wood_near(t, c, float(yy))
 		for k in 24:
 			var ang := TAU * k / 24.0
 			var d := Vector3(sin(ang), 0.0, cos(ang))
 			var from := c + Vector3.UP * (float(yy) + 0.3) + d * (r + 1.4)
 			var run := 0.0
 			var across := d.cross(Vector3.UP).normalized() * 0.6   # (both ends of the rail, as well as its middle)
-			if not _way_in(a, t, o, c, float(yy), d):
+			if not _way_in(a, t, o, c, float(yy), d) or not _deck_clear(t, o, c, float(yy), d, wood):
 				continue
 			while run < 30.0 and a.segment_clear(from, from + d * (run + 2.0), 0.6, -1) and a.segment_clear(from + across, from + across + d * (run + 2.0), 0.5, -1) and a.segment_clear(from - across, from - across + d * (run + 2.0), 0.5, -1) and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6) and _leaf_free(a, from + across + d * (run + 1.5), 0.4) and _leaf_free(a, from - across + d * (run + 1.5), 0.4):
 				run += 2.0
@@ -881,6 +917,70 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 	a._add_perch(p)
 	a.outposts.append(o)
 	return true
+
+
+## The room an outpost takes on its tree, from the deck's top: down under it (planks and bearers) and up over it
+## (the hangar, and a bird and its rider standing).
+const DECK_UNDER := 0.3
+const DECK_ROOM := 0.6
+const DECK_GAP := 0.03   ## m of air kept between the room and the wood (more than the 10 cm samples can miss)
+const DECK_BOLT := 0.25  ## m: the deck's inner strip, bolted against the trunk and the feet of an oak's stems
+
+
+## Is the room an outpost on `t` at height y facing `d` takes (its deck, the hangar, DECK_UNDER under and DECK_ROOM
+## over it, but for the strip it's bolted on by, DECK_BOLT) clear of the tree's own wood as drawn (TreeData.limbs, `wood` = _wood_near's samples of them)? The way in
+## and the line out from the rail don't cover it: an oak's limbs out of the fork ran up through decks and hangars.
+static func _deck_clear(t: ArenaLayout.TreeData, o: ArenaLayout.OutpostData, c: Vector3, y: float, d: Vector3, wood: Array) -> bool:
+	var trial := ArenaLayout.OutpostData.new()
+	trial.out = d
+	trial.width = o.width
+	trial.depth = o.depth
+	_place(t, trial, c, y)
+	var side := d.cross(Vector3.UP).normalized()
+	var mid := trial.centre + Vector3.UP * (DECK_ROOM - DECK_UNDER) * 0.5 + d * DECK_BOLT * 0.5
+	var half := Vector3(trial.width * 0.5, (DECK_ROOM + DECK_UNDER) * 0.5, (trial.depth - DECK_BOLT) * 0.5)
+	for w in wood:
+		var q: Vector3 = w[0] - mid
+		var e := Vector3(absf(q.dot(side)), absf(q.y), absf(q.dot(d))) - half
+		var outside := Vector3(maxf(e.x, 0.0), maxf(e.y, 0.0), maxf(e.z, 0.0)).length() + minf(maxf(e.x, maxf(e.y, e.z)), 0.0)
+		if outside < float(w[1]) + DECK_GAP:
+			return false
+	return true
+
+
+## Points along `t`'s drawn limbs (every 10 cm) near height y round its trunk, as [point, radius] -- leaving out what
+## is hidden inside the bole.
+static func _wood_near(t: ArenaLayout.TreeData, c: Vector3, y: float) -> Array:
+	var out := []
+	for l in t.limbs:
+		var pts: PackedVector3Array = l[0]
+		var radii: PackedFloat32Array = l[1]
+		for i in pts.size() - 1:
+			var r := maxf(radii[i], radii[i + 1])
+			if minf(pts[i].y, pts[i + 1].y) - r > y + DECK_ROOM + 0.5 or maxf(pts[i].y, pts[i + 1].y) + r < y - DECK_UNDER - 0.5:
+				continue
+			if minf(_flat_from(c, pts[i]), _flat_from(c, pts[i + 1])) - r > t.radius + 2.5:
+				continue
+			var n := maxi(1, ceili(pts[i].distance_to(pts[i + 1]) / 0.1))
+			for k in n + 1:
+				var u := float(k) / n
+				var p := pts[i].lerp(pts[i + 1], u)
+				var pr := lerpf(radii[i], radii[i + 1], u)
+				if _flat_from(c, p) + pr < _bole_r(t, p.y):
+					continue
+				out.append([p, pr])
+	return out
+
+
+## The bole's radius at height y as ArenaBuilder._trunk draws it (flared at the foot; an oak's narrowing over its fork).
+static func _bole_r(t: ArenaLayout.TreeData, y: float) -> float:
+	var oak := t.kind == ArenaLayout.Kind.BROADLEAF
+	var r := t.radius * lerpf(1.0, 0.4, clampf(y / t.height, 0.0, 1.0))
+	var top := t.trunk_top().y - ArenaLayout.GROUND_Y
+	if oak and t.crown_base > 0.0 and y > t.crown_base:
+		r = t.radius * lerpf(0.9, 0.6, clampf((y - t.crown_base) / maxf(top - t.crown_base, 0.1), 0.0, 1.0))
+	var flare := 0.55 if oak else (0.45 if t.form == "veteran" else 0.3)
+	return r * (1.0 + flare * exp(-maxf(y, 0.0) / (0.9 if oak else 0.6)))
 
 
 ## The deck's centre for an outpost on `t` (trunk foot `c`) at height y, facing o.out.
