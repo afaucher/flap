@@ -891,6 +891,8 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 			ys.append(yy)
 			yy += 0.3
 	for yy in ys:
+		if best >= 30.0:
+			break   # (a run can't be longer: nothing after can win)
 		var wood := _wood_near(t, c, float(yy))
 		for k in 24:
 			var ang := TAU * k / 24.0
@@ -898,7 +900,11 @@ static func _outpost(a: ArenaLayout, t: ArenaLayout.TreeData, rng: RandomNumberG
 			var from := c + Vector3.UP * (float(yy) + 0.3) + d * (r + 1.4)
 			var run := 0.0
 			var across := d.cross(Vector3.UP).normalized() * 0.6   # (both ends of the rail, as well as its middle)
-			if not _way_in(a, t, o, c, float(yy), d) or not _deck_clear(t, o, c, float(yy), d, wood):
+			if not _deck_clear(t, o, c, float(yy), d, wood) or not _way_in(a, t, o, c, float(yy), d):   # (the room first: it's local, and cheap)
+				continue
+			# (A run only wins past the best: one whose line isn't clear that far can't, so skip measuring it. The same
+			# lines as the loop's step at run = best, so what wins is the same.)
+			if best >= 0.0 and not (a.segment_clear(from, from + d * (best + 2.0), 0.6, -1) and a.segment_clear(from + across, from + across + d * (best + 2.0), 0.5, -1) and a.segment_clear(from - across, from - across + d * (best + 2.0), 0.5, -1)):
 				continue
 			while run < 30.0 and a.segment_clear(from, from + d * (run + 2.0), 0.6, -1) and a.segment_clear(from + across, from + across + d * (run + 2.0), 0.5, -1) and a.segment_clear(from - across, from - across + d * (run + 2.0), 0.5, -1) and _leaf_free(a, from + d * (run + 2.0), 0.6) and _leaf_free(a, from + d * (run + 1.0), 0.6) and _leaf_free(a, from + across + d * (run + 1.5), 0.4) and _leaf_free(a, from - across + d * (run + 1.5), 0.4):
 				run += 2.0

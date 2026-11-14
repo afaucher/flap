@@ -2618,7 +2618,7 @@
   "edits": [
    {
     "file": "scripts/world/pinewood.gd",
-    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d) or not _deck_clear(t, o, c, float(yy), d, wood):\n",
+    "find": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood) or not _way_in(a, t, o, c, float(yy), d):   # (the room first: it's local, and cheap)\n",
     "replace": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood):\n"
    }
   ]
@@ -6035,7 +6035,7 @@
   "edits": [
    {
     "file": "scripts/world/pinewood.gd",
-    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d) or not _deck_clear(t, o, c, float(yy), d, wood):\n",
+    "find": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood) or not _way_in(a, t, o, c, float(yy), d):   # (the room first: it's local, and cheap)\n",
     "replace": "\t\t\tif not _way_in(a, t, o, c, float(yy), d):\n"
    }
   ]
