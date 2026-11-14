@@ -14,6 +14,9 @@ Never launch a windowed Godot directly: these scripts run it on a hidden desktop
 | `--only <id>` | one bird, framed close |
 | `--pose glide\|flap\|upstroke\|folded\|flare` | a static pose (`RigPoses`); folded is perched, feet gripping |
 | `--view top\|front\|three\|under\|side\|wing\|lead\|head\|profile\|nape\|throat\|feet\|toes` | the camera: `wing` / `lead` the arm wing, `nape` / `throat` the neck's joins, `feet` / `toes` the grip |
+| `--view rider\|back\|fore\|root\|rootf` | close on the top: `rider` from the rider's seat past the head (the closest the game's camera gets), `back` / `fore` wings spread from behind / ahead and above, `root` / `rootf` one wing's root; `--zoom` |
+| `--light game` | the game's own light (`ForestLight`, `--look`) instead of the studio's: judge colours and texture in it |
+| `--arm-chart-old` | the arm wing's feather chart as it was (A/B; `tests/probe_wing_uv.gd` measures it) |
 | `--zoom <x>`, `--ortho` | closer; orthographic (true silhouette; use it for close-ups, perspective clips on the near plane) |
 | `--sun front\|back`, `--light studio\|flat` | back light shows translucency |
 | `--time <s>` | freeze the clock: repeatable shots for A/B |

@@ -38,8 +38,19 @@ measurement of what is drawn.**
 - Body tiles too busy ("pinecone / leopard"); square covert tips ("tombstones"); a mirrored projection's herringbone
   down the keel; down shells as floating dashed lines -> replaced by fraying the body's edge.
 - Silhouette cards made larger and lifted stood off the back as a shelf.
+- Scapular cards laid on the tangent at their roots read as two raised slabs, and left the white underwing showing in
+  the gap behind the arm wing. Aimed out along the wing they stood up like blinds. Real ones run straight back and lie
+  flat over the wing's root: set each card's tip on what is under it (`docs/research/scapulars.md`).
 - `BACKLIGHT` is shadowed by the feather above: use transmittance.
 - Heads at 2x life forced stubby beaks.
+- Close-up feather fixes (finer, shallower barbs; a jittered body tile; frayed tips; faint shafts) read plainer up close
+  and lost the feathers' ribs at a distance: the coarse relief and the shafts are what carry a light bird's feathers.
+  The fray was invisible at the rider's distance. Parked on branch `feather-closeup-parked`; judge any texture change
+  at the rider cam and the chase camera both, in game light (`--light game`).
+- The arm wing's texture smeared where it leaves the body: its chart spanned a rest chord shorter than the wing's,
+  kept the body loop's u spread all the way out (shear) and squeezed the join into 0.04 L. Found by measuring the
+  chart's stretch and density per triangle against the trunk's (`tests/probe_wing_uv.gd`), not by eye
+  (`arm-chart-*`).
 
 ## Numbers
 - An unsplit lift rotation steepened every glide ~0.6 deg; the phugoid damper misread flap thrust and held the nose

@@ -145,7 +145,7 @@ void fragment() {
 	ALBEDO = mix(ALBEDO, vec3(0.05, 0.05, 0.11), gl.w * sheen * 0.8);
 	// (transmittance, not BACKLIGHT: the feather above shadows each card from a sun behind it, and BACKLIGHT is
 	// shadowed with it; transmittance reads the thickness off the shadow map, so a thin vane glows through)
-	float through = gl.z * sheen * (1.0 - 0.8 * t.g) * mix(0.6, 1.0, v);
+	float through = gl.z * sheen * (1.0 - 0.8 * t.g) * mix(0.6, 1.0, v) * (contour ? 0.0 : 1.0);   // (a silhouette card lies on the body or the wing: nothing shines through it)
 	SSS_TRANSMITTANCE_COLOR = vec4(ALBEDO * through * 3.0 * through_boost, 1.0);
 	SSS_TRANSMITTANCE_DEPTH = 0.02 * through_boost;
 	SSS_TRANSMITTANCE_BOOST = 0.3 * through_boost;
@@ -176,7 +176,7 @@ void fragment() {
 	v_barb = tu * sign(us - shaft_u + 1e-4) * invmax + tv * invmax * 0.6;   // (left unnormalised: light() makes it a unit tangent)
 	float pale = clamp(dot(ALBEDO, vec3(0.3, 0.59, 0.11)) * 3.0, 0.0, 1.0);
 	v_through = through * (0.35 + 0.65 * pale);
-	v_edge = edge * k * (0.4 + 0.6 * pale) * (1.0 - t.g);
+	v_edge = edge * k * (0.4 + 0.6 * pale) * (1.0 - t.g) * (contour ? smoothstep(0.55, 0.85, v) : 1.0);   // (a card's sides lie on the next: only its tip is free)
 	v_spec = vec2(SPECULAR * (1.0 - ROUGHNESS) * 2.0, mix(0.06, 0.3, ROUGHNESS));
 }
 

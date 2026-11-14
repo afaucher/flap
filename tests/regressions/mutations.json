@@ -6053,5 +6053,131 @@
     "replace": "\t\tvar root: Vector3 = c + Vector3.UP * (fork + rng.randf_range(-0.3, 0.4))\n"
    }
   ]
- }
+ },
+  {
+    "id": "scapulars-stand-off-the-back",
+    "bug": "The scapular cards were laid on the tangent at their roots, inboard on the back: two raised slabs that lit apart from the back, while beside the body behind the arm wing the white underwing showed through (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\t\tif not spl.is_empty():\n\t\t\tvar laid := _lay_card(d)\n",
+        "replace": "\t\tif false:\n\t\t\tvar laid := _lay_card(d)\n"
+      }
+    ]
+  },
+  {
+    "id": "scapulars-fan-past-folded-back",
+    "bug": "Folded, the rear scapulars ran past the body's outline where it tapers to the tail, fanning out at the lower back (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\t\treturn Vector3(signf(p.x) * minf(absf(p.x), lerpf(w, absf(p.x), open)), p.y, p.z)\n",
+        "replace": "\t\treturn p\n"
+      }
+    ]
+  },
+  {
+    "id": "scapulars-follow-other-wing",
+    "bug": "Each side's scapulars must follow their own wing's fold (a roll folds one wing more): with the sides swapped they spread and drew in with the other wing (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar wi := 0 if float(d.side) < 0.0 else 1\n\tvar open := 1.0 - wing_fold(wi)\n\tvar reach",
+        "replace": "\tvar wi := 1 if float(d.side) < 0.0 else 0\n\tvar open := 1.0 - wing_fold(wi)\n\tvar reach"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-rest-chord",
+    "bug": "The arm wing's feather chart spanned a rest chord shorter than the spread wing's and no thickness: the tile stretched 2.5-6x across the chord and smeared round the leading edge (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar j := shape.joints(0.0)   # (the spread wing, in its plane)\n",
+        "replace": "\treturn Vector3((u - ARM_U0) * (l[0] + l[1]) + _L * 0.04, rc * lerpf(0.6, 0.35, u), 0.0)\n\tvar j := shape.joints(0.0)   # (the spread wing, in its plane)\n"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-no-bone-depth",
+    "bug": "The arm chart's chord left out the bone's depth behind the leading edge, so the chart covered less chord than drawn (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\treturn Vector3(along, depth + rc * lerpf(0.42, 0.26, u), thick)",
+        "replace": "\treturn Vector3(along, rc * lerpf(0.42, 0.26, u), thick)"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-u-sheared",
+    "bug": "Each arm station kept its body-loop point's own u all the way to the wrist, shearing the tile across ever narrower chords (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\treturn 1.0 - smoothstep(0.0, 3.0, float(k)) if arm_chart_even else 1.0",
+        "replace": "\treturn 1.0"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-join-squeezed",
+    "bug": "The arm's connector rows from the body's loop were squeezed into 0.04 L of chart: feathers drawn about twice the size where the wing meets the body (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar along := (u - 0.25 * ARM_U0) * (l[0] + l[1])",
+        "replace": "\tvar along := (u - ARM_U0) * (l[0] + l[1]) + _L * 0.04"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-gpu-u-kept",
+    "bug": "The GPU arm (arm_place) must fade the loop point's u as the rig does (body_tab's w), or its feather coordinates differ from the GDScript build's (2026-11-12).",
+    "tests": [
+      "gpu_test_arm"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/arm_place.gdshaderinc",
+        "find": "mix(fc0.x, lfc.x, au.w)",
+        "replace": "lfc.x"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-gpu-thickness",
+    "bug": "The GPU arm (arm_place) must run v round the leading edge's thickness as the rig does, or its feather coordinates differ from the GDScript build's (2026-11-12).",
+    "tests": [
+      "gpu_test_arm"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/arm_place.gdshaderinc",
+        "find": "length(vec2(ax * au.y, ar_naca(ax) * au.z))",
+        "replace": "ax * au.y"
+      }
+    ]
+  }
 ]

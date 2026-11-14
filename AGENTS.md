@@ -60,7 +60,9 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
   wing FK + fold IK, leg IK, head look, feathers; `docs/design/wing_rig.md`; each wing its own controls, so a roll
   shapes them apart -- the outer twisted up, the inner twisted down and flexed, the outer beating wider, the tail
   against the roll, the head counter-rolled: `_roll_shape`, `BirdRig.roll_shape` off for the A/B,
-  `docs/research/turning_kinematics.md`, `test_roll_shape`, `tests/probe_turn_wings.gd` films the moves), `WingShape` (per-species planform,
+  `docs/research/turning_kinematics.md`, `test_roll_shape`, `tests/probe_turn_wings.gd` films the moves; the scapular cards
+lie flat from the back over the wing's root, `_lay_card`, `docs/research/scapulars.md`, `test_scapulars`; the arm wing carries the body's feather tile on as evenly as the trunk's, `_arm_station_chart`, `test_wing_chart`,
+  `tests/probe_wing_uv.gd`), `WingShape` (per-species planform,
   calibrated to the flight model's span and area), `PlayerController` (gamepad + mouse), `ChaseCamera`.
 - `scripts/ai/`: `AIPilot` (goal, guidance, avoidance; turns within what the lift holds, lines up for the final on its own
   turning circle, manages its energy for the catch), `FlightPlanner` (lattice A*, the ways in to a perch), `Dubins`
