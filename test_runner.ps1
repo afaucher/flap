@@ -11,6 +11,9 @@
 # Logs: test_logs\<name>.log / .err.log (a sharded test: <name>.<shard>.log). A test passes only with exit code 0,
 # the ">>> [TEST PASSED] <name> <<<" marker, AND no "SCRIPT ERROR" or engine ERROR:/WARNING: line in its output.
 # Tests run under --fixed-fps 60, so physics is deterministic and runs as fast as the CPU allows.
+# A run that passes and then hangs at exit (an engine deadlock in quit() on Direct3D 12 under load: test_lib.ps1's
+# Test-ExitHung) is killed FlapExitGrace s after its PASS marker and run again, once; a second hang fails it. Each hang
+# is reported (HUNG) and logged to test_logs\exit_hangs.log.
 #
 # What keeps the suite quick (the wall clock is the slowest test, or the total over the slots, whichever is more):
 #   - the longest tests start first, by the times the last run took (test_logs\durations.csv, or the main
@@ -45,14 +48,21 @@ if (-not $NoImport) { Update-FlapImport $godot }
 $tree = Get-WorkingTree $PSScriptRoot   # (what these runs test: test_logs\passed.txt records it)
 
 # A run: one process of a test (Shard -1: the test isn't sharded).
-function Start-Test($Run) {
-    return [PSCustomObject]@{ Run = $Run; Proc = (Start-TestRun $engine $PSScriptRoot $Run) }
+function Start-Test($Run, [bool]$Retried = $false) {
+    return [PSCustomObject]@{ Run = $Run; Proc = (Start-TestRun $engine $PSScriptRoot $Run); PassedAt = $null; NextLook = 0.0; Retried = $Retried }
 }
+function Test-Done($r) { return $r.Proc.HasExited -or $r.Proc.Watch.Elapsed.TotalSeconds -gt $TimeoutSec -or (Test-ExitHung $r) }
 
 $script:times = Read-TestDurations $PSScriptRoot
+# "pass", "fail", or "retry" (passed, then hung at exit: Test-ExitHung; once).
 function Finish-Test($r) {
-    if (-not $r.Proc.HasExited) { $r.Proc.Kill() }   # (timed out)
+    $hung = Test-ExitHung $r
+    if (-not $r.Proc.HasExited) { $r.Proc.Kill() }   # (timed out, or hung at exit)
     $r.Proc.Wait()
+    if ($hung) {
+        Write-ExitHang $PSScriptRoot $r.Run.Label $r.Retried
+        if (-not $r.Retried) { return "retry" }
+    }
     $out = $r.Proc.Out; $err = $r.Proc.Err
     $label = $r.Run.Label
     Set-Content -Path "$logDir\$($r.Run.Log).log" -Value $out
@@ -66,7 +76,17 @@ function Finish-Test($r) {
         Write-Host "  FAIL  $label  ($secs s, exit $($r.Proc.Proc.ExitCode))" -ForegroundColor Red
         ($out + "`n" + $err) -split "`n" | Where-Object { $_ -match "ASSERT FAILED|SCRIPT ERROR|Parse Error|ERROR:|WARNING:|TEST FAILED" } | Select-Object -First 15 | ForEach-Object { Write-Host "        $_" }
     }
-    return $ok
+    return $(if ($ok) { "pass" } else { "fail" })
+}
+# Reaps the finished runs: a hung one starts again in its place.
+function Reap-Tests {
+    foreach ($r in @($script:running | Where-Object { Test-Done $_ })) {
+        $script:running = @($script:running | Where-Object { $_ -ne $r })
+        $v = Finish-Test $r
+        if ($v -eq "retry") { $script:running += Start-Test $r.Run $true; $script:retried += $r.Run.Label; continue }
+        $script:total += 1
+        if ($v -ne "pass") { $script:failed += $r.Run.Label }
+    }
 }
 
 # The last run's times (label -> wall seconds): this checkout's, else the main checkout's (a fresh worktree has none).
@@ -81,30 +101,21 @@ $runs = @($runs | Sort-Object -Property @{ Expression = { if ($last.ContainsKey(
 
 # 16 at a time: past it (on 32 threads) the suite got no quicker, the slowest test sets the pace.
 $max = if ($Jobs -gt 0) { $Jobs } else { [Math]::Max(2, [Math]::Min(16, [Environment]::ProcessorCount - 4)) }
-$running = @(); $failed = @(); $total = 0
+$running = @(); $failed = @(); $retried = @(); $total = 0
 $suite = [Diagnostics.Stopwatch]::StartNew()
 foreach ($run in $runs) {
     while ($true) {
-        $done = @($running | Where-Object { $_.Proc.HasExited -or $_.Proc.Watch.Elapsed.TotalSeconds -gt $TimeoutSec })
-        foreach ($r in $done) {
-            $total += 1
-            if (-not (Finish-Test $r)) { $failed += $r.Run.Label }
-            $running = @($running | Where-Object { $_ -ne $r })
-        }
+        Reap-Tests
         if ($running.Count -lt $max) { break }
         Start-Sleep -Milliseconds 50
     }
     $running += Start-Test $run
 }
 while ($running.Count -gt 0) {
-    $done = @($running | Where-Object { $_.Proc.HasExited -or $_.Proc.Watch.Elapsed.TotalSeconds -gt $TimeoutSec })
-    if ($done.Count -eq 0) { Start-Sleep -Milliseconds 50; continue }
-    foreach ($r in $done) {
-        $total += 1
-        if (-not (Finish-Test $r)) { $failed += $r.Run.Label }
-        $running = @($running | Where-Object { $_ -ne $r })
-    }
+    Reap-Tests
+    Start-Sleep -Milliseconds 50
 }
+if ($retried.Count) { Write-Host "Hung at exit after passing, run again: $($retried -join ', ') (test_logs\exit_hangs.log)." -ForegroundColor Yellow }
 $script:times.Keys | Sort-Object | ForEach-Object { "$_,$($script:times[$_])" } | Set-Content -Path $durFile
 # The tests that passed, every shard, on this tree (if nothing changed while they ran): mutation_check.ps1's baseline.
 $passed = @($names | Where-Object { $n = $_; -not ($failed | Where-Object { ($_ -split "#")[0] -eq $n }) })

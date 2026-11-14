@@ -80,7 +80,9 @@ void ar_station(int side, int k, out vec3 e, out vec3 nu, out vec3 aft_u, out fl
 	vec3 bone = arc <= l_h ? mix(sh, p3.xyz, arc / max(l_h, 1e-5)) : mix(p3.xyz, p4.xyz, (arc - l_h) / max(l_f, 1e-5));
 	float depth = max(dot(bone - e, aft_u), 0.0);
 	chord = (depth + rc * mix(0.42, 0.26, u)) * open;
-	thick = rc * mix(0.14, 0.055, u) * (1.0 + 0.15 * exp(-pow((u - 0.25) / 0.2, 2.0))) * open;
+	// (squared by hand: pow of a negative base is undefined -- Direct3D 12 makes it exp2(2 log2 x), NaN for u < 0.25)
+	float bulge = (u - 0.25) / 0.2;
+	thick = rc * mix(0.14, 0.055, u) * (1.0 + 0.15 * exp(-bulge * bulge)) * open;
 	lip = (0.0075 * p5.w / 0.45 + AR_CAMBER * 0.45 * rc) * open;
 	if (k == AR_STATIONS + 1) {
 		chord = 0.0;

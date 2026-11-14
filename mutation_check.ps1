@@ -221,13 +221,22 @@ try {
             foreach ($j in @($active)) {
                 foreach ($p in @($j.Procs)) {
                     $tp = $p.Proc
-                    if (-not (($tp.FirstFail -and -not $AllChecks) -or $tp.HasExited -or $tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec)) { continue }
+                    $hung = Test-ExitHung $p
+                    if (-not (($tp.FirstFail -and -not $AllChecks) -or $tp.HasExited -or $tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec -or $hung)) { continue }
                     $tp.Kill(); $tp.Wait(); Add-RunLog $j $p
+                    if ($hung) {   # (passed, then hung at exit: run it again in its place, once; test_lib.ps1)
+                        Write-ExitHang $root "$($j.Id): $($p.Run.Label)" $p.Retried
+                        if (-not $p.Retried) {
+                            $j.Procs = @($j.Procs | Where-Object { $_ -ne $p }) + @([PSCustomObject]@{ Run = $p.Run; Proc = (Start-TestRun $engine $j.Tree $p.Run); T0 = $loop.Elapsed.TotalSeconds; PassedAt = $null; NextLook = 0.0; Retried = $true })
+                            $busy = $true
+                            continue
+                        }
+                    }
                     $j.Procs = @($j.Procs | Where-Object { $_ -ne $p }); $j.Ended += 1; $running -= 1; $busy = $true
                     $ok = (-not $tp.FirstFail) -and (Test-RunPassed $p.Run.Name $tp.Proc.ExitCode $tp.Out $tp.Err)
                     if ($AllChecks) { $lbl = $p.Run.Label; $j.Lines += @((($tp.Out + "`n" + $tp.Err) -split "`n") | Where-Object { [FlapTestProc]::FailLine.IsMatch($_) } | ForEach-Object { "${lbl}: $($_.Trim())" }) }
                     if (-not $ok -and -not $j.Failed) {
-                        $why = if ($tp.FirstFail) { $tp.FirstFail.Trim() } elseif ($tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec) { "timed out" } else { "exit $($tp.Proc.ExitCode)" }
+                        $why = if ($hung) { "passed, then hung at exit twice" } elseif ($tp.FirstFail) { $tp.FirstFail.Trim() } elseif ($tp.Watch.Elapsed.TotalSeconds -gt $TimeoutSec) { "timed out" } else { "exit $($tp.Proc.ExitCode)" }
                         $j.Failed = [PSCustomObject]@{ Label = $p.Run.Label; Why = $why; Sec = $tp.Watch.Elapsed.TotalSeconds; Out = $tp.Out + "`n" + $tp.Err }
                     }
                 }
@@ -274,7 +283,7 @@ try {
             foreach ($j in $active) {
                 while ($running -lt $slots -and $j.Next -lt $j.Released) {
                     $run = $j.Runs[$j.Next]; $j.Next += 1
-                    $j.Procs += [PSCustomObject]@{ Run = $run; Proc = (Start-TestRun $engine $j.Tree $run); T0 = $loop.Elapsed.TotalSeconds }
+                    $j.Procs += [PSCustomObject]@{ Run = $run; Proc = (Start-TestRun $engine $j.Tree $run); T0 = $loop.Elapsed.TotalSeconds; PassedAt = $null; NextLook = 0.0; Retried = $false }
                     $running += 1; $busy = $true
                 }
             }

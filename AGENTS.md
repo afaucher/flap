@@ -221,6 +221,16 @@ Guardrail 4 applies: **build and run the tests after any code change** (`.\build
 - `scripts/app/perf.gd` + `.\perf.ps1`: the frame profiler. Code marks sections (`Perf.t()` / `Perf.add()`); the
   game's `--perf <s>` writes per-frame CSV and a summary (sections per frame and per physics tick, frame pacing,
   ticks per frame, worst frames, the machine's load while it ran). Rules and numbers: `docs/design/performance.md`.
+- Renderer: Direct3D 12 on Windows (`project.godot`, `rendering_device/driver.windows`; Godot 4.7's Vulkan reports no
+  HDR there). HDR display output (`HdrOutput`): on where the window's screen offers it (Windows HDR on), the display
+  asked again every `POLL` (0.5 s: the window moved to another screen, Windows HDR switched), F4 toggles, `--sdr` off;
+  `gpu_test_hdr_output` (a stand-in display, and the real screens where one offers HDR). Vulkan for an A/B: `-Engine
+  --rendering-driver -Engine vulkan` (probe.ps1), or `--rendering-driver vulkan` before `--`. In GLSL, `pow()` of a
+  negative base is NaN on Direct3D 12 (Vulkan happened to square it): square by hand. Godot 4.7 on Direct3D 12
+  sometimes deadlocks in `quit()` under heavy load (about 1 in 10 `gpu_test_speckle` copies with 12 GPU tests at once;
+  none alone, none on Vulkan; not SSAO, nor frames left to render): the test runner and `mutation_check.ps1` kill a
+  run still going `FlapExitGrace` (20 s) after its PASS marker and run it again once (`test_lib.ps1`'s
+  `Test-ExitHung`; a second hang fails), logged in `test_logs\exit_hangs.log`.
 - Looks: `ForestLight.LOOKS` (golden by default, afternoon, misty_morning, overcast; `--look`, F6), graded as in
   `docs/design/color_grading.md` (`tests/probe_grade.gd` renders fixed views; `tools/grade_scopes.py` charts them
   beside the concept art).

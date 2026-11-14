@@ -6024,5 +6024,47 @@
     "replace": "\t\tif redef[i]:\n\t\t\tif not gpu_place:\n\t\t\t\tfeather_codes.clear()\n\t\t\tvar pd := Perf.t()\n"
    }
   ]
+ },
+ {
+  "id": "hdr-vulkan-default",
+  "bug": "The game rendered on Vulkan by default, which in Godot 4.7 reports no HDR on Windows: HDR output never came on outside .\\hdr.ps1, even on an HDR monitor with Windows HDR on (2026-11-13).",
+  "tests": [
+   "gpu_test_hdr_output"
+  ],
+  "edits": [
+   {
+    "file": "project.godot",
+    "find": "rendering_device/driver.windows=\"d3d12\"\n",
+    "replace": ""
+   }
+  ]
+ },
+ {
+  "id": "hdr-screen-move",
+  "bug": "HDR output was decided once at the scene's start: a window opened on a screen without HDR and dragged to the HDR monitor (or Windows HDR turned on while the game ran) stayed SDR (2026-11-13).",
+  "tests": [
+   "gpu_test_hdr_output"
+  ],
+  "edits": [
+   {
+    "file": "scripts/app/hdr_output.gd",
+    "find": "\t\tif display_offers.call() != _offered:\n",
+    "replace": "\t\tif false:\n"
+   }
+  ]
+ },
+ {
+  "id": "arm-pow-negative-nan",
+  "bug": "The GPU arm wing squared a negative number with pow(), undefined in GLSL: on Direct3D 12 (exp2 of 2 log2 x) it was NaN for the stations nearest the body, so the rows joining the wing to the trunk came out NaN -- positions and normals -- and the test, comparing distances, never saw a NaN (2026-11-13).",
+  "tests": [
+   "gpu_test_arm"
+  ],
+  "edits": [
+   {
+    "file": "scripts/bird/arm_place.gdshaderinc",
+    "find": "exp(-bulge * bulge)",
+    "replace": "exp(-pow(bulge, 2.0))"
+   }
+  ]
  }
 ]

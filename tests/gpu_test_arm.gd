@@ -6,7 +6,10 @@ extends TestCase
 ## swept, the hand lifted, fluffed and breathing. A GPU test: runs windowed.
 ## (The wrist end, the last ring, closes the loft inside the hand's piece: its chord and thickness are nothing, so it
 ## is a straight segment and its triangles slivers whose normals are whatever the rounding makes them, here as in the
-## rig. There it is held to the rig's positions, and its normals to being normals.)
+## rig. There it is held to the rig's positions, and its normals to being normals. The row beside it shares those
+## slivers: near the trailing edge their short side is a few um long, at ~0.2 m from the origin, where a float's
+## rounding is ~0.3 % of it -- so that row's normals are held to 5e-3 (a third of a degree), the rest to 5e-4.
+## Vulkan's rounding happened to match the rig's; Direct3D 12's doesn't, quite.)
 
 const ROWS := 16   # BirdRig.ROOT_ROWS + ARM_STATIONS + 2
 const COLS := 17   # ARM_AROUND + 1
@@ -98,8 +101,8 @@ func setup() -> void:
 				var arr := lm.mesh.surface_get_arrays(0)
 				var uvs: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
 				var uv2s: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
-				var worst := [0.0, 0.0, 0.0, 0.0, 0.0]
-				var at := ["", "", "", "", ""]
+				var worst := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+				var at := ["", "", "", "", "", ""]
 				for vi in ROWS * COLS:
 					var g := PackedFloat32Array()
 					for x in 14:
@@ -115,7 +118,13 @@ func setup() -> void:
 						e[1] = 0.0
 					else:
 						e.append(0.0)
-					for m in 5:
+					e.append(0.0)
+					if vi / COLS == ROWS - 2:   # (beside the wrist end: its normal shares the slivers, see the note at the top)
+						e[5] = e[1]
+						e[1] = 0.0
+					for m in 6:
+						if is_nan(e[m]):   # (a NaN vertex compares false with everything: count it the worst)
+							e[m] = INF
 						if e[m] > worst[m]:
 							worst[m] = e[m]
 							at[m] = "row %d col %d" % [vi / COLS, vi % COLS]
@@ -125,6 +134,7 @@ func setup() -> void:
 				check(worst[4] < 1e-4, "%s: the wrist end's normals are unit vectors (off by %.6f)" % [tag, worst[4]])
 				check(worst[0] < 1e-5, "%s: every vertex where the rig puts it (%.7f m, %s)" % [tag, worst[0], at[0]])
 				check(worst[1] < 5e-4, "%s: its normal as the rig smooths it (%.6f, %s)" % [tag, worst[1], at[1]])
+				check(worst[5] < 5e-3, "%s: beside the wrist end, its normal as the rig smooths it to float rounding (%.6f, %s)" % [tag, worst[5], at[5]])
 				check(worst[2] < 1e-5, "%s: its colour (%.6f, %s)" % [tag, worst[2], at[2]])
 				check(worst[3] < 1e-5, "%s: its feather coordinates (%.7f relative, %s)" % [tag, worst[3], at[3]])
 		rig.queue_free()

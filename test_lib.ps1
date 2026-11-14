@@ -295,6 +295,33 @@ function Test-RunPassed([string]$Name, [int]$ExitCode, [string]$Out, [string]$Er
     return ($ExitCode -eq 0) -and ($Out -match [regex]::Escape(">>> [TEST PASSED] $Name <<<")) -and (-not $failLine)
 }
 
+# A run that printed its PASS marker, no failing line, and is still running FlapExitGrace s later: hung at exit. Godot
+# 4.7 on Direct3D 12 sometimes deadlocks inside quit() under heavy load (gpu_test_speckle: about 1 in 10 copies with 12
+# GPU tests at once; never seen alone, nor on Vulkan), every thread waiting, the test's checks all done. The runners
+# kill it and run it again, once (a second hang fails it), and log it (Write-ExitHang). `r`: a run object with Run,
+# Proc, PassedAt ($null) and NextLook (0.0); the output is searched once a second.
+$FlapExitGrace = 20.0
+function Test-ExitHung($r) {
+    $tp = $r.Proc
+    if ($tp.HasExited -or $tp.FirstFail) { return $false }
+    $now = $tp.Watch.Elapsed.TotalSeconds
+    if ($null -eq $r.PassedAt) {
+        if ($now -lt $r.NextLook) { return $false }
+        $r.NextLook = $now + 1.0
+        if (-not $tp.Out.Contains(">>> [TEST PASSED] $($r.Run.Name) <<<")) { return $false }
+        $r.PassedAt = $now
+    }
+    return ($now - $r.PassedAt) -gt $FlapExitGrace
+}
+
+# Reports a run hung at exit (Test-ExitHung), on the console and in test_logs\exit_hangs.log.
+function Write-ExitHang([string]$Root, [string]$Label, [bool]$Again) {
+    $what = if ($Again) { "hung at exit again: failed" } else { "passed, then hung at exit (an engine deadlock in quit): running it again" }
+    Write-Host "  HUNG  $Label  $what" -ForegroundColor Yellow
+    $log = Join-Path $Root "test_logs\exit_hangs.log"
+    Add-Content -Path $log -Value ("{0:yyyy-MM-dd HH:mm:ss},{1},{2},{3}" -f (Get-Date), $Label, $(if ($Again) { "again" } else { "first" }), (Split-Path -Leaf $MyInvocation.PSCommandPath))
+}
+
 # A file in this checkout's test_logs, else the main checkout's (a fresh worktree has none yet).
 function Find-TestLog([string]$Root, [string]$File) {
     $p = Join-Path $Root "test_logs\$File"

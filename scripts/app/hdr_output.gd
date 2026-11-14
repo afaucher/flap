@@ -4,11 +4,21 @@ extends CanvasLayer
 ## monitor as HDR (Windows HDR on), so highlights -- sunlit feather edges, glints, the sun through the leaves --
 ## go brighter than paper white instead of being rolled off at it. F4 toggles it; a corner label says what the
 ## display reports. On by default where the display supports it (--sdr: off). Needs the Direct3D 12 renderer on
-## Windows (Vulkan reports no HDR support there): `.\hdr.ps1` runs the game so.
+## Windows (Vulkan reports no HDR support there), the project's default there (project.godot,
+## rendering_device/driver.windows). Whether the display offers it is asked again every POLL s, so it follows the
+## window dragged to another monitor and Windows HDR turned on or off while the game runs.
 ##   HdrOutput.add(self)   # in a scene's _ready
 
+const POLL := 0.5   ## s between asking the display whether it offers HDR
+
+## Whether the window's display offers HDR output now (a test stands in a display of its own before adding it).
+var display_offers := func() -> bool: return DisplayServer.window_is_hdr_output_supported(get_window().get_window_id())
+var requested := false   ## HDR output asked for now: wanted and offered
 var _label: Label
 var _shown := 0.0
+var _want := false      ## HDR wanted (F4, --sdr), whether or not the display offers it
+var _offered := false   ## whether the display offered it when last asked
+var _poll := POLL
 
 
 static func add(parent: Node) -> HdrOutput:
@@ -36,9 +46,13 @@ func _ready() -> void:
 
 
 func set_hdr(on: bool) -> void:
-	# (asking an SDR display, or the Vulkan renderer on Windows, only earns an engine warning)
-	var ok := DisplayServer.window_is_hdr_output_supported(get_window().get_window_id())
-	get_window().hdr_output_requested = on and ok
+	_want = on
+	_offered = display_offers.call()
+	requested = on and _offered
+	_poll = POLL
+	# (asking an SDR display, or the Vulkan renderer on Windows, only earns an engine warning: the window is asked
+	# only where the display itself says yes, whatever a test's stand-in says)
+	get_window().hdr_output_requested = requested and DisplayServer.window_is_hdr_output_supported(get_window().get_window_id())
 	_shown = 4.0
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -50,7 +64,9 @@ func _report() -> void:
 	var supported := DisplayServer.window_is_hdr_output_supported(id)
 	var enabled := DisplayServer.window_is_hdr_output_enabled(id)
 	var text := ""
-	if not supported:
+	if not supported and OS.get_name() == "Windows" and RenderingServer.get_current_rendering_driver_name() != "d3d12":
+		text = "HDR: needs Direct3D 12 (running %s)  F4" % RenderingServer.get_current_rendering_driver_name()
+	elif not supported:
 		text = "HDR: this display doesn't offer it (Windows HDR off?)  F4"
 	elif enabled:
 		text = "HDR on: peak %.0f nits, white %.0f nits  F4" % [DisplayServer.window_get_hdr_output_current_max_luminance(id), DisplayServer.window_get_hdr_output_current_reference_luminance(id)]
@@ -63,8 +79,14 @@ func _report() -> void:
 func _process(dt: float) -> void:
 	_shown = maxf(_shown - dt, 0.0)
 	_label.modulate.a = clampf(_shown, 0.0, 1.0)
+	# (dragged to another monitor, or Windows HDR switched: ask again)
+	_poll -= dt
+	if _poll <= 0.0:
+		_poll = POLL
+		if display_offers.call() != _offered:
+			set_hdr(_want)
 
 
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo and (e as InputEventKey).keycode == KEY_F4:
-		set_hdr(not get_window().hdr_output_requested)
+		set_hdr(not _want)
