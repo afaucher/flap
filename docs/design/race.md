@@ -229,7 +229,10 @@ The menu's four (arena 7, the map baked 2026-11-06 with the new oaks and pines):
 figure-eight of 17 gates from the rail next out from the middle, windows 7-8 m); technical high and low, 35 (a figure-eight of
 15 gates from the middle rail, 2.3-11 m); long level, 13 (7 gates, 7-8 m); long high and low, 12 (2.3-11 m). On that
 wood most seeds' free courses turn one way only (probe_courses: 7L 0R and the like); test_race's `_course_rules` takes
-seed 28, which turns both ways. Raced (probe_race, pilots and aces): on both eights every crow, owl and sparrow takes
+seed 28, which turns both ways. Re-baked 2026-11-11 with the oaks forking in two or three stems and their outposts out of
+their limbs (the oaks' outposts are start rails): technical high and low is now course 20 (a figure-eight of 16 gates,
+its windows over 8 m apart in height: 35's spanned 7.4 m), and `_course_rules` takes seed 11 (3L 6R; 28 now circles
+left only); the other three keep their seeds, still full and in style. Raced before that re-bake (probe_race, pilots and aces): on both eights every crow, owl and sparrow takes
 every gate; the hawk and falcon miss on technical 35 as planned, and on 19 the pilot hawk finishes; the finishes lost
 after the last gate (sparrow and falcon on 19, the falcon on 35) are the landing the combat AI session is fixing. The
 long ones were raced on the wood before that bake: every pilot and ace crow, owl and sparrow finished; the falcon

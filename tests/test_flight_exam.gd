@@ -31,10 +31,12 @@ const LOW_TIER := 6.0       ## m: an oak's limbs under this are its low tier (oa
 const EIGHT := [0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0]
 const OAK_BIRDS := [["crow", "owl", "sparrow"], ["hawk", "falcon"]]   ## the oak's and grove's shards' species
 ## Share each species must land on, by scene (default: "*"). The falcon's and the hawk's floors are lower under the
-## oak's crown (its low limbs ~4.5 m up: their stall speeds and turning circles leave them little room there).
+## oak's crown (its low limbs ~4.5 m up: their stall speeds and turning circles leave them little room there). The
+## falcon's oak_low floor is 0.8: over four exam oaks (seeds 1-4) it lands 79% of the two- and three-stemmed oak's
+## low limbs, 84% of the old one-fork oak's (whose seed 1 was its easiest, 70 of 72; docs/research/oak_form.md 11).
 const RATE := {
 	"*": {"crow": 0.95, "owl": 0.95, "hawk": 0.9, "falcon": 0.85, "sparrow": 0.95},
-	"oak_low": {"hawk": 0.95, "falcon": 0.9},
+	"oak_low": {"hawk": 0.95, "falcon": 0.8},
 	"pole": {"falcon": 0.9},
 	"oak_low_heights": {"hawk": 0.85, "falcon": 0.8},
 	"gates": {"falcon": 0.9},

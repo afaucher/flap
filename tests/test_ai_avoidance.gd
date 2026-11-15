@@ -8,6 +8,7 @@ extends TestCase
 ##   - just after take-off, the tree it left still counts (its other limbs), but not the branch it sat on;
 ##   - routes leave and reach a perch's tree past its trunk and limbs, not through them;
 ##   - hemmed in on every side, it keeps to the planned route; with no goal it still turns away from a trunk;
+##   - down a leg of its route that descends, it rides its line (from above it's brought down to it);
 ##   - a perch it can't make the approach to is given up after ATTEMPT_TIME and left alone for a while.
 
 
@@ -31,6 +32,9 @@ func setup() -> void:
 	_routes_round_own_trees()
 	_routes_out_of_tight_spots()
 	await _hemmed_in_keeps_route()
+	for id in ["hawk", "crow"]:
+		await _rides_down_descending_leg(id, 2.0)
+		await _rides_down_descending_leg(id, 0.0)
 	await _no_goal_still_avoids()
 	await _gives_up_unreachable_perch()
 	await _sets_aside_perch_without_route()
@@ -347,6 +351,37 @@ func _hemmed_in_keeps_route() -> void:
 	var d: Vector3 = steer[0]
 	check(pilot.avoiding > 0.0, "hemmed in: avoiding")
 	check(d.normalized().dot((aim - b.global_position).normalized()) > 0.99, "hemmed in: keeps to the route (%s)" % d)
+	await _free_all([b])
+
+
+## Down a leg of its route that descends (5 m over 50, open air), starting `over` m above its line: from above it's
+## brought down to the line within the leg's first 15 m, and from on it, it keeps to it (not driven under). Aiming at
+## the leg's end alone it lagged above the line, where the planned clearance under the wood above didn't hold (under
+## an oak's crown the avoidance then climbed a hawk over a low limb, and it came in high and fast).
+func _rides_down_descending_leg(id: String, over: float) -> void:
+	var layout := ArenaLayout.new()
+	var far := _tree(layout, 0.0, -125.0, 20.0, 0.3)
+	var goal := _limb(layout, far, 7.5, Vector3(0.0, 0.0, 1.0), 3.0)
+	var pilot := AIPilot.new(layout, 3)
+	var b := _bird(id, layout, pilot)
+	var a0 := Vector3(0.0, 14.0, 0.0)
+	var a1 := Vector3(0.0, 9.0, -50.0)
+	b.fly_from(a0 + Vector3.UP * over, Vector3.FORWARD, b.profile.v_best)
+	pilot._attempt_start = pilot.clock
+	_going(pilot, goal, [a0, a1, Vector3(0.0, 8.0, -110.0), goal.approach_anchor()])
+	var worst_over := -INF
+	var worst_under := INF
+	while b.global_position.z > -40.0 and pilot.wp == 1 and b.state == Bird.State.FLYING:
+		await get_tree().physics_frame
+		var along := -b.global_position.z
+		if along > 15.0:
+			var off := b.global_position.y - lerpf(a0.y, a1.y, along / 50.0)
+			worst_over = maxf(worst_over, off)
+			worst_under = minf(worst_under, off)
+	check(worst_over > -INF and pilot.wp == 1, "%s, %.0f m over the leg: flew it (wp %d, at z %.1f)" % [id, over, pilot.wp, b.global_position.z])
+	# (2026-11-12: at most 0.6 m above from 2 m over, 0.3 from on it; aiming at the leg's end, 1.7-1.8 m.)
+	check(worst_over < 1.0, "%s, %.0f m over a descending leg at its start: on its line from 15 m along (at most %.2f m above)" % [id, over, worst_over])
+	check(worst_under > -0.8, "%s, %.0f m over a descending leg at its start: not driven under its line (at most %.2f m under)" % [id, over, -worst_under])
 	await _free_all([b])
 
 

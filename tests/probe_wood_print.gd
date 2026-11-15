@@ -6,7 +6,7 @@ extends TestCase
 
 func setup() -> void:
 	var seed_arg := Boot.arg_value(OS.get_cmdline_user_args(), "--seed")
-	var a := Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
+	var a: ArenaLayout = (Pinewood.grow if OS.get_cmdline_user_args().has("--grow") else Pinewood.generate).call(int(seed_arg) if seed_arg != "" else 7)   # (--grow: as grown now, not the baked map)
 	var oaks := {}
 	var rest := []
 	for t in a.trees:

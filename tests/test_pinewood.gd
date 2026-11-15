@@ -7,7 +7,8 @@ extends TestCase
 ## bases birds rearm on); the AI's clearance queries see the decks; and the crowns leave sightlines. The stand has
 ## structure: clumps and open ground, a clearing and a glade, and the young pines out in the light. Every limb's
 ## perch lies on the limb as drawn (its top surface, thick oak limbs and thin pine ones alike: not inside the wood
-## near the trunk, not above it toward the tip).
+## near the trunk, not above it toward the tip). An oak forks in two or three stems, its other limbs off the bole
+## spread up it, and no outpost's deck, hangar or the room over it has its tree's limbs in it.
 
 
 func _init() -> void:
@@ -26,6 +27,7 @@ func setup() -> void:
 	for other in [3, 11, 21, 5]:   # (outposts face whatever open air a layout leaves: try several)
 		_outposts(Pinewood.grow(other))
 	_outpost_shuns_leaves()
+	_outpost_dodges_limbs()
 	_young_pines(a)
 	_perches_on_the_wood(a)
 	_structure(a)
@@ -257,6 +259,21 @@ func _oaks(a: ArenaLayout) -> void:
 			var y := lerpf(t.crown_base + 3.0, t.height * 0.9, k / float(n - 1))
 			open += int(a.obstacle_distance(Vector3(t.base.x, ArenaLayout.GROUND_Y + y, t.base.y)) > 0.0)
 		check(open >= n / 2, "oak %d: no stem up through its crown (%d of %d points up its axis in the air)" % [t.id, open, n])
+		# Its fork, as drawn: of the limbs leaving the bole (starting on its axis), two or three leave from the fork up
+		# (its stems), no more than three leave any metre of it (not eight from one spot), and they're spread up it.
+		var off_bole: Array[float] = []
+		for l in t.limbs:
+			var p0: Vector3 = (l[0] as PackedVector3Array)[0]
+			if Vector2(p0.x - t.base.x, p0.z - t.base.y).length() < 0.05:
+				off_bole.append(p0.y)
+		off_bole.sort()
+		var stems := off_bole.filter(func(y): return y >= t.crown_base - 0.01).size()
+		check(stems >= 2 and stems <= 3, "oak %d forks in two or three stems (%d limbs leave from its fork up)" % [t.id, stems])
+		var crowded := 0
+		for y0 in off_bole:
+			crowded = maxi(crowded, off_bole.filter(func(y): return y >= y0 and y < y0 + 1.0).size())
+		check(crowded <= 3, "oak %d: no more than three limbs leave any metre of its bole (%d)" % [t.id, crowded])
+		check(off_bole.size() >= 4 and off_bole[-1] - off_bole[0] >= 1.5, "oak %d: its limbs off the bole are spread up it (%d, over %.1f m)" % [t.id, off_bole.size(), off_bole[-1] - off_bole[0] if off_bole.size() > 0 else 0.0])
 	check(oaks >= 3, "a few oaks (%d)" % oaks)
 	check(in_clearing, "an oak stands in the clearing")
 
@@ -317,6 +334,72 @@ func _outpost_shuns_leaves() -> void:
 	check(moved.out.dot(d0) < 0.99 or absf(moved.centre.y - y0) > 0.01, "with leaves in front of one end of its rail, it faces elsewhere")
 
 
+## An outpost rebuilt with a limb laid through where its deck is moves to where no limb is; without the limb it
+## comes back where it was (both ways: it shuns wood in its own room, and only that).
+func _outpost_dodges_limbs() -> void:
+	var a := Pinewood.grow(7)
+	var o: ArenaLayout.OutpostData = null
+	for oo in a.outposts:
+		if a.trees[oo.tree_id].kind == ArenaLayout.Kind.BROADLEAF:
+			o = oo
+			break
+	check(o != null, "an oak with an outpost")
+	if o == null:
+		return
+	var t: ArenaLayout.TreeData = a.trees[o.tree_id]
+	var side: Vector3 = o.out.cross(Vector3.UP).normalized()
+	# A limb across the deck's middle, a little over it, out from the trunk along the rail's line.
+	var across := PackedVector3Array([o.centre + Vector3.UP * 0.25 - side * 1.5, o.centre + Vector3.UP * 0.25 + side * 1.5])
+	var rebuilt := func(limb: bool) -> ArenaLayout.OutpostData:
+		a.outposts.erase(o)
+		if limb:
+			t.limbs.append([across, PackedFloat32Array([0.12, 0.12]), "oak_limb"])
+		var rng := RandomNumberGenerator.new()
+		check(Pinewood._outpost(a, t, rng), "the oak's outpost built again (limb %s)" % limb)
+		var n: ArenaLayout.OutpostData = a.outposts.pop_back()
+		var cut := _limbs_in_outpost(t, n)
+		check(cut.x == 0.0, "rebuilt (limb %s), no limb in its room (%.2f m)" % [limb, cut.x])
+		if limb:
+			t.limbs.pop_back()
+		a.outposts.append(o)
+		return n
+	var same: ArenaLayout.OutpostData = rebuilt.call(false)
+	check(same.out.dot(o.out) > 0.99 and absf(same.centre.y - o.centre.y) < 0.01, "built again with no limb laid through it, the outpost is where it was")
+	var moved: ArenaLayout.OutpostData = rebuilt.call(true)
+	check(moved.out.dot(o.out) < 0.99 or absf(moved.centre.y - o.centre.y) > 0.01, "with a limb through its deck, it moves")
+
+
+## How much of `t`'s drawn limbs (m of axis, and the deepest, m) lies in outpost `o`'s deck (and 0.3 m under its
+## top), its hangar or the 0.6 m over the deck -- the wood outside the bole only (inside, it's hidden in the trunk), and
+## past the deck's inner 0.25 m (bolted against the trunk and the feet of an oak's stems: what it's fixed to).
+func _limbs_in_outpost(t: ArenaLayout.TreeData, o: ArenaLayout.OutpostData) -> Vector2:
+	var side: Vector3 = o.out.cross(Vector3.UP).normalized()
+	var mid: Vector3 = o.centre + Vector3.UP * 0.15 + o.out * 0.125
+	var half := Vector3(o.width * 0.5, 0.45, (o.depth - 0.25) * 0.5)
+	var axis := Vector2(t.base.x, t.base.y)
+	var inside := 0.0
+	var deepest := 0.0
+	for l in t.limbs:
+		var pts: PackedVector3Array = l[0]
+		var radii: PackedFloat32Array = l[1]
+		for i in pts.size() - 1:
+			var seg := pts[i].distance_to(pts[i + 1])
+			var n := maxi(1, ceili(seg / 0.05))
+			for k in n:
+				var u := (k + 0.5) / n
+				var q := pts[i].lerp(pts[i + 1], u)
+				var r := lerpf(radii[i], radii[i + 1], u)
+				if Vector2(q.x, q.z).distance_to(axis) + r < Pinewood._bole_r(t, q.y):
+					continue   # (inside the bole as drawn: hidden)
+				var dq := q - mid
+				var e := Vector3(absf(dq.dot(side)), absf(dq.y), absf(dq.dot(o.out))) - half
+				var out := Vector3(maxf(e.x, 0.0), maxf(e.y, 0.0), maxf(e.z, 0.0)).length() + minf(maxf(e.x, maxf(e.y, e.z)), 0.0)
+				if out < r - 0.01:
+					inside += seg / n
+					deepest = maxf(deepest, r - out)
+	return Vector2(inside, deepest)
+
+
 func _outposts(a: ArenaLayout) -> void:
 	check(a.outposts.size() >= 6, "outposts (%d)" % a.outposts.size())
 	for o in a.outposts:
@@ -330,6 +413,8 @@ func _outposts(a: ArenaLayout) -> void:
 		check(absf((p.position - o.centre).dot(o.out) - o.depth * 0.5) < o.rail_radius * 1.5, "outpost %d: its perch is the rail along the outer edge" % o.id)
 		check(p.a.distance_to(p.b) > o.width * 0.8, "outpost %d: the rail perch runs the deck's width" % o.id)
 		check(p.facing.dot(o.out) > 0.9, "outpost %d: the rail faces out" % o.id)
+		var cut := _limbs_in_outpost(t, o)
+		check(cut.x == 0.0, "outpost %d: no limb of its tree in its deck, hangar or the room over it (%.2f m of limb, %.2f m deep)" % [o.id, cut.x, cut.y])
 		# Open air on approach, at both ends of the rail.
 		var side: Vector3 = o.out.cross(Vector3.UP).normalized()
 		for e in [-1.0, 1.0]:

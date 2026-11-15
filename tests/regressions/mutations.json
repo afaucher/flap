@@ -2618,8 +2618,8 @@
   "edits": [
    {
     "file": "scripts/world/pinewood.gd",
-    "find": "\t\t\tif not _way_in(a, t, o, c, float(yy), d):\n\t\t\t\tcontinue\n",
-    "replace": ""
+    "find": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood) or not _way_in(a, t, o, c, float(yy), d):   # (the room first: it's local, and cheap)\n",
+    "replace": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood):\n"
    }
   ]
  },
@@ -5648,7 +5648,7 @@
  },
  {
   "id": "race-round-descends-in-turn",
-  "bug": "A go-around came down from its loop in the last turn onto the run-in: gaining speed there, its turn widened, it strayed off the path and planned again, round and round (2026-11-06).",
+  "bug": "A go-around came down from its loop in the last turn onto the run-in: gaining speed there, its turn widened, it strayed off the path and planned again, round and round (2026-11-06). Caught on course 16 in the wood until the 2026-11-12 re-bake; now by test_race's _falcon_goes_round, in the open.",
   "tests": [
    "test_race"
   ],
@@ -5704,8 +5704,9 @@
  },
  {
   "id": "ai-rides-above-descent",
-  "bug": "Down a descending leg the AI aimed at its end and lagged above the line, where the planned clearance under the wood above didn't hold: under the big-trees oak's crown the avoidance climbed the hawk over a low limb and it reached the approach point 2.7 m high and fast (28 of the 36 low limbs) (2026-11-06).",
+  "bug": "Down a descending leg the AI aimed at its end and lagged above the line, where the planned clearance under the wood above didn't hold: under the big-trees oak's crown the avoidance climbed the hawk over a low limb and it reached the approach point 2.7 m high and fast (28 of the 36 low limbs) (2026-11-06). The two-stemmed oak's exam (2026-11-12) no longer showed it; test_ai_avoidance's descending leg does.",
   "tests": [
+   "test_ai_avoidance",
    "test_flight_exam"
   ],
   "edits": [
@@ -6026,45 +6027,199 @@
   ]
  },
  {
-  "id": "hdr-vulkan-default",
-  "bug": "The game rendered on Vulkan by default, which in Godot 4.7 reports no HDR on Windows: HDR output never came on outside .\\hdr.ps1, even on an HDR monitor with Windows HDR on (2026-11-13).",
+  "id": "outpost-ignores-own-limbs",
+  "bug": "An outpost's place was checked only for its way in and the line out from the rail, not the deck, the hangar or the room over it: an oak's limbs out of the fork ran up through every oak outpost's deck and hangar (2026-11-11).",
   "tests": [
-   "gpu_test_hdr_output"
+   "test_pinewood"
   ],
   "edits": [
    {
-    "file": "project.godot",
-    "find": "rendering_device/driver.windows=\"d3d12\"\n",
-    "replace": ""
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\t\tif not _deck_clear(t, o, c, float(yy), d, wood) or not _way_in(a, t, o, c, float(yy), d):   # (the room first: it's local, and cheap)\n",
+    "replace": "\t\t\tif not _way_in(a, t, o, c, float(yy), d):\n"
    }
   ]
  },
  {
-  "id": "hdr-screen-move",
-  "bug": "HDR output was decided once at the scene's start: a window opened on a screen without HDR and dragged to the HDR monitor (or Windows HDR turned on while the game ran) stayed SDR (2026-11-13).",
+  "id": "oak-limbs-from-one-spot",
+  "bug": "An oak's big limbs all left the fork with its crown limbs, eight or more from one spot of the bole, where a real oak forks in two or three stems with its other limbs spread up the bole (2026-11-11).",
   "tests": [
-   "gpu_test_hdr_output"
+   "test_pinewood"
   ],
   "edits": [
    {
-    "file": "scripts/app/hdr_output.gd",
-    "find": "\t\tif display_offers.call() != _offered:\n",
-    "replace": "\t\tif false:\n"
+    "file": "scripts/world/pinewood.gd",
+    "find": "\t\tvar root: Vector3 = on_stem.call(rng.randf_range(OAK_FORM.on_stem.x, OAK_FORM.on_stem.y))\n",
+    "replace": "\t\tvar root: Vector3 = c + Vector3.UP * (fork + rng.randf_range(-0.3, 0.4))\n"
    }
   ]
  },
- {
-  "id": "arm-pow-negative-nan",
-  "bug": "The GPU arm wing squared a negative number with pow(), undefined in GLSL: on Direct3D 12 (exp2 of 2 log2 x) it was NaN for the stations nearest the body, so the rows joining the wing to the trunk came out NaN -- positions and normals -- and the test, comparing distances, never saw a NaN (2026-11-13).",
-  "tests": [
-   "gpu_test_arm"
-  ],
-  "edits": [
-   {
-    "file": "scripts/bird/arm_place.gdshaderinc",
-    "find": "exp(-bulge * bulge)",
-    "replace": "exp(-pow(bulge, 2.0))"
-   }
-  ]
- }
+  {
+    "id": "scapulars-stand-off-the-back",
+    "bug": "The scapular cards were laid on the tangent at their roots, inboard on the back: two raised slabs that lit apart from the back, while beside the body behind the arm wing the white underwing showed through (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\t\tif not spl.is_empty():\n\t\t\tvar laid := _lay_card(d)\n",
+        "replace": "\t\tif false:\n\t\t\tvar laid := _lay_card(d)\n"
+      }
+    ]
+  },
+  {
+    "id": "scapulars-fan-past-folded-back",
+    "bug": "Folded, the rear scapulars ran past the body's outline where it tapers to the tail, fanning out at the lower back (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\t\treturn Vector3(signf(p.x) * minf(absf(p.x), lerpf(w, absf(p.x), open)), p.y, p.z)\n",
+        "replace": "\t\treturn p\n"
+      }
+    ]
+  },
+  {
+    "id": "scapulars-follow-other-wing",
+    "bug": "Each side's scapulars must follow their own wing's fold (a roll folds one wing more): with the sides swapped they spread and drew in with the other wing (2026-11-11).",
+    "tests": [
+      "test_scapulars"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar wi := 0 if float(d.side) < 0.0 else 1\n\tvar open := 1.0 - wing_fold(wi)\n\tvar reach",
+        "replace": "\tvar wi := 1 if float(d.side) < 0.0 else 0\n\tvar open := 1.0 - wing_fold(wi)\n\tvar reach"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-rest-chord",
+    "bug": "The arm wing's feather chart spanned a rest chord shorter than the spread wing's and no thickness: the tile stretched 2.5-6x across the chord and smeared round the leading edge (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar j := shape.joints(0.0)   # (the spread wing, in its plane)\n",
+        "replace": "\treturn Vector3((u - ARM_U0) * (l[0] + l[1]) + _L * 0.04, rc * lerpf(0.6, 0.35, u), 0.0)\n\tvar j := shape.joints(0.0)   # (the spread wing, in its plane)\n"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-no-bone-depth",
+    "bug": "The arm chart's chord left out the bone's depth behind the leading edge, so the chart covered less chord than drawn (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\treturn Vector3(along, depth + rc * lerpf(0.42, 0.26, u), thick)",
+        "replace": "\treturn Vector3(along, rc * lerpf(0.42, 0.26, u), thick)"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-u-sheared",
+    "bug": "Each arm station kept its body-loop point's own u all the way to the wrist, shearing the tile across ever narrower chords (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\treturn 1.0 - smoothstep(0.0, 3.0, float(k)) if arm_chart_even else 1.0",
+        "replace": "\treturn 1.0"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-join-squeezed",
+    "bug": "The arm's connector rows from the body's loop were squeezed into 0.04 L of chart: feathers drawn about twice the size where the wing meets the body (2026-11-12).",
+    "tests": [
+      "test_wing_chart"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/bird_rig.gd",
+        "find": "\tvar along := (u - 0.25 * ARM_U0) * (l[0] + l[1])",
+        "replace": "\tvar along := (u - ARM_U0) * (l[0] + l[1]) + _L * 0.04"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-gpu-u-kept",
+    "bug": "The GPU arm (arm_place) must fade the loop point's u as the rig does (body_tab's w), or its feather coordinates differ from the GDScript build's (2026-11-12).",
+    "tests": [
+      "gpu_test_arm"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/arm_place.gdshaderinc",
+        "find": "mix(fc0.x, lfc.x, au.w)",
+        "replace": "lfc.x"
+      }
+    ]
+  },
+  {
+    "id": "arm-chart-gpu-thickness",
+    "bug": "The GPU arm (arm_place) must run v round the leading edge's thickness as the rig does, or its feather coordinates differ from the GDScript build's (2026-11-12).",
+    "tests": [
+      "gpu_test_arm"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/arm_place.gdshaderinc",
+        "find": "length(vec2(ax * au.y, ar_naca(ax) * au.z))",
+        "replace": "ax * au.y"
+      }
+    ]
+  },
+  {
+    "id": "hdr-vulkan-default",
+    "bug": "The game rendered on Vulkan by default, which in Godot 4.7 reports no HDR on Windows: HDR output never came on outside .\\hdr.ps1, even on an HDR monitor with Windows HDR on (2026-11-13).",
+    "tests": [
+      "gpu_test_hdr_output"
+    ],
+    "edits": [
+      {
+        "file": "project.godot",
+        "find": "rendering_device/driver.windows=\"d3d12\"\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "hdr-screen-move",
+    "bug": "HDR output was decided once at the scene's start: a window opened on a screen without HDR and dragged to the HDR monitor (or Windows HDR turned on while the game ran) stayed SDR (2026-11-13).",
+    "tests": [
+      "gpu_test_hdr_output"
+    ],
+    "edits": [
+      {
+        "file": "scripts/app/hdr_output.gd",
+        "find": "\t\tif display_offers.call() != _offered:\n",
+        "replace": "\t\tif false:\n"
+      }
+    ]
+  },
+  {
+    "id": "arm-pow-negative-nan",
+    "bug": "The GPU arm wing squared a negative number with pow(), undefined in GLSL: on Direct3D 12 (exp2 of 2 log2 x) it was NaN for the stations nearest the body, so the rows joining the wing to the trunk came out NaN -- positions and normals -- and the test, comparing distances, never saw a NaN (2026-11-13).",
+    "tests": [
+      "gpu_test_arm"
+    ],
+    "edits": [
+      {
+        "file": "scripts/bird/arm_place.gdshaderinc",
+        "find": "exp(-bulge * bulge)",
+        "replace": "exp(-pow(bulge, 2.0))"
+      }
+    ]
+  }
 ]

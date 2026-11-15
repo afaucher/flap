@@ -2,7 +2,8 @@ extends TestCase
 ## Diagnostic: trees' limbs as drawn (TreeData.limbs), their trunks, leaf masses and perches, written as JSON for
 ## tools/tree_side_map.py to draw from the side beside reference pictures: every oak, or (--kind pine) a mature
 ## pine, a pole and a veteran, each the middle one by height of its age.
-## .\probe.ps1 -Headless probe_tree_paths [--kind oak|pine] [--seed 7] [--out <json>]
+## .\probe.ps1 -Headless probe_tree_paths [--kind oak|pine] [--seed 7] [--out <json>] [--grow]
+## (`--grow`: the wood as Pinewood.grow grows it now, not the baked map; `--exam`: the flight exam's lone oak)
 
 
 func setup() -> void:
@@ -12,7 +13,12 @@ func setup() -> void:
 	if out == "":
 		out = ProjectSettings.globalize_path("res://test_logs/tree_paths.json")
 	var pines := Boot.arg_value(args, "--kind") == "pine"
-	var a := Pinewood.generate(int(seed_arg) if seed_arg != "" else 7)
+	var a: ArenaLayout
+	if args.has("--exam"):   # (the flight exam's lone oak, FlightExam.add_tree, seeded --seed or 1)
+		a = FlightExam.place()
+		FlightExam.add_tree(a, "oak", Vector2.ZERO, int(seed_arg) if seed_arg != "" else 1)
+	else:
+		a = (Pinewood.grow if args.has("--grow") else Pinewood.generate).call(int(seed_arg) if seed_arg != "" else 7)
 	var rails := {}
 	for o in a.outposts:
 		rails[o.rail_perch_id] = true
